@@ -1,127 +1,92 @@
-/**
- * 多日驾驶舱 — 总面板。
- *
- * 跨日表格 · 14 列 · 点击日期行进入单日复盘 /quantx/:date。
- */
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Loader2, LayoutGrid } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Database, ExternalLink, LayoutGrid, Loader2, RefreshCw } from 'lucide-react'
 import { quantxApi } from '@/lib/api'
+import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
-import { cn } from '@/lib/cn'
-
-function scoreColor(score: number): string {
-  if (score >= 70) return '#ef4444'
-  if (score >= 60) return '#f97316'
-  if (score >= 40) return '#3b82f6'
-  if (score >= 30) return '#6b7280'
-  return '#1e40af'
-}
+import {
+  FactorAttribution,
+  InstitutionContinuity,
+  OpportunityRadar,
+  ThemeLifecyclePanel,
+  TradingCalendar,
+  WindowSignalMatrix,
+  WindowStatistics,
+  type WindowSize,
+} from '@/components/quantx/MultidayPanels'
 
 export function QuantXCatalog() {
   const navigate = useNavigate()
-  const qc = useQueryClient()
-  const [sortKey, setSortKey] = useState<'date' | 'heat' | 'limit_up' | 'advance'>('date')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const queryClient = useQueryClient()
+  const [selectedDate, setSelectedDate] = useState('')
+  const [windowSize, setWindowSize] = useState<WindowSize>(20)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['quantx-catalog'],
-    queryFn: () => quantxApi.getCatalog(),
+  const catalogQuery = useQuery({ queryKey: QK.quantxCatalog, queryFn: quantxApi.getCatalog, staleTime: 30_000, retry: false })
+  const dates = useMemo(() => (catalogQuery.data?.records || []).map(record => record.trade_date), [catalogQuery.data])
+  useEffect(() => {
+    if (!selectedDate && dates.length) setSelectedDate(dates.at(-1) || '')
+  }, [dates, selectedDate])
+
+  const snapshotQuery = useQuery({
+    queryKey: QK.quantxMultiday(selectedDate),
+    queryFn: () => quantxApi.getMultiday(selectedDate),
+    enabled: Boolean(selectedDate),
+    staleTime: 30_000,
     retry: false,
-    staleTime: 0,
   })
 
-  const buildMut = useMutation({
-    mutationFn: () => quantxApi.buildCatalog(),
-    onSuccess: () => { toast('驾驶舱构建完成', 'success'); qc.invalidateQueries({ queryKey: ['quantx-catalog'] }) },
-    onError: (e: Error) => toast(e.message, 'error'),
+  const rebuild = useMutation({
+    mutationFn: () => quantxApi.buildCatalog(selectedDate),
+    onSuccess: result => {
+      toast(`多日派生数据已重建：${result.rebuilt} 日`, 'success')
+      queryClient.invalidateQueries({ queryKey: QK.quantxCatalog })
+      queryClient.invalidateQueries({ queryKey: ['quantx-multiday'] })
+    },
+    onError: (error: Error) => toast(error.message, 'error'),
   })
 
-  const records = [...(data?.records || [])]
-  records.sort((a, b) => {
-    let av: number | string = 0, bv: number | string = 0
-    if (sortKey === 'date') { av = a.trade_date; bv = b.trade_date }
-    else if (sortKey === 'heat') { av = (a.metrics.market_heat_score as number) ?? 0; bv = (b.metrics.market_heat_score as number) ?? 0 }
-    else if (sortKey === 'limit_up') { av = (a.metrics.limit_up_count as number) ?? 0; bv = (b.metrics.limit_up_count as number) ?? 0 }
-    else if (sortKey === 'advance') { av = (a.metrics.advance_rate as number) ?? 0; bv = (b.metrics.advance_rate as number) ?? 0 }
-    const cmp = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : (av as number) - (bv as number)
-    return sortDir === 'desc' ? -cmp : cmp
-  })
+  if (catalogQuery.isLoading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
+  const records = catalogQuery.data?.records || []
+  const snapshot = snapshotQuery.data
 
-  function toggleSort(key: typeof sortKey) {
-    if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
-    else { setSortKey(key); setSortDir('desc') }
-  }
-
-  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
-
-  return (
-    <div className="mx-auto max-w-7xl p-4 space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <LayoutGrid className="h-5 w-5 text-accent" />
-          <h1 className="text-xl font-bold">多日驾驶舱</h1>
-          {data && <span className="text-xs text-muted">{data.stats.total_dates} 日 · 完整 {data.stats.complete}</span>}
-        </div>
-        <button onClick={() => buildMut.mutate()} disabled={buildMut.isPending}
-          className="inline-flex items-center gap-1.5 rounded-btn bg-accent/20 px-3 py-1.5 text-xs text-accent hover:bg-accent/30 disabled:opacity-50">
-          {buildMut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-          构建
+  return <div className="mx-auto max-w-[1500px] space-y-4 p-4 pb-20">
+    <header className="flex flex-wrap items-center gap-3">
+      <LayoutGrid className="h-5 w-5 text-accent" />
+      <div><h1 className="text-xl font-bold">QuantX 多日驾驶舱</h1><p className="text-[11px] text-muted">独立确定性数据管线 · 不含 LLM 分析</p></div>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <select aria-label="多日驾驶舱交易日" value={selectedDate} onChange={event => setSelectedDate(event.target.value)} className="rounded-btn border border-border bg-elevated px-3 py-1.5 text-sm font-semibold">
+          {[...dates].reverse().map(date => <option key={date} value={date}>{date}</option>)}
+        </select>
+        <button onClick={() => selectedDate && navigate(`/quantx/${selectedDate}`)} disabled={!selectedDate} className="inline-flex items-center gap-1.5 rounded-btn border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground"><ExternalLink className="h-3 w-3" />单日数据</button>
+        <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending} className="inline-flex items-center gap-1.5 rounded-btn bg-accent/20 px-3 py-1.5 text-xs text-accent hover:bg-accent/30 disabled:opacity-50">
+          {rebuild.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}重建多日数据
         </button>
       </div>
+    </header>
 
-      {records.length === 0 ? (
-        <div className="text-center py-16 text-muted text-sm">无数据，点击「构建」</div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-xs">
-            <thead className="bg-elevated sticky top-0 z-10">
-              <tr>
-                <th className="px-3 py-2 text-left cursor-pointer hover:text-accent" onClick={() => toggleSort('date')}>日期 {sortKey === 'date' && (sortDir === 'desc' ? '↓' : '↑')}</th>
-                <th className="px-3 py-2 text-left cursor-pointer hover:text-accent" onClick={() => toggleSort('heat')}>热度 {sortKey === 'heat' && (sortDir === 'desc' ? '↓' : '↑')}</th>
-                <th className="px-3 py-2 text-left">短线</th>
-                <th className="px-3 py-2 text-left">趋势</th>
-                <th className="px-3 py-2 text-left cursor-pointer hover:text-accent" onClick={() => toggleSort('limit_up')}>涨停 {sortKey === 'limit_up' && (sortDir === 'desc' ? '↓' : '↑')}</th>
-                <th className="px-3 py-2 text-left">封板率</th>
-                <th className="px-3 py-2 text-left">板高</th>
-                <th className="px-3 py-2 text-left cursor-pointer hover:text-accent" onClick={() => toggleSort('advance')}>晋级率 {sortKey === 'advance' && (sortDir === 'desc' ? '↓' : '↑')}</th>
-                <th className="px-3 py-2 text-left">参与度</th>
-                <th className="px-3 py-2 text-left">退潮</th>
-                <th className="px-3 py-2 text-left">崩塌</th>
-                <th className="px-3 py-2 text-left">变化</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r) => {
-                const m = r.metrics || {}
-                const heat = (m.market_heat_score as number) ?? 0
-                return (
-                  <tr key={r.trade_date}
-                    className="border-t border-border hover:bg-accent/10 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/quantx/${r.trade_date}`)}>
-                    <td className="px-3 py-1.5 font-mono font-semibold">{r.trade_date}</td>
-                    <td className="px-3 py-1.5">
-                      <span className="inline-block w-7 h-5 leading-5 text-center rounded text-white font-semibold text-[10px]" style={{ backgroundColor: scoreColor(heat) }}>{heat || '--'}</span>
-                      <span className="ml-1 text-muted text-[10px]">{m.market_heat_zone}</span>
-                    </td>
-                    <td className="px-3 py-1.5">{m.short_term_sentiment_score ?? '--'}</td>
-                    <td className="px-3 py-1.5">{m.trend_sentiment_score ?? '--'}</td>
-                    <td className="px-3 py-1.5">{m.limit_up_count ?? '--'}</td>
-                    <td className="px-3 py-1.5">{m.seal_rate != null ? `${m.seal_rate}%` : '--'}</td>
-                    <td className="px-3 py-1.5">{m.max_board ?? '--'}</td>
-                    <td className="px-3 py-1.5">{m.advance_rate != null ? `${m.advance_rate}%` : '--'}</td>
-                    <td className="px-3 py-1.5">{m.participation_verdict ?? ''}</td>
-                    <td className={cn('px-3 py-1.5', (m.ebb_signal_count as number) > 0 && 'text-orange-400')}>{m.ebb_risk_verdict ?? ''}</td>
-                    <td className={cn('px-3 py-1.5', m.crash_triggered ? 'text-red-400 font-semibold' : 'text-muted')}>{m.crash_triggered ? '是' : '否'}</td>
-                    <td className="px-3 py-1.5 text-muted text-[10px] max-w-[120px] truncate">{r.change_summary}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <div className="flex flex-wrap gap-2 text-[11px] text-muted">
+      <span className="rounded bg-elevated px-2 py-1">{records.length} 个交易日</span>
+      <span className="rounded bg-elevated px-2 py-1">完整 {catalogQuery.data?.stats.complete || 0}</span>
+      <span className="rounded bg-elevated px-2 py-1">仅数据 {catalogQuery.data?.stats.data_only || 0}</span>
+      <span className="rounded bg-elevated px-2 py-1">降级 {catalogQuery.data?.stats.degraded || 0}</span>
     </div>
-  )
+
+    {snapshotQuery.isLoading && <div className="flex justify-center rounded-xl border border-border py-20"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>}
+    {snapshotQuery.error && <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-6 text-center text-sm text-red-300">多日数据加载失败：{(snapshotQuery.error as Error).message}</div>}
+    {snapshot && <>
+      <div className="grid gap-2 sm:grid-cols-3" data-testid="quantx-data-coverage">
+        <div className="rounded-lg border border-border bg-elevated/30 p-2"><div className="text-[10px] text-muted">窗口覆盖</div><div className="font-mono text-lg">{snapshot.data_coverage.window_days}/20 日</div></div>
+        <div className="rounded-lg border border-border bg-elevated/30 p-2"><div className="text-[10px] text-muted">题材覆盖</div><div className="font-mono text-lg">{snapshot.data_coverage.theme_days}/20 日</div></div>
+        <div className="rounded-lg border border-border bg-elevated/30 p-2"><div className="text-[10px] text-muted">机构覆盖</div><div className="font-mono text-lg">{snapshot.data_coverage.institution_days}/20 日</div></div>
+      </div>
+      <WindowSignalMatrix data={snapshot} active={windowSize} onChange={setWindowSize} />
+      <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]"><TradingCalendar rows={snapshot.calendar} selectedDate={selectedDate} onSelect={setSelectedDate} /><WindowStatistics data={snapshot} active={windowSize} /></div>
+      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]"><ThemeLifecyclePanel data={snapshot} /><FactorAttribution rows={snapshot.factor_attribution} /></div>
+      <OpportunityRadar data={snapshot.opportunity_radar} />
+      <InstitutionContinuity data={snapshot.institution_continuity} />
+    </>}
+
+    {!snapshot && !snapshotQuery.isLoading && records.length === 0 && <div className="rounded-xl border border-border py-20 text-center text-sm text-muted"><Database className="mx-auto mb-2 h-8 w-8" />暂无 QuantX 数据</div>}
+  </div>
 }

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
-from app.quantx_data.catalog import build_catalog, load_tables
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.api.quantx_data import router as quantx_data_router
 from app.quantx_data import collectors
+from app.quantx_data.catalog import build_catalog, load_tables
+from app.quantx_data.multiday import build_multiday_snapshot, rebuild_multiday_snapshots
 from app.quantx_data.pipeline import run_pipeline
-
 
 SOURCE_NAMES = (
     "tushare", "akshare", "ths_hot", "zhangtingke", "zhangtingjun", "pywencai",
@@ -134,3 +139,71 @@ def test_source_retry_keeps_full_source_contract(tmp_path, monkeypatch):
     assert retried["status"] == "complete"
     assert calls == list(SOURCE_NAMES)
     assert (root / "quantx" / "20260825" / "market_overview.json").exists()
+
+
+def test_multiday_snapshot_contains_all_deterministic_dashboard_sections(tmp_path):
+    quantx_dir = tmp_path / "quantx"
+    for index, trade_date in enumerate(("20260819", "20260820", "20260821", "20260824", "20260825"), start=1):
+        _fixture(tmp_path, trade_date)
+        result = run_pipeline(tmp_path, trade_date, recompute=True)
+        assert result["status"] == "complete"
+        date_dir = quantx_dir / trade_date
+        computed = json.loads((date_dir / "_computed.json").read_text(encoding="utf-8"))
+        computed["market_heat"]["score"] = 20 + index * 10
+        computed["market_heat"]["inputs"]["up_ratio"] = 30 + index * 8
+        _write(date_dir / "_computed.json", computed)
+        breadth = json.loads((date_dir / "market_breadth.json").read_text(encoding="utf-8"))
+        breadth["up_ratio"] = 30 + index * 8
+        _write(date_dir / "market_breadth.json", breadth)
+        sector = json.loads((date_dir / "sector_fund_flow.json").read_text(encoding="utf-8"))
+        sector["sectors"] = [{"name": "人工智能", "pct_chg": index, "net_inflow_yi": index * 2.0, "amount_yi": 100 + index}]
+        _write(date_dir / "sector_fund_flow.json", sector)
+
+    snapshot = build_multiday_snapshot(quantx_dir, "20260825")
+
+    assert snapshot["llm"] is False
+    assert set(snapshot["window_signals"]) == {"5", "10", "20"}
+    assert snapshot["window_signals"]["5"]["market"]["direction"] == "升温"
+    assert len(snapshot["calendar"]) == 5
+    assert snapshot["window_statistics"]["5"]["market_heat"]["max"] == 70
+    assert snapshot["theme_lifecycle"]["current"][0]["name"] == "人工智能"
+    assert snapshot["factor_attribution"][0]["name"] == "人工智能"
+    assert set(snapshot["opportunity_radar"]) >= {"themes", "sectors", "stocks", "coverage_confidence"}
+    assert snapshot["institution_continuity"]["industries"][0]["name"] == "人工智能"
+    assert "review_decision" not in snapshot
+
+
+def test_multiday_rebuild_persists_versioned_snapshots_and_catalog_stays_compact(tmp_path):
+    for trade_date in ("20260824", "20260825"):
+        _fixture(tmp_path, trade_date)
+        assert run_pipeline(tmp_path, trade_date, recompute=True)["status"] == "complete"
+
+    result = rebuild_multiday_snapshots(tmp_path / "quantx")
+
+    assert result["rebuilt"] == 2
+    payload = json.loads((tmp_path / "quantx" / "20260825" / "multiday_snapshot.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "tickflow-quantx-multiday-v1"
+    catalog = json.loads((tmp_path / "quantx" / "catalog.json").read_text(encoding="utf-8"))
+    assert "window_signals" not in catalog["records"][-1]
+    assert catalog["records"][-1]["multiday_available"] is True
+
+
+def test_multiday_api_get_is_read_only_and_rebuild_is_explicit_post(tmp_path):
+    _fixture(tmp_path, "20260825")
+    assert run_pipeline(tmp_path, "20260825", recompute=True)["status"] == "complete"
+    catalog_path = tmp_path / "quantx" / "catalog.json"
+    before = catalog_path.stat().st_mtime_ns
+    app = FastAPI()
+    app.include_router(quantx_data_router)
+    app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
+
+    with TestClient(app) as client:
+        response = client.get("/api/quantx-data/catalog")
+        assert response.status_code == 200
+        assert catalog_path.stat().st_mtime_ns == before
+        multiday = client.get("/api/quantx-data/multiday/20260825")
+        assert multiday.status_code == 200
+        assert multiday.json()["llm"] is False
+        rebuilt = client.post("/api/quantx-data/catalog/rebuild?trade_date=20260825")
+        assert rebuilt.status_code == 200
+        assert rebuilt.json()["rebuilt"] == 1

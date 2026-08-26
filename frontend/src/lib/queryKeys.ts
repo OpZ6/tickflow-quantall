@@ -26,6 +26,8 @@ export const QK = {
   marketLabSector:  (dimension: string) => ['market-lab', 'sector-flow', dimension] as const,
   marketLabRadar:   (dimension: string, asOf?: string) => ['market-lab', 'sector-radar', dimension, asOf ?? 'latest'] as const,
   marketLabMacro:   ['market-lab', 'macro-dispersion'] as const,
+  quantxCatalog:    ['quantx-catalog'] as const,
+  quantxMultiday:   (date: string) => ['quantx-multiday', date] as const,
 
   // Watchlist
   watchlist:            ['watchlist'] as const,

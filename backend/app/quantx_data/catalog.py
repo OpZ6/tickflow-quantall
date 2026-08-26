@@ -62,6 +62,7 @@ def build_catalog(quantx_dir: Path) -> dict[str, Any]:
                 "run_id": status.get("run_id"),
                 "errors": status.get("errors", []),
                 "warnings": status.get("warnings", []),
+                "multiday_available": (date_dir / "multiday_snapshot.json").is_file(),
                 "artifacts": {name: ("_computed.json" if name == "_computed" else f"{name}.json") for name in PUBLIC_ARTIFACTS if (date_dir / ("_computed.json" if name == "_computed" else f"{name}.json")).is_file()},
             })
     records.sort(key=lambda item: item["trade_date"])

@@ -3540,6 +3540,7 @@ export interface CatalogRecord {
   themes: Array<{ name: string; count: number }>
   change_summary?: string
   deltas?: Record<string, number>
+  multiday_available?: boolean
 }
 
 export interface CatalogData {
@@ -3577,12 +3578,48 @@ export interface QuantXDataTables {
   manifest?: any
 }
 
+export interface QuantXWindowComponent {
+  key: 'heat' | 'breadth' | 'relay' | 'risk'
+  first: number | null
+  last: number | null
+  delta: number | null
+  arrow: 'up' | 'down' | 'flat' | 'missing'
+}
+
+export interface QuantXWindowSignal {
+  window: number
+  date_range: string[]
+  valid_days: number
+  confidence: 'high' | 'medium' | 'low'
+  market: { direction: string; tone: string; components: QuantXWindowComponent[] }
+  themes: { mainline: any[]; warming: any[]; cooling: any[] }
+  institution: any
+}
+
+export interface QuantXMultidaySnapshot {
+  schema_version: string
+  generated_at: string
+  trade_date: string
+  llm: false
+  window_signals: Record<'5' | '10' | '20', QuantXWindowSignal>
+  calendar: Array<Record<string, any> & { trade_date: string }>
+  window_statistics: Record<'5' | '10' | '20', Record<string, any>>
+  theme_lifecycle: { current: any[]; events: any[]; exited: any[]; heatmap: { dates: string[]; rows: Array<{ name: string; values: Array<number | null> }> } }
+  factor_attribution: Array<{ name: string; count: number }>
+  opportunity_radar: { coverage_confidence: Record<string, number>; themes: any[]; sectors: any[]; stocks: any[] }
+  institution_continuity: { available: boolean; coverage: number; direction: string; industries: any[]; core_stocks: any[] }
+  data_coverage: { theme_days: number; institution_days: number; window_days: number }
+}
+
 export const quantxApi = {
   getCatalog: () =>
     request<CatalogData>(`/api/quantx-data/catalog`),
 
-  buildCatalog: () =>
-    request<{ schema_version: number; stats: CatalogData['stats']; records: CatalogRecord[] }>(`/api/quantx-data/catalog`),
+  buildCatalog: (date?: string) =>
+    request<{ status: string; rebuilt: number; trade_date?: string; stats: CatalogData['stats'] }>(`/api/quantx-data/catalog/rebuild${date ? `?trade_date=${encodeURIComponent(date)}` : ''}`, { method: 'POST' }),
+
+  getMultiday: (date: string) =>
+    request<QuantXMultidaySnapshot>(`/api/quantx-data/multiday/${encodeURIComponent(date)}`),
 
   getTables: (date: string) =>
     request<QuantXDataTables>(`/api/quantx-data/${date}/tables`),

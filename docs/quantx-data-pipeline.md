@@ -29,6 +29,8 @@ POST /api/quantx-data/runs/{date}/resume
 POST /api/quantx-data/runs/{date}/recompute
 POST /api/quantx-data/runs/{date}/sources/{source}/retry
 GET  /api/quantx-data/catalog
+POST /api/quantx-data/catalog/rebuild
+GET  /api/quantx-data/multiday/{date}
 GET  /api/quantx-data/{date}/tables
 GET  /api/quantx-data/{date}/overview
 GET  /api/quantx-data/{date}/limit-ladder
@@ -38,5 +40,26 @@ GET  /api/quantx-data/{date}/fund-flow
 GET  /api/quantx-data/{date}/candidates
 GET  /api/quantx-data/{date}/quality
 ```
+
+`GET /catalog` 只扫描并返回紧凑日期目录，不写文件；`POST /catalog/rebuild?trade_date=YYYYMMDD`
+显式重建并原子写入选定日期的 `multiday_snapshot.json`。维护场景可传
+`all_dates=true` 全量重建。多日快照完全从本仓库
+`data/quantx` 内的结构化表和来源快照派生，固定标记 `llm: false`，不读取原
+QuantX 报告目录。
+
+## 多日驾驶舱
+
+React `/quantx` 面板通过 `GET /catalog` 加载日期列表，再按选定日期请求一个
+`GET /multiday/{date}` 聚合快照。快照包含：
+
+- 5/10/20 个交易日的热度、广度、接力和风险信号矩阵；
+- 交易日历与窗口均值、极值和风险日统计；
+- 多源题材生命周期、连续性热力图和涨停原因标签归因；
+- 题材、行业、个股的确定性多日机会雷达；
+- 基于申万行业资金流和可用趋势池的机构趋势连续性。
+
+历史来源缺失会降低 `data_coverage` 和 `coverage_confidence`，不会用零值补造。
+每日流水线成功发布后自动刷新当日多日快照和紧凑 catalog；历史全量重建只由
+显式 POST 或界面“重建多日数据”触发。
 
 新日期不存在有效必需来源时会 `failed`；可选来源缺失会 `degraded` 并保留警告。重复运行只重用同日期来源快照，`--force` 或单源 retry 才重新采集；`--recompute` 只计算、不访问网络。

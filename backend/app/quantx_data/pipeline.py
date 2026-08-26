@@ -193,6 +193,14 @@ def run_pipeline(
         if status in {RunStatus.COMPLETE, RunStatus.DEGRADED}:
             provisional.stages = stages
             _publish(run_dir, final_dir, quantx_dir, provisional)
+            try:
+                from .catalog import build_and_save_catalog
+                from .multiday import build_multiday_snapshot
+
+                write_json_atomic(final_dir / "multiday_snapshot.json", build_multiday_snapshot(quantx_dir, trade_date))
+                build_and_save_catalog(quantx_dir)
+            except Exception:
+                logger.exception("QuantX multiday refresh failed for %s", trade_date)
             return provisional.to_dict()
 
         stages.append("failed")

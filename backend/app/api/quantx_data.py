@@ -5,7 +5,12 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.quantx_data.catalog import build_and_save_catalog, load_artifact, load_tables
+from app.quantx_data.catalog import build_catalog, load_artifact, load_tables
+from app.quantx_data.multiday import (
+    load_multiday_snapshot,
+    rebuild_multiday_snapshot,
+    rebuild_multiday_snapshots,
+)
 from app.quantx_data.pipeline import get_status, run_pipeline
 
 router = APIRouter(prefix="/api/quantx-data", tags=["quantx-data"])
@@ -74,13 +79,33 @@ def retry_source(trade_date: str, source: str, request: Request) -> dict:
 
 @router.get("/catalog")
 def catalog(request: Request) -> dict:
-    return build_and_save_catalog(_root(request))
+    return build_catalog(_root(request))
+
+
+@router.post("/catalog/rebuild")
+def rebuild_catalog(request: Request, trade_date: str | None = None, all_dates: bool = False) -> dict:
+    try:
+        return rebuild_multiday_snapshots(_root(request)) if all_dates else rebuild_multiday_snapshot(_root(request), trade_date)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/dates")
 def dates(request: Request) -> dict:
-    data = build_and_save_catalog(_root(request))
+    data = build_catalog(_root(request))
     return {"dates": [item["trade_date"] for item in data["records"]], "stats": data["stats"]}
+
+
+@router.get("/multiday/{trade_date}")
+def multiday(trade_date: str, request: Request) -> dict:
+    try:
+        return load_multiday_snapshot(_root(request), trade_date)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"no multiday data for {trade_date}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/{trade_date}/tables")
