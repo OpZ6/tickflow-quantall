@@ -4,9 +4,11 @@
 
 它不读取 `apps/quantx/output`，不生成或消费 LLM 判断、Review Editor、HTML 文案、反思知识、PNG/PDF。
 
+TickFlow 的 `/quantx/:date` 单日页面通过 `/api/quantx/review/:date/data` 将同一日期目录中的确定性 JSON 组装为七区数据，并原生渲染 ECharts；该适配器不读取 `review.html`，也不消费其中的 LLM 占位或编辑内容。`/quantx` 多日驾驶舱继续使用 `/api/quantx-data/catalog` 和 `/api/quantx-data/multiday/:date`。
+
 ## 运行
 
-在 `prototypes/tickflow/backend` 下（脚本默认写入 `prototypes/tickflow/data`；如需覆盖可传 `--data-dir`）：
+在独立仓库的 `backend` 下（脚本默认写入仓库根目录的 `data`；如需覆盖可传 `--data-dir`）：
 
 ```powershell
 uv run python ../scripts/run_quantx_data.py --date 20260825

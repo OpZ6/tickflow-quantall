@@ -28,6 +28,7 @@ export const QK = {
   marketLabMacro:   ['market-lab', 'macro-dispersion'] as const,
   quantxCatalog:    ['quantx-catalog'] as const,
   quantxMultiday:   (date: string) => ['quantx-multiday', date] as const,
+  quantxReview:     (date: string) => ['quantx-review', date] as const,
 
   // Watchlist
   watchlist:            ['watchlist'] as const,

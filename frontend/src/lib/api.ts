@@ -3578,6 +3578,31 @@ export interface QuantXDataTables {
   manifest?: any
 }
 
+export interface QuantXReviewData {
+  trade_date: string
+  metric_strip: {
+    indexes: Array<{ code: string; name: string; close: number; pct_chg: number }>
+    up_count: number
+    down_count: number
+    flat_count: number
+    total_amount_yi: number
+    advance_rate: number | null
+  }
+  emotion: {
+    market_heat: { score: number; zone: string }
+    short_term_sentiment: { score: number; zone: string }
+    trend_sentiment: { score: number; zone: string }
+    loss_effect: { severity?: string; limit_down_count?: number | null }
+    height_trend: { latest_max_board?: number; previous_high_5d?: number | null; height_compressed?: boolean }
+    daily_summary: string
+  }
+  sections: Record<string, {
+    title: string
+    llm_block: string
+    [key: string]: unknown
+  }>
+}
+
 export interface QuantXWindowComponent {
   key: 'heat' | 'breadth' | 'relay' | 'risk'
   first: number | null
@@ -3620,6 +3645,9 @@ export const quantxApi = {
 
   getMultiday: (date: string) =>
     request<QuantXMultidaySnapshot>(`/api/quantx-data/multiday/${encodeURIComponent(date)}`),
+
+  getReviewData: (date: string) =>
+    request<QuantXReviewData>(`/api/quantx/review/${encodeURIComponent(date)}/data`),
 
   getTables: (date: string) =>
     request<QuantXDataTables>(`/api/quantx-data/${date}/tables`),
