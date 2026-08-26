@@ -8,7 +8,7 @@
 
 - 状态：`active`
 - 建立日期：2026-08-26
-- 当前阶段：规划已固化，尚未开始统一底座的代码迁移
+- 当前阶段：Phase 1-5 首批闭环已落地；交易日历、更多标准事实、保留策略和全部历史差异收敛继续推进
 - 核心工作目录：`D:\tickflow-quantall`
 - 基线日期：`20260825`
 
@@ -508,22 +508,22 @@ POST /api/data-runs/backfill
 
 只有全部满足，Goal 才能完成：
 
-- [ ] QuantX API 不再直接读取来源级 JSON；
+- [x] QuantX API 不再直接读取来源级 JSON；
 - [ ] 主系统与 QuantX 对同一指数、成交额和市场宽度只有一个事实值；
 - [ ] 更换来源不需要修改 QuantX 计算器和前端；
-- [ ] 必需性落在 dataset，而不是 Tushare、问财等具体来源；
-- [ ] 单源失败可以按确定性规则走备用来源并显示降级；
-- [ ] 同一来源和日期重复运行不产生重复事实记录；
-- [ ] 离线 recompute 不发起网络请求；
-- [ ] 失败运行不覆盖上一版成功数据；
-- [ ] 每个结果可追溯到来源、原始哈希、run ID、schema 和算法版本；
+- [x] 必需性落在 dataset，而不是 Tushare、问财等具体来源；
+- [x] 单源失败可以按确定性规则走备用来源并显示降级；
+- [x] 同一来源和日期重复运行不产生重复事实记录；
+- [x] 离线 recompute 不发起网络请求；
+- [x] 失败运行不覆盖上一版成功数据；
+- [x] 每个结果可追溯到来源、原始哈希、run ID、schema 和算法版本；
 - [ ] 历史 QuantX 日期完成迁移和逐日对账；
-- [ ] `20260825` 单日七区、富图表和多日面板结果保持兼容；
-- [ ] Market Lab 与 QuantX 共用 `MarketFactRepository`；
-- [ ] 数据源设置页可以查看路由、健康、依赖、覆盖率和最近运行；
+- [x] `20260825` 单日七区、富图表和多日面板结果保持兼容；
+- [x] Market Lab 与 QuantX 共用 `MarketFactRepository`；
+- [x] 数据源设置页可以查看路由、健康、依赖、覆盖率和最近运行；
 - [ ] 原始快照具备压缩、去重和可配置保留策略；
 - [ ] 后端单元、集成、幂等、回滚、降级、历史回放测试通过；
-- [ ] 前端 TypeScript 构建及 standalone Playwright 页面回归通过；
+- [x] 前端 TypeScript 构建及 standalone Playwright 页面回归通过；
 - [ ] 当前数据目录完成备份和迁移演练，没有不可恢复删除。
 
 ## 13. 测试与验证矩阵
@@ -596,3 +596,40 @@ POST /api/data-runs/backfill
 - [`tickflow-unification-master-plan.md`](tickflow-unification-master-plan.md)：更大范围的 Quantall/TickFlow 能力迁移规划；
 - [`custom-data-source.md`](custom-data-source.md)：现有自定义 HTTP 数据源契约；
 - [`plugin-development.md`](plugin-development.md)：数据源插件开发约定。
+
+## 17. 实施记录
+
+### 17.1 2026-08-26 首批统一闭环
+
+已完成：
+
+- 建立四类标准事实：`market_breadth_daily`、`limit_event_daily`、`theme_observation_daily`、`sector_flow_daily`；
+- 建立 Dataset Registry、Source Route、显式 Polars schema、单位、主键和日期分区；
+- 建立压缩、SHA-256 内容寻址且正文去重的来源快照；
+- 建立多分区 staging、原子替换、失败全回滚的 Parquet 发布；
+- 建立 `MarketFactRepository`、DuckDB 视图和类型稳定的空结果；
+- QuantX 流水线双写旧兼容表与标准事实，manifest 记录事实文件、行数、大小和哈希；
+- `/api/quantx-data/{date}/tables` 通过 Repository 主读，旧结构只补充富字段，并返回逐数据集对账；
+- 富图表 API 改读发布阶段生成的 `review_data.json`，请求阶段不再打开 Tushare、PyWencai 等来源 JSON；
+- TickFlow enriched 聚合作为市场宽度主来源，Tushare 为备用；PyWencai 缺失时涨停客可满足涨停事件 dataset；
+- 主盘后流水线成功后依赖触发 QuantX，17:30 只保留最终截止恢复任务；
+- Market Lab 行业资金趋势和资金雷达优先读取真实 `sector_flow_daily`，缺失才回退 OHLCV 代理；
+- `/data` 页面新增统一市场数据底座面板，展示路由、依赖、健康、覆盖和最近运行；
+- 非破坏迁移 72 个可用历史交易日，旧 JSON 保留，8 个周末或未完成目录归类为 `skipped_incomplete`；
+- 每个迁移日生成 `_market_facts_migration.json`、逐表对账和 `review_data.json`。
+
+验证证据：
+
+- 后端定向测试：51 个通过；
+- 后端全量测试曾完成 1252 个全绿；最新代码回归为 1254 个通过、1 个失败，唯一失败是既有挖掘任务异步错误事件写入竞态（`test_runner_exception_marks_failed_and_appends_error_event`），与本阶段数据底座路径无关；测试进程均清除本机 SOCKS 代理变量；
+- 前端 `pnpm build` 通过；
+- standalone Python Playwright + Microsoft Edge headless 通过：QuantX 七区、11 个 canvas、多日驾驶舱、Market Lab 真实资金流和数据源管理面板；
+- 历史迁移：72 个成功、0 个失败、8 个不完整目录跳过。
+
+尚未完成：
+
+- `trading_calendar`、市场流动性、两融、连板梯队、题材成员和确定性派生状态尚未全部进入标准 Parquet；
+- 旧日期对账虽已记录，但多数日期仍有来源集合、旧表缺失或舍入口径差异，需要分类收敛后才能冻结旧读路径；
+- 原始快照保留期尚未配置化，历史清理的 dry-run/备份/确认工具尚未落地；
+- 多日派生计算内部仍会读取兼容 JSON，尚未完全改为 Repository 查询；
+- 当前数据目录尚未完成独立备份演练，因此 Goal 保持 `active`。

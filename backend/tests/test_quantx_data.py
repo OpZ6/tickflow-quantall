@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
+import polars as pl
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.api.quantx import router as quantx_router
 from app.api.quantx_data import router as quantx_data_router
+from app.market_facts.repository import MarketFactRepository
 from app.quantx_data import collectors
 from app.quantx_data.catalog import build_catalog, load_tables
+from app.quantx_data.migration import migrate_quantx_history
 from app.quantx_data.multiday import build_multiday_snapshot, rebuild_multiday_snapshots
 from app.quantx_data.pipeline import run_pipeline
 
@@ -47,6 +52,13 @@ def _fixture(root: Path, trade_date: str = "20260825") -> Path:
     }
     for name in SOURCE_NAMES:
         _write(date_dir / f"{name}.json", payloads[name])
+    parquet_dir = root / "kline_daily_enriched" / f"date={trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+    parquet_dir.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame({
+        "date": [date(int(trade_date[:4]), int(trade_date[4:6]), int(trade_date[6:]))] * 3,
+        "change_pct": [2.0, -1.0, 0.0],
+        "amount": [100_000_000.0, 80_000_000.0, 50_000_000.0],
+    }).write_parquet(parquet_dir / "part.parquet")
     return root
 
 
@@ -58,6 +70,7 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
     date_dir = root / "quantx" / "20260825"
     assert (date_dir / "market_overview.json").exists()
     assert (date_dir / "screening_candidates.json").exists()
+    assert (date_dir / "review_data.json").exists()
     assert not (date_dir / "review.html").exists()
     status = json.loads((date_dir / "_pipeline_status.json").read_text(encoding="utf-8"))
     assert status["llm"] is False
@@ -68,6 +81,16 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
     assert manifest["sources"]["tushare"]["raw_sha256"]
     assert manifest["sources"]["tushare"]["normalized_sha256"]
     assert manifest["sources"]["tushare"]["raw_sha256"] != manifest["sources"]["tushare"]["normalized_sha256"]
+    assert {item["dataset_id"] for item in manifest["fact_artifacts"]} == {
+        "market_breadth_daily",
+        "limit_event_daily",
+        "theme_observation_daily",
+        "sector_flow_daily",
+    }
+    fact_repo = MarketFactRepository(root)
+    assert fact_repo.get_market_breadth(date(2026, 8, 25))["up_count"].to_list() == [1]
+    assert fact_repo.get_market_breadth(date(2026, 8, 25))["source"].to_list() == ["tickflow_enriched_aggregate"]
+    assert fact_repo.get_limit_events(date(2026, 8, 25))["symbol"].to_list() == ["000001"]
 
 
 def test_pipeline_is_idempotent_and_catalog_uses_pipeline_status(tmp_path):
@@ -85,7 +108,7 @@ def test_pipeline_is_idempotent_and_catalog_uses_pipeline_status(tmp_path):
     assert "sections" not in tables
 
 
-def test_recompute_is_offline_and_fails_when_required_snapshot_is_missing(tmp_path, monkeypatch):
+def test_recompute_uses_tickflow_breadth_when_tushare_snapshot_is_missing(tmp_path, monkeypatch):
     root = _fixture(tmp_path)
     (root / "quantx" / "20260825" / "tushare.json").unlink()
 
@@ -95,8 +118,24 @@ def test_recompute_is_offline_and_fails_when_required_snapshot_is_missing(tmp_pa
     monkeypatch.setattr(collectors, "_collect_tushare", network_must_not_run)
     monkeypatch.setattr(collectors, "_collect_legacy", network_must_not_run)
     result = run_pipeline(root, "20260825", recompute=True)
-    assert result["status"] == "failed"
-    assert any("tushare" in error for error in result["errors"])
+    assert result["status"] == "degraded"
+    assert any("tushare" in warning for warning in result["warnings"])
+    breadth = MarketFactRepository(root).get_market_breadth(date(2026, 8, 25))
+    assert breadth["source"].to_list() == ["tickflow_enriched_aggregate"]
+
+
+def test_required_limit_dataset_uses_fallback_when_pywencai_is_missing(tmp_path):
+    root = _fixture(tmp_path)
+    date_dir = root / "quantx" / "20260825"
+    (date_dir / "pywencai.json").unlink()
+
+    result = run_pipeline(root, "20260825", recompute=True)
+
+    assert result["status"] == "degraded"
+    assert any("limit_event_daily" in warning for warning in result["warnings"])
+    events = MarketFactRepository(root).get_limit_events(date(2026, 8, 25))
+    assert events["source"].unique().to_list() == ["zhangtingke"]
+    assert events["is_fallback"].all()
 
 
 def test_failed_run_keeps_last_published_tables(tmp_path):
@@ -107,6 +146,12 @@ def test_failed_run_keeps_last_published_tables(tmp_path):
     before = (date_dir / "market_overview.json").read_text(encoding="utf-8")
     (date_dir / "tushare.json").unlink()
     (date_dir / "normalized" / "tushare.json").unlink()
+    (
+        root
+        / "kline_daily_enriched"
+        / "date=2026-08-25"
+        / "part.parquet"
+    ).unlink()
     failed = run_pipeline(root, "20260825", recompute=True)
     assert failed["status"] == "failed"
     assert (date_dir / "market_overview.json").read_text(encoding="utf-8") == before
@@ -207,3 +252,76 @@ def test_multiday_api_get_is_read_only_and_rebuild_is_explicit_post(tmp_path):
         rebuilt = client.post("/api/quantx-data/catalog/rebuild?trade_date=20260825")
         assert rebuilt.status_code == 200
         assert rebuilt.json()["rebuilt"] == 1
+
+
+def test_tables_api_reads_canonical_facts_and_reports_legacy_drift(tmp_path):
+    _fixture(tmp_path, "20260825")
+    assert run_pipeline(tmp_path, "20260825", recompute=True)["status"] == "complete"
+    date_dir = tmp_path / "quantx" / "20260825"
+    legacy_breadth = json.loads((date_dir / "market_breadth.json").read_text(encoding="utf-8"))
+    legacy_breadth["up_count"] = 999
+    _write(date_dir / "market_breadth.json", legacy_breadth)
+
+    app = FastAPI()
+    app.include_router(quantx_data_router)
+    app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
+    app.state.market_facts = MarketFactRepository(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.get("/api/quantx-data/20260825/tables")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["market_breadth"]["up_count"] == 1
+    assert payload["data_foundation"]["read_mode"] == "canonical_with_legacy_enrichment"
+    breadth_status = payload["data_foundation"]["reconciliation"]["market_breadth_daily"]
+    assert breadth_status["status"] == "mismatch"
+    assert breadth_status["differences"]["up_count"] == {"canonical": 1, "legacy": 999}
+
+
+def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path):
+    _fixture(tmp_path, "20260825")
+    assert run_pipeline(tmp_path, "20260825", recompute=True)["status"] == "complete"
+    date_dir = tmp_path / "quantx" / "20260825"
+    for source in SOURCE_NAMES:
+        (date_dir / f"{source}.json").unlink()
+
+    app = FastAPI()
+    app.include_router(quantx_router)
+    app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
+
+    with TestClient(app) as client:
+        response = client.get("/api/quantx/review/20260825/data")
+
+    assert response.status_code == 200
+    assert set(response.json()["sections"]) == {f"s{index}" for index in range(7)}
+
+
+def test_history_migration_is_dry_run_by_default_and_preserves_legacy(tmp_path):
+    _fixture(tmp_path, "20260825")
+    legacy_path = tmp_path / "quantx" / "20260825" / "tushare.json"
+    legacy_before = legacy_path.read_bytes()
+
+    preview = migrate_quantx_history(tmp_path)
+    assert preview["dry_run"] is True
+    assert preview["eligible"] == ["20260825"]
+    assert not (tmp_path / "market_breadth_daily").exists()
+
+    applied = migrate_quantx_history(tmp_path, apply=True)
+    assert applied["migrated"] == ["20260825"]
+    assert legacy_path.read_bytes() == legacy_before
+    migration = json.loads(
+        (tmp_path / "quantx" / "20260825" / "_market_facts_migration.json").read_text(encoding="utf-8")
+    )
+    assert set(migration["reconciliation"]) == {
+        "market_breadth_daily",
+        "limit_event_daily",
+        "theme_observation_daily",
+        "sector_flow_daily",
+    }
+    assert migration["legacy_preserved"] is True
+    assert (tmp_path / "quantx" / "20260825" / "review_data.json").is_file()
+    assert MarketFactRepository(tmp_path).get_market_breadth(date(2026, 8, 25)).height == 1
+
+    repeated = migrate_quantx_history(tmp_path, apply=True)
+    assert repeated["skipped_existing"] == ["20260825"]

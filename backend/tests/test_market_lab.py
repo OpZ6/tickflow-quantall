@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.market_lab import router
+from app.market_facts.registry import DatasetId
 from app.services.market_lab import (
     build_etf_momentum,
     calculate_drawdown,
@@ -272,6 +273,67 @@ def test_sector_flow_keeps_strongest_inflow_and_outflow_sides() -> None:
     assert totals["板块39"] == -12_000_000.0
     assert any(value > 0 for value in totals.values())
     assert any(value < 0 for value in totals.values())
+
+
+def test_sector_flow_prefers_canonical_observed_facts() -> None:
+    rows = pl.DataFrame({
+        "trade_date": [date(2026, 8, 20), date(2026, 8, 21)],
+        "sector_name": ["AI", "AI"],
+        "dimension": ["industry", "industry"],
+        "net_inflow_yi": [2.0, 3.0],
+        "source": ["sector_fund_flow_s4", "sector_fund_flow_s4"],
+        "is_fallback": [False, False],
+    })
+
+    class FactRepo:
+        def available_dates(self, dataset_id):
+            assert dataset_id == DatasetId.SECTOR_FLOW_DAILY
+            return [date(2026, 8, 20), date(2026, 8, 21)]
+
+        def get_range(self, dataset_id, start, end):
+            assert dataset_id == DatasetId.SECTOR_FLOW_DAILY
+            return rows.filter((pl.col("trade_date") >= start) & (pl.col("trade_date") <= end))
+
+    class LegacyRepo:
+        def get_enriched_latest(self):
+            raise AssertionError("canonical facts should avoid proxy fallback")
+
+    result = sector_flow_from_repo(LegacyRepo(), fact_repo=FactRepo())
+
+    assert result["quality"] == "observed"
+    assert result["basis"] == "sector_flow_daily.net_inflow_yi"
+    assert result["rows"][0]["total_flow_yuan"] == 500_000_000.0
+
+
+def test_sector_radar_prefers_canonical_observed_facts() -> None:
+    rows = pl.DataFrame({
+        "trade_date": [date(2026, 8, 20), date(2026, 8, 20), date(2026, 8, 21), date(2026, 8, 21)],
+        "sector_name": ["AI", "Bank", "AI", "Bank"],
+        "dimension": ["industry"] * 4,
+        "net_inflow_yi": [2.0, -1.0, 3.0, -2.0],
+        "amount_yi": [20.0, 20.0, 25.0, 25.0],
+        "pct_chg": [1.0, -0.5, 2.0, -1.0],
+        "source": ["sector_fund_flow_s4"] * 4,
+        "is_fallback": [False] * 4,
+    })
+
+    class FactRepo:
+        def available_dates(self, _dataset_id):
+            return [date(2026, 8, 20), date(2026, 8, 21)]
+
+        def get_range(self, _dataset_id, start, end):
+            return rows.filter((pl.col("trade_date") >= start) & (pl.col("trade_date") <= end))
+
+    class LegacyRepo:
+        def get_enriched_latest(self):
+            raise AssertionError("canonical facts should avoid proxy fallback")
+
+    result = sector_radar_from_repo(LegacyRepo(), fact_repo=FactRepo())
+
+    assert result["quality"] == "observed"
+    assert result["basis"] == "sector_flow_daily.net_inflow_yi"
+    assert result["as_of"] == "2026-08-21"
+    assert result["rows"][0]["sector"] == "AI"
 
 
 def test_dimension_map_cache_keeps_dataframe_and_count_contract(monkeypatch) -> None:

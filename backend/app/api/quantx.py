@@ -73,9 +73,13 @@ def build_review(trade_date: str, request: Request):
 
 @router.get("/review/{trade_date}/data")
 def get_review_data(trade_date: str, request: Request):
-    from app.services.review_v4 import build_review_data
     d = _date_dir(request, trade_date)
-    return build_review_data(d)
+    from app.quantx_data.io import read_json
+
+    snapshot = read_json(d / "review_data.json")
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"no review_data.json for {trade_date}")
+    return snapshot
 
 
 # ---- 多日驾驶舱 ----

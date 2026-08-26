@@ -41,12 +41,17 @@ def run_scheduled(data_root: Path) -> dict | None:
         return None
 
 
-def register(scheduler, data_root: Path, *, hour: int = 16, minute: int = 0) -> None:
-    """Register an independent post-close data refresh on TickFlow's scheduler."""
+def register(scheduler, data_root: Path, *, hour: int = 17, minute: int = 30) -> None:
+    """Register the final-cutoff recovery run.
+
+    The normal QuantX run is dependency-triggered by TickFlow's successful
+    post-close pipeline.  This later job only recovers cases where that trigger
+    was missed (for example, a process restart between jobs).
+    """
     scheduler.add_job(
         lambda: run_scheduled(data_root),
         trigger=CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone="Asia/Shanghai"),
-        id="quantx_data_daily",
+        id="quantx_data_deadline_recovery",
         misfire_grace_time=7200,
         replace_existing=True,
     )

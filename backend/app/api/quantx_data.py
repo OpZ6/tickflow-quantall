@@ -5,13 +5,14 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.quantx_data.catalog import build_catalog, load_artifact, load_tables
+from app.quantx_data.catalog import build_catalog, load_artifact
 from app.quantx_data.multiday import (
     load_multiday_snapshot,
     rebuild_multiday_snapshot,
     rebuild_multiday_snapshots,
 )
 from app.quantx_data.pipeline import get_status, run_pipeline
+from app.quantx_data.repository import QuantXTableRepository
 
 router = APIRouter(prefix="/api/quantx-data", tags=["quantx-data"])
 
@@ -111,7 +112,12 @@ def multiday(trade_date: str, request: Request) -> dict:
 @router.get("/{trade_date}/tables")
 def tables(trade_date: str, request: Request) -> dict:
     try:
-        return load_tables(_root(request), trade_date)
+        facts = getattr(request.app.state, "market_facts", None)
+        if facts is None:
+            from app.market_facts.repository import MarketFactRepository
+
+            facts = MarketFactRepository(_root(request).parent)
+        return QuantXTableRepository(_root(request), facts).load(trade_date)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"no structured data for {trade_date}") from exc
     except ValueError as exc:

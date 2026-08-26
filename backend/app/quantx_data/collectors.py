@@ -115,6 +115,7 @@ def collect_source(
                 source=str(existing.get("source") or "tickflow_snapshot"),
                 error=f"payload date {observed_date} != requested {trade_date}",
                 record_count=_count_records(existing),
+                reused_snapshot=True,
                 attempts=1,
             )
         status = _payload_status(existing)
@@ -126,6 +127,7 @@ def collect_source(
             record_count=_count_records(existing),
             collected_at=str(existing.get("scraped_at") or existing.get("collected_at") or ""),
             input_path=str(date_dir / f"{spec.name}.json"),
+            reused_snapshot=True,
             attempts=1,
         )
 

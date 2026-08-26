@@ -12,6 +12,7 @@ PUBLIC_ARTIFACTS = {
     "theme_snapshot", "theme_rankings", "theme_history", "theme_stocks", "sentiment_state",
     "risk_signals", "participation", "sector_fund_flow", "sector_rotation",
     "screening_candidates", "trend_history", "trend_pool", "_computed",
+    "review_data",
 }
 
 

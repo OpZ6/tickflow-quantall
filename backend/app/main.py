@@ -21,6 +21,7 @@ from app.api import (
     chanlun,
     chanlun_analysis,
     data,
+    data_sources,
     ext_data,
     financials,
     indices,
@@ -108,6 +109,9 @@ async def _application_lifespan(app: FastAPI):
     repo = KlineRepository(store)
     app.state.datastore = store
     app.state.repo = repo
+    from app.market_facts.repository import MarketFactRepository
+
+    app.state.market_facts = MarketFactRepository(store.data_dir)
     from app.services.mining_manager import MiningJobManager
 
     mining_manager = MiningJobManager(store.data_dir)
@@ -457,6 +461,7 @@ app.include_router(regime.router)
 app.include_router(analysis.router)
 app.include_router(pipeline.router)
 app.include_router(data.router)
+app.include_router(data_sources.router)
 app.include_router(ext_data.router)
 app.include_router(financials.router)
 app.include_router(stock_analysis.router)

@@ -89,6 +89,10 @@ class DataStore:
             "ai_cache",
             "user_data",
             "depth5",
+            "market_breadth_daily",
+            "limit_event_daily",
+            "theme_observation_daily",
+            "sector_flow_daily",
         ):
             (self.data_dir / sub).mkdir(parents=True, exist_ok=True)
 
@@ -206,6 +210,14 @@ class DataStore:
             # 五档盘口 sealed 真假涨停(独立旁路存储,不进 enriched)
             f"""CREATE OR REPLACE VIEW depth5 AS
                 SELECT * FROM read_parquet('{d}/depth5/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW market_breadth_daily AS
+                SELECT * FROM read_parquet('{d}/market_breadth_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW limit_event_daily AS
+                SELECT * FROM read_parquet('{d}/limit_event_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW theme_observation_daily AS
+                SELECT * FROM read_parquet('{d}/theme_observation_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW sector_flow_daily AS
+                SELECT * FROM read_parquet('{d}/sector_flow_daily/**/*.parquet', union_by_name=true)""",
         ]
         for sql in statements:
             try:
@@ -2054,7 +2066,7 @@ class KlineRepository:
             self.store._register_unified_views()
 
     def rebuild_views(self) -> None:
-        """重建全部 13 张 parquet 视图并重挂 unified 视图 —— 唯一权威实现。
+        """重建全部核心 parquet 视图并重挂 unified 视图 —— 唯一权威实现。
 
         原先 daily_pipeline._refresh_views(盘后管道) 与 /api/data/clear(清库) 各自
         内联了同一份视图重建 SQL, 清库那份还漏了几张视图导致漂移。此处收敛为单一入口:
@@ -2075,6 +2087,10 @@ class KlineRepository:
             "instruments": f"{d}/instruments/**/*.parquet",
             "instruments_index": f"{d}/instruments_index/**/*.parquet",
             "instruments_etf": f"{d}/instruments_etf/**/*.parquet",
+            "market_breadth_daily": f"{d}/market_breadth_daily/**/*.parquet",
+            "limit_event_daily": f"{d}/limit_event_daily/**/*.parquet",
+            "theme_observation_daily": f"{d}/theme_observation_daily/**/*.parquet",
+            "sector_flow_daily": f"{d}/sector_flow_daily/**/*.parquet",
         }
         for name, path in views.items():
             try:

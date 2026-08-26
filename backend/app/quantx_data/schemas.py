@@ -38,6 +38,8 @@ class SourceResult:
     input_path: str | None = None
     raw_sha256: str | None = None
     normalized_sha256: str | None = None
+    reused_snapshot: bool = False
+    snapshot_refs: tuple[str, ...] = ()
     attempts: int = 0
 
     @property
@@ -56,6 +58,8 @@ class SourceResult:
             "input_path": self.input_path,
             "raw_sha256": self.raw_sha256,
             "normalized_sha256": self.normalized_sha256,
+            "reused_snapshot": self.reused_snapshot,
+            "snapshot_refs": list(self.snapshot_refs),
             "attempts": self.attempts,
         }
 

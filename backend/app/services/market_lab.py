@@ -9,6 +9,8 @@ from typing import Any
 
 import polars as pl
 
+from app.market_facts.registry import DatasetId, get_route
+
 
 def _pct(now: float, before: float) -> float:
     return (now / before - 1) * 100 if before else 0.0
@@ -316,7 +318,60 @@ def _select_flow_extremes(rows: list[dict[str, Any]], limit: int = 30) -> list[d
     return sorted(selected, key=lambda row: row["total_flow_yuan"], reverse=True)
 
 
-def sector_flow_from_repo(repo, dimension: str = "industry") -> dict[str, Any]:
+def _sector_flow_from_facts(fact_repo, dimension: str) -> dict[str, Any] | None:
+    dates = fact_repo.available_dates(DatasetId.SECTOR_FLOW_DAILY)[-3:]
+    if not dates:
+        return None
+    frame = fact_repo.get_range(DatasetId.SECTOR_FLOW_DAILY, dates[0], dates[-1])
+    if frame.is_empty():
+        return None
+    frame = frame.filter(pl.col("dimension") == dimension)
+    selected: list[pl.DataFrame] = []
+    for trade_date in dates:
+        daily = frame.filter(pl.col("trade_date") == trade_date)
+        for source in get_route(DatasetId.SECTOR_FLOW_DAILY).sources:
+            source_rows = daily.filter(pl.col("source") == source)
+            if not source_rows.is_empty():
+                selected.append(source_rows)
+                break
+    if not selected:
+        return None
+    chosen = pl.concat(selected)
+    rows: list[dict[str, Any]] = []
+    for sector_name in chosen["sector_name"].unique().sort().to_list():
+        sector = chosen.filter(pl.col("sector_name") == sector_name).sort("trade_date")
+        points = [
+            {
+                "date": str(row["trade_date"]),
+                "flow_yuan": (row.get("net_inflow_yi") or 0) * 100_000_000,
+            }
+            for row in sector.to_dicts()
+        ]
+        rows.append(
+            {
+                "sector": sector_name,
+                "points": points,
+                "total_flow_yuan": sum(point["flow_yuan"] for point in points),
+            }
+        )
+    rows = _select_flow_extremes(rows)
+    fallback_only = chosen["is_fallback"].all()
+    return {
+        "available": bool(rows),
+        "quality": "fallback" if fallback_only else "observed",
+        "basis": "sector_flow_daily.net_inflow_yi",
+        "unit": "CNY",
+        "detail": "来自统一标准事实; fallback 表示主来源缺失" if fallback_only else None,
+        "dates": [str(value) for value in dates],
+        "rows": rows,
+    }
+
+
+def sector_flow_from_repo(repo, dimension: str = "industry", fact_repo=None) -> dict[str, Any]:
+    if fact_repo is not None:
+        canonical = _sector_flow_from_facts(fact_repo, dimension)
+        if canonical is not None:
+            return canonical
     latest, latest_date = repo.get_enriched_latest()
     if latest_date is None or latest.is_empty():
         return {"available": False, "quality": "unavailable", "detail": "本地暂无股票日线", "rows": []}
@@ -460,10 +515,74 @@ def _rank_sector_snapshots(daily: pl.DataFrame, dimension: str) -> dict[str, lis
     return snapshots
 
 
+def _sector_radar_from_facts(fact_repo, dimension: str, as_of: date | None) -> dict[str, Any] | None:
+    available = fact_repo.available_dates(DatasetId.SECTOR_FLOW_DAILY)
+    if as_of is not None:
+        available = [value for value in available if value <= as_of]
+    available = available[-60:]
+    if not available:
+        return None
+    frame = fact_repo.get_range(
+        DatasetId.SECTOR_FLOW_DAILY, available[0], available[-1]
+    ).filter(pl.col("dimension") == dimension)
+    selected: list[pl.DataFrame] = []
+    for trade_date in available:
+        daily = frame.filter(pl.col("trade_date") == trade_date)
+        for source in get_route(DatasetId.SECTOR_FLOW_DAILY).sources:
+            source_rows = daily.filter(pl.col("source") == source)
+            if not source_rows.is_empty():
+                selected.append(source_rows)
+                break
+    if not selected:
+        return None
+    chosen = pl.concat(selected).with_columns(
+        pl.col("sector_name").alias(dimension),
+        pl.col("trade_date").alias("date"),
+        (pl.col("net_inflow_yi").fill_null(0) * 100_000_000).alias("flow_yuan"),
+        (pl.col("amount_yi").fill_null(0) * 100_000_000).alias("turnover_yuan"),
+        pl.col("pct_chg").fill_null(0).alias("return_pct"),
+    )
+    daily_abs_flow = pl.col("flow_yuan").abs().sum().over("date")
+    daily = chosen.with_columns(
+        pl.when(pl.col("turnover_yuan").abs() > 1e-12)
+        .then(pl.col("flow_yuan") / pl.col("turnover_yuan").abs() * 100)
+        .when(daily_abs_flow > 1e-12)
+        .then(pl.col("flow_yuan") / daily_abs_flow * 100)
+        .otherwise(0.0)
+        .alias("flow_ratio_pct")
+    ).select([dimension, "date", "return_pct", "flow_yuan", "flow_ratio_pct"])
+    snapshots = _rank_sector_snapshots(daily, dimension)
+    if not snapshots:
+        return None
+    available_dates = sorted(snapshots)
+    selected_date = available_dates[-1]
+    fallback_only = chosen["is_fallback"].all()
+    return {
+        "available": True,
+        "quality": "fallback" if fallback_only else "observed",
+        "basis": "sector_flow_daily.net_inflow_yi",
+        "detail": "来自统一标准事实; fallback 表示主来源缺失" if fallback_only else None,
+        "as_of": selected_date,
+        "available_dates": available_dates,
+        "universe_size": len(snapshots[selected_date]),
+        "unit": "CNY",
+        "score_formula": {
+            "swing": "9.16 x RankPct + 61.53",
+            "ratio": "10.74 x RankPct - 10.61",
+            "amount": "11.11 x RankPct - 28.26",
+        },
+        "rows": snapshots[selected_date],
+    }
+
+
 def sector_radar_from_repo(
-    repo, dimension: str = "industry", as_of: date | None = None
+    repo, dimension: str = "industry", as_of: date | None = None, fact_repo=None
 ) -> dict[str, Any]:
     """Build OneChart-compatible money-flow radar ranks for every local sector."""
+    if fact_repo is not None:
+        canonical = _sector_radar_from_facts(fact_repo, dimension, as_of)
+        if canonical is not None:
+            return canonical
     latest, latest_date = repo.get_enriched_latest()
     if latest_date is None or latest.is_empty():
         return {"available": False, "quality": "unavailable", "detail": "本地暂无股票日线", "rows": []}

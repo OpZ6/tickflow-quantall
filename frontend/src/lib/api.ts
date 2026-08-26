@@ -1404,6 +1404,51 @@ export interface DataSourcesResponse {
   config_dir: string
 }
 
+export interface MarketDatasetContract {
+  dataset_id: string
+  description: string
+  schema_version: number
+  primary_key: string[]
+  partition_keys: string[]
+  required_columns: string[]
+  field_units: Record<string, string>
+  freshness: string
+}
+
+export interface MarketSourceContract {
+  source_id: string
+  display_name: string
+  supported_datasets: string[]
+  collector_type: 'provider' | 'python'
+  collector: string
+  credentials_ref: string | null
+  credentials_configured: boolean
+  dependency_available: boolean
+  max_retries: number
+  freshness_required: boolean
+}
+
+export interface MarketSourceHealth {
+  source_id: string
+  status: string
+  record_count?: number
+  collected_at?: string | null
+  used_fallback?: boolean
+  error?: string | null
+}
+
+export interface MarketDataFoundation {
+  datasets: MarketDatasetContract[]
+  sources: MarketSourceContract[]
+  routes: Array<{ dataset_id: string; sources: string[] }>
+  health: {
+    latest_trade_date: string | null
+    run_id: string | null
+    status: string
+    sources: MarketSourceHealth[]
+  }
+}
+
 export interface DataSourceTestResult {
   provider: string
   dataset: string
@@ -1865,6 +1910,15 @@ export const api = {
 
   preferences: () => request<Preferences>('/api/settings/preferences'),
   dataSources: () => request<DataSourcesResponse>('/api/settings/data-sources'),
+  marketDataFoundation: async (): Promise<MarketDataFoundation> => {
+    const [datasets, sources, routes, health] = await Promise.all([
+      request<{ datasets: MarketDatasetContract[] }>('/api/data-sources/datasets'),
+      request<{ sources: MarketSourceContract[] }>('/api/data-sources/sources'),
+      request<{ routes: Array<{ dataset_id: string; sources: string[] }> }>('/api/data-sources/routes'),
+      request<MarketDataFoundation['health']>('/api/data-sources/health'),
+    ])
+    return { datasets: datasets.datasets, sources: sources.sources, routes: routes.routes, health }
+  },
   dataSource: (name: string) => request<CustomSourceConfig>(`/api/settings/data-sources/${encodeURIComponent(name)}`),
   saveDataSource: (config: CustomSourceConfig) =>
     request<DataSourcesResponse>('/api/settings/data-sources', {

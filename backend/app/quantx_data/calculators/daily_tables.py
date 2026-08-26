@@ -26,8 +26,10 @@ def _records(payload: dict[str, Any], *keys: str) -> list[dict[str, Any]]:
 
 def _market_tables(trade_date: str, sources: dict[str, dict[str, Any]], computed: dict[str, Any]) -> dict[str, dict[str, Any]]:
     tushare = sources.get("tushare", {})
-    daily = _records(tushare, "daily", "stocks", "records")
-    daily_market = tushare.get("daily_market") if isinstance(tushare.get("daily_market"), dict) else {}
+    aggregate = sources.get("tickflow_enriched_aggregate", {})
+    market_payload = aggregate or tushare
+    daily = _records(market_payload, "daily", "stocks", "records")
+    daily_market = market_payload.get("daily_market") if isinstance(market_payload.get("daily_market"), dict) else {}
     indexes_value = tushare.get("indexes") or tushare.get("index") or []
     if isinstance(indexes_value, dict):
         indexes = [{"code": code, **(row if isinstance(row, dict) else {})} for code, row in indexes_value.items()]
@@ -65,14 +67,14 @@ def _market_tables(trade_date: str, sources: dict[str, dict[str, Any]], computed
         "daily_market": daily_market,
         "total_amount_yi": round(amount_yi, 2),
         "market_heat": computed.get("market_heat", {}),
-        "source_refs": ["tushare", "akshare"],
+        "source_refs": ["tickflow_enriched_aggregate", "tushare", "akshare"],
     }
     liquidity = {
         "schema_version": 1, "trade_date": trade_date,
         "total_amount_yi": round(amount_yi, 2),
         "top5_amount_yi": round(sum(sorted((_num(r.get("amount_yi"), _num(r.get("amount")) / 100000) for r in daily), reverse=True)[:5]), 2) if daily else None,
         "congestion": computed.get("congestion", {}),
-        "source_refs": ["tushare", "legulegu"],
+        "source_refs": ["tickflow_enriched_aggregate", "tushare", "legulegu"],
     }
     return {"market_overview": market_overview, "market_breadth": breadth, "market_liquidity": liquidity}
 

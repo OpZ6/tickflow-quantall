@@ -9,13 +9,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.market_facts.adapters import load_tickflow_market_aggregate
+from app.market_facts.builders import build_initial_fact_batches
+from app.market_facts.registry import datasets_for_source
+from app.market_facts.snapshots import SourceSnapshotStore
+from app.market_facts.storage import FactPublication
+
 from .calculators import build_daily_tables
 from .collectors import collect_source, source_specs
 from .io import read_json, sha256_file, validate_trade_date, write_json_atomic
 from .manifest import write_manifest
 from .normalizers import normalize_source
-from .quality import validate_artifacts, validate_sources
-from .schemas import PipelineResult, RunStatus
+from .quality import validate_artifacts, validate_fact_batches, validate_sources
+from .schemas import PipelineResult, RunStatus, SourceResult
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +140,8 @@ def run_pipeline(
     stages = ["pending", "collecting"]
     errors: list[str] = []
     warnings: list[str] = []
+    fact_publication: FactPublication | None = None
+    snapshot_store = SourceSnapshotStore(data_root)
     try:
         for spec in specs:
             result = collect_source(
@@ -148,6 +156,19 @@ def run_pipeline(
                 raw_payload = result.payload
                 write_json_atomic(run_dir / "raw" / f"{spec.name}.json", raw_payload)
                 result.raw_sha256 = sha256_file(run_dir / "raw" / f"{spec.name}.json")
+                dataset_ids = datasets_for_source(spec.name)
+                if not result.reused_snapshot and dataset_ids:
+                    snapshot = snapshot_store.record(
+                        source_id=spec.name,
+                        dataset_ids=dataset_ids,
+                        trade_date=trade_date,
+                        run_id=run_id,
+                        payload=raw_payload,
+                    )
+                    result.snapshot_refs = tuple(
+                        path.relative_to(data_root).as_posix()
+                        for path in snapshot.metadata_paths
+                    )
                 normalized = normalize_source(spec.name, trade_date, raw_payload)
                 result.payload = normalized
                 write_json_atomic(run_dir / f"{spec.name}.json", normalized)
@@ -157,6 +178,18 @@ def run_pipeline(
             results[spec.name] = result
 
         stages.append("normalized")
+        aggregate = load_tickflow_market_aggregate(data_root, trade_date)
+        if aggregate is not None:
+            results["tickflow_enriched_aggregate"] = SourceResult(
+                name="tickflow_enriched_aggregate",
+                status="ok",
+                payload=aggregate,
+                source="tickflow_enriched_aggregate",
+                record_count=len(aggregate["daily"]),
+                collected_at=aggregate["scraped_at"],
+                input_path=f"{aggregate['input_table']}/date={trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}",
+                attempts=1,
+            )
         source_payloads = _source_payloads(results)
         if recompute and not source_payloads:
             raise PipelineError(f"no reusable source payloads for {trade_date}")
@@ -176,23 +209,58 @@ def run_pipeline(
         tables = build_daily_tables(trade_date, run_dir, quantx_dir, source_payloads)
         for name, payload in tables.items():
             write_json_atomic(run_dir / f"{name}.json", payload)
+        from app.services.review_v4 import build_review_data
+
+        write_json_atomic(run_dir / "review_data.json", build_review_data(run_dir))
         stages.extend(["trends", "structured"])
 
+        fact_batches = build_initial_fact_batches(trade_date, source_payloads, run_id)
         status, source_errors, source_warnings = validate_sources(specs, results)
         errors.extend(source_errors)
         warnings.extend(source_warnings)
+        dataset_status, dataset_errors, dataset_warnings = validate_fact_batches(
+            fact_batches, source_payloads
+        )
+        errors.extend(dataset_errors)
+        warnings.extend(dataset_warnings)
+        if dataset_status == RunStatus.FAILED:
+            status = RunStatus.FAILED
+        elif dataset_status == RunStatus.DEGRADED and status == RunStatus.COMPLETE:
+            status = RunStatus.DEGRADED
         artifact_errors = validate_artifacts(run_dir)
         if artifact_errors:
             status = RunStatus.FAILED
             errors.extend(f"missing artifact: {name}" for name in artifact_errors)
         stages.append("quality")
         provisional = PipelineResult(trade_date, status, run_id, stages, results, {}, errors, warnings)
-        manifest = write_manifest(run_dir, trade_date, run_id, status, results, errors=errors, warnings=warnings)
+        fact_artifacts: list[dict[str, object]] = []
+        if status in {RunStatus.COMPLETE, RunStatus.DEGRADED}:
+            fact_publication = FactPublication(data_root, run_id)
+            fact_publication.stage(fact_batches)
+            fact_artifacts = fact_publication.manifest_artifacts()
+        manifest = write_manifest(
+            run_dir,
+            trade_date,
+            run_id,
+            status,
+            results,
+            errors=errors,
+            warnings=warnings,
+            fact_artifacts=fact_artifacts,
+        )
         provisional.artifacts = {item["path"]: item["sha256"] for item in manifest.get("artifacts", [])}
 
         if status in {RunStatus.COMPLETE, RunStatus.DEGRADED}:
             provisional.stages = stages
-            _publish(run_dir, final_dir, quantx_dir, provisional)
+            assert fact_publication is not None
+            fact_publication.commit()
+            try:
+                _publish(run_dir, final_dir, quantx_dir, provisional)
+            except Exception:
+                fact_publication.rollback()
+                raise
+            fact_publication.finalize()
+            fact_publication = None
             try:
                 from .catalog import build_and_save_catalog
                 from .multiday import build_multiday_snapshot
@@ -216,6 +284,8 @@ def run_pipeline(
         _write_status(final_dir / "_pipeline_status.json", failed)
         return failed.to_dict()
     finally:
+        if fact_publication is not None:
+            fact_publication.abandon()
         shutil.rmtree(run_dir, ignore_errors=True)
         lock.release()
 

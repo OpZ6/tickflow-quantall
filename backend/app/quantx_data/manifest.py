@@ -8,7 +8,17 @@ from .io import sha256_file, write_json_atomic
 from .schemas import RunStatus, SourceResult
 
 
-def write_manifest(date_dir: Path, trade_date: str, run_id: str, status: RunStatus, sources: dict[str, SourceResult], *, errors: list[str], warnings: list[str]) -> dict[str, Any]:
+def write_manifest(
+    date_dir: Path,
+    trade_date: str,
+    run_id: str,
+    status: RunStatus,
+    sources: dict[str, SourceResult],
+    *,
+    errors: list[str],
+    warnings: list[str],
+    fact_artifacts: list[dict[str, object]] | None = None,
+) -> dict[str, Any]:
     artifacts = []
     for path in sorted(date_dir.rglob("*")):
         if not path.is_file() or (path.name.startswith("_") and path.name == "_data_manifest.json"):
@@ -26,6 +36,7 @@ def write_manifest(date_dir: Path, trade_date: str, run_id: str, status: RunStat
         "sources": {name: result.to_dict() for name, result in sources.items()},
         "artifacts": artifacts,
         "artifact_count": len(artifacts),
+        "fact_artifacts": fact_artifacts or [],
         "errors": errors,
         "warnings": warnings,
     }
