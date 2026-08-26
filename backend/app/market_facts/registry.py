@@ -13,8 +13,12 @@ class DatasetId(StrEnum):
     TRADING_CALENDAR = "trading_calendar"
     MARKET_BREADTH_DAILY = "market_breadth_daily"
     LIMIT_EVENT_DAILY = "limit_event_daily"
+    LIMIT_LADDER_DAILY = "limit_ladder_daily"
     THEME_OBSERVATION_DAILY = "theme_observation_daily"
+    THEME_MEMBER_DAILY = "theme_member_daily"
     SECTOR_FLOW_DAILY = "sector_flow_daily"
+    MARKET_STATE_DAILY = "market_state_daily"
+    SCREENING_CANDIDATE_DAILY = "screening_candidate_daily"
 
 
 @dataclass(frozen=True)
@@ -134,6 +138,27 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
             ),
             field_units=MappingProxyType({}),
         ),
+        DatasetId.LIMIT_LADDER_DAILY: DatasetSpec(
+            dataset_id=DatasetId.LIMIT_LADDER_DAILY,
+            description="Daily consecutive limit-up ladder membership",
+            schema_version=1,
+            primary_key=("trade_date", "board_height", "symbol"),
+            partition_keys=("trade_date",),
+            required_columns=("trade_date", "board_height", "symbol", "exchange"),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "board_height": pl.UInt32,
+                    "symbol": pl.String,
+                    "exchange": pl.String,
+                    "asset_type": pl.String,
+                    "source_code": pl.String,
+                    "name": pl.String,
+                    "theme_name": pl.String,
+                }
+            ),
+            field_units=MappingProxyType({}),
+        ),
         DatasetId.THEME_OBSERVATION_DAILY: DatasetSpec(
             dataset_id=DatasetId.THEME_OBSERVATION_DAILY,
             description="Source-level daily theme observations",
@@ -152,6 +177,33 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 }
             ),
             field_units=MappingProxyType({"strength": "score"}),
+        ),
+        DatasetId.THEME_MEMBER_DAILY: DatasetSpec(
+            dataset_id=DatasetId.THEME_MEMBER_DAILY,
+            description="Point-in-time stock membership observed for a theme",
+            schema_version=1,
+            primary_key=("trade_date", "source", "theme_id", "symbol"),
+            partition_keys=("trade_date",),
+            required_columns=(
+                "trade_date",
+                "source",
+                "theme_id",
+                "theme_name",
+                "symbol",
+            ),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "theme_id": pl.String,
+                    "theme_name": pl.String,
+                    "symbol": pl.String,
+                    "exchange": pl.String,
+                    "asset_type": pl.String,
+                    "name": pl.String,
+                    "role": pl.String,
+                }
+            ),
+            field_units=MappingProxyType({}),
         ),
         DatasetId.SECTOR_FLOW_DAILY: DatasetSpec(
             dataset_id=DatasetId.SECTOR_FLOW_DAILY,
@@ -185,6 +237,92 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 }
             ),
         ),
+        DatasetId.MARKET_STATE_DAILY: DatasetSpec(
+            dataset_id=DatasetId.MARKET_STATE_DAILY,
+            description="Deterministic daily QuantX market and sentiment state",
+            schema_version=1,
+            primary_key=("trade_date", "market"),
+            partition_keys=("trade_date",),
+            required_columns=("trade_date", "market", "algorithm_version"),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "market": pl.String,
+                    "market_heat_score": pl.Float64,
+                    "market_heat_zone": pl.String,
+                    "short_term_sentiment_score": pl.Float64,
+                    "trend_sentiment_score": pl.Float64,
+                    "sentiment_semantics_version": pl.UInt32,
+                    "up_ratio_pct": pl.Float64,
+                    "up_count": pl.Int64,
+                    "down_count": pl.Int64,
+                    "limit_up_count": pl.Int64,
+                    "limit_down_count": pl.Int64,
+                    "seal_rate_pct": pl.Float64,
+                    "max_board": pl.UInt32,
+                    "advance_rate_pct": pl.Float64,
+                    "premium_rate_pct": pl.Float64,
+                    "loss_severity": pl.String,
+                    "ebb_signal_count": pl.UInt32,
+                    "crash_triggered": pl.Boolean,
+                    "participation_verdict": pl.String,
+                    "total_amount_yi": pl.Float64,
+                    "algorithm_version": pl.String,
+                    "input_generation": pl.String,
+                }
+            ),
+            field_units=MappingProxyType(
+                {
+                    "market_heat_score": "score",
+                    "short_term_sentiment_score": "score",
+                    "trend_sentiment_score": "score",
+                    "up_ratio_pct": "percent",
+                    "seal_rate_pct": "percent",
+                    "advance_rate_pct": "percent",
+                    "premium_rate_pct": "percent",
+                    "total_amount_yi": "CNY_100M",
+                }
+            ),
+        ),
+        DatasetId.SCREENING_CANDIDATE_DAILY: DatasetSpec(
+            dataset_id=DatasetId.SCREENING_CANDIDATE_DAILY,
+            description="Deterministic daily rule-screen candidates",
+            schema_version=1,
+            primary_key=("trade_date", "candidate_type", "symbol"),
+            partition_keys=("trade_date",),
+            required_columns=(
+                "trade_date",
+                "candidate_type",
+                "symbol",
+                "algorithm_version",
+            ),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "symbol": pl.String,
+                    "exchange": pl.String,
+                    "asset_type": pl.String,
+                    "name": pl.String,
+                    "candidate_type": pl.String,
+                    "priority": pl.String,
+                    "score": pl.Float64,
+                    "pct_chg": pl.Float64,
+                    "net_mf_yi": pl.Float64,
+                    "industry": pl.String,
+                    "rules_matched": pl.List(pl.String),
+                    "included": pl.Boolean,
+                    "algorithm_version": pl.String,
+                    "input_generation": pl.String,
+                }
+            ),
+            field_units=MappingProxyType(
+                {
+                    "score": "score",
+                    "pct_chg": "percent",
+                    "net_mf_yi": "CNY_100M",
+                }
+            ),
+        ),
     }
 )
 
@@ -203,13 +341,29 @@ ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
             DatasetId.LIMIT_EVENT_DAILY,
             ("pywencai", "zhangtingke", "zhangtingjun", "duanxianxia", "quicktiny", "dabanke"),
         ),
+        DatasetId.LIMIT_LADDER_DAILY: SourceRoute(
+            DatasetId.LIMIT_LADDER_DAILY,
+            ("zhangtingke", "pywencai"),
+        ),
         DatasetId.THEME_OBSERVATION_DAILY: SourceRoute(
             DatasetId.THEME_OBSERVATION_DAILY,
             ("ths_hot", "pywencai", "deepq"),
         ),
+        DatasetId.THEME_MEMBER_DAILY: SourceRoute(
+            DatasetId.THEME_MEMBER_DAILY,
+            ("pywencai", "ths_hot"),
+        ),
         DatasetId.SECTOR_FLOW_DAILY: SourceRoute(
             DatasetId.SECTOR_FLOW_DAILY,
             ("sector_fund_flow_s4", "akshare", "enriched_ohlcv_proxy"),
+        ),
+        DatasetId.MARKET_STATE_DAILY: SourceRoute(
+            DatasetId.MARKET_STATE_DAILY,
+            ("quantx_deterministic_v1",),
+        ),
+        DatasetId.SCREENING_CANDIDATE_DAILY: SourceRoute(
+            DatasetId.SCREENING_CANDIDATE_DAILY,
+            ("quantx_rule_screen_v1",),
         ),
     }
 )

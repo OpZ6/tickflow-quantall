@@ -214,7 +214,12 @@ def run_pipeline(
         write_json_atomic(run_dir / "review_data.json", build_review_data(run_dir))
         stages.extend(["trends", "structured"])
 
-        fact_batches = build_initial_fact_batches(trade_date, source_payloads, run_id)
+        fact_batches = build_initial_fact_batches(
+            trade_date,
+            source_payloads,
+            run_id,
+            structured_tables=tables,
+        )
         status, source_errors, source_warnings = validate_sources(specs, results)
         errors.extend(source_errors)
         warnings.extend(source_warnings)

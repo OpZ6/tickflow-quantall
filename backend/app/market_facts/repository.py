@@ -101,11 +101,23 @@ class MarketFactRepository:
     def get_limit_events(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.LIMIT_EVENT_DAILY, trade_date)
 
+    def get_limit_ladder(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.LIMIT_LADDER_DAILY, trade_date)
+
     def get_theme_observations(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.THEME_OBSERVATION_DAILY, trade_date)
 
+    def get_theme_members(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.THEME_MEMBER_DAILY, trade_date)
+
     def get_sector_flows(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.SECTOR_FLOW_DAILY, trade_date)
+
+    def get_market_state(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.MARKET_STATE_DAILY, trade_date)
+
+    def get_screening_candidates(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.SCREENING_CANDIDATE_DAILY, trade_date)
 
     def get_range(
         self,

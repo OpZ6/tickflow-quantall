@@ -129,8 +129,12 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         DatasetId.TRADING_CALENDAR,
         DatasetId.MARKET_BREADTH_DAILY,
         DatasetId.LIMIT_EVENT_DAILY,
+        DatasetId.LIMIT_LADDER_DAILY,
         DatasetId.THEME_OBSERVATION_DAILY,
+        DatasetId.THEME_MEMBER_DAILY,
         DatasetId.SECTOR_FLOW_DAILY,
+        DatasetId.MARKET_STATE_DAILY,
+        DatasetId.SCREENING_CANDIDATE_DAILY,
     }
 
     for dataset_id in dataset_ids:
@@ -262,6 +266,7 @@ def test_fact_publication_is_idempotent_and_repository_reads_canonical_data(tmp_
     assert repo.is_trading_day(date(2026, 8, 25)) is True
     assert repo.is_trading_day(date(2026, 8, 26)) is False
     assert repo.is_trading_day(date(2026, 8, 27)) is None
+    assert repo.get_limit_ladder(date(2026, 8, 25))["board_height"].max() == 2
 
     second = FactPublication(tmp_path, "run-2")
     second.stage(build_initial_fact_batches("20260825", _sources(), "run-2"))

@@ -8,8 +8,12 @@ const DATASET_LABELS: Record<string, string> = {
   trading_calendar: '交易日历',
   market_breadth_daily: '市场宽度',
   limit_event_daily: '涨跌停事件',
+  limit_ladder_daily: '连板梯队',
   theme_observation_daily: '题材观察',
+  theme_member_daily: '题材成员',
   sector_flow_daily: '行业资金流',
+  market_state_daily: '市场状态',
+  screening_candidate_daily: '规则候选池',
 }
 
 function StatusBadge({ status }: { status: string }) {

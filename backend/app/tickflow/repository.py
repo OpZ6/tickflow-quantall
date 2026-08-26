@@ -89,10 +89,15 @@ class DataStore:
             "ai_cache",
             "user_data",
             "depth5",
+            "trading_calendar",
             "market_breadth_daily",
             "limit_event_daily",
+            "limit_ladder_daily",
             "theme_observation_daily",
+            "theme_member_daily",
             "sector_flow_daily",
+            "market_state_daily",
+            "screening_candidate_daily",
         ):
             (self.data_dir / sub).mkdir(parents=True, exist_ok=True)
 
@@ -210,14 +215,24 @@ class DataStore:
             # 五档盘口 sealed 真假涨停(独立旁路存储,不进 enriched)
             f"""CREATE OR REPLACE VIEW depth5 AS
                 SELECT * FROM read_parquet('{d}/depth5/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW trading_calendar AS
+                SELECT * FROM read_parquet('{d}/trading_calendar/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW market_breadth_daily AS
                 SELECT * FROM read_parquet('{d}/market_breadth_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW limit_event_daily AS
                 SELECT * FROM read_parquet('{d}/limit_event_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW limit_ladder_daily AS
+                SELECT * FROM read_parquet('{d}/limit_ladder_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW theme_observation_daily AS
                 SELECT * FROM read_parquet('{d}/theme_observation_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW theme_member_daily AS
+                SELECT * FROM read_parquet('{d}/theme_member_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW sector_flow_daily AS
                 SELECT * FROM read_parquet('{d}/sector_flow_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW market_state_daily AS
+                SELECT * FROM read_parquet('{d}/market_state_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW screening_candidate_daily AS
+                SELECT * FROM read_parquet('{d}/screening_candidate_daily/**/*.parquet', union_by_name=true)""",
         ]
         for sql in statements:
             try:
@@ -2087,10 +2102,15 @@ class KlineRepository:
             "instruments": f"{d}/instruments/**/*.parquet",
             "instruments_index": f"{d}/instruments_index/**/*.parquet",
             "instruments_etf": f"{d}/instruments_etf/**/*.parquet",
+            "trading_calendar": f"{d}/trading_calendar/**/*.parquet",
             "market_breadth_daily": f"{d}/market_breadth_daily/**/*.parquet",
             "limit_event_daily": f"{d}/limit_event_daily/**/*.parquet",
+            "limit_ladder_daily": f"{d}/limit_ladder_daily/**/*.parquet",
             "theme_observation_daily": f"{d}/theme_observation_daily/**/*.parquet",
+            "theme_member_daily": f"{d}/theme_member_daily/**/*.parquet",
             "sector_flow_daily": f"{d}/sector_flow_daily/**/*.parquet",
+            "market_state_daily": f"{d}/market_state_daily/**/*.parquet",
+            "screening_candidate_daily": f"{d}/screening_candidate_daily/**/*.parquet",
         }
         for name, path in views.items():
             try:

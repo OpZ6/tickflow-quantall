@@ -48,6 +48,24 @@ def _sources(data_root: Path, date_dir: Path) -> dict[str, dict]:
     return payloads
 
 
+def _structured_tables(date_dir: Path) -> dict[str, dict]:
+    names = (
+        "_computed",
+        "sentiment_state",
+        "market_overview",
+        "market_breadth",
+        "limit_summary",
+        "limit_ladder",
+        "theme_stocks",
+        "screening_candidates",
+    )
+    return {
+        name: payload
+        for name in names
+        if isinstance(payload := read_json(date_dir / f"{name}.json"), dict)
+    }
+
+
 def migrate_quantx_history(
     data_root: Path,
     *,
@@ -78,7 +96,10 @@ def migrate_quantx_history(
         run_id = f"migration-{date_dir.name}-{uuid4().hex[:12]}"
         try:
             batches = build_initial_fact_batches(
-                date_dir.name, _sources(data_root, date_dir), run_id
+                date_dir.name,
+                _sources(data_root, date_dir),
+                run_id,
+                structured_tables=_structured_tables(date_dir),
             )
             if not force:
                 batches = [batch for batch in batches if batch.dataset_id in missing_ids]

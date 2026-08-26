@@ -9,9 +9,14 @@ import math
 import re
 from collections import defaultdict
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+
+import polars as pl
+
+from app.market_facts.registry import DatasetId, get_route
+from app.market_facts.repository import MarketFactRepository
 
 from .io import read_json, validate_trade_date, write_json_atomic
 
@@ -45,60 +50,44 @@ def _canonical_theme(value: Any) -> str:
     return aliases.get(name, name)
 
 
-def _date_dirs(quantx_dir: Path) -> list[Path]:
-    if not quantx_dir.is_dir():
-        return []
-    return [
-        path
-        for path in sorted(quantx_dir.iterdir(), key=lambda item: item.name)
-        if path.is_dir() and len(path.name) == 8 and path.name.isdigit() and (path / "_computed.json").is_file()
-    ]
+def _fact_dates(repo: MarketFactRepository) -> list[date]:
+    return repo.available_dates(DatasetId.MARKET_STATE_DAILY)
 
 
 def _rank_strength(rank: int, total: int) -> float:
     return 100.0 if total <= 1 else round(100 * (1 - (rank - 1) / (total - 1)), 1)
 
 
-def _theme_source_rows(date_dir: Path) -> dict[str, list[tuple[str, float | None]]]:
-    pywencai = read_json(date_dir / "pywencai.json", {}) or {}
-    ths = read_json(date_dir / "ths_hot.json", {}) or {}
-    deepq = read_json(date_dir / "deepq.json", {}) or {}
-    ranking = read_json(date_dir / "theme_rankings.json", {}) or {}
-    py_themes = (pywencai.get("limit_up") or {}).get("themes") or []
-    deepq_themes = (deepq.get("latest_day") or {}).get("sectors") or []
-    return {
-        "pywencai": [(str(item.get("name") or ""), _number(item.get("count"))) for item in py_themes],
-        "ths": [(str(item.get("tag") or ""), _number(item.get("count"))) for item in ths.get("reason_tags") or []],
-        "deepq": [
-            (
-                str(item.get("name") or item.get("sectorName") or item.get("sector") or ""),
-                _number(item.get("heatValue"), _number(item.get("value"))),
-            )
-            for item in deepq_themes
-        ],
-        "tickflow": [(str(item.get("name") or ""), _number(item.get("count"))) for item in ranking.get("themes") or []],
-    }
-
-
-def _theme_leaders(date_dir: Path) -> dict[str, list[dict[str, str]]]:
-    pywencai = read_json(date_dir / "pywencai.json", {}) or {}
+def _theme_leaders(
+    repo: MarketFactRepository,
+    trade_date: date,
+) -> dict[str, list[dict[str, str]]]:
+    members = repo.get_theme_members(trade_date)
     leaders: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for stock in (pywencai.get("limit_up") or {}).get("stocks") or []:
-        code = str(stock.get("code") or "")
-        name = str(stock.get("name") or "")
-        concepts = stock.get("concepts") or stock.get("themes") or []
-        for raw_theme in concepts:
-            theme = _canonical_theme(raw_theme)
-            if theme and code and len(leaders[theme]) < 3:
-                leaders[theme].append({"code": code, "name": name})
+    for stock in members.to_dicts():
+        theme = _canonical_theme(stock.get("theme_name"))
+        code = str(stock.get("symbol") or "")
+        if theme and code and len(leaders[theme]) < 3:
+            leaders[theme].append(
+                {"code": code, "name": str(stock.get("name") or "")}
+            )
     return dict(leaders)
 
 
-def _themes(date_dir: Path) -> list[dict[str, Any]]:
+def _themes(repo: MarketFactRepository, trade_date: date) -> list[dict[str, Any]]:
+    observations = repo.get_theme_observations(trade_date)
     merged: dict[str, dict[str, Any]] = {}
-    for source, rows in _theme_source_rows(date_dir).items():
-        usable = [(name, value) for name, value in rows if _canonical_theme(name)]
-        for rank, (raw_name, value) in enumerate(usable, start=1):
+    if observations.is_empty():
+        return []
+    for source in observations["source"].unique(maintain_order=True).to_list():
+        source_rows = observations.filter(pl.col("source") == source).sort(
+            "rank", nulls_last=True
+        ).to_dicts()
+        usable = [row for row in source_rows if _canonical_theme(row.get("theme_name"))]
+        for fallback_rank, row in enumerate(usable, start=1):
+            raw_name = str(row.get("theme_name") or "")
+            value = _number(row.get("strength"), _number(row.get("stock_count")))
+            rank = _integer(row.get("rank"), fallback_rank) or fallback_rank
             name = _canonical_theme(raw_name)
             item = merged.setdefault(name, {"name": name, "raw_names": set(), "sources": {}, "rank_strength": 0.0})
             item["raw_names"].add(raw_name)
@@ -106,7 +95,7 @@ def _themes(date_dir: Path) -> list[dict[str, Any]]:
             candidate = {"rank": rank, "value": value, "rank_strength": _rank_strength(rank, len(usable))}
             if existing is None or rank < existing["rank"]:
                 item["sources"][source] = candidate
-    leaders = _theme_leaders(date_dir)
+    leaders = _theme_leaders(repo, trade_date)
     result = []
     for item in merged.values():
         source_rows = list(item["sources"].values())
@@ -123,116 +112,103 @@ def _themes(date_dir: Path) -> list[dict[str, Any]]:
     return sorted(result, key=lambda item: (-item["source_count"], -item["rank_strength"], item["name"]))[:40]
 
 
-def _sector_rows(date_dir: Path) -> list[dict[str, Any]]:
-    structured = read_json(date_dir / "sector_fund_flow.json", {}) or {}
-    legacy = read_json(date_dir / "sector_fund_flow_s4.json", {}) or {}
-    akshare = read_json(date_dir / "akshare.json", {}) or {}
-    rows = structured.get("sectors") or legacy.get("sectors") or akshare.get("sector_fund_flow") or []
-    result = []
-    for raw in rows:
-        name = str(raw.get("name") or "").strip()
-        if not name:
-            continue
-        result.append(
-            {
-                "name": name,
-                "code": str(raw.get("code") or ""),
-                "pct_chg": _number(raw.get("pct_chg")),
-                "net_inflow_yi": _number(raw.get("net_inflow_yi")),
-                "amount_yi": _number(raw.get("amount_yi")),
-                "net_inflow_pct": _number(raw.get("net_inflow_pct")),
-                "source": "eastmoney_s4" if legacy.get("sectors") or structured.get("sectors") else "akshare",
-            }
-        )
-    return result
+def _preferred_frame(frame: pl.DataFrame, dataset_id: DatasetId) -> pl.DataFrame:
+    if frame.is_empty() or "source" not in frame.columns:
+        return frame
+    for source in get_route(dataset_id).sources:
+        selected = frame.filter(pl.col("source") == source)
+        if not selected.is_empty():
+            return selected
+    return frame.head(0)
 
 
-def _core_stocks(date_dir: Path) -> list[dict[str, Any]]:
-    pool = read_json(date_dir / "institution_trend_pool.json", {}) or read_json(date_dir / "trend_pool.json", {}) or {}
-    active = pool.get("active_pool") or pool.get("active") or []
-    if active:
-        return [
-            {
-                "code": str(item.get("code") or ""),
-                "name": item.get("name"),
-                "priority": item.get("priority") or "observe",
-                "score": _number(item.get("score")),
-                "pct_chg": _number(item.get("pct_chg")),
-                "net_mf_yi": _number(item.get("net_mf_yi")),
-                "industry": item.get("industry") or (item.get("theme_path") or {}).get("industry_chain"),
-                "source": "institution_trend_pool",
-            }
-            for item in active[:40]
-            if item.get("code")
-        ]
-    candidates = read_json(date_dir / "screening_candidates.json", {}) or {}
+def _sector_rows(repo: MarketFactRepository, trade_date: date) -> list[dict[str, Any]]:
+    frame = _preferred_frame(
+        repo.get_sector_flows(trade_date), DatasetId.SECTOR_FLOW_DAILY
+    )
     return [
         {
-            "code": str(item.get("code") or ""),
-            "name": item.get("name"),
-            "priority": "rule",
-            "score": None,
-            "pct_chg": None,
-            "net_mf_yi": None,
-            "industry": None,
-            "source": "deterministic_rule_screen",
+            "name": str(row.get("sector_name") or ""),
+            "code": str(row.get("sector_id") or ""),
+            "pct_chg": _number(row.get("pct_chg")),
+            "net_inflow_yi": _number(row.get("net_inflow_yi")),
+            "amount_yi": _number(row.get("amount_yi")),
+            "net_inflow_pct": None,
+            "source": str(row.get("source") or ""),
         }
-        for item in (candidates.get("candidates") or [])[:40]
-        if item.get("code")
+        for row in frame.to_dicts()
+        if str(row.get("sector_name") or "").strip()
     ]
 
 
-def _metrics(date_dir: Path) -> dict[str, Any]:
-    computed = read_json(date_dir / "_computed.json", {}) or {}
-    overview = read_json(date_dir / "market_overview.json", {}) or {}
-    breadth = read_json(date_dir / "market_breadth.json", {}) or overview.get("breadth") or {}
-    limit = read_json(date_dir / "limit_summary.json", {}) or {}
-    heat = computed.get("market_heat") or {}
-    heat_inputs = heat.get("inputs") or {}
-    short = computed.get("short_term_sentiment") or {}
-    trend = computed.get("trend_sentiment") or {}
-    loss = computed.get("loss_effect") or {}
-    risk = computed.get("ebb_risk_check") or {}
-    crash = computed.get("crash_signals") or {}
-    participation = computed.get("participation_check") or {}
-    advance = computed.get("advance_stats") or {}
+def _core_stocks(repo: MarketFactRepository, trade_date: date) -> list[dict[str, Any]]:
+    candidates = repo.get_screening_candidates(trade_date)
+    return [
+        {
+            "code": str(item.get("symbol") or ""),
+            "name": item.get("name"),
+            "priority": item.get("priority") or "rule",
+            "score": _number(item.get("score")),
+            "pct_chg": _number(item.get("pct_chg")),
+            "net_mf_yi": _number(item.get("net_mf_yi")),
+            "industry": item.get("industry"),
+            "source": item.get("candidate_type") or "deterministic_rule_screen",
+        }
+        for item in candidates.head(40).to_dicts()
+        if item.get("symbol")
+    ]
+
+
+def _metrics(repo: MarketFactRepository, trade_date: date) -> dict[str, Any]:
+    frame = repo.get_market_state(trade_date)
+    if frame.is_empty():
+        return {}
+    state = frame.row(0, named=True)
     return {
-        "market_heat_score": _number(heat.get("score")),
-        "market_heat_zone": heat.get("zone"),
-        "short_term_sentiment_score": _number(short.get("score")),
-        "trend_sentiment_score": _number(trend.get("score")),
-        "sentiment_semantics_version": _integer(short.get("metric_semantics_version"), 1),
-        "up_ratio": _number(breadth.get("up_ratio"), _number(heat_inputs.get("up_ratio"))),
-        "up_count": _integer(breadth.get("up_count")),
-        "down_count": _integer(breadth.get("down_count")),
-        "limit_up_count": _integer(limit.get("limit_up_count"), _integer(heat_inputs.get("limit_up_count"))),
-        "limit_down_count": _integer(limit.get("limit_down_count"), _integer(loss.get("limit_down_count"))),
-        "seal_rate": _number(limit.get("seal_rate"), _number(heat_inputs.get("seal_rate"))),
-        "max_board": _integer(limit.get("max_board"), _integer((computed.get("height_trend") or {}).get("latest_max_board"))),
-        "advance_rate": _number(advance.get("advance_rate")),
-        "premium_rate": _number(advance.get("premium_rate")),
-        "loss_severity": loss.get("severity"),
-        "ebb_signal_count": _integer(risk.get("signal_count")),
-        "crash_triggered": bool(crash.get("any_triggered")),
-        "participation_verdict": participation.get("verdict"),
-        "total_amount_yi": _number(overview.get("total_amount_yi")),
+        "market_heat_score": _number(state.get("market_heat_score")),
+        "market_heat_zone": state.get("market_heat_zone"),
+        "short_term_sentiment_score": _number(state.get("short_term_sentiment_score")),
+        "trend_sentiment_score": _number(state.get("trend_sentiment_score")),
+        "sentiment_semantics_version": _integer(state.get("sentiment_semantics_version"), 1),
+        "up_ratio": _number(state.get("up_ratio_pct")),
+        "up_count": _integer(state.get("up_count")),
+        "down_count": _integer(state.get("down_count")),
+        "limit_up_count": _integer(state.get("limit_up_count")),
+        "limit_down_count": _integer(state.get("limit_down_count")),
+        "seal_rate": _number(state.get("seal_rate_pct")),
+        "max_board": _integer(state.get("max_board")),
+        "advance_rate": _number(state.get("advance_rate_pct")),
+        "premium_rate": _number(state.get("premium_rate_pct")),
+        "loss_severity": state.get("loss_severity"),
+        "ebb_signal_count": _integer(state.get("ebb_signal_count")),
+        "crash_triggered": bool(state.get("crash_triggered")),
+        "participation_verdict": state.get("participation_verdict"),
+        "total_amount_yi": _number(state.get("total_amount_yi")),
     }
 
 
-def _record(date_dir: Path) -> dict[str, Any]:
-    status = read_json(date_dir / "_pipeline_status.json", {}) or {}
-    ths = read_json(date_dir / "ths_hot.json", {}) or {}
+def _record(repo: MarketFactRepository, trade_date: date) -> dict[str, Any]:
+    observations = repo.get_theme_observations(trade_date)
+    ths = observations.filter(pl.col("source") == "ths_hot").sort(
+        "rank", nulls_last=True
+    ) if not observations.is_empty() else observations
     return {
-        "trade_date": date_dir.name,
-        "stage": status.get("status") or "data_only",
-        "metrics": _metrics(date_dir),
-        "themes": _themes(date_dir),
+        "trade_date": trade_date.strftime("%Y%m%d"),
+        "stage": "canonical",
+        "metrics": _metrics(repo, trade_date),
+        "themes": _themes(repo, trade_date),
         "factor_attribution": [
-            {"name": _canonical_theme(item.get("tag")), "count": _integer(item.get("count"), 0)}
-            for item in (ths.get("reason_tags") or [])[:12]
-            if _canonical_theme(item.get("tag"))
+            {
+                "name": _canonical_theme(item.get("theme_name")),
+                "count": _integer(item.get("stock_count"), _integer(item.get("strength"), 0)),
+            }
+            for item in ths.head(12).to_dicts()
+            if _canonical_theme(item.get("theme_name"))
         ],
-        "institution": {"sectors": _sector_rows(date_dir), "core_stocks": _core_stocks(date_dir)},
+        "institution": {
+            "sectors": _sector_rows(repo, trade_date),
+            "core_stocks": _core_stocks(repo, trade_date),
+        },
     }
 
 
@@ -477,10 +453,12 @@ def _snapshot_from_records(records: list[dict[str, Any]], events: list[dict[str,
 def build_multiday_snapshot(quantx_dir: Path, trade_date: str) -> dict[str, Any]:
     validate_trade_date(trade_date)
     quantx_dir = Path(quantx_dir).resolve()
-    dirs = [path for path in _date_dirs(quantx_dir) if path.name <= trade_date]
-    if not dirs or dirs[-1].name != trade_date:
+    repo = MarketFactRepository(quantx_dir.parent)
+    selected_day = datetime.strptime(trade_date, "%Y%m%d").date()
+    dates = [value for value in _fact_dates(repo) if value <= selected_day]
+    if not dates or dates[-1] != selected_day:
         raise FileNotFoundError(trade_date)
-    records = [_record(path) for path in dirs]
+    records = [_record(repo, value) for value in dates]
     events = _decorate_theme_lifecycle(records)
     return _snapshot_from_records(records, events)
 
@@ -496,23 +474,27 @@ def load_multiday_snapshot(quantx_dir: Path, trade_date: str) -> dict[str, Any]:
 
 def rebuild_multiday_snapshots(quantx_dir: Path) -> dict[str, Any]:
     quantx_dir = Path(quantx_dir).resolve()
-    date_dirs = _date_dirs(quantx_dir)
-    records = [_record(path) for path in date_dirs]
+    repo = MarketFactRepository(quantx_dir.parent)
+    dates = _fact_dates(repo)
+    records = [_record(repo, value) for value in dates]
     events = _decorate_theme_lifecycle(records)
-    for index, date_dir in enumerate(date_dirs):
+    for index, trade_date in enumerate(dates):
         snapshot = _snapshot_from_records(records[: index + 1], events)
+        date_dir = quantx_dir / trade_date.strftime("%Y%m%d")
+        date_dir.mkdir(parents=True, exist_ok=True)
         write_json_atomic(date_dir / "multiday_snapshot.json", snapshot)
     from .catalog import build_and_save_catalog
 
     catalog = build_and_save_catalog(quantx_dir)
-    return {"status": "ok", "schema_version": SCHEMA_VERSION, "rebuilt": len(date_dirs), "stats": catalog["stats"]}
+    return {"status": "ok", "schema_version": SCHEMA_VERSION, "rebuilt": len(dates), "stats": catalog["stats"]}
 
 
 def rebuild_multiday_snapshot(quantx_dir: Path, trade_date: str | None = None) -> dict[str, Any]:
     """Persist one selected/latest snapshot for an interactive rebuild."""
     quantx_dir = Path(quantx_dir).resolve()
-    date_dirs = _date_dirs(quantx_dir)
-    selected = trade_date or (date_dirs[-1].name if date_dirs else None)
+    repo = MarketFactRepository(quantx_dir.parent)
+    dates = _fact_dates(repo)
+    selected = trade_date or (dates[-1].strftime("%Y%m%d") if dates else None)
     if selected is None:
         raise FileNotFoundError("no QuantX dates")
     snapshot = build_multiday_snapshot(quantx_dir, selected)

@@ -97,13 +97,29 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
         "trading_calendar",
         "market_breadth_daily",
         "limit_event_daily",
+        "limit_ladder_daily",
         "theme_observation_daily",
+        "theme_member_daily",
         "sector_flow_daily",
+        "market_state_daily",
+        "screening_candidate_daily",
     }
     fact_repo = MarketFactRepository(root)
     assert fact_repo.get_market_breadth(date(2026, 8, 25))["up_count"].to_list() == [1]
     assert fact_repo.get_market_breadth(date(2026, 8, 25))["source"].to_list() == ["tickflow_enriched_aggregate"]
     assert fact_repo.get_limit_events(date(2026, 8, 25))["symbol"].to_list() == ["000001"]
+    assert fact_repo.get_limit_ladder(date(2026, 8, 25)).select(
+        "board_height", "symbol"
+    ).rows() == [(2, "000001")]
+    assert fact_repo.get_theme_members(date(2026, 8, 25))["symbol"].to_list() == [
+        "000001"
+    ]
+    state = fact_repo.get_market_state(date(2026, 8, 25)).row(0, named=True)
+    assert state["algorithm_version"] == "quantx-data-v1"
+    assert state["quality_level"] == "derived"
+    assert fact_repo.get_screening_candidates(date(2026, 8, 25))[
+        "algorithm_version"
+    ].to_list() == ["quantx-rule-screen-v1"]
     assert fact_repo.is_trading_day(date(2026, 8, 26)) is False
 
 
@@ -222,17 +238,22 @@ def test_multiday_snapshot_contains_all_deterministic_dashboard_sections(tmp_pat
         _fixture(tmp_path, trade_date)
         result = run_pipeline(tmp_path, trade_date, recompute=True)
         assert result["status"] == "complete"
-        date_dir = quantx_dir / trade_date
-        computed = json.loads((date_dir / "_computed.json").read_text(encoding="utf-8"))
-        computed["market_heat"]["score"] = 20 + index * 10
-        computed["market_heat"]["inputs"]["up_ratio"] = 30 + index * 8
-        _write(date_dir / "_computed.json", computed)
-        breadth = json.loads((date_dir / "market_breadth.json").read_text(encoding="utf-8"))
-        breadth["up_ratio"] = 30 + index * 8
-        _write(date_dir / "market_breadth.json", breadth)
-        sector = json.loads((date_dir / "sector_fund_flow.json").read_text(encoding="utf-8"))
-        sector["sectors"] = [{"name": "人工智能", "pct_chg": index, "net_inflow_yi": index * 2.0, "amount_yi": 100 + index}]
-        _write(date_dir / "sector_fund_flow.json", sector)
+        iso_date = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+        state_path = tmp_path / "market_state_daily" / f"date={iso_date}" / "part.parquet"
+        pl.read_parquet(state_path).with_columns(
+            pl.lit(20 + index * 10).alias("market_heat_score"),
+            pl.lit(30 + index * 8).alias("up_ratio_pct"),
+        ).write_parquet(state_path)
+        sector_path = tmp_path / "sector_flow_daily" / f"date={iso_date}" / "part.parquet"
+        pl.read_parquet(sector_path).filter(
+            pl.col("source") == "sector_fund_flow_s4"
+        ).head(1).with_columns(
+            pl.lit("人工智能").alias("sector_id"),
+            pl.lit("人工智能").alias("sector_name"),
+            pl.lit(float(index)).alias("pct_chg"),
+            pl.lit(index * 2.0).alias("net_inflow_yi"),
+            pl.lit(100.0 + index).alias("amount_yi"),
+        ).write_parquet(sector_path)
 
     snapshot = build_multiday_snapshot(quantx_dir, "20260825")
 
@@ -246,6 +267,28 @@ def test_multiday_snapshot_contains_all_deterministic_dashboard_sections(tmp_pat
     assert set(snapshot["opportunity_radar"]) >= {"themes", "sectors", "stocks", "coverage_confidence"}
     assert snapshot["institution_continuity"]["industries"][0]["name"] == "人工智能"
     assert "review_decision" not in snapshot
+
+
+def test_multiday_rebuild_uses_only_canonical_facts_after_publication(tmp_path):
+    quantx_dir = tmp_path / "quantx"
+    for trade_date in ("20260821", "20260824", "20260825"):
+        _fixture(tmp_path, trade_date)
+        assert run_pipeline(tmp_path, trade_date, recompute=True)["status"] == "complete"
+        date_dir = quantx_dir / trade_date
+        for path in date_dir.glob("*.json"):
+            if path.name == "multiday_snapshot.json":
+                path.unlink()
+                continue
+            if path.name not in {"_pipeline_status.json", "_data_manifest.json"}:
+                path.unlink()
+
+    snapshot = build_multiday_snapshot(quantx_dir, "20260825")
+
+    assert snapshot["trade_date"] == "20260825"
+    assert snapshot["data_coverage"]["window_days"] == 3
+    assert snapshot["calendar"][-1]["trade_date"] == "20260825"
+    assert snapshot["theme_lifecycle"]["current"]
+    assert snapshot["opportunity_radar"]["stocks"]
 
 
 def test_multiday_rebuild_persists_versioned_snapshots_and_catalog_stays_compact(tmp_path):

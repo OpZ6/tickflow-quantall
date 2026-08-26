@@ -97,6 +97,30 @@ def sources() -> dict[str, Any]:
             "max_retries": 0,
             "freshness_required": True,
         },
+        {
+            "source_id": "quantx_deterministic_v1",
+            "display_name": "QuantX deterministic state derivation",
+            "supported_datasets": ["market_state_daily"],
+            "collector_type": "provider",
+            "collector": "deterministic_derivation",
+            "credentials_ref": None,
+            "credentials_configured": True,
+            "dependency_available": True,
+            "max_retries": 0,
+            "freshness_required": True,
+        },
+        {
+            "source_id": "quantx_rule_screen_v1",
+            "display_name": "QuantX deterministic rule screen",
+            "supported_datasets": ["screening_candidate_daily"],
+            "collector_type": "provider",
+            "collector": "deterministic_derivation",
+            "credentials_ref": None,
+            "credentials_configured": True,
+            "dependency_available": True,
+            "max_retries": 0,
+            "freshness_required": True,
+        },
     ]
     for spec in SOURCE_SPECS:
         package = "tushare" if spec.collector == "tushare" else None

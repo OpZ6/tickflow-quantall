@@ -47,7 +47,7 @@ def main() -> None:
             response = page.request.get(f"{base_url}/api/data-sources/{endpoint}")
             assert response.ok, f"data source endpoint failed: {endpoint}"
         datasets_response = page.request.get(f"{base_url}/api/data-sources/datasets").json()
-        assert len(datasets_response["datasets"]) == 5
+        assert len(datasets_response["datasets"]) == 9
         calendar_response = page.request.get(
             f"{base_url}/api/data-sources/calendar?start=2026-08-25&end=2026-08-26"
         )

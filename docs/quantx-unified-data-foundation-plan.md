@@ -637,3 +637,26 @@ POST /api/data-runs/backfill
 - 旧日期对账虽已记录，但多数日期仍有来源集合、旧表缺失或舍入口径差异，需要分类收敛后才能冻结旧读路径；
 - 多日派生计算内部仍会读取兼容 JSON，尚未完全改为 Repository 查询；
 - 当前数据目录尚未完成独立备份演练，因此 Goal 保持 `active`。
+
+### 17.2 2026-08-26 多日事实化与历史回填
+
+已完成：
+
+- 新增 `limit_ladder_daily`、`theme_member_daily`、`market_state_daily`、`screening_candidate_daily` 四类标准事实；连板梯队、题材成员、确定性市场状态和规则候选池不再只存在于 QuantX JSON。
+- `MarketFactRepository` 增加上述四类事实的稳定读取接口，TickFlow DuckDB 初始化和刷新流程同步注册全部九类市场事实视图。
+- QuantX 多日计算器的日期选择、情绪窗口、题材共识与生命周期、行业机会雷达、个股机会雷达和机构连续性全部改读 `MarketFactRepository`。
+- 多日计算路径已冻结来源 JSON 读取；仅 `load_multiday_snapshot()` 保留对已发布 `multiday_snapshot.json` API 缓存的读取。
+- 新增离线回归：事实发布后删除来源和结构化 JSON，多日快照仍可完整重建。
+- 对真实历史执行非破坏性增量回填：72 个交易日补齐四类新事实，0 失败；8 个周末或未完成目录保持 `skipped_incomplete`，未覆盖既有五类事实和旧 JSON。
+- 回填后二次预检显示 72 个日期全部进入 `skipped_existing`，验证迁移幂等。
+- 从统一事实库重建 72 份多日缓存；`20260825` 保持 20 日窗口、38 个当前题材、12 个题材雷达、12 个行业雷达、16 个个股雷达和 5 条机构连续性结果。
+
+本阶段验证：
+
+- `tests/test_market_facts.py tests/test_quantx_data.py`：23 个测试通过。
+- `tests/test_repository_index.py`：9 个测试通过。
+- 相关 Python 模块 Ruff 检查通过；`app/tickflow/repository.py` 存在历史遗留 lint 问题，本次未进行无关全文件整理。
+- 后端全量回归：1258 个通过、1 个失败、63 条警告；唯一失败仍是既有挖掘任务状态与异步 error 事件写入竞态 `test_runner_exception_marks_failed_and_appends_error_event`，与本阶段改动路径无关。
+- 前端 `pnpm build` 通过；standalone Python Playwright + Microsoft Edge headless 的 QuantX 单日/多日、Market Lab 和数据源管理回归通过。
+
+Goal 仍为 `active`。剩余工作集中在 `market_liquidity_daily`、`margin_daily` 等事实补齐、历史差异分类收敛、完整后端与前端回归，以及独立备份/恢复演练。

@@ -50,6 +50,7 @@ def validate_fact_batches(batches: list[FactBatch], sources: dict[str, dict]) ->
         DatasetId.TRADING_CALENDAR,
         DatasetId.MARKET_BREADTH_DAILY,
         DatasetId.LIMIT_EVENT_DAILY,
+        DatasetId.MARKET_STATE_DAILY,
     }
 
     for dataset_id in DatasetId:
