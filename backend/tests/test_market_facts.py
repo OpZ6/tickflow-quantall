@@ -27,10 +27,21 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
             "trade_date": trade_date,
             "scraped_at": "2026-08-25T16:01:00+08:00",
             "daily": [
-                {"ts_code": "000001.SZ", "pct_chg": 2.0},
-                {"ts_code": "600000.SH", "pct_chg": -1.0},
-                {"ts_code": "300001.SZ", "pct_chg": 0.0},
+                {"ts_code": "000001.SZ", "pct_chg": 2.0, "amount": 100_000},
+                {"ts_code": "600000.SH", "pct_chg": -1.0, "amount": 80_000},
+                {"ts_code": "300001.SZ", "pct_chg": 0.0, "amount": 50_000},
             ],
+            "daily_market": {
+                "total_amount_yi": 2.3,
+                "top5_amount_ratio": 45.0,
+                "top20_amount_ratio": 70.0,
+            },
+            "margin": {
+                "history": [
+                    {"date": "20260822", "rzye_yi": 100.0, "rz_net_buy_yi": 1.0},
+                    {"date": "20260824", "rzye_yi": 102.0, "rz_net_buy_yi": 2.0},
+                ]
+            },
             "trade_calendar": {
                 "records": [
                     {
@@ -128,6 +139,8 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
     dataset_ids = {
         DatasetId.TRADING_CALENDAR,
         DatasetId.MARKET_BREADTH_DAILY,
+        DatasetId.MARKET_LIQUIDITY_DAILY,
+        DatasetId.MARGIN_DAILY,
         DatasetId.LIMIT_EVENT_DAILY,
         DatasetId.LIMIT_LADDER_DAILY,
         DatasetId.THEME_OBSERVATION_DAILY,
@@ -143,10 +156,15 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         assert "trade_date" in spec.required_columns
 
     assert get_dataset(DatasetId.TRADING_CALENDAR).partition_keys == ("as_of_date",)
+    assert get_dataset(DatasetId.MARGIN_DAILY).partition_keys == ("as_of_date",)
     assert get_dataset(DatasetId.MARKET_BREADTH_DAILY).partition_keys == ("trade_date",)
 
     breadth_route = get_route(DatasetId.MARKET_BREADTH_DAILY)
     assert breadth_route.sources[:2] == ("tickflow_enriched_aggregate", "tushare")
+    assert get_route(DatasetId.MARKET_LIQUIDITY_DAILY).sources == (
+        "tickflow_enriched_aggregate",
+        "tushare",
+    )
     limit_route = get_route(DatasetId.LIMIT_EVENT_DAILY)
     assert limit_route.sources[:2] == ("pywencai", "zhangtingke")
     assert get_route(DatasetId.TRADING_CALENDAR).sources == (
@@ -240,6 +258,17 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
     assert flows.filter(pl.col("source") == "sector_fund_flow_s4")["is_fallback"].item() is False
     assert flows.filter(pl.col("source") == "akshare")["is_fallback"].item() is True
 
+    liquidity = by_id[DatasetId.MARKET_LIQUIDITY_DAILY].frame.row(0, named=True)
+    assert liquidity["total_amount_yi"] == 2.3
+    assert liquidity["source"] == "tushare"
+    assert liquidity["is_fallback"] is True
+
+    margin = by_id[DatasetId.MARGIN_DAILY].frame
+    assert margin.select("trade_date", "as_of_date", "financing_balance_yi").rows() == [
+        (date(2026, 8, 22), date(2026, 8, 25), 100.0),
+        (date(2026, 8, 24), date(2026, 8, 25), 102.0),
+    ]
+
 
 def test_fact_publication_is_idempotent_and_repository_reads_canonical_data(tmp_path) -> None:
     batches = build_initial_fact_batches("20260825", _sources(), "run-1")
@@ -254,7 +283,13 @@ def test_fact_publication_is_idempotent_and_repository_reads_canonical_data(tmp_
     themes = repo.get_theme_observations(date(2026, 8, 25))
     flows = repo.get_sector_flows(date(2026, 8, 25))
     calendar = repo.get_trading_calendar(date(2026, 8, 25), date(2026, 8, 26))
+    liquidity = repo.get_market_liquidity(date(2026, 8, 25))
+    margin = repo.get_margin_history(
+        date(2026, 8, 20), date(2026, 8, 25), as_of=date(2026, 8, 25)
+    )
     assert breadth["up_count"].to_list() == [1]
+    assert liquidity["total_amount_yi"].to_list() == [2.3]
+    assert margin["financing_balance_yi"].to_list() == [100.0, 102.0]
     assert set(events["event_type"].to_list()) == {
         "limit_up",
         "broken_board",

@@ -7,6 +7,8 @@ import { QK } from '@/lib/queryKeys'
 const DATASET_LABELS: Record<string, string> = {
   trading_calendar: '交易日历',
   market_breadth_daily: '市场宽度',
+  market_liquidity_daily: '市场流动性',
+  margin_daily: '融资余额',
   limit_event_daily: '涨跌停事件',
   limit_ladder_daily: '连板梯队',
   theme_observation_daily: '题材观察',

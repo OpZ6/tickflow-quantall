@@ -61,6 +61,7 @@ class QuantXTableRepository:
 
         for dataset_id, apply in (
             (DatasetId.MARKET_BREADTH_DAILY, self._apply_breadth),
+            (DatasetId.MARKET_LIQUIDITY_DAILY, self._apply_liquidity),
             (DatasetId.LIMIT_EVENT_DAILY, self._apply_limits),
             (DatasetId.THEME_OBSERVATION_DAILY, self._apply_themes),
             (DatasetId.SECTOR_FLOW_DAILY, self._apply_sector_flows),
@@ -102,6 +103,27 @@ class QuantXTableRepository:
         overview = tables.get("market_overview")
         if isinstance(overview, dict):
             overview["breadth"] = {**(overview.get("breadth") or {}), **canonical}
+        return {"status": _status(differences), "differences": differences}
+
+    def _apply_liquidity(self, tables: dict[str, Any], day) -> dict[str, Any]:
+        frame = _preferred_source(
+            self.facts.get_market_liquidity(day),
+            DatasetId.MARKET_LIQUIDITY_DAILY,
+        )
+        if frame.is_empty():
+            canonical: dict[str, Any] = {}
+        else:
+            row = frame.row(0, named=True)
+            canonical = {
+                "total_amount_yi": row["total_amount_yi"],
+                "top5_amount_yi": row["top5_amount_yi"],
+            }
+        legacy = tables.get("market_liquidity") or {}
+        differences = _differences(canonical, legacy)
+        tables["market_liquidity"] = {**legacy, **canonical}
+        overview = tables.get("market_overview")
+        if isinstance(overview, dict) and canonical.get("total_amount_yi") is not None:
+            overview["total_amount_yi"] = canonical["total_amount_yi"]
         return {"status": _status(differences), "differences": differences}
 
     def _apply_limits(self, tables: dict[str, Any], day) -> dict[str, Any]:

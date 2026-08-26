@@ -253,6 +253,122 @@ def _build_market_breadth(
     )
 
 
+def _build_market_liquidity(
+    trade_date: str,
+    sources: dict[str, dict[str, Any]],
+    structured: dict[str, dict[str, Any]],
+    run_id: str,
+    ingested_at: str,
+) -> FactBatch:
+    source = "tickflow_enriched_aggregate"
+    payload = sources.get(source) or {}
+    is_fallback = False
+    if not _records(payload, "daily", "stocks", "records") and not isinstance(
+        payload.get("daily_market"), dict
+    ):
+        source = "tushare"
+        payload = sources.get(source) or {}
+        is_fallback = True
+    daily = _records(payload, "daily", "stocks", "records")
+    summary = (
+        payload.get("daily_market")
+        if isinstance(payload.get("daily_market"), dict)
+        else {}
+    )
+    table = structured.get("market_liquidity") or {}
+    amounts = [
+        value
+        for row in daily
+        if (
+            value := _number(row.get("amount_yi"))
+            if row.get("amount_yi") is not None
+            else (
+                _number(row.get("amount")) / 100_000
+                if _number(row.get("amount")) is not None
+                else None
+            )
+        )
+        is not None
+    ]
+    total_amount = sum(amounts) if amounts else _number(
+        table.get("total_amount_yi") or summary.get("total_amount_yi")
+    )
+    if total_amount is None:
+        return FactBatch(
+            DatasetId.MARKET_LIQUIDITY_DAILY,
+            _trade_date(trade_date),
+            _frame(DatasetId.MARKET_LIQUIDITY_DAILY, []),
+        )
+    congestion = table.get("congestion") if isinstance(table.get("congestion"), dict) else {}
+    row = {
+        "trade_date": _trade_date(trade_date),
+        "market": "CN_A",
+        "total_amount_yi": round(total_amount, 2),
+        "top5_amount_yi": _number(table.get("top5_amount_yi"))
+        if table.get("top5_amount_yi") is not None
+        else (round(sum(sorted(amounts, reverse=True)[:5]), 2) if amounts else None),
+        "top5_amount_ratio_pct": _number(summary.get("top5_amount_ratio")),
+        "top20_amount_ratio_pct": _number(summary.get("top20_amount_ratio")),
+        "volume_ratio_pct": _number(congestion.get("volume_ratio")),
+        **_metadata(
+            source=source,
+            source_record_id=f"{source}:{trade_date}:CN_A",
+            observed_at=_observed_at(payload),
+            ingested_at=ingested_at,
+            run_id=run_id,
+            is_fallback=is_fallback,
+        ),
+    }
+    return FactBatch(
+        DatasetId.MARKET_LIQUIDITY_DAILY,
+        _trade_date(trade_date),
+        _frame(DatasetId.MARKET_LIQUIDITY_DAILY, [row]),
+    )
+
+
+def _build_margin_history(
+    trade_date: str,
+    sources: dict[str, dict[str, Any]],
+    run_id: str,
+    ingested_at: str,
+) -> FactBatch:
+    as_of_date = _trade_date(trade_date)
+    payload = sources.get("tushare") or {}
+    margin = payload.get("margin") if isinstance(payload.get("margin"), dict) else {}
+    rows = []
+    for item in _records(margin, "history", "records", "rows"):
+        margin_date = _calendar_date(item.get("date") or item.get("trade_date"))
+        balance = _number(item.get("rzye_yi") or item.get("financing_balance_yi"))
+        if margin_date is None or balance is None or margin_date > as_of_date:
+            continue
+        rows.append(
+            {
+                "trade_date": margin_date,
+                "as_of_date": as_of_date,
+                "scope": "CN_A",
+                "financing_balance_yi": balance,
+                "financing_net_buy_yi": _number(
+                    item.get("rz_net_buy_yi")
+                    if item.get("rz_net_buy_yi") is not None
+                    else item.get("financing_net_buy_yi")
+                ),
+                **_metadata(
+                    source="tushare",
+                    source_record_id=f"tushare:margin:CN_A:{margin_date.isoformat()}",
+                    observed_at=_observed_at(payload),
+                    ingested_at=ingested_at,
+                    run_id=run_id,
+                ),
+            }
+        )
+    frame = _frame(DatasetId.MARGIN_DAILY, rows)
+    if not frame.is_empty():
+        frame = frame.unique(
+            subset=["scope", "trade_date"], keep="last", maintain_order=True
+        ).sort("trade_date")
+    return FactBatch(DatasetId.MARGIN_DAILY, as_of_date, frame)
+
+
 def _event_rows(
     *,
     trade_date: str,
@@ -821,6 +937,10 @@ def build_initial_fact_batches(
     return [
         _build_trading_calendar(trade_date, sources, run_id, ingested_at),
         _build_market_breadth(trade_date, sources, run_id, ingested_at),
+        _build_market_liquidity(
+            trade_date, sources, structured, run_id, ingested_at
+        ),
+        _build_margin_history(trade_date, sources, run_id, ingested_at),
         _build_limit_events(trade_date, sources, run_id, ingested_at),
         _build_limit_ladder(
             trade_date, sources, structured, run_id, ingested_at

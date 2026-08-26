@@ -40,14 +40,14 @@ def main() -> None:
         tables = tables_response.json()
         foundation = tables["data_foundation"]
         assert foundation["read_mode"] == "canonical_with_legacy_enrichment"
-        assert len(foundation["canonical_datasets"]) == 4
+        assert len(foundation["canonical_datasets"]) == 5
         assert not foundation["legacy_fallback_datasets"]
 
         for endpoint in ("datasets", "sources", "routes", "health"):
             response = page.request.get(f"{base_url}/api/data-sources/{endpoint}")
             assert response.ok, f"data source endpoint failed: {endpoint}"
         datasets_response = page.request.get(f"{base_url}/api/data-sources/datasets").json()
-        assert len(datasets_response["datasets"]) == 9
+        assert len(datasets_response["datasets"]) == 11
         calendar_response = page.request.get(
             f"{base_url}/api/data-sources/calendar?start=2026-08-25&end=2026-08-26"
         )

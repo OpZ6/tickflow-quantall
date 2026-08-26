@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,6 +32,11 @@ def _write(path: Path, payload: dict) -> None:
 
 def _fixture(root: Path, trade_date: str = "20260825") -> Path:
     date_dir = root / "quantx" / trade_date
+    selected_day = datetime.strptime(trade_date, "%Y%m%d")
+    margin_dates = [
+        (selected_day - timedelta(days=3)).strftime("%Y%m%d"),
+        (selected_day - timedelta(days=1)).strftime("%Y%m%d"),
+    ]
     daily = [
         {"ts_code": "000001.SZ", "close": 10, "pct_chg": 2.0, "amount": 100000},
         {"ts_code": "600000.SH", "close": 9, "pct_chg": -1.0, "amount": 80000},
@@ -47,6 +52,12 @@ def _fixture(root: Path, trade_date: str = "20260825") -> Path:
                 "records": [
                     {"exchange": "SSE", "cal_date": trade_date, "is_open": 1, "pretrade_date": "20260824"},
                     {"exchange": "SSE", "cal_date": "20260826", "is_open": 0, "pretrade_date": trade_date},
+                ]
+            },
+            "margin": {
+                "history": [
+                    {"date": margin_dates[0], "rzye_yi": 100.0, "rz_net_buy_yi": 1.0},
+                    {"date": margin_dates[1], "rzye_yi": 102.0, "rz_net_buy_yi": 2.0},
                 ]
             },
         },
@@ -96,6 +107,8 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
     assert {item["dataset_id"] for item in manifest["fact_artifacts"]} == {
         "trading_calendar",
         "market_breadth_daily",
+        "market_liquidity_daily",
+        "margin_daily",
         "limit_event_daily",
         "limit_ladder_daily",
         "theme_observation_daily",
@@ -107,6 +120,12 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
     fact_repo = MarketFactRepository(root)
     assert fact_repo.get_market_breadth(date(2026, 8, 25))["up_count"].to_list() == [1]
     assert fact_repo.get_market_breadth(date(2026, 8, 25))["source"].to_list() == ["tickflow_enriched_aggregate"]
+    assert fact_repo.get_market_liquidity(date(2026, 8, 25))[
+        "total_amount_yi"
+    ].to_list() == [2.3]
+    assert fact_repo.get_margin_history(
+        date(2026, 8, 20), date(2026, 8, 25), as_of=date(2026, 8, 25)
+    )["financing_balance_yi"].to_list() == [100.0, 102.0]
     assert fact_repo.get_limit_events(date(2026, 8, 25))["symbol"].to_list() == ["000001"]
     assert fact_repo.get_limit_ladder(date(2026, 8, 25)).select(
         "board_height", "symbol"
@@ -362,12 +381,15 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     app = FastAPI()
     app.include_router(quantx_router)
     app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
+    app.state.market_facts = MarketFactRepository(tmp_path)
 
     with TestClient(app) as client:
         response = client.get("/api/quantx/review/20260825/data")
 
     assert response.status_code == 200
     assert set(response.json()["sections"]) == {f"s{index}" for index in range(7)}
+    assert response.json()["metric_strip"]["total_amount_yi"] == 2.3
+    assert response.json()["sections"]["s1"]["margin"]["date"] == "20260824"
 
 
 def test_history_migration_is_dry_run_by_default_and_preserves_legacy(tmp_path):
@@ -388,6 +410,7 @@ def test_history_migration_is_dry_run_by_default_and_preserves_legacy(tmp_path):
     )
     assert set(migration["reconciliation"]) == {
         "market_breadth_daily",
+        "market_liquidity_daily",
         "limit_event_daily",
         "theme_observation_daily",
         "sector_flow_daily",

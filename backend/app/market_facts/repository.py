@@ -38,6 +38,49 @@ class MarketFactRepository:
     def get_market_breadth(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.MARKET_BREADTH_DAILY, trade_date)
 
+    def get_market_liquidity(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.MARKET_LIQUIDITY_DAILY, trade_date)
+
+    def get_margin_history(
+        self,
+        start: date,
+        end: date,
+        *,
+        scope: str = "CN_A",
+        as_of: date | None = None,
+    ) -> pl.DataFrame:
+        """Return the newest known margin rows as of the requested horizon."""
+        if end < start:
+            raise ValueError("end must not be before start")
+        cutoff = as_of or end
+        root = self.data_dir / DatasetId.MARGIN_DAILY.value
+        parts = sorted(
+            [
+                path
+                for path in root.glob("date=*/part.parquet")
+                if path.parent.name.removeprefix("date=") <= cutoff.isoformat()
+            ],
+            reverse=True,
+        )
+        selected: list[pl.DataFrame] = []
+        seen: set[date] = set()
+        for path in parts:
+            frame = pl.read_parquet(path).filter(
+                (pl.col("scope") == scope)
+                & pl.col("trade_date").is_between(start, end, closed="both")
+                & (pl.col("as_of_date") <= cutoff)
+            )
+            if seen:
+                frame = frame.filter(~pl.col("trade_date").is_in(seen))
+            if not frame.is_empty():
+                selected.append(frame)
+                seen.update(frame["trade_date"].to_list())
+        return (
+            pl.concat(selected).sort("trade_date")
+            if selected
+            else self._empty(DatasetId.MARGIN_DAILY)
+        )
+
     def get_trading_calendar(
         self,
         start: date,

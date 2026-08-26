@@ -91,6 +91,8 @@ class DataStore:
             "depth5",
             "trading_calendar",
             "market_breadth_daily",
+            "market_liquidity_daily",
+            "margin_daily",
             "limit_event_daily",
             "limit_ladder_daily",
             "theme_observation_daily",
@@ -219,6 +221,10 @@ class DataStore:
                 SELECT * FROM read_parquet('{d}/trading_calendar/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW market_breadth_daily AS
                 SELECT * FROM read_parquet('{d}/market_breadth_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW market_liquidity_daily AS
+                SELECT * FROM read_parquet('{d}/market_liquidity_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW margin_daily AS
+                SELECT * FROM read_parquet('{d}/margin_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW limit_event_daily AS
                 SELECT * FROM read_parquet('{d}/limit_event_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW limit_ladder_daily AS
@@ -2104,6 +2110,8 @@ class KlineRepository:
             "instruments_etf": f"{d}/instruments_etf/**/*.parquet",
             "trading_calendar": f"{d}/trading_calendar/**/*.parquet",
             "market_breadth_daily": f"{d}/market_breadth_daily/**/*.parquet",
+            "market_liquidity_daily": f"{d}/market_liquidity_daily/**/*.parquet",
+            "margin_daily": f"{d}/margin_daily/**/*.parquet",
             "limit_event_daily": f"{d}/limit_event_daily/**/*.parquet",
             "limit_ladder_daily": f"{d}/limit_ladder_daily/**/*.parquet",
             "theme_observation_daily": f"{d}/theme_observation_daily/**/*.parquet",

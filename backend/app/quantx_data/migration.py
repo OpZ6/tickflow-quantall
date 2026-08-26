@@ -54,6 +54,7 @@ def _structured_tables(date_dir: Path) -> dict[str, dict]:
         "sentiment_state",
         "market_overview",
         "market_breadth",
+        "market_liquidity",
         "limit_summary",
         "limit_ladder",
         "theme_stocks",

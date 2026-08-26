@@ -64,7 +64,11 @@ def sources() -> dict[str, Any]:
         {
             "source_id": "tickflow_enriched_aggregate",
             "display_name": "TickFlow enriched aggregate",
-            "supported_datasets": ["trading_calendar", "market_breadth_daily"],
+            "supported_datasets": [
+                "trading_calendar",
+                "market_breadth_daily",
+                "market_liquidity_daily",
+            ],
             "collector_type": "provider",
             "collector": "market_fact_adapter",
             "credentials_ref": None,

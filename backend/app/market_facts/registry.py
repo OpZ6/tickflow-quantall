@@ -12,6 +12,8 @@ import polars as pl
 class DatasetId(StrEnum):
     TRADING_CALENDAR = "trading_calendar"
     MARKET_BREADTH_DAILY = "market_breadth_daily"
+    MARKET_LIQUIDITY_DAILY = "market_liquidity_daily"
+    MARGIN_DAILY = "margin_daily"
     LIMIT_EVENT_DAILY = "limit_event_daily"
     LIMIT_LADDER_DAILY = "limit_ladder_daily"
     THEME_OBSERVATION_DAILY = "theme_observation_daily"
@@ -110,6 +112,62 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 }
             ),
             field_units=MappingProxyType({"up_ratio_pct": "percent"}),
+        ),
+        DatasetId.MARKET_LIQUIDITY_DAILY: DatasetSpec(
+            dataset_id=DatasetId.MARKET_LIQUIDITY_DAILY,
+            description="A-share daily turnover and concentration metrics",
+            schema_version=1,
+            primary_key=("trade_date", "market"),
+            partition_keys=("trade_date",),
+            required_columns=("trade_date", "market", "total_amount_yi"),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "market": pl.String,
+                    "total_amount_yi": pl.Float64,
+                    "top5_amount_yi": pl.Float64,
+                    "top5_amount_ratio_pct": pl.Float64,
+                    "top20_amount_ratio_pct": pl.Float64,
+                    "volume_ratio_pct": pl.Float64,
+                }
+            ),
+            field_units=MappingProxyType(
+                {
+                    "total_amount_yi": "CNY_100M",
+                    "top5_amount_yi": "CNY_100M",
+                    "top5_amount_ratio_pct": "percent",
+                    "top20_amount_ratio_pct": "percent",
+                    "volume_ratio_pct": "percent",
+                }
+            ),
+        ),
+        DatasetId.MARGIN_DAILY: DatasetSpec(
+            dataset_id=DatasetId.MARGIN_DAILY,
+            description="Point-in-time A-share margin financing history",
+            schema_version=1,
+            primary_key=("scope", "trade_date"),
+            partition_keys=("as_of_date",),
+            required_columns=(
+                "trade_date",
+                "as_of_date",
+                "scope",
+                "financing_balance_yi",
+            ),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "as_of_date": pl.Date,
+                    "scope": pl.String,
+                    "financing_balance_yi": pl.Float64,
+                    "financing_net_buy_yi": pl.Float64,
+                }
+            ),
+            field_units=MappingProxyType(
+                {
+                    "financing_balance_yi": "CNY_100M",
+                    "financing_net_buy_yi": "CNY_100M",
+                }
+            ),
         ),
         DatasetId.LIMIT_EVENT_DAILY: DatasetSpec(
             dataset_id=DatasetId.LIMIT_EVENT_DAILY,
@@ -336,6 +394,14 @@ ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
         DatasetId.MARKET_BREADTH_DAILY: SourceRoute(
             DatasetId.MARKET_BREADTH_DAILY,
             ("tickflow_enriched_aggregate", "tushare", "pywencai"),
+        ),
+        DatasetId.MARKET_LIQUIDITY_DAILY: SourceRoute(
+            DatasetId.MARKET_LIQUIDITY_DAILY,
+            ("tickflow_enriched_aggregate", "tushare"),
+        ),
+        DatasetId.MARGIN_DAILY: SourceRoute(
+            DatasetId.MARGIN_DAILY,
+            ("tushare",),
         ),
         DatasetId.LIMIT_EVENT_DAILY: SourceRoute(
             DatasetId.LIMIT_EVENT_DAILY,

@@ -660,3 +660,22 @@ POST /api/data-runs/backfill
 - 前端 `pnpm build` 通过；standalone Python Playwright + Microsoft Edge headless 的 QuantX 单日/多日、Market Lab 和数据源管理回归通过。
 
 Goal 仍为 `active`。剩余工作集中在 `market_liquidity_daily`、`margin_daily` 等事实补齐、历史差异分类收敛、完整后端与前端回归，以及独立备份/恢复演练。
+
+### 17.3 2026-08-26 流动性与两融事实化
+
+已完成：
+
+- 新增 `market_liquidity_daily`，以 TickFlow enriched 聚合为主来源、Tushare 为备用来源，统一保存全市场成交额、头部成交集中度和量能比等明确单位字段。
+- 新增 `margin_daily`，按 `as_of_date` 保存 Tushare 当时可见的两融历史，明确区分“数据交易日”和“快照观察日”，不把滞后一日数据伪装成当日事实。
+- `MarketFactRepository` 新增流动性读取和 point-in-time 两融区间读取；QuantX 表格 API 的市场流动性及单日富图表 API 的成交额、融资余额和融资净买入改由统一事实覆盖。
+- Dataset/Source Registry、DuckDB 视图、数据源管理面板和历史迁移同步扩展到 11 类市场事实。
+- 真实历史增量回填 72 个流动性分区和 72 个两融快照分区，0 失败；截至 `20260825` 可按 point-in-time 查询 39 条两融记录，最新可见数据为 `20260824`，融资余额 26290.75 亿元、净买入 -42.4 亿元。
+- 回填后二次预检 `eligible=[]`，72 个交易日全部 `skipped_existing`，验证增量迁移幂等。
+
+本阶段验证：
+
+- 统一事实、QuantX 流水线和 Repository 定向回归 32 个测试通过，相关 Ruff 检查通过。
+- 后端全量回归 1258 个通过、1 个失败、63 条警告；本次唯一失败是既有挖掘任务取消状态与异步 `cancelled` 事件写入竞态 `test_cancel_while_waiting_for_capacity_never_calls_runner`，属于前述同一类并发测试竞态。
+- 前端 `pnpm build` 通过；standalone Python Playwright + Microsoft Edge headless 的 QuantX 单日/多日、Market Lab 和 11 类数据集管理面板回归通过。
+
+Goal 继续保持 `active`。下一阶段不再泛化新增表，而是按现有 QuantX 富图表字段逐项审计剩余来源读取，分类为已有 TickFlow 事实、需要新增的可复用事实或仅属 API 展示缓存，再收敛历史对账和备份恢复演练。
