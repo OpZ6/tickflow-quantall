@@ -21,7 +21,6 @@
 </div>
 
 <div align="center">
-  
 
 
 **[快速开始](#-快速开始)** · **[核心功能](#-核心功能)** · **[配置](#️-配置)** · **[完整文档](#-完整文档)**
@@ -33,7 +32,7 @@
 
 
 
-**本项目个人开源，基于 [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 数据源，非 [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 官方项目。仅供学习研究使用，严禁商业用途。** 
+**本项目个人开源，基于 [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 数据源，非 [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 官方项目。仅供学习研究使用，严禁商业用途。**
 
 
 
@@ -237,6 +236,9 @@ PORT=3018                      # 服务端口
 | [docs/configuration.md](./docs/configuration.md)                                                   | 所有 `.env` 配置项详解(数据源、AI、服务、密码、数据目录)             |
 | [docs/features.md](./docs/features.md)                                                             | 各功能模块详细说明(选股/指标/回测/监控/个股分析/数据扩展)            |
 | [docs/custom-data-source.md](./docs/custom-data-source.md)                                         | 自定义数据源接入、YAML 配置与 mock 联调示例                         |
+| [docs/prototype-integration.md](./docs/prototype-integration.md)                                   | 缠论、全指标、市场实验室与两个参考图的接入记录                       |
+| [docs/data-source-alternatives.md](./docs/data-source-alternatives.md)                             | TickFlow 免费替代源与 stock-sdk 详细检查                             |
+| [docs/system-integration-and-local-financials.md](./docs/system-integration-and-local-financials.md) | QuantX/Quants/QuantT/主面板协同契约与 custom 财务源方案             |
 | [docs/strategy.md](./docs/strategy.md)                                                             | 策略体系(18 内置策略 + 三种扩展方式 + 文件结构)                      |
 | [backend/app/strategy/prompts/strategy-guide.md](./backend/app/strategy/prompts/strategy-guide.md) | 策略开发完整规范(AI 生成与手写)                                      |
 
@@ -258,7 +260,7 @@ fork同时请点个star哦,欢迎 Issue 和 PR。
 
 ## 📄 License
 
-[MIT](./LICENSE) © tickflow-stock-panel contributors 
+[MIT](./LICENSE) © tickflow-stock-panel contributors
 
 本项目依赖 [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 提供数据服务,使用前请遵守其服务条款
 

@@ -1,0 +1,12 @@
+# Tushare Pro 数据源插件
+# 通过 tushare SDK 拉 A 股日K/除权/指数/财务/资金流,归一化到内部 schema。
+# 需 TUSHARE_TOKEN 环境变量;开发模式: uv sync --extra tushare
+
+name: tushare
+display_name: "Tushare Pro（A 股官方行情）"
+runtime: python
+entry: app.plugins.tushare.provider:TushareProvider
+check: app.plugins.tushare.bridge:availability
+datasets: [daily, adj_factor, index, financial, moneyflow]
+description: "Tushare Pro A 股日K/除权/指数/财务/资金流。需 TUSHARE_TOKEN 环境变量。用于 quantall 能力迁移,替代 Quants ETL。"
+install_hint: "uv sync --extra tushare;并在 .env 设置 TUSHARE_TOKEN=你的token"

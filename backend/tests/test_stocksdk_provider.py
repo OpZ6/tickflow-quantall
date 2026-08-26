@@ -83,11 +83,15 @@ def test_get_minute_datetime_is_beijing_wall_clock(monkeypatch):
 def test_get_realtime_passthrough(monkeypatch):
     rows = [{"symbol": "600519.SH", "name": "贵州茅台", "last_price": 1200.0,
              "prev_close": 1194.0, "open": 1186.0, "high": 1203.0, "low": 1180.0, "volume": 16325}]
+    rows[0].update({"amount": 2345.67, "change_pct": 0.5})
     _patch_run_job(monkeypatch, {"realtime": {"ok": True, "op": "realtime", "rows": rows}})
     out = StockSDKProvider().get_realtime()
-    assert out == rows
     required = {"symbol", "last_price", "prev_close", "open", "high", "low", "volume"}
     assert required <= set(out[0].keys())
+    # Upstream Tencent fields use 10k CNY and percentage points; TickFlow uses CNY and decimals.
+    assert out[0]["amount"] == 23_456_700
+    assert out[0]["change_pct"] == 0.005
+    assert rows[0]["amount"] == 2345.67
 
 
 def test_get_instruments_flatten_compatible(monkeypatch):
@@ -107,6 +111,34 @@ def test_empty_symbols_returns_empty():
     assert p.get_daily([], None, None).is_empty()
     assert p.get_adj_factors([], None, None).is_empty()
     assert p.get_minute([], None, None).is_empty()
+
+
+def test_fetch_daily_selected_routes_to_stocksdk(monkeypatch):
+    from app.data_providers import custom as custom_sources
+    from app.services import kline_sync
+
+    expected = pl.DataFrame({"symbol": ["600519.SH"], "date": [dt.date(2026, 1, 5)]})
+
+    class Provider:
+        def get_daily(self, symbols, start_time, end_time, on_chunk_done=None):
+            assert symbols == ["600519.SH"]
+            return expected
+
+    monkeypatch.setattr(kline_sync.preferences, "get_daily_data_provider", lambda: "stocksdk")
+    monkeypatch.setattr(custom_sources, "provider_has_dataset", lambda name, dataset: True)
+    monkeypatch.setattr(custom_sources, "get_provider", lambda name: Provider())
+    result = kline_sync.fetch_daily_selected(["600519.SH"], count=30)
+    assert result.equals(expected)
+
+
+def test_fetch_daily_selected_does_not_silently_fallback(monkeypatch):
+    from app.data_providers import custom as custom_sources
+    from app.services import kline_sync
+
+    monkeypatch.setattr(kline_sync.preferences, "get_daily_data_provider", lambda: "stocksdk")
+    monkeypatch.setattr(custom_sources, "provider_has_dataset", lambda name, dataset: False)
+    monkeypatch.setattr(kline_sync, "sync_daily_batch", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("fallback")))
+    assert kline_sync.fetch_daily_selected(["600519.SH"], count=30).is_empty()
 
 
 def test_bridge_error_degrades_to_empty(monkeypatch):
@@ -171,6 +203,29 @@ def test_bridge_mjs_resolves_local_stock_sdk_on_windows_path(tmp_path):
     assert proc.returncode == 0
     result = json.loads(proc.stdout)
     assert result == {"ok": True, "op": "ping", "version": "fake-local"}
+
+
+def test_bridge_mjs_fails_closed_when_dataset_worker_throws(tmp_path):
+    if shutil.which("node") is None:
+        raise AssertionError("node is required for stock-sdk bridge regression test")
+    bridge_path = tmp_path / "bridge.mjs"
+    shutil.copyfile(bridge._BRIDGE_MJS, bridge_path)
+    pkg_dir = tmp_path / "node_modules" / "stock-sdk"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "package.json").write_text(
+        json.dumps({"name": "stock-sdk", "type": "module", "main": "index.js"}), encoding="utf-8"
+    )
+    (pkg_dir / "index.js").write_text(
+        "export class StockSDK { constructor(){ this.kline={cn:async()=>{throw new Error('upstream down')}} } }\n",
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        ["node", str(bridge_path)], input=json.dumps({"op": "daily", "symbols": ["600519.SH"]}),
+        capture_output=True, text=True, encoding="utf-8", timeout=20,
+    )
+    result = json.loads(proc.stdout)
+    assert result["ok"] is False
+    assert "worker failed" in result["error"]
 
 
 def test_plugin_discovered_in_loader():

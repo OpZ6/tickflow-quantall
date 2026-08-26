@@ -2,7 +2,7 @@
 name = "tickflow-stock-panel-backend"
 version = "0.1.88"
 description = "A 股选股 + 监控 + 回测面板 — TickFlow 适配"
-readme = "../README.md"
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
@@ -23,6 +23,8 @@ dependencies = [
     "numba>=0.65.1; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     "fastexcel>=0.10",            # Polars 读取 xlsx/xls
     "pypinyin>=0.50",             # 股票名拼音首字母搜索 (同花顺式 payh → 平安银行)
+    # Chan theory analysis (缠论)
+    "czsc>=1.0",
     # TickFlow 官方 SDK
     "tickflow[all]>=0.1.23",
     # Scheduling
@@ -62,6 +64,18 @@ desktop = [
     "pywebview>=5.0",
 ]
 
+# 本机走 SOCKS 代理时的出网支持 (httpx 检测到 ALL_PROXY 需要它)。
+# 启用:`uv sync --extra socks`
+socks = [
+    "socksio>=1.0",
+]
+
+# Tushare Pro 数据源插件依赖 (quantall 能力迁移用, 替代 Quants ETL)。
+# 启用:`uv sync --extra tushare`
+tushare = [
+    "tushare>=1.4",
+]
+
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -83,6 +97,12 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 ignore = ["E501"]   # 长行交给 fmt
+
+# These modules are vendored source adapters. Their public scraper contracts
+# are preserved verbatim; the independent pipeline validates their output at
+# the adapter boundary instead of reformatting their implementation.
+[tool.ruff.lint.per-file-ignores]
+"app/quantx_data/legacy_scrapers/*.py" = ["ALL"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -26,7 +26,10 @@ const Branding = lazy(() => import('./pages/Branding').then(m => ({ default: m.B
 const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const Indices = lazy(() => import('./pages/Indices').then(m => ({ default: m.Indices })))
 const Regime = lazy(() => import('./pages/Regime').then(m => ({ default: m.Regime })))
+const MarketLab = lazy(() => import('./pages/MarketLab').then(m => ({ default: m.MarketLab })))
 const Dev = lazy(() => import('./pages/Dev').then(m => ({ default: m.Dev })))
+const QuantXCatalog = lazy(() => import('./pages/QuantXCatalog').then(m => ({ default: m.QuantXCatalog })))
+const QuantXReview = lazy(() => import('./pages/QuantXReview').then(m => ({ default: m.QuantXReview })))
 
 // 首次使用守卫 —— 未完成向导则重定向到 /onboarding
 // 只挂在根路由上;/onboarding 本身不被守卫,避免循环重定向。
@@ -74,6 +77,7 @@ export const router = createBrowserRouter([
       { path: 'concept-analysis', element: <ConceptAnalysis /> },
       { path: 'industry-analysis', element: <IndustryAnalysis /> },
       { path: 'stock-analysis', element: <StockAnalysis /> },
+      { path: 'chanlun', element: <Navigate to="/stock-analysis?view=chanlun" replace /> },
       { path: 'review', element: <Review /> },
       { path: 'watchlist', element: <Watchlist /> },
       { path: 'screener', element: <Screener /> },
@@ -84,6 +88,9 @@ export const router = createBrowserRouter([
       { path: 'limit-ladder', element: <LimitUpLadder /> },
       { path: 'indices', element: <Indices /> },
     { path: 'regime', element: <Regime /> },
+      { path: 'market-lab', element: <MarketLab /> },
+      { path: 'quantx', element: <QuantXCatalog /> },
+      { path: 'quantx/:date', element: <QuantXReview /> },
       { path: 'branding', element: <Branding /> },
       { path: 'settings', element: <Settings /> },
       // 隐藏路由：开发者工具（不暴露在菜单，仅供调试）

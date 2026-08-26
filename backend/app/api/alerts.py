@@ -153,4 +153,3 @@ def seed_demo_alerts(request: Request, count: int = 12, recent: bool = True):
         qs.push_alerts(sse_alerts)
 
     return {"ok": True, "generated": len(events)}
-

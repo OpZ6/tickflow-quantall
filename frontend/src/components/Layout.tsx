@@ -47,6 +47,8 @@ import {
   Moon,
   X,
   WifiOff,
+  Beaker,
+  Zap,
 } from 'lucide-react'
 import { Logo } from './Logo'
 import { api, type IndexQuote } from '@/lib/api'
@@ -68,6 +70,7 @@ const CORE_INDEXES = [
 type CoreIndex = (typeof CORE_INDEXES)[number]
 
 const nav = [
+  { to: '/market-lab', label: '市场实验室', icon: Beaker, badge: 'beta' },
   { to: '/',                label: '看板',     icon: LayoutDashboard },
   { to: '/watchlist',  label: '自选',   icon: Star },
   { to: '/screener',   label: '策略',   icon: ScanSearch },
@@ -80,6 +83,7 @@ const nav = [
   { to: '/monitor', label: '监控中心', icon: RadioTower },
   { to: '/regime', label: '市场环境', icon: Gauge, badge: 'beta' },
   { to: '/review',      label: '复盘',   icon: BookOpenCheck },
+  { to: '/quantx',      label: 'QuantX', icon: Zap, badge: 'beta' },
   { to: '/indices', label: '指数', icon: BarChart3 },
   { to: '/data',       label: '数据',   icon: Database },
 ] as const

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { Sparkles, LineChart, History as HistoryIcon, Loader2, ExternalLink, Bell, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
@@ -7,6 +8,7 @@ import { StockFinancialSearch } from '@/components/financials/StockFinancialSear
 import { StockPreviewDialog } from '@/components/StockPreviewDialog'
 import { LastStockChip } from '@/components/LastStockChip'
 import { AnalysisKChart, type PriceLevel, type LevelType } from '@/components/stock-analysis/AnalysisKChart'
+import { ChanlunKlineWorkbench } from '@/components/stock-analysis/ChanlunKlineWorkbench'
 import { PriceAlertDialog } from '@/components/stock-analysis/PriceAlertDialog'
 import { api } from '@/lib/api'
 import { useLastStock } from '@/lib/useLastStock'
@@ -26,8 +28,9 @@ import {
  *  - 报告胶囊用蓝色系,与财务分析(紫色)并存
  */
 export function StockAnalysis() {
-  const [symbol, setSymbol] = useState<string>('')
-  const [name, setName] = useState<string>('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [symbol, setSymbol] = useState<string>(() => searchParams.get('symbol') ?? '')
+  const [name, setName] = useState<string>(() => searchParams.get('name') ?? '')
   const [checking, setChecking] = useState(false)
   const [confirmReport, setConfirmReport] = useState<{ id: string; created_at: string; focus: string } | null>(null)
   const [previewSymbol, setPreviewSymbol] = useState<string | null>(null)
@@ -52,6 +55,12 @@ export function StockAnalysis() {
     setConfirmReport(null)
     setShowPriceAlerts(false)
     rememberStock(sym, nm)
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('symbol', sym)
+      next.set('name', nm)
+      return next
+    }, { replace: true })
   }
 
   const handleAnalyze = async () => {
@@ -81,7 +90,7 @@ export function StockAnalysis() {
     <>
       <PageHeader
         title="个股分析"
-        subtitle="日 K · 关键价位 · AI 四维分析(技术 / 基本面 / 财务 / 消息面)"
+        subtitle="统一 K 线图 · 关键价位 · 缠论与扩展指标 · AI 四维分析"
         right={
           <div className="flex items-center gap-2">
             <LastStockChip stock={lastStock} onSelect={onSelect} />
@@ -126,21 +135,19 @@ export function StockAnalysis() {
           )}
         </div>
 
-        {/* 主体:左侧当前个股看板 + 右侧常驻历史报告 */}
-        <div className="grid grid-cols-[1fr_288px] gap-6 items-start">
-          <div className="min-w-0">
-            {!symbol ? (
-              <EmptyState
-                icon={LineChart}
-                title="选择一只股票开始分析"
-                hint="搜索代码或名称,查看日 K 与关键价位,并可让 AI 进行技术面 / 基本面 / 财务面 / 消息面四维综合分析。"
-              />
-            ) : (
-              <StockAnalysisBoard symbol={symbol} />
-            )}
-          </div>
-          <HistorySidebar />
+        {/* 主体:当前个股看板(撑满全宽);历史报告移到看板下方,不挤占 K 线宽度 */}
+        <div className="min-w-0">
+          {!symbol ? (
+            <EmptyState
+              icon={LineChart}
+              title="选择一只股票开始分析"
+              hint="搜索代码或名称,查看日 K 与关键价位,并可让 AI 进行技术面 / 基本面 / 财务面 / 消息面四维综合分析。"
+            />
+          ) : (
+            <StockAnalysisBoard symbol={symbol} />
+          )}
         </div>
+        <HistorySidebar />
       </div>
 
       {/* 二次确认:已有历史报告 */}
@@ -175,9 +182,21 @@ export function StockAnalysis() {
 
 // ===== 分析看板:日 K + 关键价位 =====
 function StockAnalysisBoard({ symbol }: { symbol: string }) {
+  const [chartView, setChartView] = useState<'levels' | 'chanlun'>(() => (
+    new URLSearchParams(window.location.search).get('view') === 'chanlun' ? 'chanlun' : 'levels'
+  ))
+  // 图表高度自适应视口:撑满首屏(减去页头/搜索栏等固定开销),最小不低于 560
+  const [vh, setVh] = useState(() => window.innerHeight)
+  useEffect(() => {
+    const onResize = () => setVh(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const chartHeight = Math.max(560, vh - 340)
+
   const kline = useQuery({
     queryKey: ['kline', symbol, ''],
-    queryFn: () => api.klineDaily(symbol, 250),
+    queryFn: () => api.klineDaily(symbol, 500),
     enabled: !!symbol,
     staleTime: 60_000,
   })
@@ -189,32 +208,40 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
     staleTime: 60_000,
   })
 
-  if (kline.isLoading) {
-    return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted" /></div>
-  }
+  const rows = kline.data?.rows ?? []
+  const levels = (levelsQ.data?.levels ?? {}) as Record<LevelType, PriceLevel[]>
 
-  if (kline.isError) {
-    return (
+  // 涨跌色:最后一根 K 线收 vs 前一根收(无前日则按开收判断)
+  const last = rows[rows.length - 1]
+  const prev = rows[rows.length - 2]
+  const curClose = levelsQ.data?.close ?? last?.close
+  const isUp = last ? (prev ? (last.close >= prev.close) : (last.close >= last.open)) : true
+
+  let levelChart: React.ReactNode
+  if (kline.isLoading) {
+    levelChart = <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted" /></div>
+  } else if (kline.isError) {
+    levelChart = (
       <EmptyState
         icon={AlertTriangle}
         title="日 K 数据加载失败"
         hint="请检查网络或数据源配置后重试。"
       />
     )
+  } else if (rows.length === 0) {
+    levelChart = <EmptyState icon={LineChart} title="暂无日 K 数据" hint="该标的尚未同步日 K,请先在数据页或自选页同步。" />
+  } else {
+    levelChart = (
+      <AnalysisKChart
+        rows={rows}
+        levels={levels}
+        series={levelsQ.data?.series}
+        seriesDates={levelsQ.data?.dates}
+        defaultLevelTypes={['sr', 'pivot', 'keltner_s']}
+        height={chartHeight}
+      />
+    )
   }
-
-  const rows = kline.data?.rows ?? []
-  if (rows.length === 0) {
-    return <EmptyState icon={LineChart} title="暂无日 K 数据" hint="该标的尚未同步日 K,请先在数据页或自选页同步。" />
-  }
-
-  const levels = (levelsQ.data?.levels ?? {}) as Record<LevelType, PriceLevel[]>
-
-  // 涨跌色:最后一根 K 线收 vs 前一根收(无前日则按开收判断)
-  const last = rows[rows.length - 1]
-  const prev = rows[rows.length - 2]
-  const curClose = levelsQ.data?.close
-  const isUp = prev ? (last.close >= prev.close) : (last.close >= last.open)
 
   return (
     <div className="rounded-card border border-border/60 bg-surface/40 overflow-hidden">
@@ -222,10 +249,26 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <LineChart className="h-4 w-4 text-sky-400 shrink-0" />
-            <span className="text-sm font-medium text-foreground">关键价位分析</span>
+            <span className="text-sm font-medium text-foreground">K 线图</span>
+            <div className="ml-2 inline-flex items-center rounded-md border border-border/50 bg-base/30 p-0.5">
+              <button
+                type="button"
+                onClick={() => setChartView('levels')}
+                className={`rounded px-2 py-1 text-[10px] transition-colors ${chartView === 'levels' ? 'bg-elevated text-foreground' : 'text-muted hover:text-secondary'}`}
+              >
+                关键价位
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartView('chanlun')}
+                className={`rounded px-2 py-1 text-[10px] transition-colors ${chartView === 'chanlun' ? 'bg-cyan-400/10 text-cyan-300' : 'text-muted hover:text-secondary'}`}
+              >
+                缠论 · 全指标
+              </button>
+            </div>
           </div>
           <div className="flex items-baseline gap-2 shrink-0">
-            <span className="text-[10px] text-muted">{rows.length} 个交易日</span>
+            <span className="text-[10px] text-muted">{rows.length > 0 ? `${rows.length} 个交易日` : '扩展 K 线能力'}</span>
             <span className="text-[10px] text-muted/60">·</span>
             <span className="text-[10px] text-muted">当前价</span>
             <span className={`text-base font-mono font-bold ${isUp ? 'text-bull' : 'text-bear'}`}>
@@ -235,25 +278,18 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
         </div>
       </div>
       <div className="p-3">
-        <AnalysisKChart
-          rows={rows}
-          levels={levels}
-          series={levelsQ.data?.series}
-          seriesDates={levelsQ.data?.dates}
-          defaultLevelTypes={['sr', 'pivot', 'keltner_s']}
-          height={480}
-        />
+        {chartView === 'chanlun' ? <ChanlunKlineWorkbench symbol={symbol} /> : levelChart}
       </div>
     </div>
   )
 }
 
-// ===== 左侧常驻:历史报告侧栏(所有股票,按时间倒序平铺) =====
+// ===== 历史报告(看板下方横排区,按时间倒序) =====
 function HistorySidebar() {
   const { reports, loaded } = useHistoryReports()
 
   return (
-    <aside className="self-start sticky top-0">
+    <section>
       <div className="rounded-card border border-border/60 bg-surface/40 overflow-hidden">
         <div className="px-3 py-2.5 border-b border-border/40 flex items-center gap-2">
           <HistoryIcon className="h-3.5 w-3.5 text-sky-400 shrink-0" />
@@ -273,7 +309,7 @@ function HistorySidebar() {
             <p className="text-[10px] text-muted/60 mt-1">选一只股票,点「AI 个股分析」生成</p>
           </div>
         ) : (
-          <div className="max-h-[calc(100vh-220px)] overflow-y-auto p-2 space-y-1.5">
+          <div className="max-h-[320px] overflow-y-auto p-2 space-y-1.5">
             {reports.map(r => (
               <div
                 key={r.id}
@@ -310,7 +346,7 @@ function HistorySidebar() {
           </div>
         )}
       </div>
-    </aside>
+    </section>
   )
 }
 

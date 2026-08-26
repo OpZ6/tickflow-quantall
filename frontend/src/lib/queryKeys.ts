@@ -20,6 +20,12 @@ export const QK = {
   overviewMarket: (asOf?: string) => ['overview-market', asOf ?? 'latest'] as const,
   indexQuotes:    ['index-quotes'] as const,
   indexList:      ['index-list'] as const,
+  chanlunStatus:  ['chanlun', 'status'] as const,
+  chanlunAnalysis: (symbol: string, start: string, end: string) => ['chanlun', 'analysis', symbol, start, end] as const,
+  marketLabEtf:     ['market-lab', 'etf-momentum'] as const,
+  marketLabSector:  (dimension: string) => ['market-lab', 'sector-flow', dimension] as const,
+  marketLabRadar:   (dimension: string, asOf?: string) => ['market-lab', 'sector-radar', dimension, asOf ?? 'latest'] as const,
+  marketLabMacro:   ['market-lab', 'macro-dispersion'] as const,
 
   // Watchlist
   watchlist:            ['watchlist'] as const,

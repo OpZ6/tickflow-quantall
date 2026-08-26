@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TickFlow 架构与扩展开发指南 · HTML 报告</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg-card: #161b22; --bg-card-2: #1c2330; --bg-code: #0a0e14;
+    --border: #30363d; --border-light: #484f58;
+    --text: #c9d1d9; --text-heading: #f0f6fc; --text-muted: #8b949e;
+    --green: #238636; --green-light: #2ea043;
+    --blue: #1f6feb; --blue-light: #58a6ff;
+    --purple: #8957e5; --purple-light: #bc8cff;
+    --pink: #f778ba; --orange: #d29922; --orange-light: #e3b341;
+    --red: #f85149; --teal: #2dd4bf;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.65; font-size: 15px;
+  }
+  code, pre, .mono { font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace; }
+  .layout { display: grid; grid-template-columns: 240px 1fr; max-width: 1500px; margin: 0 auto; }
+  .toc { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 24px 16px 24px 24px; border-right: 1px solid var(--border); background: linear-gradient(180deg, #0d1117 0%, #0a0e14 100%); }
+  .toc h3 { color: var(--text-heading); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .toc ol { list-style: none; }
+  .toc li { margin-bottom: 3px; }
+  .toc a { display: block; padding: 4px 10px; border-radius: 4px; color: var(--text-muted); text-decoration: none; font-size: 13px; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--blue-light); background: rgba(88,166,252,0.08); border-left-color: var(--blue-light); }
+  .content { padding: 40px 48px 80px; max-width: 1100px; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } .toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); } }
+  .hero { background: radial-gradient(ellipse at top, rgba(35,134,54,0.18) 0%, transparent 60%), radial-gradient(ellipse at bottom right, rgba(31,111,235,0.12) 0%, transparent 60%), var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 40px 36px; margin-bottom: 32px; position: relative; overflow: hidden; }
+  .hero::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--green) 0%, var(--blue) 50%, var(--purple) 100%); }
+  .hero h1 { color: var(--text-heading); font-size: 32px; margin-bottom: 8px; letter-spacing: -0.5px; }
+  .hero .subtitle { color: var(--blue-light); font-size: 15px; margin-bottom: 20px; }
+  .hero .lede { color: var(--text-muted); font-size: 15px; max-width: 800px; line-height: 1.7; }
+  .hero .meta { margin-top: 16px; font-size: 12px; color: var(--text-muted); }
+  .hero .meta span { margin-right: 16px; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 24px 0; }
+  .metric { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+  .metric .v { font-size: 26px; font-weight: 700; color: var(--text-heading); font-family: monospace; }
+  .metric .l { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+  .metric.g .v { color: var(--green-light); } .metric.b .v { color: var(--blue-light); }
+  .metric.p .v { color: var(--purple-light); } .metric.o .v { color: var(--orange-light); }
+  .metric.t .v { color: var(--teal); }
+  section { margin-bottom: 48px; scroll-margin-top: 20px; }
+  h2 { color: var(--text-heading); font-size: 24px; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  h2 .num { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; font-size: 14px; background: linear-gradient(135deg, var(--green) 0%, var(--blue) 100%); color: white; font-weight: 700; }
+  h3 { color: var(--text-heading); font-size: 18px; margin: 24px 0 12px; }
+  h4 { color: var(--text-heading); font-size: 15px; margin: 16px 0 8px; }
+  p { margin-bottom: 12px; }
+  a { color: var(--blue-light); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; margin-bottom: 14px; }
+  .card h4 { margin-top: 0; }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .card-grid .card { margin-bottom: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg-card-2); color: var(--text-heading); font-weight: 600; font-size: 13px; }
+  tr:hover td { background: rgba(88,166,252,0.04); }
+  td code, th code { font-size: 12px; color: var(--blue-light); background: rgba(88,166,252,0.1); padding: 2px 6px; border-radius: 3px; }
+  pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 14px 18px; overflow-x: auto; font-size: 13px; line-height: 1.55; margin: 12px 0; }
+  pre code { color: var(--text); }
+  code { color: var(--blue-light); }
+  .kw { color: var(--purple-light); } .str { color: var(--green-light); } .num { color: var(--orange-light); }
+  .com { color: var(--text-muted); font-style: italic; } .fn { color: var(--blue-light); }
+  .callout { border-left: 3px solid; padding: 12px 16px; border-radius: 4px; margin: 14px 0; background: var(--bg-card); }
+  .callout-warn { border-color: var(--orange); background: rgba(210,153,34,0.08); }
+  .callout-danger { border-color: var(--red); background: rgba(248,81,73,0.08); }
+  .callout-info { border-color: var(--blue); background: rgba(31,111,235,0.08); }
+  .callout-tip { border-color: var(--green); background: rgba(35,134,54,0.08); }
+  .callout strong { color: var(--text-heading); }
+  .arch-stack { display: flex; flex-direction: column; gap: 6px; margin: 20px 0; }
+  .arch-layer { position: relative; padding: 16px 20px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); display: grid; grid-template-columns: 60px 1fr 180px; gap: 16px; align-items: center; transition: transform 0.15s; }
+  .arch-layer:hover { transform: translateX(4px); }
+  .arch-layer .layer-num { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 16px; }
+  .arch-layer .layer-body h4 { margin: 0 0 4px; font-size: 15px; }
+  .arch-layer .layer-body p { margin: 0; font-size: 13px; color: var(--text-muted); }
+  .arch-layer .layer-files { font-size: 11px; color: var(--text-muted); text-align: right; font-family: monospace; }
+  .arch-layer.l1 { border-left: 3px solid var(--teal); } .arch-layer.l1 .layer-num { background: var(--teal); }
+  .arch-layer.l2 { border-left: 3px solid var(--blue); } .arch-layer.l2 .layer-num { background: var(--blue); }
+  .arch-layer.l3 { border-left: 3px solid var(--purple); } .arch-layer.l3 .layer-num { background: var(--purple); }
+  .arch-layer.l4 { border-left: 3px solid var(--green); } .arch-layer.l4 .layer-num { background: var(--green); }
+  .arch-layer.l5 { border-left: 3px solid var(--orange); } .arch-layer.l5 .layer-num { background: var(--orange); }
+  .arch-layer.l6 { border-left: 3px solid var(--pink); } .arch-layer.l6 .layer-num { background: var(--pink); }
+  .arch-arrow { text-align: center; color: var(--text-muted); font-size: 18px; margin: -2px 0; }
+  .storage-3d { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0; }
+  .storage-layer { border-radius: 10px; padding: 20px; border: 1px solid; position: relative; min-height: 200px; }
+  .storage-layer h4 { margin-top: 0; font-size: 16px; }
+  .storage-layer .role { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .storage-layer ul { list-style: none; padding: 0; font-size: 12px; }
+  .storage-layer ul li { padding: 4px 0; border-bottom: 1px dashed rgba(255,255,255,0.06); }
+  .storage-layer ul li:last-child { border-bottom: none; }
+  .storage-layer.parquet { background: linear-gradient(135deg, rgba(45,212,191,0.12), rgba(45,212,191,0.04)); border-color: var(--teal); }
+  .storage-layer.parquet .role { color: var(--teal); }
+  .storage-layer.duckdb { background: linear-gradient(135deg, rgba(188,140,255,0.12), rgba(188,140,255,0.04)); border-color: var(--purple-light); }
+  .storage-layer.duckdb .role { color: var(--purple-light); }
+  .storage-layer.polars { background: linear-gradient(135deg, rgba(247,120,186,0.12), rgba(247,120,186,0.04)); border-color: var(--pink); }
+  .storage-layer.polars .role { color: var(--pink); }
+  .storage-layer .size { position: absolute; bottom: 14px; right: 14px; font-family: monospace; font-size: 11px; color: var(--text-muted); }
+  .tree { font-family: monospace; font-size: 13px; line-height: 1.8; background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; margin: 14px 0; white-space: pre-wrap; }
+  .tree .dir { color: var(--blue-light); } .tree .file { color: var(--text-muted); } .tree .note { color: var(--text-muted); font-style: italic; }
+  .tree .badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
+  .tree .badge.b { background: rgba(31,111,235,0.2); color: var(--blue-light); }
+  .tree .badge.g { background: rgba(35,134,54,0.2); color: var(--green-light); }
+  .tree .badge.o { background: rgba(210,153,34,0.2); color: var(--orange-light); }
+  .tree .badge.p { background: rgba(137,87,229,0.2); color: var(--purple-light); }
+  .pipeline-step { display: grid; grid-template-columns: 1fr 100px; gap: 14px; align-items: center; padding: 10px 14px; border-radius: 6px; background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 6px; }
+  .pipeline-step .pct { font-family: monospace; font-size: 12px; color: var(--green-light); text-align: right; }
+  .pipeline-step .step-name { font-weight: 600; color: var(--text-heading); font-size: 14px; }
+  .pipeline-step .step-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .pipeline-step .bar { height: 6px; background: rgba(35,134,54,0.15); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .pipeline-step .bar > div { height: 100%; background: linear-gradient(90deg, var(--green), var(--blue-light)); border-radius: 3px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+  .flow-node { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 12px; min-width: 110px; text-align: center; }
+  .flow-node .title { color: var(--text-heading); font-weight: 600; }
+  .flow-node .sub { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
+  .flow-arrow { color: var(--text-muted); font-size: 18px; }
+  .bar-chart { margin: 16px 0; }
+  .bar-row { display: grid; grid-template-columns: 130px 1fr 50px; gap: 10px; align-items: center; margin-bottom: 6px; font-size: 13px; }
+  .bar-row .bar-label { color: var(--text); text-align: right; }
+  .bar-row .bar-track { height: 22px; background: var(--bg-card); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+  .bar-row .bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--blue), var(--blue-light)); }
+  .bar-row .bar-value { font-family: monospace; color: var(--text-muted); font-size: 12px; }
+  .bar-row.g .bar-fill { background: linear-gradient(90deg, var(--green), var(--green-light)); }
+  .bar-row.p .bar-fill { background: linear-gradient(90deg, var(--purple), var(--purple-light)); }
+  .bar-row.o .bar-fill { background: linear-gradient(90deg, var(--orange), var(--orange-light)); }
+  .bar-row.t .bar-fill { background: linear-gradient(90deg, #13a186, var(--teal)); }
+  .bar-row.r .bar-fill { background: linear-gradient(90deg, #c4362f, var(--red)); }
+  .cat-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 16px 0; }
+  .cat-bar { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+  .cat-bar .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .cat-bar .head .name { color: var(--text-heading); font-size: 13px; font-weight: 600; }
+  .cat-bar .head .count { font-family: monospace; color: var(--blue-light); font-size: 13px; }
+  .cat-bar .fields { font-size: 11px; color: var(--text-muted); font-family: monospace; line-height: 1.6; }
+  .exec-flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0; }
+  .exec-step { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 14px; position: relative; }
+  .exec-step .step { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+  .exec-step .name { color: var(--text-heading); font-size: 14px; font-weight: 600; margin: 4px 0; }
+  .exec-step .desc { font-size: 11px; color: var(--text-muted); }
+  .exec-step::after { content: "→"; position: absolute; right: -14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px; }
+  .exec-step:last-child::after { display: none; }
+  @media (max-width: 800px) { .exec-flow { grid-template-columns: 1fr 1fr; } .exec-step::after { display: none; } .storage-3d { grid-template-columns: 1fr; } }
+  .bt-timeline { position: relative; padding: 20px 0; margin: 16px 0; }
+  .bt-timeline::before { content: ""; position: absolute; top: 40px; left: 0; right: 0; height: 2px; background: var(--border); }
+  .bt-days { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; position: relative; }
+  .bt-day { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 12px; position: relative; text-align: center; }
+  .bt-day .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+  .bt-day .d { font-family: monospace; color: var(--blue-light); font-size: 13px; margin: 4px 0; }
+  .bt-day .action { font-size: 12px; color: var(--text-heading); font-weight: 600; }
+  .bt-day.signal { border-color: var(--orange); } .bt-day.signal .action { color: var(--orange-light); }
+  .bt-day.buy { border-color: var(--green); } .bt-day.buy .action { color: var(--green-light); }
+  .bt-day.sell { border-color: var(--red); } .bt-day.sell .action { color: var(--red); }
+  .bt-day .marker { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--bg); }
+  .bt-day.signal .marker { background: var(--orange); }
+  .bt-day.buy .marker { background: var(--green); }
+  .bt-day.sell .marker { background: var(--red); }
+  .bt-day.hold .marker { background: var(--text-muted); }
+  .quadrant { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px; margin: 16px 0; min-height: 360px; }
+  .quad { border-radius: 8px; padding: 16px; border: 1px solid; }
+  .quad h4 { margin-top: 0; font-size: 14px; }
+  .quad ul { padding-left: 18px; font-size: 12px; }
+  .quad li { margin-bottom: 4px; }
+  .quad.q1 { background: rgba(35,134,54,0.08); border-color: var(--green); } .quad.q1 h4 { color: var(--green-light); }
+  .quad.q2 { background: rgba(31,111,235,0.08); border-color: var(--blue); } .quad.q2 h4 { color: var(--blue-light); }
+  .quad.q3 { background: rgba(137,87,229,0.08); border-color: var(--purple); } .quad.q3 h4 { color: var(--purple-light); }
+  .quad.q4 { background: rgba(248,81,73,0.08); border-color: var(--red); } .quad.q4 h4 { color: var(--red); }
+  .step-flow { margin: 16px 0; position: relative; padding-left: 28px; }
+  .step-flow::before { content: ""; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+  .step-item { position: relative; padding-bottom: 18px; }
+  .step-item::before { content: ""; position: absolute; left: -28px; top: 4px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); border: 3px solid var(--blue); }
+  .step-item .head { color: var(--text-heading); font-weight: 600; font-size: 14px; }
+  .step-item .desc { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .route-table .arrow { color: var(--text-muted); }
+  .route-table .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-family: monospace; }
+  .route-table .tick { background: rgba(35,134,54,0.2); color: var(--green-light); }
+  .route-table .cust { background: rgba(31,111,235,0.2); color: var(--blue-light); }
+  .route-table .fallback { background: rgba(210,153,34,0.2); color: var(--orange-light); }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; border: 1px solid; }
+  .pill.g { color: var(--green-light); border-color: rgba(35,134,54,0.4); background: rgba(35,134,54,0.08); }
+  .pill.b { color: var(--blue-light); border-color: rgba(31,111,235,0.4); background: rgba(31,111,235,0.08); }
+  .pill.p { color: var(--purple-light); border-color: rgba(137,87,229,0.4); background: rgba(137,87,229,0.08); }
+  .pill.o { color: var(--orange-light); border-color: rgba(210,153,34,0.4); background: rgba(210,153,34,0.08); }
+  .pill.r { color: var(--red); border-color: rgba(248,81,73,0.4); background: rgba(248,81,73,0.08); }
+  .pill.t { color: var(--teal); border-color: rgba(45,212,191,0.4); background: rgba(45,212,191,0.08); }
+  .check-list { list-style: none; padding: 0; }
+  .check-list li { padding: 6px 0; font-size: 13px; }
+  .check-list li::before { content: "☐ "; color: var(--blue-light); font-weight: 700; }
+  footer { margin-top: 60px; padding: 24px 0; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; }
+  footer p { margin-bottom: 6px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+  .text-muted { color: var(--text-muted); }
+  .text-green { color: var(--green-light); } .text-blue { color: var(--blue-light); }
+  .text-purple { color: var(--purple-light); } .text-orange { color: var(--orange-light); }
+  .text-red { color: var(--red); } .text-teal { color: var(--teal); }
+  .small { font-size: 12px; }
+  .mono-sm { font-family: monospace; font-size: 12px; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc">
+    <h3>导航</h3>
+    <ol>
+      <li><a href="#hero">概览</a></li>
+      <li><a href="#architecture">1. 顶层架构</a></li>
+      <li><a href="#stack">2. 技术栈与边界</a></li>
+      <li><a href="#storage">3. 数据底座三层</a></li>
+      <li><a href="#data-dir">4. 数据目录全景</a></li>
+      <li><a href="#schema">5. 数据集与单位</a></li>
+      <li><a href="#enriched">6. Enriched 表</a></li>
+      <li><a href="#write-concurrency">7. 写入与启动</a></li>
+      <li><a href="#providers">8. 数据源插件化</a></li>
+      <li><a href="#ext-data">9. 扩展数据</a></li>
+      <li><a href="#pipeline">10. 盘后管道</a></li>
+      <li><a href="#realtime">11. 实时热路径</a></li>
+      <li><a href="#cache">12. 缓存生命周期</a></li>
+      <li><a href="#indicators">13. 指标与信号</a></li>
+      <li><a href="#strategy">14. 策略引擎</a></li>
+      <li><a href="#backtest">15. 回测系统</a></li>
+      <li><a href="#monitor">16. 监控与通知</a></li>
+      <li><a href="#market">17. 市场状态</a></li>
+      <li><a href="#levels">18. 关键价位</a></li>
+      <li><a href="#ai">19. AI 分析</a></li>
+      <li><a href="#api">20. API 层</a></li>
+      <li><a href="#frontend">21. 前端架构</a></li>
+      <li><a href="#analyze">22. 如何做分析</a></li>
+      <li><a href="#new-feature">23. 如何新增功能</a></li>
+      <li><a href="#new-panel">24. 如何新增面板</a></li>
+      <li><a href="#extension-directions">25. 扩展方向</a></li>
+      <li><a href="#source-index">26. 源码索引</a></li>
+      <li><a href="#verify">27. 验证流程</a></li>
+      <li><a href="#risks">28. 已知风险</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <section id="hero" class="hero">
+      <h1>TickFlow 架构与扩展开发指南</h1>
+      <div class="subtitle">面向二次开发者的 HTML 报告 — 数据底座 · 业务能力 · 扩展路径</div>
+      <p class="lede">
+        本报告把 <code>prototypes/tickflow</code> 从「数据底座 → 业务能力 → API → 前端」逐层拆开,标出每层的存储形式、调用链、扩展点和已知风险,并给出「新增数据源 / 新增策略 / 新增指标 / 新增 API / 新增面板」的可复用路径。后续大量开发绝大多数是<strong>在已落地的底座上叠加新数据集、新指标、新分析、新面板</strong>,而不是替换底座本身。
+      </p>
+      <div class="meta">
+        <span>源版本 0.1.88</span>
+        <span>审计提交 <code>9b9538a</code></span>
+        <span>独立 git 仓库</span>
+        <span>2026-08-24</span>
+      </div>
+      <div class="metrics">
+        <div class="metric g"><div class="v">18</div><div class="l">内置策略</div></div>
+        <div class="metric b"><div class="v">187</div><div class="l">API path</div></div>
+        <div class="metric p"><div class="v">208</div><div class="l">API operation</div></div>
+        <div class="metric o"><div class="v">3</div><div class="l">存储层</div></div>
+        <div class="metric t"><div class="v">~100万</div><div class="l">enriched 历史行</div></div>
+        <div class="metric g"><div class="v">~5500</div><div class="l">最新日股票数</div></div>
+        <div class="metric b"><div class="v">4</div><div class="l">数据源接入方式</div></div>
+        <div class="metric p"><div class="v">11</div><div class="l">关键价位类型</div></div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <h2><span class="num">1</span>顶层架构</h2>
+      <p>TickFlow Stock Panel 是<strong>本地优先、数据源可插拔</strong>的 A 股研究工作台,把「数据接入 → 复权 → 指标 → 选股 → 回测 → 监控 → 复盘 → AI 文本分析」放进同一套数据契约与同一份本地 Parquet 数据底座。它<strong>不是</strong>交易终端:没有下单链路,没有真实撮合,没有逐笔 Tick。所有"成交"都是基于日 K / 分钟 K 的规则模拟。</p>
+      <div class="arch-stack">
+        <div class="arch-layer l6">
+          <div class="layer-num">6</div>
+          <div class="layer-body"><h4>前端 · React 18 + Vite + TS + TanStack Query</h4><p>24 个页面 lazy 加载 · lib/api.ts 统一客户端 · useQuoteStream 单 SSE · ECharts + lightweight-charts + dnd-kit</p></div>
+          <div class="layer-files">frontend/src/<br>router.tsx · lib/ · pages/</div>
+        </div>
+        <div class="arch-arrow">▲</div>
+        <div class="arch-layer l5">
+          <div class="layer-num">5</div>
+          <div class="layer-body"><h4>API 层 · FastAPI + SSE</h4><p>28 个 router · 187 path / 208 operation · REST 拿快照,SSE 推行情/进度/AI 流</p></div>
+          <div class="layer-files">backend/app/api/<br>routes.py + 27 业务 router</div>
+        </div>
+        <div class="arch-arrow">▲</div>
+        <div class="arch-layer l4">
+          <div class="layer-num">4</div>
+          <div class="layer-body"><h4>业务能力层 · indicators · strategy · backtest · services</h4><p>指标流水线 · 策略引擎 · 回测矩阵 · 监控 · regime · 市场总览 · 关键价位 · AI 分析</p></div>
+          <div class="layer-files">backend/app/<br>indicators/ · strategy/ · backtest/ · services/</div>
+        </div>
+        <div class="arch-arrow">▲</div>
+        <div class="arch-layer l3">
+          <div class="layer-num">3</div>
+          <div class="layer-body"><h4>Repository · DataStore(数据底座)</h4><p>Parquet 分区写盘 + DuckDB union_by_name 视图 + Polars 内存缓存</p></div>
+          <div class="layer-files">backend/app/tickflow/<br>repository.py · capabilities.py</div>
+        </div>
+        <div class="arch-arrow">▲</div>
+        <div class="arch-layer l2">
+          <div class="layer-num">2</div>
+          <div class="layer-body"><h4>Provider 契约 + 标准化</h4><p>把不同供应商的字段/单位/代码/日期归一成内部统一 schema,上层不依赖供应商响应结构</p></div>
+          <div class="layer-files">backend/app/data_providers/<br>base.py · schemas.py · custom/</div>
+        </div>
+        <div class="arch-arrow">▲</div>
+        <div class="arch-layer l1">
+          <div class="layer-num">1</div>
+          <div class="layer-body"><h4>外部数据源 / 本地文件</h4><p>TickFlow SDK · stock-sdk 插件 · 自定义 HTTP(YAML) · CSV/Excel/JSON · 截图 OCR</p></div>
+          <div class="layer-files">TickFlow 官方端点<br>third-party API · 本地文件</div>
+        </div>
+      </div>
+      <div class="callout callout-danger">
+        <strong>铁律</strong>:API 与页面不应直接读取某个供应商。所有数据必须先走 provider → 标准化 → 仓库,再进入业务层。这是后续所有扩展都必须遵守的边界(<code>CONTRIBUTING.md §2.3</code>)。
+      </div>
+    </section>
+
+    <section id="stack">
+      <h2><span class="num">2</span>技术栈与模块边界</h2>
+      <h3>2.1 技术栈</h3>
+      <table>
+        <tr><th>层</th><th>选型</th><th>关键约束</th></tr>
+        <tr><td>后端</td><td>Python ≥ 3.11、FastAPI、Pydantic v2、APScheduler、sse-starlette</td><td>业务计算优先 Polars,回测边界允许 pandas</td></tr>
+        <tr><td>数据</td><td>Polars(计算) · DuckDB(查询) · Parquet(存储) · PyArrow</td><td>DuckDB 不做主存储,只读 Parquet 视图</td></tr>
+        <tr><td>回测</td><td>NumPy + Numba 自研矩阵引擎;vectorbt 为可选兼容边界</td><td>主路径已切到自研 matrix,<strong>不是</strong> vectorbt</td></tr>
+        <tr><td>数据源</td><td>TickFlow 官方 SDK · stock-sdk 插件 · 自定义 HTTP</td><td>一切供应商字段先归一再入库</td></tr>
+        <tr><td>AI(可选)</td><td>OpenAI 兼容 / Codex CLI</td><td>留空即关闭,不进热路径</td></tr>
+        <tr><td>前端</td><td>React 18、Vite、TypeScript、Tailwind、TanStack Query</td><td>单 SSE、统一 api.ts、查询键集中</td></tr>
+        <tr><td>部署</td><td>Docker 两阶段构建,前端 dist 拷进后端镜像,单容器</td><td>dev 模式 Vite 代理 /api 到 3018</td></tr>
+      </table>
+      <h3>2.2 模块边界(CONTRIBUTING.md §2.3)</h3>
+      <div class="card-grid">
+        <div class="card"><h4 class="text-blue">backend/app/api/</h4><p class="small text-muted">HTTP、SSE、参数校验、响应映射。薄层,不放重计算/全量扫描/数据源专属业务。</p></div>
+        <div class="card"><h4 class="text-blue">backend/app/services/</h4><p class="small text-muted">同步、实时、通知等业务编排。组合领域能力,不复制仓库或 provider 实现。</p></div>
+        <div class="card"><h4 class="text-blue">backend/app/tickflow/</h4><p class="small text-muted">存储、仓库、能力检测、TickFlow 接入。通过抽象暴露能力,上层不依赖存储细节。</p></div>
+        <div class="card"><h4 class="text-blue">backend/app/data_providers/</h4><p class="small text-muted">Provider 接口、标准化、自定义数据源。新数据能力先定义数据集契约,再由 provider 实现。</p></div>
+        <div class="card"><h4 class="text-blue">backend/app/plugins/</h4><p class="small text-muted">插件发现、加载、插件协议。插件失败不得破坏未启用插件的主流程。</p></div>
+        <div class="card"><h4 class="text-blue">backend/app/indicators/</h4><p class="small text-muted">指标计算和 enriched 流水线。向量化,区分原始价/复权价/输出单位。</p></div>
+        <div class="card"><h4 class="text-blue">backend/app/strategy/</h4><p class="small text-muted">策略注册、执行、监控、AI 策略。内置与自定义策略共享执行契约。</p></div>
+        <div class="card"><h4 class="text-blue">backend/app/backtest/</h4><p class="small text-muted">回测、优化、步进、worker。严格隔离信号生成与成交模拟,防未来函数。</p></div>
+        <div class="card"><h4 class="text-blue">frontend/src/lib/</h4><p class="small text-muted">API 客户端、查询键、共享查询。后端契约变化必须同步类型与调用方。</p></div>
+        <div class="card"><h4 class="text-blue">data/</h4><p class="small text-muted">用户运行时数据。不提交 Git,不写绝对路径。</p></div>
+      </div>
+    </section>
+
+    <section id="storage">
+      <h2><span class="num">3</span>数据底座三层存储</h2>
+      <p>这是 TickFlow 最有价值的部分。后续大量开发绝大多数是<strong>在已落地的底座上叠加新数据集、新指标、新分析、新面板</strong>,而不是替换底座本身。代码入口:<code>backend/app/tickflow/repository.py</code> 的 <code>DataStore</code> 与 <code>KlineRepository</code>。</p>
+      <div class="storage-3d">
+        <div class="storage-layer parquet">
+          <div class="role">持久层</div>
+          <h4 class="text-teal">Parquet</h4>
+          <ul>
+            <li>按日期分区</li>
+            <li>symbol+date 主键 merge-upsert</li>
+            <li>临时文件 + replace 原子写</li>
+            <li>窄表存 enriched(15 列)</li>
+            <li>完整指标读取时重算</li>
+            <li>进程重启唯一可恢复状态</li>
+          </ul>
+          <div class="size">~100万行历史</div>
+        </div>
+        <div class="storage-layer duckdb">
+          <div class="role">查询层</div>
+          <h4 class="text-purple">DuckDB</h4>
+          <ul>
+            <li>内存模式,不建 .db 文件</li>
+            <li><code>CREATE VIEW ... read_parquet(...) union_by_name=true</code></li>
+            <li>适合统计/元数据/自定义 SQL</li>
+            <li>不做主存储</li>
+            <li>单 connection,锁保护</li>
+            <li>缺字段仍可读(向后兼容)</li>
+          </ul>
+          <div class="size">23 个视图</div>
+        </div>
+        <div class="storage-layer polars">
+          <div class="role">热路径</div>
+          <h4 style="color: var(--pink);">Polars 内存缓存</h4>
+          <ul>
+            <li>enriched 最新日 ~5500 行</li>
+            <li>完整历史 ~100万行(含指标)</li>
+            <li>instruments / live_agg(递推)</li>
+            <li>ETF / index enriched 懒加载</li>
+            <li>启动 instruments 同步</li>
+            <li>enriched 推 daemon 重算</li>
+          </ul>
+          <div class="size">毫秒级响应</div>
+        </div>
+      </div>
+      <h3>3.1 写数据后必须同步检查</h3>
+      <div class="flow">
+        <div class="flow-node"><div class="title">1. 持久化</div><div class="sub">Parquet</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">2. 内存缓存</div><div class="sub">Polars</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">3. generation</div><div class="sub">矩阵 version</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">4. SSE 事件</div><div class="sub">推送</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">5. 前端 invalidation</div><div class="sub">TanStack Query</div></div>
+      </div>
+      <div class="callout callout-warn">
+        <strong>不能</strong>只保证"文件已写入"却继续返回旧内存对象。多步刷新优先<strong>构建新快照后原子替换</strong>,避免 UI 在刷新期间短暂变成空列表或零结果。
+      </div>
+    </section>
+
+    <section id="data-dir">
+      <h2><span class="num">4</span>数据目录全景</h2>
+      <p><code>data/</code> 被 Git 忽略,所有内容都是程序运行时生成或拉取的用户数据。<code>DataStore.__init__</code> 在启动时确保下列子目录存在(repository.py:62-90)。</p>
+      <div class="tree"><span class="dir">data/</span>
+├── <span class="dir">kline_daily/</span>                  <span class="badge b">日K</span> <span class="note">A 股日 K, date=YYYY-MM-DD/part.parquet</span>
+├── <span class="dir">kline_daily_enriched/</span>         <span class="badge g">enriched</span> <span class="note">15 列窄表</span>
+├── <span class="dir">kline_index_daily/</span>            <span class="badge b">指数</span>
+├── <span class="dir">kline_index_enriched/</span>         <span class="badge g">enriched</span>
+├── <span class="dir">kline_etf_daily/</span>              <span class="badge b">ETF</span>
+├── <span class="dir">kline_etf_enriched/</span>           <span class="badge g">enriched</span>
+├── <span class="dir">kline_etf_minute/</span>            <span class="badge o">分钟</span>
+├── <span class="dir">kline_minute/</span>                 <span class="badge o">分钟</span> <span class="note">A 股, symbol=XXX/date=.../</span>
+├── <span class="dir">adj_factor/</span>                   <span class="badge p">复权</span> <span class="note">按 symbol 分区</span>
+├── <span class="dir">adj_factor_etf/</span>
+├── <span class="dir">instruments/</span>                  <span class="badge b">维表</span> <span class="note">instruments.parquet</span>
+├── <span class="dir">instruments_index/</span>
+├── <span class="dir">instruments_etf/</span>
+├── <span class="dir">instruments_ext/</span>             <span class="badge b">扩展维表</span>
+├── <span class="dir">kline_ext/</span>                    <span class="badge b">扩展K线</span>
+├── <span class="dir">financials/</span>
+│   ├── <span class="dir">metrics/</span>
+│   ├── <span class="dir">income/</span>
+│   ├── <span class="dir">balance_sheet/</span>
+│   ├── <span class="dir">cash_flow/</span>
+│   └── <span class="dir">shares/</span>                  <span class="note">历史股本</span>
+├── <span class="dir">depth5/</span>                       <span class="badge o">五档</span> <span class="note">sealed 真假涨停</span>
+├── <span class="dir">ext_data/{id}/</span>
+│   ├── <span class="file">part.parquet</span>          <span class="note">snapshot 模式</span>
+│   └── <span class="dir">timeseries/date=.../</span> <span class="note">时序模式</span>
+├── <span class="dir">pools/</span>                        <span class="note">标的池 CN_Equity_A 等</span>
+├── <span class="dir">backtest_results/</span>            <span class="note">回测结果 JSON</span>
+├── <span class="dir">screener_results/</span>            <span class="note">选股结果缓存</span>
+├── <span class="dir">.backtest_matrix_cache/</span>      <span class="badge o">memmap</span> <span class="note">512 MB 上限</span>
+├── <span class="file">.matrix_generation_stock.json</span>
+├── <span class="dir">ai_cache/</span>                     <span class="note">AI 报告归档</span>
+├── <span class="dir">job_store/</span>                    <span class="note">同步任务记录</span>
+├── <span class="file">capabilities.json</span>            <span class="note">能力检测结果</span>
+├── <span class="dir">data_sources/</span>                 <span class="note">自定义数据源 YAML</span>
+├── <span class="dir">regime_history/</span>
+├── <span class="dir">strategies/</span>                   <span class="note">不在 user_data/ 下</span>
+│   ├── <span class="dir">custom/</span>                  <span class="badge g">用户策略</span>
+│   ├── <span class="dir">ai/</span>                       <span class="badge p">AI 生成</span>
+│   └── <span class="dir">composite/</span>               <span class="badge b">组合</span>
+└── <span class="dir">user_data/</span>
+    ├── <span class="file">preferences.json</span>         <span class="note">全局偏好</span>
+    ├── <span class="dir">custom_signals/</span>           <span class="note">csg_*.json</span>
+    ├── <span class="dir">monitor_rules/</span>
+    ├── <span class="dir">strategy_overrides/</span>
+    ├── <span class="file">auth.json</span>                 <span class="note">访问密码与会话</span>
+    └── <span class="file">alerts.jsonl</span>             <span class="note">7天/5000条上限</span></div>
+    </section>
+
+    <section id="schema">
+      <h2><span class="num">5</span>数据集 schema 与单位约定</h2>
+      <p>Provider 标准化 schema 由 <code>backend/app/data_providers/schemas.py</code> 定义:</p>
+      <pre><code><span class="kw">DAILY_COLUMNS</span> = [<span class="str">"symbol"</span>, <span class="str">"asset_type"</span>, <span class="str">"source"</span>, <span class="str">"date"</span>,
+    <span class="str">"open"</span>, <span class="str">"high"</span>, <span class="str">"low"</span>, <span class="str">"close"</span>,
+    <span class="str">"volume"</span>, <span class="str">"amount"</span>, <span class="str">"pre_close"</span>, <span class="str">"change_pct"</span>]
+<span class="kw">ADJ_FACTOR_COLUMNS</span> = [<span class="str">"symbol"</span>, <span class="str">"asset_type"</span>, <span class="str">"source"</span>, <span class="str">"trade_date"</span>, <span class="str">"ex_factor"</span>]
+<span class="kw">INSTRUMENT_COLUMNS</span> = [<span class="str">"symbol"</span>, <span class="str">"name"</span>, <span class="str">"exchange"</span>, <span class="str">"asset_type"</span>, <span class="str">"source"</span>, <span class="str">"list_date"</span>, <span class="str">"status"</span>]
+<span class="kw">MINUTE_COLUMNS</span> = [<span class="str">"symbol"</span>, <span class="str">"asset_type"</span>, <span class="str">"source"</span>, <span class="str">"datetime"</span>,
+    <span class="str">"open"</span>, <span class="str">"high"</span>, <span class="str">"low"</span>, <span class="str">"close"</span>, <span class="str">"volume"</span>, <span class="str">"amount"</span>, <span class="str">"freq"</span>]</code></pre>
+      <h3>5.1 关键单位约定(CONTRIBUTING.md §3)</h3>
+      <div class="callout callout-danger">
+        金融数据错误经常<strong>不会报异常</strong>,但会生成看似合理的错误结果。涉及下列字段时,必须在变量名、边界转换或测试中证明口径正确。
+      </div>
+      <table>
+        <tr><th>字段 / 场景</th><th>口径</th><th>示例</th></tr>
+        <tr><td>自定义实时入口 <code>change_pct</code></td><td><span class="pill g">小数</span></td><td>0.0366 表示 3.66%</td></tr>
+        <tr><td>enriched 与监控内部 <code>change_pct</code></td><td><span class="pill g">通常小数</span></td><td>阈值前必须确认调用链</td></tr>
+        <tr><td>指数实时展示缓存涨跌幅</td><td><span class="pill o">百分数</span></td><td>使用前必须显式转换</td></tr>
+        <tr><td>自定义实时入口 <code>turnover_rate</code></td><td><span class="pill g">小数</span></td><td>0.05 表示 5%</td></tr>
+        <tr><td>enriched 的 <code>turnover_rate</code></td><td><span class="pill o">百分数值</span></td><td>5 表示 5%</td></tr>
+        <tr><td>enriched <code>open/high/low/close</code></td><td><span class="pill b">前复权价</span></td><td>用于技术指标</td></tr>
+        <tr><td><code>raw_close/raw_high/raw_low</code></td><td><span class="pill p">不复权价</span></td><td>用于涨跌停判断</td></tr>
+        <tr><td>enriched <code>raw_open</code></td><td><span class="pill r">缺失</span></td><td>历史已如此,改动需评估兼容</td></tr>
+      </table>
+      <div class="callout callout-warn">
+        新增跨边界映射时必须增加单位测试。<strong>禁止</strong>用"数值小于 1 就乘 100"一类启发式转换,这会掩盖真实数据错误。
+      </div>
+    </section>
+
+    <section id="enriched">
+      <h2><span class="num">6</span>Enriched 表:核心分析底座</h2>
+      <p>Enriched 是 TickFlow 的"中间层":落盘只存 15 列窄表,运行时由 <code>compute_indicators</code> 即时计算完整 50+ 列(指标 + 信号 + JOIN)。这套设计让存储紧凑、回测与策略共用同一份指标定义、历史 schema 缺字段也能向后兼容。</p>
+      <h3>6.1 落盘 15 列(ENRICHED_STORAGE_COLS)</h3>
+      <pre><code>symbol, date,
+open, high, low, close,          <span class="com"># 前复权</span>
+volume, amount,
+raw_close, raw_high, raw_low,    <span class="com"># 不复权</span>
+turnover_rate,                    <span class="com"># 依赖当时 float_shares,不可回推</span>
+consecutive_limit_ups,            <span class="com"># 递推状态,需从历史 cum_sum</span>
+consecutive_limit_downs,
+quote_ts,                         <span class="com"># 行情时间戳(ms)</span></code></pre>
+      <h3>6.2 运行时计算 50+ 列分类</h3>
+      <div class="cat-bars">
+        <div class="cat-bar"><div class="head"><span class="name">存储列</span><span class="count">15</span></div><div class="fields">symbol date open high low close volume amount raw_close raw_high raw_low turnover_rate consecutive_limit_ups consecutive_limit_downs quote_ts</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">基础指标</span><span class="count">4</span></div><div class="fields">prev_close change_pct change_amount amplitude</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">均线 MA</span><span class="count">5</span></div><div class="fields">ma5 ma10 ma20 ma30 ma60</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">指数均线 EMA</span><span class="count">5</span></div><div class="fields">ema5 ema10 ema20 ema30 ema60</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">MACD</span><span class="count">3</span></div><div class="fields">macd_dif macd_dea macd_hist</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">布林</span><span class="count">2</span></div><div class="fields">boll_upper boll_lower</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">KDJ</span><span class="count">3</span></div><div class="fields">kdj_k kdj_d kdj_j</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">ATR / 量价 / 极值</span><span class="count">7</span></div><div class="fields">atr_14 vol_ma5 vol_ma10 vol_ratio_5d high_60d low_60d</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">动量 / 波动率 / RSI</span><span class="count">10</span></div><div class="fields">momentum_5/10/20/30/60d annual_vol_20d rsi_6 rsi_14 rsi_24</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">信号(布尔)</span><span class="count">14</span></div><div class="fields">signal_ma_golden/dead_5_20 signal_macd_golden/dead signal_ma20_breakout/breakdown signal_n_day_high/low signal_boll_breakout/breakdown signal_volume_surge signal_limit_up/down signal_broken_limit_up signal_limit_down_recovery</div></div>
+        <div class="cat-bar"><div class="head"><span class="name">JOIN 列</span><span class="count">3</span></div><div class="fields">name total_shares float_shares</div></div>
+      </div>
+      <div class="callout callout-warn">
+        <strong>历史与实时口径差异(必须知道)</strong>:
+        <ul style="margin-top:6px; padding-left:20px;">
+          <li>历史批量 <code>high_60d/low_60d</code> 用 <strong>close</strong> 的极值</li>
+          <li>实时递推用 <strong>high/low</strong> 的极值</li>
+          <li>盘中"新高/新低"与盘后重算可能不一致 — 这是后续做实时分析时最容易踩的坑</li>
+        </ul>
+      </div>
+      <h3>6.3 自定义信号(csg_*)</h3>
+      <p>由 <code>strategy/custom_signals.py</code> 编译为 Polars Expr。两套表达式:</p>
+      <ul style="padding-left: 20px; margin-bottom: 12px;">
+        <li><strong>全量路径</strong> <code>allow_shift=True</code>:支持日期偏移(回看 60 日)</li>
+        <li><strong>盘中增量</strong> <code>allow_shift=False</code>:跳过带偏移的信号(单日快照上 <code>.shift</code> 跨 symbol 不正确)</li>
+      </ul>
+    </section>
+
+    <section id="write-concurrency">
+      <h2><span class="num">7</span>写入并发与启动预热</h2>
+      <h3>7.1 两把锁(KlineRepository)</h3>
+      <div class="grid-2">
+        <div class="card"><h4 class="text-blue">_lock</h4><p class="small">串行化所有 DuckDB 读(<code>execute_all/_one</code>)。DuckDB 单 connection 非线程安全,所有读路径必须走锁保护。</p></div>
+        <div class="card"><h4 class="text-blue">_write_lock</h4><p class="small">串行化 parquet 分区的读-改-写。实时轮询线程、手动 refresh、盘后管道可能并发 merge/flush 同一分区,无锁会互相覆盖。</p></div>
+      </div>
+      <p>写策略:<strong>临时文件 + replace</strong>,symbol/date 主键 merge-upsert,降低中断造成半文件的概率。<code>DataStore</code> 不做事务,但 <code>failed</code> 任务此前成功阶段可能已经写盘,因此 <strong>failed ≠ 零副作用</strong>。</p>
+      <h3>7.2 启动预热(main.py:54-60)</h3>
+      <div class="step-flow">
+        <div class="step-item"><div class="head">lifespan 启动</div><div class="desc">创建 DataStore + KlineRepository,固定 managed generation</div></div>
+        <div class="step-item"><div class="head">refresh_cache(background=True)</div><div class="desc">instruments 同步加载(毫秒级),index/ETF instruments 同步</div></div>
+        <div class="step-item"><div class="head">_start_enriched_warmup(daemon 线程)</div><div class="desc">compute_indicators 107 万行,低配机 50s+;期间 get_enriched_latest 返回空表降级</div></div>
+        <div class="step-item"><div class="head">_on_warmup_done → app.state.indicators_ready = True</div><div class="desc">前端可查询指标就绪状态</div></div>
+        <div class="step-item"><div class="head">_on_refresh_done → matrix cache 预热</div><div class="desc">回测矩阵 memmap 缓存异步预热(可选)</div></div>
+      </div>
+      <div class="callout callout-info">
+        应用一启动就能服务请求,但<strong>指标数据可能要等 50 秒级才就绪</strong>。涉及 enriched 的页面/API 需要处理这种空态。
+      </div>
+    </section>
+    <section id="providers">
+      <h2><span class="num">8</span>数据源插件化与接入路径</h2>
+      <h3>8.1 Provider 契约(base.py)</h3>
+      <pre><code><span class="kw">@dataclass</span>(frozen=<span class="kw">True</span>)
+<span class="kw">class</span> <span class="fn">ProviderCapabilities</span>:
+    instruments: <span class="kw">bool</span> = <span class="kw">False</span>
+    daily: <span class="kw">bool</span> = <span class="kw">False</span>
+    adj_factor: <span class="kw">bool</span> = <span class="kw">False</span>
+    minute: <span class="kw">bool</span> = <span class="kw">False</span>
+    realtime: <span class="kw">bool</span> = <span class="kw">False</span>
+    financial: <span class="kw">bool</span> = <span class="kw">False</span>
+
+<span class="kw">class</span> <span class="fn">MarketDataProvider</span>(Protocol):
+    name: <span class="kw">str</span>
+    capabilities: ProviderCapabilities
+    <span class="kw">def</span> <span class="fn">get_instruments</span>(self, asset_type) -> pl.DataFrame: ...
+    <span class="kw">def</span> <span class="fn">get_daily</span>(self, symbols, start, end, asset_type) -> pl.DataFrame: ...
+    <span class="kw">def</span> <span class="fn">get_adj_factors</span>(self, symbols, start, end, asset_type) -> pl.DataFrame: ...
+    <span class="kw">def</span> <span class="fn">get_minute</span>(self, symbols, start, end, asset_type, freq, on_chunk_done) -> pl.DataFrame: ...
+    <span class="kw">def</span> <span class="fn">get_realtime</span>(self, universes=None, symbols=None) -> pl.DataFrame: ...</code></pre>
+      <p>上层服务通过 <code>get_provider()</code> 与 <code>provider_has_dataset(name, dataset)</code> 路由,<strong>禁止</strong>把 TickFlow SDK 调用硬编码到策略/监控/回测/API/前端。</p>
+      <h3>8.2 四种接入方式</h3>
+      <div class="card-grid">
+        <div class="card">
+          <h4 class="text-green">TickFlow 客户端</h4>
+          <p class="small">官方 SDK。<code>tickflow/client.py</code> 包装端点路由(none→free-api,有 Key→api.tickflow.org);<code>capabilities.py</code> 按端点探测生成 CapabilitySet,缓存到 <code>.capabilities.json</code>。档位: none / Free / Starter / Pro / Expert。</p>
+          <p class="small text-muted">真正可用性以探测结果为准,档位名只是 UI 标签。</p>
+        </div>
+        <div class="card">
+          <h4 class="text-blue">自定义 HTTP 数据源(YAML)</h4>
+          <p class="small">外部 HTTP 服务取数,本项目映射字段。配置 <code>data/data_sources/*.yaml</code>:支持 GET/POST、batch/rpm/timeout、response_path、field_map、4 类鉴权(none/bearer/header/query)、受控变换(无 eval)。</p>
+          <p class="small text-muted">热加载:<code>POST /api/settings/data-sources/reload</code></p>
+        </div>
+        <div class="card">
+          <h4 class="text-purple">数据源插件(Python/Node)</h4>
+          <p class="small">复杂鉴权/分页/签名。在 <code>backend/app/plugins/&lt;name&gt;/</code> 放 <code>plugin.yaml</code> + <code>provider.py</code>(对齐 GenericHTTPProvider 签名)+ 可选 <code>bridge.py</code>(<code>check</code> 函数)。</p>
+          <p class="small text-muted">参考:stock-sdk(Node 型,subprocess 桥接)。Docker 默认不打包。</p>
+        </div>
+        <div class="card">
+          <h4 class="text-orange">扩展数据(ext_data)</h4>
+          <p class="small">任意维度/标签/时序附着到标的。CSV/XLSX 上传、JSON ingest、HTTP pull、定时 pull(最短 60 秒)。snapshot/timeseries 两种存储。</p>
+          <p class="small text-muted">与行情 provider 是两条不同链,不互相替代。</p>
+        </div>
+      </div>
+      <h3>8.3 数据源路由规则</h3>
+      <table class="route-table">
+        <tr><th>数据集</th><th>路由</th></tr>
+        <tr><td>日 K</td><td>用户选 custom daily <span class="arrow">→</span> <span class="tag cust">custom</span> <span class="arrow">否则</span> <span class="tag tick">TickFlow</span></td></tr>
+        <tr><td>复权因子</td><td>可选 <span class="tag cust">same_as_daily</span> / 单独 <span class="tag cust">custom</span> / <span class="tag tick">TickFlow</span></td></tr>
+        <tr><td>实时</td><td><span class="tag tick">TickFlow 档位</span> 或 <span class="tag cust">custom 全市场源</span></td></tr>
+        <tr><td>分钟</td><td>优先 <span class="tag cust">custom</span> <span class="arrow">失败可回退</span> <span class="tag fallback">TickFlow</span></td></tr>
+        <tr><td>财务</td><td><span class="tag cust">custom provider</span> 可绕过 TickFlow Expert 门槛 <span class="arrow">否则</span> <span class="tag tick">TickFlow</span></td></tr>
+        <tr><td>指数/ETF 部分批量同步</td><td>仍依赖 <span class="tag tick">TickFlow capability</span>,未完全供应商无关</td></tr>
+      </table>
+      <div class="callout callout-warn">
+        缺少能力时:<strong>明确提示、跳过该功能或 fail-closed</strong>;禁止静默换用错误数据或错误口径。
+      </div>
+    </section>
+
+    <section id="ext-data">
+      <h2><span class="num">9</span>扩展数据(ext_data)</h2>
+      <p>扩展数据与行情 provider 是<strong>两条不同链</strong>:行情 provider 提供核心 OHLCV/因子/实时/财务;<code>ext_data</code> 提供可附着到标的的任意维度、标签和时间序列。</p>
+      <table>
+        <tr><th>接入方式</th><th>入口</th><th>存储</th></tr>
+        <tr><td>CSV/XLSX 上传</td><td><code>services/ext_data.py</code></td><td>自动处理 UTF-8/GBK 与代码归一</td></tr>
+        <tr><td>JSON ingest</td><td>API 直接写 rows</td><td>—</td></tr>
+        <tr><td>HTTP pull</td><td><code>services/ext_pull.py</code></td><td>URL/method/headers/params/response_path/field_map</td></tr>
+        <tr><td>定时 pull</td><td><code>PullScheduler</code></td><td>最短 60 秒,默认 1440 分钟</td></tr>
+      </table>
+      <h3>9.1 两种存储模式</h3>
+      <div class="grid-2">
+        <div class="card"><h4 class="text-blue">snapshot 模式</h4><p class="small mono-sm">data/ext_data/{id}/part.parquet</p><p class="small text-muted">当前快照覆盖写。适合标签、分类、最新属性。</p></div>
+        <div class="card"><h4 class="text-blue">timeseries 模式</h4><p class="small mono-sm">data/ext_data/{id}/timeseries/date=YYYY-MM-DD/part.parquet</p><p class="small text-muted">按日期分区。适合每日指标、评分、事件。</p></div>
+      </div>
+      <h3>9.2 内置扩展预设</h3>
+      <table>
+        <tr><th>ID</th><th>数据</th><th>URL</th></tr>
+        <tr><td><code>ext_gn_ths</code></td><td>同花顺概念映射</td><td>https://shy313.com/api/plugins/market_flow/exports/ths-concepts</td></tr>
+        <tr><td><code>ext_hy_ths</code></td><td>同花顺行业映射</td><td>https://shy313.com/api/plugins/market_flow/exports/ths-industries</td></tr>
+      </table>
+      <p class="small text-muted">启动只创建配置,但配置默认 <code>enabled=true</code>,<code>PullScheduler</code> 启动后立即执行一次,然后按 1440 分钟循环。概念数组用分号连接,行业层级用连字符连接,并生成 symbol/code。</p>
+    </section>
+
+    <section id="pipeline">
+      <h2><span class="num">10</span>盘后管道</h2>
+      <p><code>backend/app/jobs/daily_pipeline.py</code>,默认按北京时间调度:</p>
+      <table>
+        <tr><th>时间</th><th>任务</th></tr>
+        <tr><td>09:10</td><td>标的维表同步</td></tr>
+        <tr><td>15:02</td><td>盘口定版(depth_finalize)</td></tr>
+        <tr><td>15:30</td><td>盘后管道(日 K + 除权 + enriched + 视图刷新)</td></tr>
+        <tr><td>每小时</td><td>能力重探</td></tr>
+      </table>
+      <h3>10.1 run_now 六步管道</h3>
+      <div class="pipeline-step">
+        <div><div class="step-name">Step 0 · sync_instruments</div><div class="step-desc">同步个股维表,含当日涨跌停价</div><div class="bar"><div style="width:8%"></div></div></div>
+        <div class="pct">2% → 8%</div>
+      </div>
+      <div class="pipeline-step">
+        <div><div class="step-name">resolve_universe</div><div class="step-desc">有 batch 能力用 CN_Equity_A(~5522 只),否则退化 demo + watchlist + instruments</div><div class="bar"><div style="width:10%"></div></div></div>
+        <div class="pct">9% → 10%</div>
+      </div>
+      <div class="pipeline-step">
+        <div><div class="step-name">Step 1 · sync_daily</div><div class="step-desc">override_start_date 强制 batch / 付费档实时覆写 / batch 补缺口 / 首次拉 1 年</div><div class="bar"><div style="width:45%"></div></div></div>
+        <div class="pct">12% → 45%</div>
+      </div>
+      <div class="pipeline-step">
+        <div><div class="step-name">Step 1.5 · sync_adj_factor</div><div class="step-desc">增量除权因子,从已有数据最新日期下一天开始</div><div class="bar"><div style="width:55%"></div></div></div>
+        <div class="pct">45% → 55%</div>
+      </div>
+      <div class="pipeline-step">
+        <div><div class="step-name">Step 2-4 · halt filter + 前复权 + compute_indicators + signals + limits + turnover</div><div class="step-desc">停牌过滤(open=0 且 high=0)/ 复权因子缺失兜底 / 窄表落盘</div><div class="bar"><div style="width:85%"></div></div></div>
+        <div class="pct">55% → 85%</div>
+      </div>
+      <div class="pipeline-step">
+        <div><div class="step-name">Step 5-6 · optional index/ETF/minute/regime + 刷新 DuckDB 视图 + Polars 缓存</div><div class="step-desc">regime 默认关闭;财务默认只手动同步</div><div class="bar"><div style="width:100%"></div></div></div>
+        <div class="pct">85% → 100%</div>
+      </div>
+      <div class="callout callout-danger">
+        任何阶段异常 → job 标 failed,但<strong>此前成功阶段可能已经写盘</strong>,因此 <strong>failed ≠ 零副作用</strong>。
+      </div>
+    </section>
+
+    <section id="realtime">
+      <h2><span class="num">11</span>实时行情热路径</h2>
+      <p><code>backend/app/services/quote_service.py</code></p>
+      <div class="flow">
+        <div class="flow-node"><div class="title">provider realtime</div><div class="sub">snapshot</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">normalize</div><div class="sub">decimal fields</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">QuoteService</div><div class="sub">in-memory cache</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">merge daily</div><div class="sub">raw candle</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">compute_enriched_today</div><div class="sub">递推更新</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">refresh caches</div><div class="sub">latest</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">evaluate monitor</div><div class="sub">rules</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">SSE push</div><div class="sub">quotes_updated</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">TanStack</div><div class="sub">invalidation</div></div>
+      </div>
+      <h3>11.1 轮询模式</h3>
+      <table>
+        <tr><th>模式</th><th>范围</th></tr>
+        <tr><td><span class="pill r">none</span></td><td>无 Key,不启动实时</td></tr>
+        <tr><td><span class="pill o">Free</span></td><td>主要覆盖自选(自选前 5 个标的),数量受限</td></tr>
+        <tr><td><span class="pill g">paid / custom full_market</span></td><td>全市场模式</td></tr>
+      </table>
+      <p>交易时段按北京时间,告警只在<strong>连续竞价阶段</strong>触发,避免集合竞价噪声。详见 <code>app/market_time.py</code>。</p>
+    </section>
+
+    <section id="cache">
+      <h2><span class="num">12</span>缓存生命周期</h2>
+      <h3>12.1 KlineRepository 刷新 API</h3>
+      <table>
+        <tr><th>方法</th><th>何时用</th></tr>
+        <tr><td><code>refresh_cache(background=False)</code></td><td>盘后管道/手动刷新:全部同步,保证即时一致</td></tr>
+        <tr><td><code>refresh_cache(background=True)</code></td><td>启动时:instruments 同步,enriched 推 daemon</td></tr>
+        <tr><td><code>clear_cache()</code></td><td>清数据/重置场景:无条件清空所有内存缓存</td></tr>
+      </table>
+      <div class="callout callout-danger">
+        <code>refresh_cache</code> 在磁盘无数据时会<strong>提前 return</strong>,导致内存里的旧缓存残留(这是"清数据后看板仍显示旧数据"的根因)。<strong>清数据场景必须调 <code>clear_cache()</code></strong>。
+      </div>
+      <h3>12.2 缓存键必须覆盖的维度</h3>
+      <div class="pills">
+        <span class="pill b">资产类型 stock/etf/index</span>
+        <span class="pill b">周期 daily/minute</span>
+        <span class="pill b">日期</span>
+        <span class="pill b">策略参数</span>
+        <span class="pill b">其他会改变结果的维度</span>
+      </div>
+      <p>失效范围应精确;不能为了修复单条数据而无条件清空所有历史缓存。</p>
+    </section>
+
+    <section id="indicators">
+      <h2><span class="num">13</span>指标与信号</h2>
+      <p><code>backend/app/indicators/</code>:<code>pipeline.py</code> 计算流水线,<code>levels.py</code> 关键价位。</p>
+      <h3>13.1 指标公式</h3>
+      <table>
+        <tr><th>指标</th><th>源码公式</th></tr>
+        <tr><td>MA</td><td>close 的 rolling_mean,窗口 5/10/20/30/60</td></tr>
+        <tr><td>EMA</td><td>alpha=2/(N+1),adjust=False</td></tr>
+        <tr><td>MACD DIF/DEA/hist</td><td>EMA12 - EMA26 / DIF 的 EMA9 / 2 × (DIF - DEA)</td></tr>
+        <tr><td>Bollinger</td><td>MA20 ± 2 × rolling_std(close, 20)</td></tr>
+        <tr><td>KDJ RSV/K/D/J</td><td>100 × (close - LLV9) / (HHV9 - LLV9) / K=RSV EWM(1/3) / J=3K-2D</td></tr>
+        <tr><td>ATR14</td><td>True Range 的 EWM(alpha=1/14)</td></tr>
+        <tr><td>量比</td><td>当日 volume / 前 5 日平均 volume,不含当天</td></tr>
+        <tr><td>盘中量比</td><td>当前累计 volume × 240/已交易分钟 ÷ 前 5 日平均量</td></tr>
+        <tr><td>RSI</td><td>Wilder 风格,N=6/14/24,alpha=1/N</td></tr>
+        <tr><td>换手率</td><td>volume(手) × 10000 / float_shares(股),结果百分数值</td></tr>
+      </table>
+      <h3>13.2 原子信号</h3>
+      <div class="pills">
+        <span class="pill g">MA5/MA20 金叉与死叉</span>
+        <span class="pill g">MA20/MA60 金叉与死叉</span>
+        <span class="pill g">close 上穿/下穿 MA20</span>
+        <span class="pill g">MACD DIF/DEA 金叉与死叉</span>
+        <span class="pill o">60 日新高/新低</span>
+        <span class="pill o">Boll 上轨突破、下轨跌破</span>
+        <span class="pill b">量比 ≥ 2 放量</span>
+        <span class="pill r">涨停/跌停/炸板/跌停翘板</span>
+        <span class="pill r">连续涨跌停</span>
+        <span class="pill p">用户自定义信号</span>
+      </div>
+      <div class="callout callout-warn">
+        <strong>历史与实时不是同一实现</strong>:历史批量直接 rolling/EWM;实时路径保留 EMA/MACD/KDJ/ATR/RSI/部分和/历史 close 等状态递推。历史 <code>high_60d/low_60d</code> 用 close 极值,实时用 high/low 极值 — <strong>语义差异可能让盘中"新高/新低"与盘后重算不一致</strong>。
+      </div>
+    </section>
+
+    <section id="strategy">
+      <h2><span class="num">14</span>策略引擎</h2>
+      <p><code>backend/app/strategy/</code>。所有内置策略声明 <code>EXECUTION_BACKEND = matrix_native</code>。</p>
+      <h3>14.1 执行流程</h3>
+      <div class="exec-flow">
+        <div class="exec-step"><div class="step">Step 1</div><div class="name">基础过滤</div><div class="desc">价格 3-300 / 市值 ≥ 10亿 / 成交额 ≥ 0.2亿 / 排除 ST / 上市 ≥ 30 日 / 5 板块</div></div>
+        <div class="exec-step"><div class="step">Step 2</div><div class="name">策略布尔掩码</div><div class="desc"><code>filter_fn</code> 返回 pl.Expr 或 <code>filter_history_fn</code> 返回 DataFrame</div></div>
+        <div class="exec-step"><div class="step">Step 3</div><div class="name">横截面评分</div><div class="desc">min-max 归一化<br>score = 100 × Σ(norm × weight)</div></div>
+        <div class="exec-step"><div class="step">Step 4</div><div class="name">排序 + limit</div><div class="desc">候选集内相对分,不跨日期/跨策略比较</div></div>
+      </div>
+      <h3>14.2 18 个内置策略分类</h3>
+      <div class="card-grid">
+        <div class="card" style="border-left: 3px solid var(--blue);">
+          <h4 class="text-blue">趋势、突破与均线(6)</h4>
+          <p class="small">trend_breakout · ma_golden_cross · bullish_alignment · pullback_ma20_bounce · pullback_to_support · low_volatility_leader</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--orange);">
+          <h4 class="text-orange">量价、动量与振荡(8)</h4>
+          <p class="small">volume_price_surge · high_turnover_surge · strong_open · macd_golden · boll_breakout · n_day_low_reversal · oversold_bounce · oversold_reversal</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--red);">
+          <h4 class="text-red">涨停与连板(4)</h4>
+          <p class="small">consecutive_limit_ups · near_limit_up · limit_up_momentum · broken_board_recovery</p>
+        </div>
+      </div>
+      <h3>14.3 策略目录装配(main.py:150-159)</h3>
+      <pre><code>strategy_dirs = [
+    Path(<span class="str">"backend/app/strategy/builtin"</span>),    <span class="com"># 内置</span>
+    store.data_dir / <span class="str">"strategies"</span> / <span class="str">"custom"</span>,  <span class="com"># 用户手写</span>
+    store.data_dir / <span class="str">"strategies"</span> / <span class="str">"ai"</span>,       <span class="com"># AI 生成 (ai_ 前缀)</span>
+    store.data_dir / <span class="str">"strategies"</span> / <span class="str">"composite"</span>,<span class="com"># 组合</span>
+]</code></pre>
+      <h3>14.4 评分行为</h3>
+      <ul style="padding-left: 20px;">
+        <li>无效或缺失字段被排除,剩余权重重新归一化</li>
+        <li>某字段在候选中为常数时统一赋 0.5</li>
+        <li>分数只表示同一批候选内的相对排名,<strong>不能</strong>跨日期、跨策略直接比较</li>
+        <li>回测中同样按每个交易日横截面归一化</li>
+        <li>所有内置权重均为正;oversold_bounce 与 oversold_reversal 对 RSI 也给正权重,因此 RSI&lt;30 的候选内 RSI 更高者反而得分更高</li>
+      </ul>
+    </section>
+    <section id="backtest">
+      <h2><span class="num">15</span>回测系统</h2>
+      <p><code>backend/app/backtest/</code>。主路径把时间×标的展开为 NumPy 矩阵,自研引擎 + Numba 加速。</p>
+      <h3>15.1 成交时序(默认严格 open_t+1)</h3>
+      <div class="bt-timeline">
+        <div class="bt-days">
+          <div class="bt-day signal">
+            <div class="marker"></div>
+            <div class="label">Day T</div>
+            <div class="d">信号日</div>
+            <div class="action">只用 T 日已完成数据</div>
+          </div>
+          <div class="bt-day buy">
+            <div class="marker"></div>
+            <div class="label">Day T+1</div>
+            <div class="d">成交</div>
+            <div class="action">最早 T+1 开盘成交</div>
+          </div>
+          <div class="bt-day hold">
+            <div class="marker"></div>
+            <div class="label">Day T+2 ~</div>
+            <div class="d">持有</div>
+            <div class="action">T+1 约束</div>
+          </div>
+          <div class="bt-day sell">
+            <div class="marker"></div>
+            <div class="label">退出日</div>
+            <div class="d">卖出</div>
+            <div class="action">close_t / signal_next_minute</div>
+          </div>
+        </div>
+      </div>
+      <h3>15.2 A 股交易约束</h3>
+      <div class="pills">
+        <span class="pill r">T+1 当日买入不能当日卖出</span>
+        <span class="pill r">一字涨停阻止买入</span>
+        <span class="pill r">一字跌停阻止卖出</span>
+        <span class="pill o">停牌/非法价格阻止成交</span>
+        <span class="pill b">未成交退出进 pending</span>
+        <span class="pill b">同日退出后不立即重新入场</span>
+      </div>
+      <h3>15.3 默认成本</h3>
+      <div class="grid-2">
+        <div class="card"><ul style="padding-left: 18px; font-size: 13px;"><li>买卖佣金各 <strong>0.02%</strong></li><li>印花税只在卖出侧(默认 0)</li><li>滑点 <strong>5 bps</strong> 两侧</li><li>初始资金 <strong>1,000,000</strong></li></ul></div>
+        <div class="card"><ul style="padding-left: 18px; font-size: 13px;"><li>最大持仓数 <strong>10</strong></li><li>最大总敞口 <strong>100%</strong></li><li>100 股整数手</li><li>权重 equal 或 score</li></ul></div>
+      </div>
+      <h3>15.4 两种统计模式</h3>
+      <table>
+        <tr><th>模式</th><th>含义</th></tr>
+        <tr><td><code>position</code></td><td>真实组合资金曲线,受现金/仓位数/权重/T+1 限制</td></tr>
+        <tr><td><code>full</code></td><td>每个候选视作独立 100 股交易统计,<strong>不是</strong>可直接执行的组合净值</td></tr>
+      </table>
+      <h3>15.5 输出指标</h3>
+      <div class="pills">
+        <span class="pill b">总收益 / 年化</span>
+        <span class="pill b">最大回撤</span>
+        <span class="pill b">Sharpe / Sortino / Calmar</span>
+        <span class="pill b">胜率 / profit factor</span>
+        <span class="pill b">持仓天数 / 单笔收益 / 交易明细</span>
+        <span class="pill p">bootstrap Monte Carlo(种子 42,最多 1000 次,200 万单元保护)</span>
+      </div>
+      <div class="callout callout-warn">
+        <strong>已知实现缺口</strong>:<code>FactorBacktestConfig</code> 的 <code>weight/fees_pct/slippage_bps</code> 会进入响应 config,但计算函数<strong>没有引用</strong>它们。当前因子组收益与多空收益没有真正扣除费用,也没有实现 factor_weight。UI 给出已配置的错觉,收益可能偏高。
+      </div>
+    </section>
+
+    <section id="monitor">
+      <h2><span class="num">16</span>监控与通知</h2>
+      <p><code>backend/app/strategy/monitor*.py</code> + <code>backend/app/services/sector_monitor.py</code></p>
+      <h3>16.1 监控类型</h3>
+      <div class="card-grid">
+        <div class="card" style="border-left: 3px solid var(--blue);"><h4 class="text-blue">strategy</h4><p class="small">策略结果或买卖信号变化</p></div>
+        <div class="card" style="border-left: 3px solid var(--green);"><h4 class="text-green">signal</h4><p class="small">原子或自定义信号</p></div>
+        <div class="card" style="border-left: 3px solid var(--orange);"><h4 class="text-orange">price</h4><p class="small">价格、涨跌幅等字段条件</p></div>
+        <div class="card" style="border-left: 3px solid var(--red);"><h4 class="text-red">market</h4><p class="small">涨跌停、连板等市场异动</p></div>
+        <div class="card" style="border-left: 3px solid var(--purple);"><h4 class="text-purple">ladder</h4><p class="small">连板梯队和封单</p></div>
+        <div class="card" style="border-left: 3px solid var(--teal);"><h4 class="text-teal">sector</h4><p class="small">概念/行业聚合(专用,通用 sector scope 当前 fail-closed)</p></div>
+      </div>
+      <h3>16.2 状态机</h3>
+      <div class="flow">
+        <div class="flow-node"><div class="title">首次评估</div><div class="sub">建立 baseline,不报警</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">后续产生</div><div class="sub">buy/sell · pool_entry/exit</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">同批 &gt; 5 合并</div><div class="sub">cooldown = rule+symbol+event</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><div class="title">alerts.jsonl</div><div class="sub">7 天 / 5000 条上限</div></div>
+      </div>
+      <p>默认 cooldown <strong>3600 秒</strong>。规则最多 8 条条件,支持 AND/OR;字段和信号走白名单;scope 可为指定 symbols 或 all。</p>
+      <h3>16.3 通知出口</h3>
+      <div class="pills">
+        <span class="pill b">本机系统通知</span>
+        <span class="pill g">飞书 Webhook(可签名)</span>
+        <span class="pill p">企业微信 Webhook</span>
+        <span class="pill o">企业微信智能机器人长连接</span>
+      </div>
+      <p class="small text-muted">文案使用用户可理解的中文名称,不泄漏内部枚举名、模块名或调试字段。</p>
+    </section>
+
+    <section id="market">
+      <h2><span class="num">17</span>市场状态、轮动与情绪</h2>
+      <h3>17.1 Regime 市场状态(regime_builder.py)</h3>
+      <div class="card">
+        <p>四个分量合成 0-100 分:<strong>profit(0.35) + speculation(0.25) + resilience(0.20) + trend(0.20)</strong></p>
+        <table>
+          <tr><th>分数</th><th>状态</th></tr>
+          <tr><td>≥ 70</td><td><span class="pill g">strong</span></td></tr>
+          <tr><td>≥ 55</td><td><span class="pill b">lean_strong</span></td></tr>
+          <tr><td>≥ 45</td><td><span class="pill o">range</span></td></tr>
+          <tr><td>≥ 30</td><td><span class="pill o">lean_weak</span></td></tr>
+          <tr><td>&lt; 30</td><td><span class="pill r">weak</span></td></tr>
+        </table>
+        <p class="small text-muted">回测按 T-1 的 regime mask 控制当日入场,避免把当日收盘才能知道的 regime 用于当日开盘。阈值来源"2022-2026 p15/p85"只有源码注释,没有原始样本/脚本/分位数审计产物。</p>
+      </div>
+      <h3>17.2 RPS 轮动(rps_rotation.py)</h3>
+      <p>实际算法<strong>不是</strong>常见的"某证券 N 日收益相对全市场百分位",而是:</p>
+      <ol style="padding-left: 20px; margin-bottom: 12px;">
+        <li>每日对概念或行业成员的 change_pct 求平均</li>
+        <li>对所有板块的当日平均涨幅做横截面排名</li>
+        <li>保存最近 7-30 天排名矩阵</li>
+      </ol>
+      <table>
+        <tr><th>标签</th><th>规则</th></tr>
+        <tr><td><span class="pill g">persistent</span></td><td>最近 3 日平均排名 ≤ 10 且最新 ≤ 10</td></tr>
+        <tr><td><span class="pill b">rising</span></td><td>最早排名 &gt; 30、最新 ≤ 20、名次提升 ≥ 20</td></tr>
+        <tr><td><span class="pill o">fading</span></td><td>最早 ≤ 10、最新 &gt; 30、名次下降 ≥ 20</td></tr>
+        <tr><td><span class="pill p">institutional</span></td><td>排名标准差 ≤ 5 且平均排名 ≤ 20</td></tr>
+        <tr><td><span class="pill r">hot-money</span></td><td>排名标准差 ≥ 20</td></tr>
+      </table>
+      <div class="callout callout-info">
+        "机构"和"游资"只是排名稳定性启发式标签,<strong>不是</strong>持仓、席位或资金流的直接证据。
+      </div>
+    </section>
+
+    <section id="levels">
+      <h2><span class="num">18</span>关键价位(11 类)</h2>
+      <p><code>backend/app/indicators/levels.py</code>。README 称 9 类,源码 <code>LEVEL_TYPES</code> 实际有 11 类。</p>
+      <div class="card-grid">
+        <div class="card"><h4 class="text-blue">chip / POC</h4><p class="small">40 个价格桶;旧筹码按 1-turnover 衰减;当日量在 high-low 内均匀分布;取 POC 和两个高于均值的桶</p></div>
+        <div class="card"><h4 class="text-blue">pivot</h4><p class="small">最近一根 K 的标准 P、R1-R3、S1-S3</p></div>
+        <div class="card"><h4 class="text-blue">extremes</h4><p class="small">60/250 日高低点 + ±5 bar 局部 swing;1% 内聚类,最近上下各 2</p></div>
+        <div class="card"><h4 class="text-blue">Boll</h4><p class="small">MA20 ± 2σ</p></div>
+        <div class="card"><h4 class="text-blue">Keltner 短/中/长</h4><p class="small">MA20 ± 2ATR / MA60 ± 2.5ATR / MA120 ± 3ATR</p></div>
+        <div class="card"><h4 class="text-blue">ATR</h4><p class="small">当前 close ± 1.5ATR / 2ATR</p></div>
+        <div class="card"><h4 class="text-blue">gaps</h4><p class="small">120 日内未回补缺口</p></div>
+        <div class="card"><h4 class="text-blue">Fibonacci</h4><p class="small">120 日 swing 的 0.236/0.382/0.5/0.618/0.786,按趋势方向映射</p></div>
+        <div class="card"><h4 class="text-blue">round</h4><p class="small">当前价 ±10% 内圆整数位,最多 8 个</p></div>
+      </div>
+      <div class="callout callout-info">
+        筹码分布把成交量假设为在当日高低价间均匀分布,是<strong>近似模型</strong>,不是交易所逐笔真实筹码。
+      </div>
+    </section>
+
+    <section id="ai">
+      <h2><span class="num">19</span>AI 分析的实际边界</h2>
+      <p><code>backend/app/services/ai_provider.py</code>:OpenAI 兼容 / Codex CLI;不支持 temperature 的端点命中 400 后去掉 temperature 重试一次。</p>
+      <div class="card-grid">
+        <div class="card">
+          <h4 class="text-blue">个股技术分析</h4>
+          <p class="small"><code>stock_analyzer.py</code>:加载 K 线尾部 + 轻量财务 + 关键价位 → LLM 输出 Markdown</p>
+          <p class="small text-red"><strong>不</strong>输出买卖/仓位/操作建议;要求引用输入数值</p>
+        </div>
+        <div class="card">
+          <h4 class="text-blue">财务分析</h4>
+          <p class="small"><code>financial_analyzer.py</code>:读取 metrics/income/balance_sheet/cash_flow/shares → LLM 财务质量报告</p>
+          <p class="small text-red">无 DCF、可比公司估值、盈利预测或目标价格的确定性实现</p>
+        </div>
+        <div class="card">
+          <h4 class="text-blue">市场复盘</h4>
+          <p class="small"><code>market_recap.py</code>:数据与 <code>/api/overview/market</code> 同源;用户 focus 走敏感交易措辞 blocklist,命中整段丢弃</p>
+          <p class="small text-muted">只做客观描述,不给交易指令</p>
+        </div>
+        <div class="card">
+          <h4 class="text-blue">轮动分析</h4>
+          <p class="small"><code>concept_rotation_analyzer.py</code>:先确定性排名标签,再交 LLM</p>
+          <p class="small text-muted">市场背景 + 标签交给 LLM</p>
+        </div>
+        <div class="card">
+          <h4 class="text-blue">AI 报告归档</h4>
+          <p class="small"><code>ai_reports.py</code> / <code>json_report_store.py</code> / <code>stock_reports.py</code> → <code>data/ai_cache/</code></p>
+          <p class="small text-muted">本地最多保留 20 条历史报告</p>
+        </div>
+        <div class="card">
+          <h4 class="text-blue">截图 OCR 导入</h4>
+          <p class="small"><code>services/watchlist_ocr/</code>:Pillow → 本机 Tesseract OCR → 正则提六位代码 → instruments 校验</p>
+          <p class="small text-muted"><strong>不</strong>调用云端 OCR;不自动写入自选</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="api">
+      <h2><span class="num">20</span>API 层</h2>
+      <h3>20.1 路由装配(main.py:336-361)</h3>
+      <p>28 个 router,187 path / 208 operation。</p>
+      <h3>20.2 OpenAPI 按 tag 分布</h3>
+      <div class="bar-chart">
+        <div class="bar-row"><div class="bar-label">settings</div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div><div class="bar-value">54</div></div>
+        <div class="bar-row g"><div class="bar-label">strategies</div><div class="bar-track"><div class="bar-fill" style="width:33%"></div></div><div class="bar-value">18</div></div>
+        <div class="bar-row p"><div class="bar-label">ext-data</div><div class="bar-track"><div class="bar-fill" style="width:31%"></div></div><div class="bar-value">17</div></div>
+        <div class="bar-row b"><div class="bar-label">kline</div><div class="bar-track"><div class="bar-fill" style="width:28%"></div></div><div class="bar-value">15</div></div>
+        <div class="bar-row o"><div class="bar-label">backtest</div><div class="bar-track"><div class="bar-fill" style="width:20%"></div></div><div class="bar-value">11</div></div>
+        <div class="bar-row o"><div class="bar-label">financials</div><div class="bar-track"><div class="bar-fill" style="width:20%"></div></div><div class="bar-value">11</div></div>
+        <div class="bar-row t"><div class="bar-label">screener</div><div class="bar-track"><div class="bar-fill" style="width:17%"></div></div><div class="bar-value">9</div></div>
+        <div class="bar-row t"><div class="bar-label">watchlist</div><div class="bar-track"><div class="bar-fill" style="width:17%"></div></div><div class="bar-value">9</div></div>
+        <div class="bar-row p"><div class="bar-label">monitor-rules</div><div class="bar-track"><div class="bar-fill" style="width:13%"></div></div><div class="bar-value">7</div></div>
+        <div class="bar-row b"><div class="bar-label">index</div><div class="bar-track"><div class="bar-fill" style="width:11%"></div></div><div class="bar-value">6</div></div>
+        <div class="bar-row g"><div class="bar-label">regime</div><div class="bar-track"><div class="bar-fill" style="width:9%"></div></div><div class="bar-value">5</div></div>
+        <div class="bar-row g"><div class="bar-label">stock-analysis</div><div class="bar-track"><div class="bar-fill" style="width:9%"></div></div><div class="bar-value">5</div></div>
+        <div class="bar-row r"><div class="bar-label">auth</div><div class="bar-track"><div class="bar-fill" style="width:9%"></div></div><div class="bar-value">5</div></div>
+      </div>
+      <h3>20.3 REST 与 SSE 分工</h3>
+      <div class="grid-2">
+        <div class="card"><h4 class="text-blue">REST 承担</h4><p class="small">快照与任务启动</p></div>
+        <div class="card"><h4 class="text-blue">SSE / 流式响应 承担</h4><ul style="padding-left: 18px; font-size: 12px;"><li><code>/api/intraday/stream</code> 行情与监控事件</li><li>参数优化和 walk-forward 进度</li><li>个股/财务/市场复盘/轮动 AI 文本流</li><li>AI 策略生成流</li></ul></div>
+      </div>
+      <h3>20.4 能力门控与认证</h3>
+      <div class="callout callout-info">
+        业务代码用 <code>capset.require(Cap.X)</code> 断言能力,缺失抛 <code>CapabilityDenied</code> → handler 返回 <strong>403</strong>(而非 500)。
+      </div>
+      <table>
+        <tr><th>情况</th><th>处理</th></tr>
+        <tr><td>未设密码 + 本机/内网</td><td><span class="pill g">放行</span></td></tr>
+        <tr><td>未设密码 + 公网</td><td><span class="pill r">403</span> 防裸奔也防抢占</td></tr>
+        <tr><td>已设密码 + 有效 session</td><td><span class="pill g">放行</span></td></tr>
+        <tr><td>已设密码 + 无效 session</td><td><span class="pill r">401</span> 前端跳登录</td></tr>
+      </table>
+      <p class="small text-muted">白名单:<code>/api/auth/*</code>、<code>/health</code>、<code>/openapi.json</code>、<code>/docs</code>、<code>/redoc</code>。CORS <code>allow_origins=["*"]</code> + <code>allow_credentials=False</code>(认证走 header 不依赖 cookie)。</p>
+      <div class="callout callout-danger">
+        <strong>自定义 URL 外连风险</strong>:自定义 HTTP 数据源、扩展数据测试、<code>detect-url</code>、手动拉取都会由后端访问用户提供的 URL,并允许跟随重定向。公网或多人部署<strong>必须先启用访问认证并限制谁能操作数据源设置</strong>,否则会形成内网 URL 探测面。
+      </div>
+    </section>
+
+    <section id="frontend">
+      <h2><span class="num">21</span>前端架构</h2>
+      <p><code>frontend/src/router.tsx</code>:所有页面 <code>lazy</code> 加载,避免首屏打包所有页面(ECharts/lightweight-charts/framer-motion 等重库)。<code>Layout</code> / <code>Onboarding</code> / <code>Auth</code> 为应用外壳,保持同步加载。</p>
+      <h3>21.1 路由树</h3>
+      <div class="tree"><span class="dir">/</span>
+├── <span class="dir">onboarding</span>             <span class="note">首次引导(无守卫)</span>
+├── <span class="dir">login</span>                    <span class="note">登录</span>
+└── <span class="dir">/ (OnboardingGuard 守卫)</span>
+    ├── index                 <span class="badge g">Dashboard</span>
+    ├── overview              <span class="note">→ 重定向 /</span>
+    ├── analysis              <span class="note">→ 重定向 /settings?tab=ext-pages</span>
+    ├── analysis/:menuId     <span class="badge b">AnalysisDetail(动态扩展页面)</span>
+    ├── concept-analysis     <span class="badge b">ConceptAnalysis</span>
+    ├── industry-analysis    <span class="badge b">IndustryAnalysis</span>
+    ├── stock-analysis       <span class="badge b">StockAnalysis(chanlun view 兼容)</span>
+    ├── review               <span class="badge b">Review(AI 复盘)</span>
+    ├── watchlist            <span class="badge b">Watchlist</span>
+    ├── screener             <span class="badge b">Screener</span>
+    ├── backtest             <span class="badge b">Backtest</span>
+    ├── financials           <span class="badge b">Financials</span>
+    ├── data                 <span class="badge b">Data</span>
+    ├── monitor              <span class="badge b">Monitor</span>
+    ├── limit-ladder         <span class="badge b">LimitUpLadder</span>
+    ├── indices              <span class="badge b">Indices</span>
+    ├── regime               <span class="badge b">Regime</span>
+    ├── market-lab           <span class="badge b">MarketLab</span>
+    ├── branding             <span class="badge b">Branding</span>
+    ├── settings             <span class="badge b">Settings</span>
+    ├── dev                   <span class="note">隐藏,仅调试</span>
+    └── 旧路由兼容重定向</div>
+      <h3>21.2 数据层(frontend/src/lib/)</h3>
+      <table>
+        <tr><th>文件</th><th>职责</th></tr>
+        <tr><td><code>api.ts</code></td><td>统一 fetch 客户端与类型契约;组件禁止散落请求地址</td></tr>
+        <tr><td><code>queryKeys.ts</code></td><td>TanStack Query 查询键集中维护</td></tr>
+        <tr><td><code>useSharedQueries.ts</code></td><td>跨页面共享查询</td></tr>
+        <tr><td><code>useQuoteStream.ts</code></td><td>全局唯一 EventSource</td></tr>
+        <tr><td><code>indicator-formulas.ts</code> / <code>indicator-params.ts</code></td><td>前端浏览器内指标计算(纯函数,参数可持久化)</td></tr>
+        <tr><td><code>screener-columns.ts</code> 等</td><td>列定义</td></tr>
+        <tr><td><code>signals.ts</code></td><td>信号库</td></tr>
+      </table>
+      <p>TanStack Query 默认 <code>staleTime 5s</code>,窗口重新聚焦不自动 refetch。401 或未初始化密码由全局 QueryCache/Mutation 拦截跳转登录。<code>quotes_updated</code> 按用户页面设置精确 invalidation。</p>
+    </section>
+    <section id="analyze">
+      <h2><span class="num">22</span>如何在底座之上做分析</h2>
+      <p>从轻到重四种接入方式,优先级从上到下递减。</p>
+      <div class="card-grid">
+        <div class="card" style="border-left: 3px solid var(--green);">
+          <h4 class="text-green">方式一:用现成 API + 前端组件</h4>
+          <p class="small"><strong>最轻</strong>。直接调 REST/SSE,在前端用现成图表组件渲染。适合一次性展示、不引入新数据契约的场景。</p>
+          <p class="small text-muted">例:新加「北向资金 Top10」卡片 → 调 <code>/api/overview/market</code> 已有字段,在 Dashboard 用 <code>StockPanel</code> 渲染。无需改后端。</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--blue);">
+          <h4 class="text-blue">方式二:直接读 Parquet(Polars / DuckDB)</h4>
+          <p class="small">适合脚本、Notebook、批处理,不进 Web 服务。<strong>底座最容易复用</strong>的能力。</p>
+          <pre style="margin-top:8px;"><code><span class="kw">import</span> polars <span class="kw">as</span> pl
+df = pl.<span class="fn">read_parquet</span>(<span class="str">"data/kline_daily_enriched/date=2026-08-23/part.parquet"</span>)
+<span class="com"># 仅 15 列窄表;需要完整指标调用 compute_indicators</span>
+<span class="kw">from</span> app.indicators.pipeline <span class="kw">import</span> compute_indicators, compute_signals
+df_full = <span class="fn">compute_signals</span>(<span class="fn">compute_indicators</span>(df))</code></pre>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--purple);">
+          <h4 class="text-purple">方式三:复用 KlineRepository 写后端 service + API</h4>
+          <p class="small"><strong>最推荐</strong>。需要进 Web 服务、要被前端调用。自动复用缓存、能力门控、SSE、认证。</p>
+          <p class="small text-muted">典型路径:services/xxx_analyzer.py → api/xxx.py → main.py 装配 → lib/api.ts → pages/Xxx.tsx → router.tsx → Layout.tsx 菜单</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--orange);">
+          <h4 class="text-orange">方式四:接入扩展数据(ext_data)</h4>
+          <p class="small">适合把外部任意维度/标签/时序数据附着到标的,与内置数据同台分析。<strong>不修改核心代码就能加数据</strong>的官方通道。</p>
+          <p class="small text-muted">详见 §9 ext_data 与 <code>docs/custom-data-source.md</code>。</p>
+        </div>
+      </div>
+      <h3>22.1 KlineRepository 常用调用</h3>
+      <pre><code><span class="kw">from</span> app.tickflow.repository <span class="kw">import</span> KlineRepository
+repo = app.state.repo  <span class="com"># 或构造时注入</span>
+
+<span class="com"># 最新日 enriched(含指标,来自内存缓存,毫秒级)</span>
+df = repo.<span class="fn">get_enriched_latest</span>(asset_type=<span class="str">"stock"</span>)
+
+<span class="com"># 完整历史(含指标,~100 万行,来自内存缓存)</span>
+hist = repo.<span class="fn">get_enriched_history</span>(asset_type=<span class="str">"stock"</span>)
+
+<span class="com"># instruments</span>
+inst = repo.<span class="fn">get_instruments</span>()
+
+<span class="com"># DuckDB SQL(线程安全)</span>
+rows = repo.<span class="fn">execute_all</span>(<span class="str">"SELECT symbol, close FROM kline_enriched WHERE date = ?"</span>, [today])</code></pre>
+    </section>
+
+    <section id="new-feature">
+      <h2><span class="num">23</span>如何新增功能</h2>
+      <h3>23.1 新增数据源(按复杂度递增三选一)</h3>
+      <table>
+        <tr><th>方式</th><th>适合</th><th>步骤</th></tr>
+        <tr><td><span class="pill b">自定义 HTTP(YAML)</span></td><td>REST API 取数</td><td>写 <code>data/data_sources/xxx.yaml</code> → <code>POST /api/settings/data-sources/reload</code> → 设置页切换 → 测试端点 → 小范围同步核对</td></tr>
+        <tr><td><span class="pill p">数据源插件(Python/Node)</span></td><td>复杂鉴权/分页/签名</td><td>在 <code>backend/app/plugins/&lt;name&gt;/</code> 放 <code>plugin.yaml</code> + <code>provider.py</code>(对齐 GenericHTTPProvider 签名)+ 可选 <code>bridge.py</code>(check)→ 重启 → 设置页启用</td></tr>
+        <tr><td><span class="pill o">扩展数据(CSV/JSON/HTTP pull)</span></td><td>任意维度附着到标的</td><td>设置页 → 扩展数据 → 上传/配置 HTTP pull → 选 snapshot/timeseries → 可选配扩展页面</td></tr>
+      </table>
+      <h3>23.2 新增策略(三种方式)</h3>
+      <div class="card-grid">
+        <div class="card"><h4 class="text-green">自定义信号(不写代码)</h4><p class="small">选股页 UI <code>字段+操作符+阈值</code> → 编译为 <code>csg_*</code> Polars Expr → 落盘 <code>data/user_data/custom_signals/*.json</code></p></div>
+        <div class="card"><h4 class="text-purple">AI 生成</h4><p class="small">选股页「AI 策略生成器」 → 流式接收代码 → AST 安全校验 → 落盘 <code>data/strategies/ai/*.py</code>(<code>ai_</code> 前缀)</p></div>
+        <div class="card"><h4 class="text-blue">自定义编写 / 代码迁移</h4><p class="small">选股页「自定义编写」或手放文件 → 落盘 <code>data/strategies/custom/*.py</code>(<code>custom_</code> 前缀)</p></div>
+      </div>
+      <p>内置策略(贡献者):在 <code>backend/app/strategy/builtin/</code> 参照现有文件实现 <code>StrategyDef</code>,引擎自动发现。<strong>AI 生成的策略不会落入 builtin/</strong>。</p>
+      <h3>23.3 新增指标 / 信号</h3>
+      <div class="step-flow">
+        <div class="step-item"><div class="head">1. 在 ENRICHED_COLUMNS 字典声明新列</div><div class="desc"><code>indicators/pipeline.py</code> 加分类:存储/基础/ma/ema/macd/boll/kdj/atr/量价/极值/动量/波动率/rsi/信号/JOIN</div></div>
+        <div class="step-item"><div class="head">2. 在 compute_indicators / compute_signals / compute_limit_signals 加 Polars 表达式</div><div class="desc"><strong><code>.over("symbol")</code> 每只标的独立计算</strong></div></div>
+        <div class="step-item"><div class="head">3. 若是信号,在 compute_signals 注册原子信号名</div><div class="desc">使其可被监控规则字段白名单引用</div></div>
+        <div class="step-item"><div class="head">4. 指标依赖历史状态?同步改 _build_live_agg 递推状态列</div><div class="desc">否则盘中口径会与历史不一致</div></div>
+        <div class="step-item"><div class="head">5. 落盘列(ENRICHED_STORAGE_COLS)默认不动</div><div class="desc">落盘窄表越宽,每行越大,历史重算越慢。新指标默认走「读取时即时计算」,历史 Parquet 用 union_by_name 向后兼容</div></div>
+        <div class="step-item"><div class="head">6. 加固定样本数值断言测试</div><div class="desc">覆盖历史边界和降级路径(<code>backend/tests/</code>)</div></div>
+        <div class="step-item"><div class="head">7. 重跑盘后管道或调 POST /api/pipeline/run</div><div class="desc">让新指标在 enriched 缓存中生效</div></div>
+      </div>
+      <h3>23.4 新增 API endpoint</h3>
+      <div class="step-flow">
+        <div class="step-item"><div class="head">1. backend/app/api/xxx.py 新 router</div><div class="desc"><code>@router.get("/api/xxx/yyy")</code> 用 <code>app.state.repo</code> / <code>app.state.strategy_engine</code> / services</div></div>
+        <div class="step-item"><div class="head">2. backend/app/main.py 装配</div><div class="desc"><code>app.include_router(xxx.router)</code></div></div>
+        <div class="step-item"><div class="head">3. frontend/src/lib/api.ts 加 fetchXxxYyy + TS 类型</div><div class="desc">后端契约变化必须同步类型与调用方</div></div>
+        <div class="step-item"><div class="head">4. frontend/src/lib/queryKeys.ts 加 query key</div><div class="desc">查询键集中维护,不在组件内拼出平行键</div></div>
+      </div>
+      <div class="callout callout-tip">
+        <strong>薄层原则</strong>:API 只做参数校验、响应映射、SSE 包装。重计算放 service,数据访问放 repo,指标放 indicators,策略放 strategy。<strong>禁止</strong> API 直接读 provider 或本地文件,绕过标准化。能力缺失用 <code>capset.require(Cap.X)</code>,自动返回 403。
+      </div>
+    </section>
+
+    <section id="new-panel">
+      <h2><span class="num">24</span>如何新增面板</h2>
+      <p>「面板」= 一个出现在左侧菜单、有独立路由、有数据来源的页面。TickFlow 提供两条路径:<strong>代码路径</strong>与<strong>零代码路径</strong>。</p>
+      <h3>24.1 代码路径(完全自定义页面)</h3>
+      <div class="exec-flow">
+        <div class="exec-step"><div class="step">步骤 1</div><div class="name">后端 API</div><div class="desc"><code>backend/app/api/momentum_grid.py</code> 新 router,业务逻辑放 service</div></div>
+        <div class="exec-step"><div class="step">步骤 2</div><div class="name">前端 API 客户端</div><div class="desc"><code>frontend/src/lib/api.ts</code> 加类型 + fetchXxx;queryKeys.ts 加 key</div></div>
+        <div class="exec-step"><div class="step">步骤 3</div><div class="name">前端页面</div><div class="desc"><code>frontend/src/pages/MomentumGrid.tsx</code>,用 useQuery + 5 态覆盖</div></div>
+        <div class="exec-step"><div class="step">步骤 4</div><div class="name">路由 + 菜单</div><div class="desc">router.tsx 注册 lazy 路由,Layout.tsx 加菜单项,设置页菜单设置可拖拽排序</div></div>
+      </div>
+      <h3>24.2 零代码路径(扩展页面)</h3>
+      <div class="step-flow">
+        <div class="step-item"><div class="head">1. 接入扩展数据(§9.1)</div><div class="desc">CSV/JSON/HTTP pull 落到 ext_data</div></div>
+        <div class="step-item"><div class="head">2. 设置 → 扩展页面</div><div class="desc">选择数据集、展示字段、筛选项、页面名称</div></div>
+        <div class="step-item"><div class="head">3. 保存后自动出现在左侧菜单</div><div class="desc">路由为 <code>/analysis/:menuId</code>(router.tsx 已内置 AnalysisDetail)</div></div>
+        <div class="step-item"><div class="head">4. 可在菜单设置拖动排序</div><div class="desc">隐藏菜单只影响导航,不删除页面配置</div></div>
+      </div>
+      <div class="callout callout-warn">
+        扩展页面只负责展示已接入数据,<strong>不会自动</strong>把字段加入所有策略。需要在策略中使用扩展字段时,应确认该字段已进入对应策略数据链路或 enriched 数据。
+      </div>
+      <h3>24.3 面板开发 Checklist</h3>
+      <ul class="check-list">
+        <li>后端业务逻辑在 service,API 是薄层</li>
+        <li>后端契约变化已同步前端 <code>lib/api.ts</code> 类型与调用方</li>
+        <li>TanStack Query 查询键进入 <code>queryKeys.ts</code>,含所有影响结果的维度</li>
+        <li>切换股票/ETF/日期/策略后不把上一上下文的缓存结果当作当前结果</li>
+        <li>实时刷新保留上一份有效数据直到新数据就绪,避免列、计数、列表闪烁消失</li>
+        <li>弹窗打开和关闭正确重置临时表单状态;新建态与编辑态分离</li>
+        <li>跨页面行为(个股详情、成分股、概念标签)用共享组件,不在多页面复制交互</li>
+        <li>加载、空数据、错误、禁用、无权限 五种状态全覆盖</li>
+        <li>桌面与窄屏尺寸下检查文字截断、遮挡、滚动区域、弹窗可操作性</li>
+        <li>不用前端补丁掩盖后端单位或契约错误;契约问题在数据边界修正</li>
+        <li><code>pnpm build</code> 通过</li>
+      </ul>
+    </section>
+
+    <section id="extension-directions">
+      <h2><span class="num">25</span>扩展方向建议</h2>
+      <p>基于现有底座,以下是符合项目设计哲学、不破坏插件化与数据契约的扩展方向。</p>
+      <div class="quadrant">
+        <div class="quad q1">
+          <h4>数据层扩展(建议)</h4>
+          <ul>
+            <li><strong>本地财务源</strong>:custom provider 声明 financial 数据集,绕过 TickFlow Expert 门槛</li>
+            <li><strong>分钟回测扩展</strong>:支持更精细入场/出场,<code>backtest/minute_trigger.py</code> + matrix minute 列</li>
+            <li><strong>跨市场(港/美)</strong>:复用 asset_type 维度;新加 asset_type="us" 等,路由与维表独立</li>
+            <li><strong>基本面快照扩展</strong>:估值/股东/研报,用 ext_data snapshot 模式附着到标的</li>
+          </ul>
+        </div>
+        <div class="quad q2">
+          <h4>业务层扩展(建议)</h4>
+          <ul>
+            <li><strong>形态识别</strong>:头肩、双顶/底、三角;新增独立 pattern detector,输出证据点作为 ECharts marker/range</li>
+            <li><strong>信号面板</strong>:统一 BSP / 技术指标 / 策略信号;复用现有信号体系,保留 source/时间/是否确认</li>
+            <li><strong>BSP 回测</strong>:把 BSP 映射为现有 Backtest 策略输入,复用成本/停牌/涨跌停约束</li>
+            <li><strong>多股扫描</strong>:把 BSP/形态字段接入现有 Screener,基于已落地快照,避免页面逐股抓取</li>
+            <li><strong>回放</strong>:ECharts 窗口截断逐 bar 重算,防未来函数;回测结果仍以后端为准</li>
+            <li><strong>风险预算/Kelly/蒙特卡洛</strong>:已接入 MarketLab;可扩展为独立页面</li>
+          </ul>
+        </div>
+        <div class="quad q3">
+          <h4>前端扩展(建议)</h4>
+          <ul>
+            <li><strong>画线/截图/快捷键</strong>:复用 ChartPriceLine / ChartRange + 浏览器导出;用户标注与算法图层分开存储</li>
+            <li><strong>自定义仪表盘</strong>:复用 data/、stock-table/、virtual-list/,卡片可拖拽</li>
+            <li><strong>移动端适配</strong>:现已支持窄屏,可进一步做 PWA</li>
+          </ul>
+        </div>
+        <div class="quad q4">
+          <h4>不建议扩展的方向</h4>
+          <ul>
+            <li><strong>不</strong>对标同花顺 / 通达信(README 明确声明)</li>
+            <li><strong>不</strong>内置 AI 荐股 / 涨停预测(README 明确声明)</li>
+            <li><strong>不</strong>在未经验证的免费上游之上制造"可用"实现</li>
+            <li><strong>不</strong>为假设的未来需求设计抽象(CONTRIBUTING.md §1.2)</li>
+            <li><strong>不</strong>新增第二套互相矛盾的信号仓库</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="source-index">
+      <h2><span class="num">26</span>关键源码索引</h2>
+      <table>
+        <tr><th>主题</th><th>文件</th></tr>
+        <tr><td>应用装配</td><td><code>backend/app/main.py</code></td></tr>
+        <tr><td>配置</td><td><code>backend/app/config.py</code>、<code>.env.example</code>、<code>docs/configuration.md</code></td></tr>
+        <tr><td>TickFlow 客户端与能力</td><td><code>tickflow/client.py</code>、<code>capabilities.py</code>、<code>policy.py</code>、<code>rate_limits.py</code>、<code>pools.py</code>、<code>scheduler.py</code></td></tr>
+        <tr><td>档位定义</td><td><code>tiers.yaml</code>(业务代码不读,只读运行时探测出的 CapabilitySet)</td></tr>
+        <tr><td>Provider 契约</td><td><code>data_providers/base.py</code>、<code>schemas.py</code>、<code>registry.py</code>、<code>normalizer.py</code></td></tr>
+        <tr><td>TickFlow provider</td><td><code>data_providers/tickflow_provider.py</code></td></tr>
+        <tr><td>自定义 HTTP</td><td><code>data_providers/custom/</code>、<code>docs/custom-data-source.md</code></td></tr>
+        <tr><td>stock-sdk 插件</td><td><code>plugins/stocksdk/</code>、<code>docs/plugin-development.md</code></td></tr>
+        <tr><td>盘后管道</td><td><code>jobs/daily_pipeline.py</code></td></tr>
+        <tr><td>仓库与缓存</td><td><code>tickflow/repository.py</code>、<code>app/parquet.py</code></td></tr>
+        <tr><td>指标与信号</td><td><code>indicators/pipeline.py</code>、<code>levels.py</code></td></tr>
+        <tr><td>涨跌停</td><td><code>app/price_limits.py</code></td></tr>
+        <tr><td>历史股本</td><td><code>app/share_capital.py</code></td></tr>
+        <tr><td>策略引擎</td><td><code>strategy/engine.py</code>、<code>scoring.py</code>、<code>composite.py</code>、<code>custom_signals.py</code>、<code>config.py</code></td></tr>
+        <tr><td>监控</td><td><code>strategy/monitor.py</code>、<code>monitor_rules.py</code>、<code>intraday_signals.py</code>、<code>services/sector_monitor.py</code></td></tr>
+        <tr><td>18 个内置策略</td><td><code>strategy/builtin/</code></td></tr>
+        <tr><td>回测矩阵与撮合</td><td><code>backtest/matrix.py</code>、<code>engine.py</code>、<code>strategy.py</code>、<code>minute_trigger.py</code>、<code>numba_runtime.py</code></td></tr>
+        <tr><td>参数优化与步进</td><td><code>backtest/optimizer.py</code>、<code>walkforward.py</code>、<code>worker.py</code></td></tr>
+        <tr><td>因子回测</td><td><code>backtest/factor.py</code></td></tr>
+        <tr><td>市场状态</td><td><code>services/regime_builder.py</code></td></tr>
+        <tr><td>市场总览</td><td><code>services/market_overview_builder.py</code></td></tr>
+        <tr><td>轮动</td><td><code>services/rps_rotation.py</code>、<code>concept_rotation_analyzer.py</code></td></tr>
+        <tr><td>关键价位</td><td><code>indicators/levels.py</code></td></tr>
+        <tr><td>实时行情</td><td><code>services/quote_service.py</code></td></tr>
+        <tr><td>AI provider</td><td><code>services/ai_provider.py</code></td></tr>
+        <tr><td>个股/财务/复盘 AI</td><td><code>services/stock_analyzer.py</code>、<code>financial_analyzer.py</code>、<code>market_recap.py</code></td></tr>
+        <tr><td>通知</td><td><code>services/notify_adapter.py</code>、<code>webhook_adapter.py</code>、<code>wecom_bot_service.py</code></td></tr>
+        <tr><td>五档盘口</td><td><code>services/depth_service.py</code></td></tr>
+        <tr><td>自选截图 OCR</td><td><code>services/watchlist_ocr/</code></td></tr>
+        <tr><td>扩展数据</td><td><code>services/ext_data.py</code>、<code>ext_pull.py</code>、<code>ext_presets.py</code>、<code>api/ext_data.py</code></td></tr>
+        <tr><td>同步</td><td><code>services/instrument_sync.py</code>、<code>kline_sync.py</code>、<code>index_sync.py</code>、<code>financial_sync.py</code></td></tr>
+        <tr><td>API 汇总</td><td><code>backend/app/api/</code>(routes.py 装配 health/capabilities)</td></tr>
+        <tr><td>缠论</td><td><code>backend/app/chanlun/</code>、<code>api/chanlun.py</code>、<code>chanlun_analysis.py</code></td></tr>
+        <tr><td>市场实验室</td><td><code>services/market_lab.py</code>、<code>api/market_lab.py</code></td></tr>
+        <tr><td>前端路由</td><td><code>frontend/src/router.tsx</code></td></tr>
+        <tr><td>前端 API/SSE</td><td><code>frontend/src/lib/api.ts</code>、<code>useQuoteStream.ts</code></td></tr>
+        <tr><td>前端查询键</td><td><code>frontend/src/lib/queryKeys.ts</code></td></tr>
+        <tr><td>前端布局</td><td><code>frontend/src/components/Layout.tsx</code></td></tr>
+        <tr><td>开发脚本</td><td><code>dev.ps1</code>(Windows)、<code>dev.sh</code>(*nix)</td></tr>
+        <tr><td>部署</td><td><code>Dockerfile</code>、<code>docker-compose.yml</code>、<code>docs/deployment.md</code></td></tr>
+        <tr><td>贡献与审查规范</td><td><code>CONTRIBUTING.md</code></td></tr>
+        <tr><td>AI 开发入口</td><td><code>AGENTS.md</code></td></tr>
+        <tr><td>独立审计结论</td><td><code>PROJECT_ANALYSIS.md</code></td></tr>
+        <tr><td>用户操作流程</td><td><code>操作说明书.md</code></td></tr>
+      </table>
+    </section>
+
+    <section id="verify">
+      <h2><span class="num">27</span>验证与开发流程</h2>
+      <h3>27.1 启动</h3>
+      <pre><code><span class="com"># Windows</span>
+cd prototypes\tickflow
+cp .env.example .env       <span class="com"># 按需填 TICKFLOW_API_KEY(留空 = None 模式)</span>
+.\dev.ps1
+
+<span class="com"># macOS / Linux</span>
+./dev.sh</code></pre>
+      <p><code>dev.ps1</code> / <code>dev.sh</code> 自动检查/安装依赖、释放端口、同时起前后端。后端 → http://localhost:3018,前端 → http://localhost:3011。</p>
+      <div class="callout callout-warn">
+        <strong>已知安装缺陷</strong>:<code>backend/pyproject.toml</code> 的 <code>readme = "../README.md"</code> 位于 backend 目录之外,Hatchling 拒绝,<code>uv sync</code> 会失败。绕过方式:<code>uv sync --no-install-project --extra dev</code> 安装依赖后直接从 backend 工作目录运行 <code>app</code> 包。如需长期使用,建议把 README 复制或链接进 backend,再让 pyproject 指向 backend 内部文件,并重建 <code>uv.lock</code>。
+      </div>
+      <h3>27.2 验证命令(CONTRIBUTING.md §9)</h3>
+      <pre><code><span class="com"># 后端定向测试</span>
+cd backend
+uv run pytest tests/path/to/test_x.py -q
+uv run ruff check app/path.py tests/path.py
+
+<span class="com"># 前端构建</span>
+cd frontend
+pnpm build
+
+<span class="com"># 提交前检查</span>
+git diff --check</code></pre>
+      <h3>27.3 验证矩阵(最低要求)</h3>
+      <table>
+        <tr><th>改动类型</th><th>最低验证</th></tr>
+        <tr><td>后端纯函数/规则/bug 修复</td><td>对应定向 pytest,含复现用例和边界用例</td></tr>
+        <tr><td>API 契约</td><td>service 测试 + API 测试;成功/无数据/错误响应</td></tr>
+        <tr><td>数据源或插件</td><td>provider 契约测试、缺能力、空数据、字段/单位标准化</td></tr>
+        <tr><td>指标/复权/换手率/涨跌停</td><td>固定样本数值断言,覆盖历史边界和降级路径</td></tr>
+        <tr><td>策略或监控</td><td>参数变更、缓存失效、资产切换、重启/并发</td></tr>
+        <tr><td>回测</td><td>信号日与成交日、T+1、费用、滑点、不可成交、数据缺口</td></tr>
+        <tr><td>缓存或性能</td><td>命中/失效测试、并发快照测试;必要时附前后基准</td></tr>
+        <tr><td>前端组件或页面</td><td><code>pnpm build</code>,并手工检查加载/空/错/切换/实时刷新</td></tr>
+        <tr><td>前后端契约同时变化</td><td>后端定向测试 + 前端构建 + 对应页面联调</td></tr>
+        <tr><td>文件/Docker/跨平台</td><td>正常路径、权限/能力缺失、目标不可用的失败路径</td></tr>
+      </table>
+      <div class="callout callout-danger">
+        <ul style="padding-left: 18px; margin: 0;">
+          <li>新增文件和本次改动<strong>不得</strong>引入 Ruff 告警;不要为清理历史告警而在功能 PR 中全仓格式化</li>
+          <li>前端 <code>package.json</code> 声明 <code>pnpm lint</code> 但 devDependencies 没有 eslint,该命令无法执行</li>
+          <li>后端全仓 Ruff 当前有 1,257 项历史告警,仓库不满足自身全量 Ruff 配置,不能把 lint 表述为"通过"</li>
+          <li>提交前必须运行 <code>git diff --check</code>,并检查最终 diff 不含调试代码和无关文件</li>
+        </ul>
+      </div>
+      <h3>27.4 PR 复审 11 步(CONTRIBUTING.md §11)</h3>
+      <div class="step-flow">
+        <div class="step-item"><div class="head">1. 确认问题</div><div class="desc">测试复现旧行为</div></div>
+        <div class="step-item"><div class="head">2. 检查边界</div><div class="desc">代码在正确模块,无反向依赖/平行实现/API 层重计算</div></div>
+        <div class="step-item"><div class="head">3. 核对数据契约</div><div class="desc">单位/复权/日期/时区/资产类型/空值/排序方向</div></div>
+        <div class="step-item"><div class="head">4. 核对插件化</div><div class="desc">是否依赖 provider 能力,非 TickFlow 数据源能否工作或明确降级</div></div>
+        <div class="step-item"><div class="head">5. 跟踪状态变化</div><div class="desc">写入→持久化→缓存→generation→SSE→前端查询失效</div></div>
+        <div class="step-item"><div class="head">6. 检查兼容性</div><div class="desc">历史配置/旧策略 JSON/旧 Parquet schema/缺字段数据</div></div>
+        <div class="step-item"><div class="head">7. 检查性能和并发</div><div class="desc">实时/列表/全量扫描热路径,锁和原子替换</div></div>
+        <div class="step-item"><div class="head">8. 检查失败路径</div><div class="desc">网络失败/无权限/空数据/能力缺失/部分写入</div></div>
+        <div class="step-item"><div class="head">9. 评估测试质量</div><div class="desc">测试必须断言业务结果,覆盖负例和边界,不能只断言 200</div></div>
+        <div class="step-item"><div class="head">10. 检查最终 diff</div><div class="desc">逐项确认必要性,排除无关格式化/敏感信息/临时文件</div></div>
+        <div class="step-item"><div class="head">11. 给出结论</div><div class="desc">可合并 / 修改后合并 / 不建议合并</div></div>
+      </div>
+      <p>问题严重级别:<span class="pill r">P0</span> 数据破坏/安全/严重错误交易结果(禁止合并) · <span class="pill r">P1</span> 核心流程不可用/错误金融口径/未来函数/广泛回归(禁止合并) · <span class="pill o">P2</span> 明确功能错误/兼容性/性能退化(修改后合并) · <span class="pill b">P3</span> 维护性/局部体验/文档/测试建议(可不阻断)</p>
+    </section>
+
+    <section id="risks">
+      <h2><span class="num">28</span>已知风险与开发约束</h2>
+      <h3>28.1 安装与构建</h3>
+      <ul style="padding-left: 20px;">
+        <li>标准 <code>uv sync</code> 因 README 越界失败(Hatchling)</li>
+        <li><code>backend/uv.lock</code> 落后于 <code>pyproject.toml</code>:锁文件项目版本仍为 0.1.83,缺 pypinyin;不能把 <code>uv.lock</code> 当作当前依赖声明的完整镜像</li>
+        <li>README 声称 Docker 已内置 stock-sdk,但 Dockerfile 和 <code>docs/deployment.md</code> 明确默认 <code>INCLUDE_STOCKSDK=0</code>;实际默认镜像不含该插件依赖</li>
+      </ul>
+      <h3>28.2 算法与描述偏差(改动前必看)</h3>
+      <div class="card-grid">
+        <div class="card" style="border-left: 3px solid var(--orange);">
+          <h4 class="text-orange">断板反包策略</h4>
+          <p class="small">META description 写"连板≥2 后断板 1-2 天,出现放量反包",但 <code>compute_signals</code> 没有引用历史断板或前序连板,只看当日 <code>limit_up_locked</code>、<code>vol_ratio_5d</code>、<code>change_pct</code>。当前算法更接近"当日涨停且放量",不是严格的断板反包。</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--orange);">
+          <h4 class="text-orange">连板接力策略</h4>
+          <p class="small"><code>ENTRY_SIGNALS</code> 写 <code>signal_limit_up</code>,但实际 entry 只检查 <code>change_pct</code> 和 <code>consecutive_limit_ups</code>,没有与当日 <code>limit_up_locked</code> 做 AND。</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--orange);">
+          <h4 class="text-orange">high_60d / low_60d</h4>
+          <p class="small">历史用 close 极值,实时用 high/low 极值,口径不一致,盘中与盘后信号可能翻转。</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--orange);">
+          <h4 class="text-orange">因子回测</h4>
+          <p class="small"><code>weight/fees_pct/slippage_bps</code> 进入响应 config 但计算函数未引用;UI 给出已配置的错觉,收益可能偏高。</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--orange);">
+          <h4 class="text-orange">enriched 列数</h4>
+          <p class="small">源码注释称 14 列,实际 <code>ENRICHED_STORAGE_COLS</code> 有 15 列(含 <code>quote_ts</code>)。</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--orange);">
+          <h4 class="text-orange">关键价位</h4>
+          <p class="small">README 称 9 类,源码 <code>LEVEL_TYPES</code> 实际有 11 类。</p>
+        </div>
+      </div>
+      <h3>28.3 安全</h3>
+      <div class="card-grid">
+        <div class="card" style="border-left: 3px solid var(--red);">
+          <h4 class="text-red">AI/用户 Python 策略非进程沙箱</h4>
+          <p class="small">AST 规则是模式拦截,不是进程隔离;<code>StrategyEngine</code> 最终通过 <code>importlib</code> 的 <code>exec_module</code> 在 Web 服务进程执行策略文件。源码注释明确把"受限子进程执行"列为后续 P0。<strong>只应运行可信或人工复核后的策略代码</strong>。</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--red);">
+          <h4 class="text-red">自定义 URL 外连</h4>
+          <p class="small">自定义 HTTP 数据源、扩展数据测试、<code>detect-url</code>、手动拉取都会由后端访问用户提供的 URL,并允许跟随重定向。公网或多人部署必须启用访问认证并限制谁能操作数据源设置,否则形成内网 URL 探测面。</p>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--red);">
+          <h4 class="text-red">AI 数据边界</h4>
+          <p class="small">AI 分析会把行情、财务、策略描述、用户输入发送给所配置的模型服务。涉及私有策略或敏感数据时,应使用可信服务并确认其存储政策。</p>
+        </div>
+      </div>
+      <h3>28.4 数据与单位</h3>
+      <ul style="padding-left: 20px;">
+        <li>改动跨边界映射时必须增加单位测试。<strong>禁止</strong>用"数值小于 1 就乘 100"一类启发式转换</li>
+        <li>enriched 的 <code>open/high/low/close</code> 为前复权;<code>raw_close/raw_high/raw_low</code> 为不复权;<code>raw_open</code> <strong>不存在</strong>(历史已如此)。涨跌停判断使用 <code>raw_*</code></li>
+        <li>窗口、前 N 日、批次回算均按实际交易日,不得用自然日直接替代</li>
+        <li>A 股交易时段统一按北京时间;服务器时区不能成为业务逻辑的隐式输入</li>
+        <li>分钟 K 的股票、ETF、指数分开存储和路由,不得仅凭代码格式猜测资产类型</li>
+        <li>历史换手率优先使用公告日不晚于目标交易日的历史股本;缺少时才降级到最新维表股本</li>
+      </ul>
+      <h3>28.5 方法论风险(改动涉及指标/策略/回测时牢记)</h3>
+      <ul style="padding-left: 20px;">
+        <li>18 个策略都是规则与横截面排名,<strong>不是</strong>机器学习预测模型</li>
+        <li>策略 <code>score</code> 是候选集内相对分,<strong>不是</strong>收益概率</li>
+        <li>多数策略没有 take-profit,退出主要靠 MA、MACD、止损或最长持有期</li>
+        <li>market regime 的阈值样本与校准脚本未随仓库提供;"2022-2026 p15/p85"只能视作作者声明</li>
+        <li>RPS 的"机构/游资"是排名稳定性标签,<strong>不是</strong>资金身份识别</li>
+        <li>筹码分布使用区间均匀成交假设,<strong>不是</strong>交易所逐笔真实筹码</li>
+        <li>回测虽处理 T+1/费用/滑点/涨跌停,但仍<strong>没有</strong>盘口冲击、排队成交、容量、真实撮合延迟和数据修订</li>
+        <li>没有用真实样本独立复算任何策略收益,因此本指南不对 alpha、胜率或未来表现背书</li>
+      </ul>
+      <h3>28.6 仓库协同(docs/system-integration-and-local-financials.md)</h3>
+      <p><code>quantall</code> 仓库内四个相关项目的源码边界:</p>
+      <table>
+        <tr><th>项目</th><th>关系</th></tr>
+        <tr><td><code>prototypes/tickflow</code></td><td>本文档所在项目;A 股研究工作台</td></tr>
+        <tr><td><code>apps/quantx</code></td><td>每日市场数据采集、统一复盘报告、A 股深度研究</td></tr>
+        <tr><td><code>apps/quants</code></td><td>本地 A 股选股、策略分析、信号追踪(内部包名 <code>ppgu</code>)</td></tr>
+        <tr><td><code>apps/quantt</code></td><td>K 线训练、复盘、AI 点评 Web 应用</td></tr>
+      </table>
+      <p>四者的源码边界、版本化 sidecar 契约、主线与形态交集评分、真实交易反馈回路详见 <code>docs/system-integration-and-local-financials.md</code>。后续在 TickFlow 之上做扩展时,如需与这三个兄弟应用协同,务必先读该文档,<strong>不要直接读取或写入它们的生产数据库</strong>。</p>
+    </section>
+
+    <footer>
+      <p><strong>写作依据</strong>:基于源码静态追踪(<code>backend/app/</code> 全模块、<code>frontend/src/</code> 主要文件、<code>docs/</code> 全部文档)与 <code>PROJECT_ANALYSIS.md</code>(2026-08-23 审计,提交 <code>9b9538a</code>,版本 0.1.88)。</p>
+      <p><strong>未覆盖范围</strong>:TickFlow 私有服务端清洗授权、shy313.com 概念/行业接口上游、硬编码 regime 阈值的原始训练样本、stock-sdk 第三方接口长期稳定性、全 A 股多年数据上的真实峰值内存与回测耗时。</p>
+      <p><strong>免责声明</strong>:本文档不构成投资建议。TickFlow Stock Panel 用于数据分析和策略研究,历史表现不代表未来收益,实盘决策及其风险由使用者自行承担。</p>
+      <p>配套文档:<code>docs/architecture-and-extension.md</code>(同内容 Markdown 版本) · <code>CONTRIBUTING.md</code> · <code>AGENTS.md</code> · <code>PROJECT_ANALYSIS.md</code> · <code>操作说明书.md</code></p>
+    </footer>
+  </main>
+</div>
+</body>
+</html>
