@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 
 const DATASET_LABELS: Record<string, string> = {
+  trading_calendar: '交易日历',
   market_breadth_daily: '市场宽度',
   limit_event_daily: '涨跌停事件',
   theme_observation_daily: '题材观察',
@@ -43,6 +44,7 @@ export function DataSourceFoundationPanel() {
 
   const { datasets, sources, routes, health } = query.data
   const healthBySource = new Map(health.sources.map(item => [item.source_id, item]))
+  const healthByDataset = new Map(health.datasets.map(item => [item.dataset_id, item]))
   const dependencyProblems = sources.filter(
     source => !source.dependency_available || !source.credentials_configured,
   ).length
@@ -63,8 +65,16 @@ export function DataSourceFoundationPanel() {
           <span>·</span>
           <span>{datasets.length} 个标准数据集</span>
           {dependencyProblems > 0 && <span className="text-warning">· {dependencyProblems} 项依赖待配置</span>}
+          {health.snapshot_retention.retention_days && (
+            <span>· 原始快照保留 {health.snapshot_retention.retention_days} 天</span>
+          )}
         </div>
       </div>
+      {health.snapshot_retention.status === 'invalid_configuration' && (
+        <div className="mt-3 rounded border border-danger/30 bg-danger/5 px-3 py-2 text-[11px] text-danger">
+          快照保留策略配置无效：{health.snapshot_retention.error}
+        </div>
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <div>
@@ -91,7 +101,11 @@ export function DataSourceFoundationPanel() {
                   })}
                 </div>
                 <div className="mt-1 text-[10px] text-muted">
-                  schema v{datasets.find(item => item.dataset_id === route.dataset_id)?.schema_version ?? '—'} · 按交易日分区
+                  schema v{datasets.find(item => item.dataset_id === route.dataset_id)?.schema_version ?? '—'}
+                  {' · '}{healthByDataset.get(route.dataset_id)?.partition_count ?? 0} 个分区
+                  {healthByDataset.get(route.dataset_id)?.latest_partition
+                    ? ` · 最新 ${healthByDataset.get(route.dataset_id)?.latest_partition}`
+                    : ''}
                 </div>
               </div>
             ))}

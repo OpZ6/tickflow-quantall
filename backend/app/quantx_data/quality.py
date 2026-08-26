@@ -46,7 +46,11 @@ def validate_fact_batches(batches: list[FactBatch], sources: dict[str, dict]) ->
     by_id = {batch.dataset_id: batch for batch in batches}
     errors: list[str] = []
     warnings: list[str] = []
-    required = {DatasetId.MARKET_BREADTH_DAILY, DatasetId.LIMIT_EVENT_DAILY}
+    required = {
+        DatasetId.TRADING_CALENDAR,
+        DatasetId.MARKET_BREADTH_DAILY,
+        DatasetId.LIMIT_EVENT_DAILY,
+    }
 
     for dataset_id in DatasetId:
         batch = by_id.get(dataset_id)

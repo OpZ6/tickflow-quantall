@@ -1446,6 +1446,21 @@ export interface MarketDataFoundation {
     run_id: string | null
     status: string
     sources: MarketSourceHealth[]
+    datasets: Array<{
+      dataset_id: string
+      partition_count: number
+      latest_partition: string | null
+    }>
+    snapshot_retention: {
+      status?: string
+      dry_run?: boolean
+      retention_days?: number
+      cutoff_date?: string
+      metadata_count?: number
+      blob_count?: number
+      bytes_reclaimable?: number
+      error?: string
+    }
   }
 }
 

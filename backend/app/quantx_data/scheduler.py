@@ -1,37 +1,36 @@
 from __future__ import annotations
 
 import logging
-import os
 from datetime import date
 from pathlib import Path
 
 from apscheduler.triggers.cron import CronTrigger
+
+from app.market_facts.adapters import has_tickflow_market_partition
+from app.market_facts.repository import MarketFactRepository
 
 from .pipeline import run_pipeline
 
 logger = logging.getLogger(__name__)
 
 
-def _trade_date_today() -> str | None:
-    now = date.today()
-    if now.weekday() >= 5:
+def _trade_date_today(data_root: Path, *, today: date | None = None) -> str | None:
+    now = today or date.today()
+    calendar_state = MarketFactRepository(data_root).is_trading_day(now)
+    if calendar_state is False:
         return None
-    token = os.environ.get("TUSHARE_TOKEN", "").strip()
-    if token:
-        try:
-            import tushare as ts
-
-            pro = ts.pro_api(token, timeout=15)
-            frame = pro.trade_cal(exchange="SSE", start_date=now.strftime("%Y%m%d"), end_date=now.strftime("%Y%m%d"))
-            if frame is not None and not frame.empty and int(frame.iloc[0].get("is_open", 0)) != 1:
-                return None
-        except Exception as exc:  # calendar outage must not disable weekday fallback
-            logger.warning("trade calendar check failed; using weekday fallback: %s", exc)
-    return now.strftime("%Y%m%d")
+    trade_date = now.strftime("%Y%m%d")
+    if calendar_state is True or has_tickflow_market_partition(data_root, trade_date):
+        return trade_date
+    logger.warning(
+        "QuantX schedule skipped for %s: calendar unknown and no local TickFlow partition",
+        trade_date,
+    )
+    return None
 
 
 def run_scheduled(data_root: Path) -> dict | None:
-    trade_date = _trade_date_today()
+    trade_date = _trade_date_today(data_root)
     if not trade_date:
         return None
     try:

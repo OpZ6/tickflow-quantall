@@ -90,19 +90,26 @@ function SectorPanel() {
   const radar = useQuery({ queryKey: QK.marketLabRadar(dimension, asOf), queryFn: () => api.marketLabSectorRadar(dimension, asOf) })
   const flow = useQuery({ queryKey: QK.marketLabSector(dimension), queryFn: () => api.marketLabSectorFlow(dimension) })
   const rows = radar.data?.rows ?? []
+  const flowRows = flow.data?.rows ?? []
   useEffect(() => {
     if (!asOf && radar.data?.as_of) setAsOf(radar.data.as_of)
   }, [asOf, radar.data?.as_of])
   useEffect(() => {
-    if (rows.length && !rows.some(row => row.sector === selectedSector)) setSelectedSector(rows[0].sector)
-  }, [rows, selectedSector])
+    if (!rows.length) return
+    const radarHasSelection = rows.some(row => row.sector === selectedSector)
+    const flowHasSelection = flowRows.some(row => row.sector === selectedSector)
+    if (!radarHasSelection || (flowRows.length > 0 && !flowHasSelection)) {
+      const shared = rows.find(row => flowRows.some(flowRow => flowRow.sector === row.sector))
+      setSelectedSector(shared?.sector ?? rows[0].sector)
+    }
+  }, [flowRows, rows, selectedSector])
 
   const ordered = useMemo(() => [...rows].sort((a, b) => radarValue(b, metric, rankWindow) - radarValue(a, metric, rankWindow)), [metric, rankWindow, rows])
   const rankChangeCount = Math.max(1, Math.ceil(ordered.length * 0.1))
   const attackers = metric === 'change' ? ordered.slice(0, rankChangeCount) : ordered.filter(row => radarRankPct(row, metric) >= 90)
   const retreaters = metric === 'change' ? ordered.slice(-rankChangeCount).reverse() : ordered.filter(row => radarRankPct(row, metric) <= 10).reverse()
   const maxAbs = Math.max(1e-9, ...attackers.concat(retreaters).map(row => Math.abs(radarValue(row, metric, rankWindow))))
-  const selectedFlow = flow.data?.rows.find(row => row.sector === selectedSector)
+  const selectedFlow = flowRows.find(row => row.sector === selectedSector)
   const metricLabel = metric === 'swing' ? '波段流入率' : metric === 'ratio' ? '单日流入率' : metric === 'amount' ? '单日净额' : `${rankWindow}日排名变化`
   const metricText = (row: SectorRadarRow) => metric === 'amount'
     ? billion(row.flow_yuan)

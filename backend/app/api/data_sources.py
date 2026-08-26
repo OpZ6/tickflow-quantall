@@ -4,12 +4,15 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
 
-from app.market_facts.registry import DATASETS, ROUTES, datasets_for_source
+from app.market_facts.registry import DATASETS, ROUTES, DatasetId, datasets_for_source
+from app.market_facts.repository import MarketFactRepository
+from app.market_facts.snapshots import SnapshotRetentionPolicy, SourceSnapshotStore
 from app.quantx_data.collectors import SOURCE_SPECS
 
 router = APIRouter(prefix="/api/data-sources", tags=["data-sources"])
@@ -61,7 +64,7 @@ def sources() -> dict[str, Any]:
         {
             "source_id": "tickflow_enriched_aggregate",
             "display_name": "TickFlow enriched aggregate",
-            "supported_datasets": ["market_breadth_daily"],
+            "supported_datasets": ["trading_calendar", "market_breadth_daily"],
             "collector_type": "provider",
             "collector": "market_fact_adapter",
             "credentials_ref": None,
@@ -74,6 +77,18 @@ def sources() -> dict[str, Any]:
             "source_id": "enriched_ohlcv_proxy",
             "display_name": "TickFlow OHLCV proxy",
             "supported_datasets": ["sector_flow_daily"],
+            "collector_type": "provider",
+            "collector": "market_fact_adapter",
+            "credentials_ref": None,
+            "credentials_configured": True,
+            "dependency_available": True,
+            "max_retries": 0,
+            "freshness_required": True,
+        },
+        {
+            "source_id": "tickflow_published_fact",
+            "display_name": "TickFlow published canonical fact",
+            "supported_datasets": ["trading_calendar"],
             "collector_type": "provider",
             "collector": "market_fact_adapter",
             "credentials_ref": None,
@@ -114,8 +129,23 @@ def routes() -> dict[str, Any]:
 
 @router.get("/health")
 def health(request: Request) -> dict[str, Any]:
-    trade_date, manifest = _latest_manifest(_data_root(request))
+    data_root = _data_root(request)
+    trade_date, manifest = _latest_manifest(data_root)
     source_states = manifest.get("sources") if isinstance(manifest.get("sources"), dict) else {}
+    fact_repo = MarketFactRepository(data_root)
+    try:
+        retention_policy = SnapshotRetentionPolicy.from_environment()
+        retention_plan = SourceSnapshotStore(data_root).plan_retention(retention_policy)
+        retention = {
+            "dry_run": True,
+            "retention_days": retention_plan.retention_days,
+            "cutoff_date": retention_plan.cutoff_date.isoformat(),
+            "metadata_count": retention_plan.metadata_count,
+            "blob_count": retention_plan.blob_count,
+            "bytes_reclaimable": retention_plan.bytes_reclaimable,
+        }
+    except ValueError as exc:
+        retention = {"status": "invalid_configuration", "error": str(exc)}
     return {
         "latest_trade_date": trade_date,
         "run_id": manifest.get("run_id"),
@@ -131,4 +161,28 @@ def health(request: Request) -> dict[str, Any]:
             }
             for spec in SOURCE_SPECS
         ],
+        "datasets": [
+            {
+                "dataset_id": dataset_id.value,
+                "partition_count": len(available := fact_repo.available_dates(dataset_id)),
+                "latest_partition": available[-1].isoformat() if available else None,
+            }
+            for dataset_id in DatasetId
+        ],
+        "snapshot_retention": retention,
+    }
+
+
+@router.get("/calendar")
+def calendar(request: Request, start: date, end: date, exchange: str = "SSE") -> dict[str, Any]:
+    frame = MarketFactRepository(_data_root(request)).get_trading_calendar(
+        start,
+        end,
+        exchange=exchange.upper(),
+    )
+    return {
+        "exchange": exchange.upper(),
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "calendar": frame.to_dicts(),
     }

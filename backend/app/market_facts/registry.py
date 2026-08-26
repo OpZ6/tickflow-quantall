@@ -10,6 +10,7 @@ import polars as pl
 
 
 class DatasetId(StrEnum):
+    TRADING_CALENDAR = "trading_calendar"
     MARKET_BREADTH_DAILY = "market_breadth_daily"
     LIMIT_EVENT_DAILY = "limit_event_daily"
     THEME_OBSERVATION_DAILY = "theme_observation_daily"
@@ -53,6 +54,29 @@ def _schema(fields: dict[str, pl.DataType]) -> Mapping[str, pl.DataType]:
 
 DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
     {
+        DatasetId.TRADING_CALENDAR: DatasetSpec(
+            dataset_id=DatasetId.TRADING_CALENDAR,
+            description="Point-in-time exchange trading calendar",
+            schema_version=1,
+            primary_key=("exchange", "trade_date"),
+            partition_keys=("as_of_date",),
+            required_columns=(
+                "trade_date",
+                "as_of_date",
+                "exchange",
+                "is_open",
+            ),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "as_of_date": pl.Date,
+                    "exchange": pl.String,
+                    "is_open": pl.Boolean,
+                    "previous_open_date": pl.Date,
+                }
+            ),
+            field_units=MappingProxyType({}),
+        ),
         DatasetId.MARKET_BREADTH_DAILY: DatasetSpec(
             dataset_id=DatasetId.MARKET_BREADTH_DAILY,
             description="A-share daily advancing, declining and flat counts",
@@ -167,6 +191,10 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
 
 ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
     {
+        DatasetId.TRADING_CALENDAR: SourceRoute(
+            DatasetId.TRADING_CALENDAR,
+            ("tushare", "tickflow_enriched_aggregate", "tickflow_published_fact"),
+        ),
         DatasetId.MARKET_BREADTH_DAILY: SourceRoute(
             DatasetId.MARKET_BREADTH_DAILY,
             ("tickflow_enriched_aggregate", "tushare", "pywencai"),

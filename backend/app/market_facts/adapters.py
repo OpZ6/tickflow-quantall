@@ -8,6 +8,32 @@ from typing import Any
 import polars as pl
 
 
+def has_tickflow_market_partition(data_root: Path, trade_date: str) -> bool:
+    """Return whether TickFlow already published local daily facts for the date."""
+    iso_date = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+    return any(
+        any((Path(data_root) / table / f"date={iso_date}").glob("*.parquet"))
+        for table in ("kline_daily_enriched", "kline_daily", "market_breadth_daily")
+    )
+
+
+def load_published_fact_evidence(data_root: Path, trade_date: str) -> dict[str, Any] | None:
+    """Use an already published breadth fact as proof that the market opened."""
+    iso_date = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+    path = Path(data_root) / "market_breadth_daily" / f"date={iso_date}" / "part.parquet"
+    if not path.is_file():
+        return None
+    frame = pl.read_parquet(path)
+    if frame.is_empty():
+        return None
+    return {
+        "trade_date": trade_date,
+        "source": "tickflow_published_fact",
+        "scraped_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "input_table": "market_breadth_daily",
+    }
+
+
 def load_tickflow_market_aggregate(data_root: Path, trade_date: str) -> dict[str, Any] | None:
     """Build daily breadth inputs from the already published TickFlow partition."""
     iso_date = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"

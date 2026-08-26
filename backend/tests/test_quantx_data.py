@@ -17,6 +17,7 @@ from app.quantx_data.catalog import build_catalog, load_tables
 from app.quantx_data.migration import migrate_quantx_history
 from app.quantx_data.multiday import build_multiday_snapshot, rebuild_multiday_snapshots
 from app.quantx_data.pipeline import run_pipeline
+from app.quantx_data.scheduler import _trade_date_today
 
 SOURCE_NAMES = (
     "tushare", "akshare", "ths_hot", "zhangtingke", "zhangtingjun", "pywencai",
@@ -37,7 +38,18 @@ def _fixture(root: Path, trade_date: str = "20260825") -> Path:
         {"ts_code": "300001.SZ", "close": 20, "pct_chg": 0.0, "amount": 50000},
     ]
     payloads = {
-        "tushare": {"trade_date": trade_date, "status": "ok", "daily": daily, "indexes": {"000001.SH": {"code": "000001.SH", "name": "上证指数", "close": 3000, "pct_chg": 0.5}}},
+        "tushare": {
+            "trade_date": trade_date,
+            "status": "ok",
+            "daily": daily,
+            "indexes": {"000001.SH": {"code": "000001.SH", "name": "上证指数", "close": 3000, "pct_chg": 0.5}},
+            "trade_calendar": {
+                "records": [
+                    {"exchange": "SSE", "cal_date": trade_date, "is_open": 1, "pretrade_date": "20260824"},
+                    {"exchange": "SSE", "cal_date": "20260826", "is_open": 0, "pretrade_date": trade_date},
+                ]
+            },
+        },
         "akshare": {"trade_date": trade_date, "status": "ok", "sector_fund_flow": []},
         "ths_hot": {"trade_date": trade_date, "status": "ok", "reason_tags": [{"tag": "人工智能", "count": 2}], "stocks": [{"code": "000001", "name": "甲", "reason": "人工智能"}]},
         "zhangtingke": {"trade_date": trade_date, "status": "ok", "ladder_by_height": {"2": [{"code": "000001", "name": "甲", "limit_times": 2}]}, "ladder_stocks": [{"code": "000001", "name": "甲", "limit_times": 2}]},
@@ -82,6 +94,7 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
     assert manifest["sources"]["tushare"]["normalized_sha256"]
     assert manifest["sources"]["tushare"]["raw_sha256"] != manifest["sources"]["tushare"]["normalized_sha256"]
     assert {item["dataset_id"] for item in manifest["fact_artifacts"]} == {
+        "trading_calendar",
         "market_breadth_daily",
         "limit_event_daily",
         "theme_observation_daily",
@@ -91,6 +104,23 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
     assert fact_repo.get_market_breadth(date(2026, 8, 25))["up_count"].to_list() == [1]
     assert fact_repo.get_market_breadth(date(2026, 8, 25))["source"].to_list() == ["tickflow_enriched_aggregate"]
     assert fact_repo.get_limit_events(date(2026, 8, 25))["symbol"].to_list() == ["000001"]
+    assert fact_repo.is_trading_day(date(2026, 8, 26)) is False
+
+
+def test_scheduler_uses_canonical_calendar_and_local_partition_evidence(tmp_path):
+    root = _fixture(tmp_path)
+    assert run_pipeline(root, "20260825", recompute=True)["status"] == "complete"
+
+    assert _trade_date_today(root, today=date(2026, 8, 25)) == "20260825"
+    assert _trade_date_today(root, today=date(2026, 8, 26)) is None
+    assert _trade_date_today(root, today=date(2026, 8, 27)) is None
+
+    partition = root / "kline_daily" / "date=2026-08-27"
+    partition.mkdir(parents=True)
+    pl.DataFrame({"date": [date(2026, 8, 27)], "close": [1.0]}).write_parquet(
+        partition / "part.parquet"
+    )
+    assert _trade_date_today(root, today=date(2026, 8, 27)) == "20260827"
 
 
 def test_pipeline_is_idempotent_and_catalog_uses_pipeline_status(tmp_path):
@@ -325,3 +355,29 @@ def test_history_migration_is_dry_run_by_default_and_preserves_legacy(tmp_path):
 
     repeated = migrate_quantx_history(tmp_path, apply=True)
     assert repeated["skipped_existing"] == ["20260825"]
+
+
+def test_history_migration_can_backfill_calendar_from_published_breadth(tmp_path):
+    root = _fixture(tmp_path)
+    assert run_pipeline(root, "20260825", recompute=True)["status"] == "complete"
+    breadth_path = root / "market_breadth_daily" / "date=2026-08-25" / "part.parquet"
+    breadth_before = breadth_path.read_bytes()
+    for relative in (
+        "quantx/20260825/tushare.json",
+        "quantx/20260825/normalized/tushare.json",
+    ):
+        path = root / relative
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload.pop("trade_calendar", None)
+        _write(path, payload)
+    (root / "trading_calendar" / "date=2026-08-25" / "part.parquet").unlink()
+    (root / "kline_daily_enriched" / "date=2026-08-25" / "part.parquet").unlink()
+
+    preview = migrate_quantx_history(root)
+
+    assert preview["eligible"] == ["20260825"]
+    assert preview["skipped_incomplete"] == {}
+    applied = migrate_quantx_history(root, apply=True)
+    assert applied["migrated"] == ["20260825"]
+    assert breadth_path.read_bytes() == breadth_before
+    assert MarketFactRepository(root).is_trading_day(date(2026, 8, 25)) is True

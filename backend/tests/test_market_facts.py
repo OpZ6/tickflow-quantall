@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import json
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 
 import polars as pl
@@ -13,7 +14,10 @@ from app.api.data_sources import router as data_sources_router
 from app.market_facts.builders import build_initial_fact_batches
 from app.market_facts.registry import DatasetId, get_dataset, get_route
 from app.market_facts.repository import MarketFactRepository
-from app.market_facts.snapshots import SourceSnapshotStore
+from app.market_facts.snapshots import (
+    SnapshotRetentionPolicy,
+    SourceSnapshotStore,
+)
 from app.market_facts.storage import FactPublication
 
 
@@ -27,6 +31,22 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
                 {"ts_code": "600000.SH", "pct_chg": -1.0},
                 {"ts_code": "300001.SZ", "pct_chg": 0.0},
             ],
+            "trade_calendar": {
+                "records": [
+                    {
+                        "exchange": "SSE",
+                        "cal_date": trade_date,
+                        "is_open": 1,
+                        "pretrade_date": "20260824",
+                    },
+                    {
+                        "exchange": "SSE",
+                        "cal_date": "20260826",
+                        "is_open": 0,
+                        "pretrade_date": trade_date,
+                    },
+                ]
+            },
         },
         "pywencai": {
             "trade_date": trade_date,
@@ -106,6 +126,7 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
 
 def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
     dataset_ids = {
+        DatasetId.TRADING_CALENDAR,
         DatasetId.MARKET_BREADTH_DAILY,
         DatasetId.LIMIT_EVENT_DAILY,
         DatasetId.THEME_OBSERVATION_DAILY,
@@ -116,17 +137,46 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         spec = get_dataset(dataset_id)
         assert spec.schema_version == 1
         assert "trade_date" in spec.required_columns
-        assert spec.partition_keys == ("trade_date",)
+
+    assert get_dataset(DatasetId.TRADING_CALENDAR).partition_keys == ("as_of_date",)
+    assert get_dataset(DatasetId.MARKET_BREADTH_DAILY).partition_keys == ("trade_date",)
 
     breadth_route = get_route(DatasetId.MARKET_BREADTH_DAILY)
     assert breadth_route.sources[:2] == ("tickflow_enriched_aggregate", "tushare")
     limit_route = get_route(DatasetId.LIMIT_EVENT_DAILY)
     assert limit_route.sources[:2] == ("pywencai", "zhangtingke")
+    assert get_route(DatasetId.TRADING_CALENDAR).sources == (
+        "tushare",
+        "tickflow_enriched_aggregate",
+        "tickflow_published_fact",
+    )
 
 
 def test_fact_builders_normalize_breadth_and_limit_events() -> None:
     batches = build_initial_fact_batches("20260825", _sources(), "run-1")
     by_id = {batch.dataset_id: batch for batch in batches}
+
+    calendar = by_id[DatasetId.TRADING_CALENDAR].frame.sort("trade_date")
+    assert calendar.select(
+        "trade_date", "as_of_date", "exchange", "is_open", "source", "is_fallback"
+    ).to_dicts() == [
+        {
+            "trade_date": date(2026, 8, 25),
+            "as_of_date": date(2026, 8, 25),
+            "exchange": "SSE",
+            "is_open": True,
+            "source": "tushare",
+            "is_fallback": False,
+        },
+        {
+            "trade_date": date(2026, 8, 26),
+            "as_of_date": date(2026, 8, 25),
+            "exchange": "SSE",
+            "is_open": False,
+            "source": "tushare",
+            "is_fallback": False,
+        },
+    ]
 
     breadth = by_id[DatasetId.MARKET_BREADTH_DAILY].frame.to_dicts()
     assert breadth == [
@@ -199,6 +249,7 @@ def test_fact_publication_is_idempotent_and_repository_reads_canonical_data(tmp_
     events = repo.get_limit_events(date(2026, 8, 25))
     themes = repo.get_theme_observations(date(2026, 8, 25))
     flows = repo.get_sector_flows(date(2026, 8, 25))
+    calendar = repo.get_trading_calendar(date(2026, 8, 25), date(2026, 8, 26))
     assert breadth["up_count"].to_list() == [1]
     assert set(events["event_type"].to_list()) == {
         "limit_up",
@@ -207,6 +258,10 @@ def test_fact_publication_is_idempotent_and_repository_reads_canonical_data(tmp_
     }
     assert not themes.is_empty()
     assert not flows.is_empty()
+    assert calendar["is_open"].to_list() == [True, False]
+    assert repo.is_trading_day(date(2026, 8, 25)) is True
+    assert repo.is_trading_day(date(2026, 8, 26)) is False
+    assert repo.is_trading_day(date(2026, 8, 27)) is None
 
     second = FactPublication(tmp_path, "run-2")
     second.stage(build_initial_fact_batches("20260825", _sources(), "run-2"))
@@ -293,6 +348,67 @@ def test_source_snapshot_store_compresses_and_deduplicates_raw_payload(tmp_path)
     assert json.loads(metadata[0].read_text(encoding="utf-8"))["blob_sha256"] == first.sha256
 
 
+def test_snapshot_retention_is_dry_run_recoverable_and_reference_safe(tmp_path) -> None:
+    store = SourceSnapshotStore(tmp_path)
+    unique_old = store.record(
+        source_id="tushare",
+        dataset_ids=(DatasetId.MARKET_BREADTH_DAILY,),
+        trade_date="20250101",
+        run_id="old-unique",
+        payload={"kind": "old-only"},
+    )
+    shared_old = store.record(
+        source_id="tushare",
+        dataset_ids=(DatasetId.MARKET_BREADTH_DAILY,),
+        trade_date="20250101",
+        run_id="old-shared",
+        payload={"kind": "shared"},
+    )
+    shared_new = store.record(
+        source_id="tushare",
+        dataset_ids=(DatasetId.MARKET_BREADTH_DAILY,),
+        trade_date="20260825",
+        run_id="new-shared",
+        payload={"kind": "shared"},
+    )
+    assert shared_old.sha256 == shared_new.sha256
+    unknown_metadata = json.loads(
+        shared_new.metadata_paths[0].read_text(encoding="utf-8")
+    )
+    unknown_metadata["trade_date"] = "unknown"
+    shared_new.metadata_paths[0].write_text(
+        json.dumps(unknown_metadata), encoding="utf-8"
+    )
+
+    policy = SnapshotRetentionPolicy(retention_days=365)
+    plan = store.plan_retention(policy, today=date(2026, 8, 26))
+
+    assert plan.dry_run is True
+    assert plan.metadata_count == 2
+    assert plan.blob_count == 1
+    assert plan.bytes_reclaimable > 0
+    assert unique_old.blob_path in plan.blob_paths
+    assert shared_new.blob_path not in plan.blob_paths
+    assert all(path.exists() for path in plan.metadata_paths + plan.blob_paths)
+
+    try:
+        store.apply_retention(plan, confirmed=False)
+    except ValueError as exc:
+        assert "confirmation" in str(exc)
+    else:
+        raise AssertionError("retention apply must require confirmation")
+
+    applied = store.apply_retention(plan, confirmed=True)
+    assert applied["status"] == "quarantined"
+    assert applied["recoverable"] is True
+    assert not unique_old.blob_path.exists()
+    assert shared_new.blob_path.exists()
+    assert all(not path.exists() for path in plan.metadata_paths)
+    quarantine = Path(applied["quarantine_path"])
+    assert quarantine.is_dir()
+    assert (quarantine / "_retention_manifest.json").is_file()
+
+
 def test_repository_returns_typed_empty_frames_for_missing_partitions(tmp_path) -> None:
     repo = MarketFactRepository(tmp_path)
 
@@ -310,14 +426,24 @@ def test_data_source_management_api_exposes_contracts_without_secrets(tmp_path) 
     app.include_router(data_sources_router)
     app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
 
+    publication = FactPublication(tmp_path, "run-api")
+    publication.stage(build_initial_fact_batches("20260825", _sources(), "run-api"))
+    publication.commit()
+    publication.finalize()
+
     with TestClient(app) as client:
         datasets = client.get("/api/data-sources/datasets")
         sources = client.get("/api/data-sources/sources")
         routes = client.get("/api/data-sources/routes")
         health = client.get("/api/data-sources/health")
+        calendar = client.get(
+            "/api/data-sources/calendar",
+            params={"start": "2026-08-25", "end": "2026-08-26"},
+        )
 
     assert datasets.status_code == sources.status_code == routes.status_code == 200
     assert health.status_code == 200
+    assert calendar.status_code == 200
     assert {item["dataset_id"] for item in datasets.json()["datasets"]} == {
         item.value for item in DatasetId
     }
@@ -329,4 +455,41 @@ def test_data_source_management_api_exposes_contracts_without_secrets(tmp_path) 
     source = next(item for item in sources.json()["sources"] if item["source_id"] == "tushare")
     assert source["credentials_ref"] == "TUSHARE_TOKEN"
     assert "token" not in source
-    assert health.json()["latest_trade_date"] is None
+    dataset_health = {
+        item["dataset_id"]: item for item in health.json()["datasets"]
+    }
+    assert dataset_health["trading_calendar"]["partition_count"] == 1
+    assert health.json()["snapshot_retention"]["retention_days"] == 730
+    assert "metadata_paths" not in health.json()["snapshot_retention"]
+    assert calendar.json()["calendar"] == [
+        {
+            "trade_date": "2026-08-25",
+            "as_of_date": "2026-08-25",
+            "exchange": "SSE",
+            "is_open": True,
+            "previous_open_date": "2026-08-24",
+            "source": "tushare",
+            "source_record_id": "tushare:SSE:2026-08-25",
+            "observed_at": "2026-08-25T16:01:00+08:00",
+            "ingested_at": calendar.json()["calendar"][0]["ingested_at"],
+            "run_id": "run-api",
+            "schema_version": 1,
+            "quality_level": "observed",
+            "is_fallback": False,
+        },
+        {
+            "trade_date": "2026-08-26",
+            "as_of_date": "2026-08-25",
+            "exchange": "SSE",
+            "is_open": False,
+            "previous_open_date": "2026-08-25",
+            "source": "tushare",
+            "source_record_id": "tushare:SSE:2026-08-26",
+            "observed_at": "2026-08-25T16:01:00+08:00",
+            "ingested_at": calendar.json()["calendar"][1]["ingested_at"],
+            "run_id": "run-api",
+            "schema_version": 1,
+            "quality_level": "observed",
+            "is_fallback": False,
+        },
+    ]

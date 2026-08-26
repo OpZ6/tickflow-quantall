@@ -5,7 +5,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from app.market_facts.adapters import load_tickflow_market_aggregate
+from app.market_facts.adapters import (
+    load_published_fact_evidence,
+    load_tickflow_market_aggregate,
+)
 from app.market_facts.builders import FactValidationError, build_initial_fact_batches
 from app.market_facts.registry import DatasetId
 from app.market_facts.repository import MarketFactRepository
@@ -39,6 +42,9 @@ def _sources(data_root: Path, date_dir: Path) -> dict[str, dict]:
     aggregate = load_tickflow_market_aggregate(data_root, date_dir.name)
     if aggregate is not None:
         payloads["tickflow_enriched_aggregate"] = aggregate
+    published = load_published_fact_evidence(data_root, date_dir.name)
+    if published is not None:
+        payloads["tickflow_published_fact"] = published
     return payloads
 
 
@@ -63,7 +69,10 @@ def migrate_quantx_history(
 
     for date_dir in _date_dirs(data_root):
         day = datetime.strptime(date_dir.name, "%Y%m%d").date()
-        if not force and all(repo.has_partition(item, day) for item in dataset_ids):
+        missing_ids = {
+            item for item in dataset_ids if not repo.has_partition(item, day)
+        }
+        if not force and not missing_ids:
             result["skipped_existing"].append(date_dir.name)
             continue
         run_id = f"migration-{date_dir.name}-{uuid4().hex[:12]}"
@@ -71,6 +80,8 @@ def migrate_quantx_history(
             batches = build_initial_fact_batches(
                 date_dir.name, _sources(data_root, date_dir), run_id
             )
+            if not force:
+                batches = [batch for batch in batches if batch.dataset_id in missing_ids]
         except FactValidationError as exc:
             result["skipped_incomplete"][date_dir.name] = str(exc)
             continue

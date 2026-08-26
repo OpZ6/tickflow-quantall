@@ -38,6 +38,66 @@ class MarketFactRepository:
     def get_market_breadth(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.MARKET_BREADTH_DAILY, trade_date)
 
+    def get_trading_calendar(
+        self,
+        start: date,
+        end: date,
+        *,
+        exchange: str = "SSE",
+        as_of: date | None = None,
+    ) -> pl.DataFrame:
+        """Return the newest known calendar row as of the requested horizon."""
+        if end < start:
+            raise ValueError("end must not be before start")
+        cutoff = as_of or end
+        root = self.data_dir / DatasetId.TRADING_CALENDAR.value
+        parts = sorted(
+            [
+            path
+            for path in root.glob("date=*/part.parquet")
+            if path.parent.name.removeprefix("date=") <= cutoff.isoformat()
+            ],
+            reverse=True,
+        )
+        if not parts:
+            return self._empty(DatasetId.TRADING_CALENDAR)
+        selected: list[pl.DataFrame] = []
+        seen: set[date] = set()
+        expected_days = (end - start).days + 1
+        for path in parts:
+            frame = pl.read_parquet(path).filter(
+                (pl.col("exchange") == exchange)
+                & pl.col("trade_date").is_between(start, end, closed="both")
+                & (pl.col("as_of_date") <= cutoff)
+            )
+            if seen:
+                frame = frame.filter(~pl.col("trade_date").is_in(seen))
+            if not frame.is_empty():
+                selected.append(frame)
+                seen.update(frame["trade_date"].to_list())
+            if len(seen) >= expected_days:
+                break
+        return (
+            pl.concat(selected).sort("trade_date")
+            if selected
+            else self._empty(DatasetId.TRADING_CALENDAR)
+        )
+
+    def is_trading_day(
+        self,
+        day: date,
+        *,
+        exchange: str = "SSE",
+        as_of: date | None = None,
+    ) -> bool | None:
+        frame = self.get_trading_calendar(
+            day,
+            day,
+            exchange=exchange,
+            as_of=as_of or day,
+        )
+        return None if frame.is_empty() else bool(frame["is_open"].item())
+
     def get_limit_events(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.LIMIT_EVENT_DAILY, trade_date)
 

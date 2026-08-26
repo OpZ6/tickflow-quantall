@@ -23,10 +23,15 @@ export function QuantXCatalog() {
   const [windowSize, setWindowSize] = useState<WindowSize>(20)
 
   const catalogQuery = useQuery({ queryKey: QK.quantxCatalog, queryFn: quantxApi.getCatalog, staleTime: 30_000, retry: false })
-  const dates = useMemo(() => (catalogQuery.data?.records || []).map(record => record.trade_date), [catalogQuery.data])
+  const records = useMemo(() => catalogQuery.data?.records || [], [catalogQuery.data])
+  const dates = useMemo(() => records.map(record => record.trade_date), [records])
+  const latestPublishedDate = useMemo(
+    () => records.filter(record => record.multiday_available).at(-1)?.trade_date || '',
+    [records],
+  )
   useEffect(() => {
-    if (!selectedDate && dates.length) setSelectedDate(dates.at(-1) || '')
-  }, [dates, selectedDate])
+    if (!selectedDate && latestPublishedDate) setSelectedDate(latestPublishedDate)
+  }, [latestPublishedDate, selectedDate])
 
   const snapshotQuery = useQuery({
     queryKey: QK.quantxMultiday(selectedDate),
@@ -47,7 +52,6 @@ export function QuantXCatalog() {
   })
 
   if (catalogQuery.isLoading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
-  const records = catalogQuery.data?.records || []
   const snapshot = snapshotQuery.data
 
   return <div className="mx-auto max-w-[1500px] space-y-4 p-4 pb-20">

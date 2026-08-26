@@ -38,6 +38,16 @@ def _trade_date(value: str) -> date:
     return datetime.strptime(value, "%Y%m%d").date()
 
 
+def _calendar_date(value: Any) -> date | None:
+    text = str(value or "").strip().replace("-", "")
+    if len(text) != 8 or not text.isdigit():
+        return None
+    try:
+        return _trade_date(text)
+    except ValueError:
+        return None
+
+
 def _number(value: Any) -> float | None:
     try:
         return float(value) if value is not None else None
@@ -108,6 +118,82 @@ def _metadata(
         "quality_level": "fallback" if is_fallback else "observed",
         "is_fallback": is_fallback,
     }
+
+
+def _build_trading_calendar(
+    trade_date: str,
+    sources: dict[str, dict[str, Any]],
+    run_id: str,
+    ingested_at: str,
+) -> FactBatch:
+    as_of_date = _trade_date(trade_date)
+    tushare = sources.get("tushare") or {}
+    calendar = (
+        tushare.get("trade_calendar")
+        if isinstance(tushare.get("trade_calendar"), dict)
+        else {}
+    )
+    rows: list[dict[str, Any]] = []
+    for item in _records(calendar, "records", "rows"):
+        calendar_day = _calendar_date(
+            item.get("cal_date") or item.get("trade_date") or item.get("date")
+        )
+        is_open_raw = item.get("is_open")
+        if calendar_day is None or is_open_raw is None:
+            continue
+        exchange = str(item.get("exchange") or "SSE").upper()
+        rows.append(
+            {
+                "trade_date": calendar_day,
+                "as_of_date": as_of_date,
+                "exchange": exchange,
+                "is_open": bool(_integer(is_open_raw)),
+                "previous_open_date": _calendar_date(item.get("pretrade_date")),
+                **_metadata(
+                    source="tushare",
+                    source_record_id=f"tushare:{exchange}:{calendar_day.isoformat()}",
+                    observed_at=_observed_at(tushare),
+                    ingested_at=ingested_at,
+                    run_id=run_id,
+                ),
+            }
+        )
+
+    fallback_source = next(
+        (
+            source
+            for source in ("tickflow_enriched_aggregate", "tickflow_published_fact")
+            if sources.get(source)
+        ),
+        None,
+    )
+    if not rows and fallback_source:
+        payload = sources[fallback_source]
+        rows.append(
+            {
+                "trade_date": as_of_date,
+                "as_of_date": as_of_date,
+                "exchange": "SSE",
+                "is_open": True,
+                "previous_open_date": None,
+                **_metadata(
+                    source=fallback_source,
+                    source_record_id=f"{fallback_source}:SSE:{as_of_date.isoformat()}",
+                    observed_at=_observed_at(payload),
+                    ingested_at=ingested_at,
+                    run_id=run_id,
+                    is_fallback=True,
+                ),
+            }
+        )
+    if not rows:
+        raise FactValidationError(f"cannot build trading_calendar for {trade_date}")
+    frame = _frame(DatasetId.TRADING_CALENDAR, rows).unique(
+        subset=["exchange", "trade_date"],
+        keep="first",
+        maintain_order=True,
+    ).sort(["trade_date", "exchange"])
+    return FactBatch(DatasetId.TRADING_CALENDAR, as_of_date, frame)
 
 
 def _build_market_breadth(
@@ -473,6 +559,7 @@ def build_initial_fact_batches(
     """Build the first canonical fact slice used by the migration dual-write."""
     ingested_at = datetime.now(UTC).isoformat(timespec="seconds")
     return [
+        _build_trading_calendar(trade_date, sources, run_id, ingested_at),
         _build_market_breadth(trade_date, sources, run_id, ingested_at),
         _build_limit_events(trade_date, sources, run_id, ingested_at),
         _build_theme_observations(trade_date, sources, run_id, ingested_at),

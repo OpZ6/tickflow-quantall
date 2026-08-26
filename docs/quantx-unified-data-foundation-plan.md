@@ -8,7 +8,7 @@
 
 - 状态：`active`
 - 建立日期：2026-08-26
-- 当前阶段：Phase 1-5 首批闭环已落地；交易日历、更多标准事实、保留策略和全部历史差异收敛继续推进
+- 当前阶段：Phase 1-5 首批闭环、交易日历和原始快照保留治理已落地；更多标准事实、多日 Repository 化和全部历史差异收敛继续推进
 - 核心工作目录：`D:\tickflow-quantall`
 - 基线日期：`20260825`
 
@@ -521,7 +521,7 @@ POST /api/data-runs/backfill
 - [x] `20260825` 单日七区、富图表和多日面板结果保持兼容；
 - [x] Market Lab 与 QuantX 共用 `MarketFactRepository`；
 - [x] 数据源设置页可以查看路由、健康、依赖、覆盖率和最近运行；
-- [ ] 原始快照具备压缩、去重和可配置保留策略；
+- [x] 原始快照具备压缩、去重和可配置保留策略；
 - [ ] 后端单元、集成、幂等、回滚、降级、历史回放测试通过；
 - [x] 前端 TypeScript 构建及 standalone Playwright 页面回归通过；
 - [ ] 当前数据目录完成备份和迁移演练，没有不可恢复删除。
@@ -617,19 +617,23 @@ POST /api/data-runs/backfill
 - `/data` 页面新增统一市场数据底座面板，展示路由、依赖、健康、覆盖和最近运行；
 - 非破坏迁移 72 个可用历史交易日，旧 JSON 保留，8 个周末或未完成目录归类为 `skipped_incomplete`；
 - 每个迁移日生成 `_market_facts_migration.json`、逐表对账和 `review_data.json`。
+- `trading_calendar` 采用 `as_of_date` 分区保存点时可知日历，Tushare 为主来源，TickFlow 当日行情分区和既有市场宽度事实仅作为“当日开市”回退证据；
+- QuantX 定时任务改为只读 `MarketFactRepository.is_trading_day()`，未知日历且没有本地行情事实时 fail-closed，不再联网或按星期猜测；
+- 72 个历史交易日已非破坏回填交易日历，重跑全部进入 `skipped_existing`；8 个周末或未完成目录保持不动；
+- 原始快照保留期通过 `TICKFLOW_SOURCE_SNAPSHOT_RETENTION_DAYS` 配置，默认 730 天、下限 30 天；管理脚本默认 dry-run，显式确认后只移入可恢复隔离区，仍被新元数据引用的 blob 不会移动；
+- 多日驾驶舱默认选择最新 `multiday_available` 日期，避免未完成当日目录遮蔽最后成功快照；Market Lab 明细默认选择同时存在于雷达和趋势数据的板块。
 
 验证证据：
 
-- 后端定向测试：51 个通过；
-- 后端全量测试曾完成 1252 个全绿；最新代码回归为 1254 个通过、1 个失败，唯一失败是既有挖掘任务异步错误事件写入竞态（`test_runner_exception_marks_failed_and_appends_error_event`），与本阶段数据底座路径无关；测试进程均清除本机 SOCKS 代理变量；
+- 本阶段后端定向测试：54 个通过；交易日历、迁移幂等、保留计划、引用保护、确认门禁和隔离恢复路径均有覆盖；
+- 后端全量测试曾完成 1252 个全绿；本阶段最新代码回归为 1257 个通过、1 个失败，唯一失败是既有挖掘任务异步错误事件写入竞态（`test_runner_exception_marks_failed_and_appends_error_event`），与本阶段数据底座路径无关；测试进程均清除本机 SOCKS 代理变量；
 - 前端 `pnpm build` 通过；
 - standalone Python Playwright + Microsoft Edge headless 通过：QuantX 七区、11 个 canvas、多日驾驶舱、Market Lab 真实资金流和数据源管理面板；
 - 历史迁移：72 个成功、0 个失败、8 个不完整目录跳过。
 
 尚未完成：
 
-- `trading_calendar`、市场流动性、两融、连板梯队、题材成员和确定性派生状态尚未全部进入标准 Parquet；
+- 市场流动性、两融、连板梯队、题材成员和确定性派生状态尚未全部进入标准 Parquet；
 - 旧日期对账虽已记录，但多数日期仍有来源集合、旧表缺失或舍入口径差异，需要分类收敛后才能冻结旧读路径；
-- 原始快照保留期尚未配置化，历史清理的 dry-run/备份/确认工具尚未落地；
 - 多日派生计算内部仍会读取兼容 JSON，尚未完全改为 Repository 查询；
 - 当前数据目录尚未完成独立备份演练，因此 Goal 保持 `active`。

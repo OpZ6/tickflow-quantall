@@ -46,6 +46,13 @@ def main() -> None:
         for endpoint in ("datasets", "sources", "routes", "health"):
             response = page.request.get(f"{base_url}/api/data-sources/{endpoint}")
             assert response.ok, f"data source endpoint failed: {endpoint}"
+        datasets_response = page.request.get(f"{base_url}/api/data-sources/datasets").json()
+        assert len(datasets_response["datasets"]) == 5
+        calendar_response = page.request.get(
+            f"{base_url}/api/data-sources/calendar?start=2026-08-25&end=2026-08-26"
+        )
+        assert calendar_response.ok
+        assert calendar_response.json()["calendar"]
 
         page.goto(
             f"{base_url}/quantx/{args.date}",
@@ -82,6 +89,7 @@ def main() -> None:
         page.get_by_test_id("data-source-foundation").wait_for()
         page.get_by_text("统一市场数据底座", exact=True).wait_for()
         page.get_by_text("行业资金流", exact=True).wait_for()
+        page.get_by_text("交易日历", exact=True).wait_for()
         page.screenshot(
             path=str(RESULTS / "quantx-data-foundation-sources.png"), full_page=True
         )
