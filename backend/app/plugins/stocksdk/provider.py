@@ -203,7 +203,18 @@ class StockSDKProvider:
         except bridge.StockSDKBridgeError as e:
             logger.warning("stock-sdk realtime 拉取失败: %s", e)
             return []
-        return result.get("rows") or []
+        normalized: list[dict] = []
+        for raw in result.get("rows") or []:
+            row = dict(raw)
+            # stock-sdk batch.cn currently exposes Tencent's native units:
+            # amount=万元 and changePercent=percentage points. Internal quote
+            # contracts use CNY and decimal ratios respectively.
+            if row.get("amount") is not None:
+                row["amount"] = float(row["amount"]) * 10_000
+            if row.get("change_pct") is not None:
+                row["change_pct"] = float(row["change_pct"]) / 100
+            normalized.append(row)
+        return normalized
 
     # ---- instruments (标的维表) ----
     def get_instruments(self, asset_type: str = "stock") -> list[dict]:

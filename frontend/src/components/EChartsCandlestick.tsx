@@ -2,6 +2,18 @@ import { useEffect, useRef, useCallback, useMemo } from 'react'
 import { chartTheme, getTheme, useTheme } from '@/lib/theme'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
+import type { ChanlunAnalysis } from '@/lib/api'
+import { getParams } from '@/lib/indicator-params'
+import {
+  calcATR, calcAO, calcAroon, calcADL, calcBIAS, calcBRAR, calcCCI, calcChaikinOsc,
+  calcCMF, calcCMO, calcCR, calcDMA, calcDPO, calcDMI, calcElderRay, calcEMV,
+  calcForceIndex, calcMFI, calcMTM, calcOBV, calcPPO, calcPSY, calcROC,
+  calcSTC, calcStoch, calcStochRSI, calcTRIX, calcTSI, calcTTMSqueeze, calcUO,
+  calcVR, calcVortex, calcWR, calcBOLL, calcBBI, calcZigZag, calcSAR, calcTEMA, calcDEMA,
+  calcHMA, calcWMA, calcVWMA, calcVWAP, calcSupertrend, calcDonchian, calcKeltner,
+  calcIchimoku, calcAlligator, calcLinRegChannel, calcEMA, calcSMA, calcChop, calcPVT,
+  calcKDJChannel, calcWRChannel,
+} from '@/lib/indicator-formulas'
 
 export interface OHLC {
   date: string
@@ -65,9 +77,98 @@ export interface VolumeCompareConfig {
   days: number
 }
 
+// ===== 缠论 (Chan Theory) 图层 =====
+
+export interface ChanlunLayerConfig {
+  /** 缠论总开关 */
+  visible: boolean
+  showBi: boolean
+  showSegments: boolean
+  showZhongshu: boolean
+  showBsp: boolean
+  /** 叠加 ZenChart 官方图层 (红色系, 需传入 chanlunOfficial) */
+  showOfficial: boolean
+}
+
+export const DEFAULT_CHANLUN_CONFIG: ChanlunLayerConfig = {
+  visible: false, showBi: true, showSegments: true, showZhongshu: true, showBsp: true,
+  showOfficial: false,
+}
+
+/** 已映射到本图 K 线索引的缠论数据 (index 与 data 数组一一对应) */
+export interface ChanlunMappedLayer {
+  bi: {
+    startIdx: number | null; endIdx: number | null
+    startPrice: number; endPrice: number
+    direction: 'up' | 'down'; isSure: boolean
+  }[]
+  segments: {
+    startIdx: number | null; endIdx: number | null
+    startPrice: number; endPrice: number
+    direction: 'up' | 'down'
+  }[]
+  zhongshu: { startIdx: number | null; endIdx: number | null; low: number; high: number }[]
+  bsp: { idx: number | null; direction: 'buy' | 'sell'; type: string; price: number }[]
+}
+
+/**
+ * 将后端缠论分析结果映射到图表数据索引。
+ * 要求 candles 与 data 同序同长（发送分析请求时由同一 rows 数组生成）。
+ */
+export function mapChanlunData(
+  chanlun: ChanlunAnalysis | null | undefined,
+  timeToIndex: Map<number, number>,
+): ChanlunMappedLayer | null {
+  if (!chanlun) return null
+  const idx = (t: number | undefined | null): number | null =>
+    t == null ? null : (timeToIndex.get(t) ?? null)
+  return {
+    bi: (chanlun.bi ?? []).map(b => ({
+      startIdx: idx(b.start_time), endIdx: idx(b.end_time),
+      startPrice: b.start_price, endPrice: b.end_price,
+      direction: b.direction, isSure: b.is_sure !== false,
+    })),
+    segments: (chanlun.segments ?? []).map(s => ({
+      startIdx: idx(s.start_time), endIdx: idx(s.end_time),
+      startPrice: s.start_price, endPrice: s.end_price,
+      direction: s.direction,
+    })),
+    zhongshu: (chanlun.zhongshu ?? []).map(z => ({
+      startIdx: idx(z.start_time), endIdx: idx(z.end_time),
+      low: z.low, high: z.high,
+    })),
+    bsp: (chanlun.bsp ?? [])
+      .filter(b => b.level === 'bi')
+      .map(b => ({ idx: idx(b.time), direction: b.direction, type: b.type, price: b.price })),
+  }
+}
+
+/** 日期字符串 → 当日本地午夜 unix 秒 (与后端 candle.time 约定一致) */
+export function candleTimeOf(date: string): number {
+  return Math.floor(new Date(`${date}T00:00:00`).getTime() / 1000)
+}
+
+/** 由图表 rows 构建时间→索引映射 (配合 mapChanlunData 使用) */
+export function buildTimeIndex(rows: { date: string }[]): Map<number, number> {
+  const m = new Map<number, number>()
+  rows.forEach((r, i) => m.set(candleTimeOf(r.date), i))
+  return m
+}
+
+/** 由图表 rows 生成缠论分析请求的 candle 数组 (同序同长，保证索引对齐) */
+export function toChanlunCandles(rows: OHLC[]): { time: number; open: number; high: number; low: number; close: number; volume?: number }[] {
+  return rows.map(r => ({
+    time: candleTimeOf(r.date),
+    open: r.open, high: r.high, low: r.low, close: r.close,
+    volume: r.volume,
+  }))
+}
+
 interface SubChartContext {
   compact: boolean
   volumeCompare: VolumeCompareConfig
+  /** 指标参数 (key: 指标 key, value: { 参数名: 值 }) */
+  params: Record<string, Record<string, number>>
 }
 
 /** 子图定义 */
@@ -78,10 +179,12 @@ export interface SubChartDef {
   height: number
   /** 构建 series 数组 */
   buildSeries: (data: OHLC[], context: SubChartContext) => any[]
-  /** 构建信息栏文字 (当前数据行 -> 显示内容) */
-  buildInfo: (d: OHLC | null) => { label: string; color: string; value: string }[]
+  /** 构建信息栏文字 (当前数据行 + 数据集/索引 -> 显示内容; 前端计算型指标需要 data+idx) */
+  buildInfo: (d: OHLC | null, data?: OHLC[], idx?: number) => { label: string; color: string; value: string }[]
   /** Y 轴特殊配置 */
   yAxisConfig?: Record<string, any>
+  /** 水平参考线 (如 RSI 的 30/70) */
+  refLines?: number[]
 }
 
 // ===== 成交量 N 日均量 =====
@@ -122,7 +225,7 @@ function fmtVolumeRatio(value: number | null, digits = 2): string {
   return value == null ? '—' : `${value.toFixed(digits)}x`
 }
 
-export const SUB_CHARTS: SubChartDef[] = [
+const CORE_SUB_CHARTS: SubChartDef[] = [
   {
     key: 'vol',
     label: '成交量',
@@ -310,13 +413,338 @@ export const SUB_CHARTS: SubChartDef[] = [
   },
 ]
 
+// ===== 扩展副图指标 (前端计算, 公式移植自 openclarr-chanlun) =====
+
+type LineDef = { name: string; color: string; values: (number | null)[] }
+
+/** 按 data 引用 + 参数签名缓存计算结果，避免鼠标移动时重复计算 */
+const subComputeCache = new WeakMap<OHLC[], Map<string, LineDef[]>>()
+
+function cachedLines(
+  data: OHLC[], cacheKey: string, params: Record<string, number>,
+  compute: (C: OHLC[], p: Record<string, number>) => LineDef[],
+): LineDef[] {
+  let m = subComputeCache.get(data)
+  if (!m) { m = new Map(); subComputeCache.set(data, m) }
+  const sig = JSON.stringify(params)
+  const fullKey = `${cacheKey}|${sig}`
+  const hit = m.get(fullKey)
+  if (hit) return hit
+  for (const k of [...m.keys()]) if (k.startsWith(`${cacheKey}|`)) m.delete(k)
+  const out = compute(data, params)
+  m.set(fullKey, out)
+  return out
+}
+
+/** 标准多线副图工厂 */
+function makeLinesSub(
+  key: string,
+  label: string,
+  compute: (data: OHLC[], p: Record<string, number>) => LineDef[],
+  opts?: {
+    height?: number
+    yAxisConfig?: Record<string, any>
+    refLines?: number[]
+    zeroLine?: boolean
+    barLine?: (lines: LineDef[], data: OHLC[]) => any[] | null
+  },
+): SubChartDef {
+  const refLines = [...(opts?.refLines ?? []), ...(opts?.zeroLine ? [0] : [])]
+  return {
+    key,
+    label,
+    height: opts?.height ?? 72,
+    ...(opts?.yAxisConfig ? { yAxisConfig: opts.yAxisConfig } : {}),
+    ...(refLines.length > 0 ? { refLines } : {}),
+    buildSeries: (data, _context) => {
+      const lines = cachedLines(data, key, getParams(key), compute)
+      const series: any[] = lines.map(l => ({
+        name: l.name, type: 'line',
+        data: l.values.map(v => v != null ? Number(v) : '-'),
+        smooth: true, symbol: 'none', animation: false,
+        lineStyle: { width: 1, color: l.color }, itemStyle: { color: l.color },
+      }))
+      if (opts?.barLine) {
+        const extra = opts.barLine(lines, data)
+        if (extra) series.push(...extra)
+      }
+      if (refLines.length > 0 && series.length > 0) {
+        series[0] = {
+          ...series[0],
+          markLine: {
+            silent: true, symbol: 'none', animation: false,
+            lineStyle: { color: 'rgba(255,255,255,0.14)', type: 'dashed', width: 1 },
+            label: { show: false },
+            data: refLines.map(v => ({ yAxis: v })),
+          },
+        }
+      }
+      return series
+    },
+    buildInfo: (d, data, idx) => {
+      if (!d || !data || idx == null || idx < 0 || idx >= data.length) return []
+      const lines = cachedLines(data, key, getParams(key), compute)
+      const fmt = (v: number | null) => v == null ? '—' : Math.abs(v) >= 1e5 ? (v / 1e4).toFixed(0) + '万' : v.toFixed(2)
+      return lines.map(l => ({ label: l.name, color: l.color, value: fmt(l.values[idx]) }))
+    },
+  }
+}
+
+const EXTENDED_SUB_CHARTS: SubChartDef[] = [
+  makeLinesSub('wr', 'WR', (d, p) => [{ name: 'WR', color: '#3B82F6', values: calcWR(d, p.p) }], { yAxisConfig: { min: 0, max: 100 }, refLines: [20, 80] }),
+  makeLinesSub('cci', 'CCI', (d, p) => [{ name: 'CCI', color: '#ff9800', values: calcCCI(d, p.p) }], { refLines: [-100, 100] }),
+  makeLinesSub('bias', 'BIAS', d => [
+    { name: 'BIAS6', color: '#8B5CF6', values: calcBIAS(d, 6) },
+    { name: 'BIAS12', color: '#3B82F6', values: calcBIAS(d, 12) },
+    { name: 'BIAS24', color: '#22c55e', values: calcBIAS(d, 24) },
+  ], { zeroLine: true }),
+  makeLinesSub('obv', 'OBV', d => [{ name: 'OBV', color: '#ff9800', values: calcOBV(d) }]),
+  makeLinesSub('vr', 'VR', (d, p) => [{ name: 'VR', color: '#8B5CF6', values: calcVR(d, p.n) }], { refLines: [40, 150] }),
+  makeLinesSub('atr', 'ATR', (d, p) => [{ name: 'ATR', color: '#ff9800', values: calcATR(d, p.n) }], { height: 56 }),
+  makeLinesSub('dmi', 'DMI', (d, p) => {
+    const r = calcDMI(d, p.n, p.m)
+    return [
+      { name: 'PDI', color: '#f43f5e', values: r.pdi },
+      { name: 'MDI', color: '#3B82F6', values: r.mdi },
+      { name: 'ADX', color: '#ff9800', values: r.adx },
+      { name: 'ADXR', color: '#22c55e', values: r.adxr },
+    ]
+  }),
+  makeLinesSub('mtm', 'MTM', (d, p) => {
+    const r = calcMTM(d, p.n, p.m)
+    return [
+      { name: 'MTM', color: '#3B82F6', values: r.mtm },
+      { name: 'MTMMA', color: '#f43f5e', values: r.mamtm },
+    ]
+  }, { zeroLine: true }),
+  makeLinesSub('roc', 'ROC', (d, p) => {
+    const r = calcROC(d, p.n, p.m)
+    return [
+      { name: 'ROC', color: '#3B82F6', values: r.roc },
+      { name: 'ROAMA', color: '#f43f5e', values: r.maroc },
+    ]
+  }, { zeroLine: true }),
+  makeLinesSub('mfi', 'MFI', (d, p) => [{ name: 'MFI', color: '#8B5CF6', values: calcMFI(d, p.n) }], { yAxisConfig: { min: 0, max: 100 }, refLines: [20, 80] }),
+  makeLinesSub('cmf', 'CMF', (d, p) => [{ name: 'CMF', color: '#3B82F6', values: calcCMF(d, p.n) }], { zeroLine: true }),
+  makeLinesSub('cmo', 'CMO', (d, p) => [{ name: 'CMO', color: '#ff9800', values: calcCMO(d, p.n) }], { refLines: [-50, 50] }),
+  makeLinesSub('trix', 'TRIX', (d, p) => {
+    const r = calcTRIX(d, p.n, p.m)
+    return [
+      { name: 'TRIX', color: '#3B82F6', values: r.trix },
+      { name: 'MATRIX', color: '#f43f5e', values: r.matrix },
+    ]
+  }, { zeroLine: true }),
+  makeLinesSub('tsi', 'TSI', (d, p) => {
+    const r = calcTSI(d, p.r, p.s, p.sig)
+    return [
+      { name: 'TSI', color: '#3B82F6', values: r.tsi },
+      { name: 'SIGNAL', color: '#f43f5e', values: r.signal },
+    ]
+  }, { zeroLine: true }),
+  makeLinesSub('stoch', 'Stoch', (d, p) => {
+    const r = calcStoch(d, p.n, p.sk, p.sd)
+    return [
+      { name: 'K', color: '#3B82F6', values: r.k },
+      { name: 'D', color: '#f43f5e', values: r.d },
+    ]
+  }, { yAxisConfig: { min: 0, max: 100 }, refLines: [20, 80] }),
+  makeLinesSub('stochrsi', 'StochRSI', (d, p) => {
+    const r = calcStochRSI(d, p.rn, p.sn, p.sk, p.sd)
+    return [
+      { name: 'K', color: '#3B82F6', values: r.k },
+      { name: 'D', color: '#f43f5e', values: r.d },
+    ]
+  }, { yAxisConfig: { min: 0, max: 100 }, refLines: [20, 80] }),
+  makeLinesSub('ppo', 'PPO', (d, p) => {
+    const r = calcPPO(d, p.f, p.s, p.sig)
+    return [
+      { name: 'PPO', color: '#3B82F6', values: r.ppo },
+      { name: 'SIGNAL', color: '#f43f5e', values: r.signal },
+    ]
+  }, { zeroLine: true }),
+  makeLinesSub('dma', 'DMA', (d, p) => {
+    const r = calcDMA(d, p.n1, p.n2, p.m)
+    return [
+      { name: 'DDD', color: '#3B82F6', values: r.ddd },
+      { name: 'AMA', color: '#f43f5e', values: r.ama },
+    ]
+  }, { zeroLine: true }),
+  makeLinesSub('uo', 'UO', (d, p) => [{ name: 'UO', color: '#8B5CF6', values: calcUO(d, p.s, p.m, p.l) }], { yAxisConfig: { min: 0, max: 100 }, refLines: [30, 70] }),
+  makeLinesSub('vortex', 'Vortex', (d, p) => {
+    const r = calcVortex(d, p.n)
+    return [
+      { name: 'VI+', color: '#22c55e', values: r.plus },
+      { name: 'VI-', color: '#f43f5e', values: r.minus },
+    ]
+  }),
+  makeLinesSub('psy', 'PSY', (d, p) => {
+    const r = calcPSY(d, p.n, p.m)
+    return [
+      { name: 'PSY', color: '#3B82F6', values: r.psy },
+      { name: 'PSYMA', color: '#f43f5e', values: r.psyma },
+    ]
+  }, { yAxisConfig: { min: 0, max: 100 }, refLines: [50] }),
+  makeLinesSub('chop', 'Chop', (d, p) => [{ name: 'CHOP', color: '#ff9800', values: calcChop(d, p.n) }], { yAxisConfig: { min: 0, max: 100 }, refLines: [38.2, 61.8] }),
+  makeLinesSub('ao', 'AO', (d, p) => [{ name: 'AO', color: '#3B82F6', values: calcAO(d, p.fast, p.slow) }], {
+    zeroLine: true,
+    barLine: (lines, data) => [{
+      name: 'AOBAR', type: 'bar', barWidth: '40%', animation: false,
+      data: data.map((_, i) => {
+        const v = lines[0].values[i]
+        if (v == null) return '-'
+        return { value: v, itemStyle: { color: v >= 0 ? 'rgba(240,68,56,0.55)' : 'rgba(18,183,106,0.55)' } }
+      }),
+    }],
+  }),
+  makeLinesSub('aroon', 'Aroon', (d, p) => {
+    const r = calcAroon(d, p.n)
+    return [
+      { name: 'UP', color: '#22c55e', values: r.up },
+      { name: 'DOWN', color: '#f43f5e', values: r.dn },
+    ]
+  }, { yAxisConfig: { min: 0, max: 100 } }),
+  makeLinesSub('pvt', 'PVT', d => [{ name: 'PVT', color: '#ff9800', values: calcPVT(d) }]),
+  makeLinesSub('dpo', 'DPO', (d, p) => [{ name: 'DPO', color: '#3B82F6', values: calcDPO(d, p.n) }], { zeroLine: true }),
+  makeLinesSub('forceindex', 'Force', (d, p) => [{ name: 'FORCE', color: '#8B5CF6', values: calcForceIndex(d, p.n) }], { zeroLine: true, height: 56 }),
+  makeLinesSub('emv', 'EMV', (d, p) => {
+    const r = calcEMV(d, p.n, p.m)
+    return [
+      { name: 'EMV', color: '#3B82F6', values: r.emv },
+      { name: 'MAEMV', color: '#f43f5e', values: r.maemv },
+    ]
+  }, { zeroLine: true }),
+  makeLinesSub('adl', 'ADL', d => [{ name: 'ADL', color: '#ff9800', values: calcADL(d) }]),
+  makeLinesSub('chaikinosc', 'Chaikin', (d, p) => [{ name: 'CHAIKIN', color: '#3B82F6', values: calcChaikinOsc(d, p.fast, p.slow) }], { zeroLine: true }),
+  makeLinesSub('elderray', 'ElderRay', (d, p) => {
+    const r = calcElderRay(d, p.n)
+    return [
+      { name: 'BULL', color: '#22c55e', values: r.bull },
+      { name: 'BEAR', color: '#f43f5e', values: r.bear },
+    ]
+  }, { zeroLine: true }),
+  makeLinesSub('ttmsqueeze', 'TTM', (d, p) => [{ name: 'SRC', color: '#3B82F6', values: calcTTMSqueeze(d, p.n, p.bbMult, p.kcMult).src }], { zeroLine: true }),
+  makeLinesSub('stc', 'STC', (d, p) => [{ name: 'STC', color: '#ff9800', values: calcSTC(d, p.f, p.s, p.cyc) }], { yAxisConfig: { min: 0, max: 100 } }),
+  makeLinesSub('cr', 'CR', (d, p) => [{ name: 'CR', color: '#ff9800', values: calcCR(d, p.n) }], { refLines: [40, 200] }),
+  makeLinesSub('brar', 'BRAR', (d, p) => {
+    const r = calcBRAR(d, p.n)
+    return [
+      { name: 'AR', color: '#3B82F6', values: r.ar },
+      { name: 'BR', color: '#f43f5e', values: r.br },
+    ]
+  }, { refLines: [100] }),
+]
+
+/** 全部可用副图 (核心 + 扩展) */
+export const SUB_CHARTS: SubChartDef[] = [...CORE_SUB_CHARTS, ...EXTENDED_SUB_CHARTS]
+
 /** 向后兼容的 INDICATORS 导出 (不含 vol) */
 export const INDICATORS = SUB_CHARTS.filter(s => s.key !== 'vol')
 
-/** 主图叠加指标 (画在 K 线上方, 不占副图空间) */
+/** 主图叠加指标 (画在 K 线上方, 不占副图空间) — 全部前端计算, 移植自 openclarr-chanlun */
 export const OVERLAY_INDICATORS: { key: string; label: string }[] = [
   { key: 'boll', label: 'BOLL' },
+  { key: 'ema', label: 'EMA' },
+  { key: 'sma', label: 'SMA' },
+  { key: 'bbi', label: 'BBI' },
+  { key: 'sar', label: 'SAR' },
+  { key: 'zigzag', label: 'ZIGZAG' },
+  { key: 'tema', label: 'TEMA' },
+  { key: 'dema', label: 'DEMA' },
+  { key: 'hma', label: 'HMA' },
+  { key: 'wma', label: 'WMA' },
+  { key: 'vwma', label: 'VWMA' },
+  { key: 'vwap', label: 'VWAP' },
+  { key: 'supertrend', label: 'Supertrend' },
+  { key: 'donchian', label: 'Donchian' },
+  { key: 'keltner', label: 'Keltner' },
+  { key: 'ichimoku', label: 'Ichimoku' },
+  { key: 'alligator', label: 'Alligator' },
+  { key: 'linreg', label: 'LinReg' },
+  { key: 'kdjch', label: 'KDJ通道' },
+  { key: 'wrch', label: 'WR通道' },
 ]
+
+const OVERLAY_KEYS = new Set(OVERLAY_INDICATORS.map(o => o.key))
+
+/** 主图叠加指标的 line series 快捷构造 */
+function ovLine(name: string, color: string, values: (number | null)[], dashed = false) {
+  return {
+    name, type: 'line',
+    data: values.map(v => v != null ? Number(v) : '-'),
+    smooth: false, symbol: 'none', animation: false, silent: true,
+    lineStyle: { width: 1.2, color, ...(dashed ? { type: 'dashed' as const } : {}) },
+    itemStyle: { color },
+  }
+}
+
+/** 由公式库构建主图叠加 series (boll 走数据字段单独处理) */
+function buildOverlaySeries(key: string, data: OHLC[]): any[] {
+  const p = getParams(key)
+  switch (key) {
+    case 'ema': return [ovLine(`EMA${p.p}`, '#ff9800', calcEMA(data, p.p))]
+    case 'sma': return [ovLine(`SMA${p.p}`, '#facc15', calcSMA(data, p.p))]
+    case 'bbi': return [ovLine('BBI', '#9c27b0', calcBBI(data, p.p1, p.p2, p.p3, p.p4))]
+    case 'sar': {
+      const pts = calcSAR(data, p.step, p.maxAF)
+      const dates = data.map(d => d.date)
+      const mk = (up: boolean) => pts
+        .map((pt, i) => (pt && pt.up === up ? [dates[i], pt.value] as [string, number] : null))
+        .filter((x): x is [string, number] => x != null)
+      return [
+        { name: 'SAR-UP', type: 'scatter', data: mk(true), symbolSize: 3, itemStyle: { color: '#f23645' }, silent: true, animation: false },
+        { name: 'SAR-DN', type: 'scatter', data: mk(false), symbolSize: 3, itemStyle: { color: '#22c55e' }, silent: true, animation: false },
+      ]
+    }
+    case 'zigzag': return [ovLine('ZIGZAG', '#fde047', calcZigZag(data, p.dev), true)]
+    case 'tema': return [ovLine(`TEMA${p.n}`, '#00bcd4', calcTEMA(data, p.n))]
+    case 'dema': return [ovLine(`DEMA${p.n}`, '#00bcd4', calcDEMA(data, p.n))]
+    case 'hma': return [ovLine(`HMA${p.p}`, '#7c4dff', calcHMA(data, p.p))]
+    case 'wma': return [ovLine(`WMA${p.p}`, '#8d6e63', calcWMA(data, p.p))]
+    case 'vwma': return [ovLine(`VWMA${p.p}`, '#8d6e63', calcVWMA(data, p.p))]
+    case 'vwap': return [ovLine('VWAP', '#607d8b', calcVWAP(data))]
+    case 'supertrend': {
+      const r = calcSupertrend(data, p.n, p.mult)
+      return [ovLine('ST-UP', '#2bc983', r.up), ovLine('ST-DN', '#f23645', r.down)]
+    }
+    case 'donchian': {
+      const [up, mid, dn] = calcDonchian(data, p.n)
+      return [ovLine('DC-UP', '#e53935', up), ovLine('DC-MID', '#2962ff', mid, true), ovLine('DC-DN', '#43a047', dn)]
+    }
+    case 'keltner': {
+      const [up, mid, dn] = calcKeltner(data, p.n, p.m)
+      return [ovLine('KC-UP', '#e53935', up), ovLine('KC-MID', '#2962ff', mid, true), ovLine('KC-DN', '#43a047', dn)]
+    }
+    case 'ichimoku': {
+      const r = calcIchimoku(data, p.conv, p.base, p.span, p.disp)
+      return [
+        ovLine('转换', '#2962ff', r.tenkan), ovLine('基准', '#e53935', r.kijun),
+        ovLine('先行A', '#43a047', r.spanA), ovLine('先行B', '#ff9800', r.spanB),
+      ]
+    }
+    case 'alligator':
+      return calcAlligator(data, p.jawN, p.jawShift, p.teethN, p.teethShift, p.lipsN, p.lipsShift)
+        .map(m => ovLine(m.color === '#2962ff' ? '颚' : m.color === '#e53935' ? '牙' : '唇', m.color, m.data))
+    case 'linreg': {
+      const [up, mid, dn] = calcLinRegChannel(data, p.len, p.mult)
+      return [ovLine('LR-UP', '#ab47bc', up, true), ovLine('LR-MID', '#ab47bc', mid), ovLine('LR-DN', '#ab47bc', dn, true)]
+    }
+    case 'kdjch': {
+      const channel = calcKDJChannel(data, p.n, p.m1, p.m2)
+      return [
+        ovLine(`HH(${p.n})`, 'rgba(224,168,48,0.65)', channel.upper),
+        ovLine(`LL(${p.n})`, 'rgba(224,168,48,0.65)', channel.lower),
+      ]
+    }
+    case 'wrch': {
+      const channel = calcWRChannel(data, p.p)
+      return [
+        ovLine(`HH(${p.p})`, 'rgba(224,168,48,0.55)', channel.upper),
+        ovLine(`LL(${p.p})`, 'rgba(224,168,48,0.55)', channel.lower),
+      ]
+    }
+    default: return []
+  }
+}
 
 interface Props {
   data: OHLC[]
@@ -339,6 +767,12 @@ interface Props {
   activeIndicators?: string[]
   /** 成交量柱相对前 N 个交易日均量的显示设置 */
   volumeCompare?: VolumeCompareConfig
+  /** 缠论图层 (笔/线段/中枢/买卖点), 已映射到本图索引 */
+  chanlunData?: ChanlunMappedLayer | null
+  /** 缠论图层开关配置 */
+  chanlunConfig?: ChanlunLayerConfig
+  /** ZenChart 官方图层 (showOfficial 开启时叠加, 红色系) */
+  chanlunOfficial?: ChanlunMappedLayer | null
 }
 
 // 序列颜色 (双主题通用); 画布轴/网格/文字等主题相关色走 CT() 动态取
@@ -380,7 +814,7 @@ function buildSubInfoGraphics(
     const def = SUB_CHARTS.find(s => s.key === key)
     if (!def) return
 
-    const items = def.buildInfo(d)
+    const items = def.buildInfo(d, data, infoIdx)
     if (def.key === 'vol' && d) {
       const calcVolMa = (n: number) => {
         if (infoIdx < n - 1) return null
@@ -473,6 +907,9 @@ function buildOption(
   infoIdx: number,
   linkedPrice: number | null | undefined,
   volumeCompare: VolumeCompareConfig,
+  chanlunData?: ChanlunMappedLayer | null,
+  chanlunCfg?: ChanlunLayerConfig,
+  chanlunOff?: ChanlunMappedLayer | null,
 ): EChartsOption {
   const candleData = data.map(d => [d.open, d.close, d.low, d.high])
 
@@ -592,7 +1029,7 @@ function buildOption(
   })
   xAxisIndices.push(0)
 
-  const markAreaData = (ranges ?? [])
+  const markAreaData: any[] = (ranges ?? [])
     .filter(r => dateIndexMap.has(r.start) && dateIndexMap.has(r.end))
     .map(r => ([
       {
@@ -615,6 +1052,29 @@ function buildOption(
       },
       { xAxis: r.end },
     ]))
+
+  // 缠论中枢 → 半透明矩形 (叠加到 K 系列 markArea; 本地紫 / 官方红)
+  if (chanlunCfg?.visible && chanlunCfg.showZhongshu !== false) {
+    const zsLayers: { data: ChanlunMappedLayer['zhongshu']; fill: string; border: string }[] = []
+    if (chanlunData) zsLayers.push({ data: chanlunData.zhongshu, fill: 'rgba(165,94,234,0.13)', border: 'rgba(165,94,234,0.6)' })
+    if (chanlunCfg.showOfficial && chanlunOff) {
+      zsLayers.push({ data: chanlunOff.zhongshu, fill: 'rgba(242,54,69,0.07)', border: 'rgba(242,54,69,0.45)' })
+    }
+    for (const layer of zsLayers) {
+      for (const z of layer.data) {
+        const si = z.startIdx, ei = z.endIdx
+        if (si == null || ei == null || si >= data.length || ei < 0) continue
+        markAreaData.push([
+          {
+            xAxis: dates[Math.max(0, si)],
+            yAxis: z.high,
+            itemStyle: { color: layer.fill, borderColor: layer.border, borderWidth: 1 },
+          },
+          { xAxis: dates[Math.min(data.length - 1, ei)], yAxis: z.low },
+        ])
+      }
+    }
+  }
 
   const markLineData: any[] = (priceLines ?? [])
     .filter(line => Number.isFinite(line.value))
@@ -666,6 +1126,33 @@ function buildOption(
     })
   }
 
+  // 缠论买卖点 → 三角标记 (叠加到 K 系列 markPoint; name=日期以复用点击回调)
+  if (chanlunData && chanlunCfg?.visible && chanlunCfg.showBsp !== false) {
+    for (const b of chanlunData.bsp) {
+      const idx = b.idx
+      if (idx == null || idx < 0 || idx >= data.length) continue
+      const d = data[idx]
+      const isBuy = b.direction === 'buy'
+      const color = isBuy ? '#2bc983' : '#f23645'
+      markPointData.push({
+        name: d.date,
+        coord: [d.date, isBuy ? d.low : d.high],
+        symbol: 'triangle', symbolSize: 10,
+        symbolRotate: isBuy ? 0 : 180,
+        symbolOffset: isBuy ? [0, '70%'] : [0, '-70%'],
+        itemStyle: { color },
+        label: {
+          show: !compact && !!b.type,
+          formatter: b.type ?? '',
+          position: isBuy ? 'bottom' : 'top', distance: 7,
+          color, fontSize: 9,
+          fontFamily: 'JetBrains Mono, monospace',
+        },
+        z: 100, zlevel: 10,
+      })
+    }
+  }
+
   series.push({
     name: 'K', type: 'candlestick', data: candleData,
     animation: false,
@@ -706,6 +1193,103 @@ function buildOption(
     series.push(bollLine('boll_upper', '#E879F9', 'BOLL上'))
     series.push(bollLine('boll_lower', '#E879F9', 'BOLL下'))
   }
+  // BOLL 无数据字段时回退到公式计算
+  else if (activeIndicators.includes('boll')) {
+    const bp = getParams('boll')
+    const [up, , dn] = calcBOLL(data, bp.p, bp.sd)
+    series.push(ovLine('BOLL上', '#E879F9', up, true))
+    series.push(ovLine('BOLL下', '#E879F9', dn, true))
+  }
+
+  // 其余主图叠加指标 (前端公式计算)
+  for (const ov of activeIndicators) {
+    if (ov === 'boll' || ov === 'vol') continue
+    if (!OVERLAY_KEYS.has(ov)) continue
+    try {
+      series.push(...buildOverlaySeries(ov, data))
+    } catch { /* 参数未就绪等异常静默跳过 */ }
+  }
+
+  // ===== 缠论笔 / 线段 (line series 折线) =====
+  // 注: 不用 custom series —— 在多 grid + dataZoom 组合下 renderItem 坐标解析会静默失败;
+  // 笔/线段端点本身首尾相连, 用普通折线即可, 且与缩放/联动完全兼容。
+  if (chanlunCfg?.visible) {
+    const toPts = (list: { startIdx: number | null; endIdx: number | null; startPrice: number; endPrice: number; isSure?: boolean }[], sureOnly: boolean | null): (any[] | '-')[] => {
+      const pts: any[] = []
+      let prevEnd: string | null = null
+      for (const s of list) {
+        if (sureOnly !== null && !!s.isSure !== sureOnly) continue
+        if (s.startIdx == null || s.endIdx == null || s.startIdx >= dates.length || s.endIdx >= dates.length) continue
+        const p: [string, number] = [dates[s.startIdx], s.startPrice]
+        const q: [string, number] = [dates[s.endIdx], s.endPrice]
+        // 折线断链: 与上一段不连续时插入空档
+        if (pts.length > 0 && prevEnd !== p[0]) pts.push('-')
+        pts.push(p, q)
+        prevEnd = q[0]
+      }
+      return pts
+    }
+
+    // ----- 本地图层 (chanlunData 存在才画; 仅官方模式下为 null) -----
+    if (chanlunData) {
+      if (chanlunCfg.showSegments !== false && chanlunData.segments.length > 0) {
+        series.push({
+          name: '缠论-线段', type: 'line',
+          data: toPts(chanlunData.segments as any, null),
+          silent: true, z: 9, animation: false,
+          symbol: 'none',
+          lineStyle: { color: '#ff9f43', width: 2.5, opacity: 0.85 },
+          itemStyle: { color: '#ff9f43' },
+        })
+      }
+      if (chanlunCfg.showBi !== false && chanlunData.bi.length > 0) {
+        series.push({
+          name: '缠论-笔', type: 'line',
+          data: toPts(chanlunData.bi as any, true),
+          silent: true, z: 10, animation: false,
+          symbol: 'circle', symbolSize: 3.5, showSymbol: true,
+          lineStyle: { color: '#19d3ff', width: 1.6 },
+          itemStyle: { color: '#19d3ff' },
+        })
+        // 未确认笔: 虚线半透明
+        const unsure = toPts(chanlunData.bi.filter(b => !b.isSure) as any, null)
+        if (unsure.length > 0) {
+          series.push({
+            name: '缠论-笔(未确认)', type: 'line',
+            data: unsure,
+            silent: true, z: 10, animation: false,
+            symbol: 'circle', symbolSize: 3,
+            lineStyle: { color: '#19d3ff', width: 1.2, type: 'dashed', opacity: 0.45 },
+            itemStyle: { color: '#19d3ff', opacity: 0.45 },
+          })
+        }
+      }
+    }
+
+    // ----- 官方图层 (独立开关, 与本地图层互不依赖) -----
+    if (chanlunCfg.showOfficial && chanlunOff) {
+      if (chanlunCfg.showSegments !== false && chanlunOff.segments.length > 0) {
+        series.push({
+          name: '官方-线段', type: 'line',
+          data: toPts(chanlunOff.segments as any, null),
+          silent: true, z: 8, animation: false,
+          symbol: 'none',
+          lineStyle: { color: '#f23645', width: 2, opacity: 0.55 },
+          itemStyle: { color: '#f23645' },
+        })
+      }
+      if (chanlunCfg.showBi !== false && chanlunOff.bi.length > 0) {
+        series.push({
+          name: '官方-笔', type: 'line',
+          data: toPts(chanlunOff.bi as any, null),
+          silent: true, z: 9, animation: false,
+          symbol: 'none',
+          lineStyle: { color: '#f23645', width: 1.2, type: 'dashed', opacity: 0.6 },
+          itemStyle: { color: '#f23645' },
+        })
+      }
+    }
+  }
 
   // ===== 子图区域 =====
   let curTop = topPad + candleAvail + candleBottomPad
@@ -735,7 +1319,7 @@ function buildOption(
     const isFixedRange = !!def.yAxisConfig
     yAxes.push({
       scale: !isFixedRange,
-      ...(isFixedRange ? def.yAxisConfig : {}),
+      ...(def.yAxisConfig ?? {}),
       gridIndex: gridIdx,
       splitNumber: 2,
       axisLine: { show: false }, axisTick: { show: false },
@@ -748,7 +1332,7 @@ function buildOption(
 
     xAxisIndices.push(xAxisIdx)
 
-    const subSeries = def.buildSeries(data, { compact, volumeCompare })
+    const subSeries = def.buildSeries(data, { compact, volumeCompare, params: {} })
     subSeries.forEach((s: any) => {
       series.push({ ...s, xAxisIndex: xAxisIdx, yAxisIndex: yAxisIdx })
     })
@@ -816,6 +1400,9 @@ export function EChartsCandlestick({
   visibleBars = 60,
   activeIndicators = [],
   volumeCompare = { enabled: true, days: 1 },
+  chanlunData = null,
+  chanlunConfig,
+  chanlunOfficial = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<ECharts | null>(null)
@@ -1133,6 +1720,9 @@ export function EChartsCandlestick({
       infoIdxRef.current,
       linkedPrice,
       volumeCompare,
+      chanlunData,
+      chanlunConfig,
+      chanlunOfficial,
     )
 
     chart.setOption(option, true)
@@ -1150,7 +1740,7 @@ export function EChartsCandlestick({
     if (infoEl) {
       infoEl.innerHTML = getInfoBarHTML()
     }
-  }, [data, markers, ranges, priceLines, linkedPrice, showMA, showMarkersProp, activeIndicators, volumeCompare, chartHeight, dates, dateIndexMap, initialZoom, getInfoBarHTML, theme])
+  }, [data, markers, ranges, priceLines, linkedPrice, showMA, showMarkersProp, activeIndicators, volumeCompare, chartHeight, dates, dateIndexMap, initialZoom, getInfoBarHTML, theme, chanlunData, chanlunConfig, chanlunOfficial])
 
   // 渲染信息栏容器 (内容由 JS 直接写入)
   const initialHTML = useMemo(() => {

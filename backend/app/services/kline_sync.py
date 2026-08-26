@@ -152,6 +152,52 @@ def sync_daily_batch(symbols: list[str],
     return pl.concat(out, how="diagonal_relaxed")
 
 
+def fetch_daily_selected(
+    symbols: list[str],
+    *,
+    count: int | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    on_chunk_done: Callable[[int, int], None] | None = None,
+) -> pl.DataFrame:
+    """Fetch daily bars from the provider selected in preferences without persisting.
+
+    A configured third-party provider is fail-closed: an empty/error result is
+    returned as empty and is not silently replaced by TickFlow data. This keeps
+    source provenance observable for analysis-only requests such as Chan charts.
+    """
+    if not symbols:
+        return pl.DataFrame()
+    provider_name = preferences.get_daily_data_provider()
+    if provider_name == "tickflow":
+        return sync_daily_batch(
+            symbols,
+            count=count,
+            start_time=start_time,
+            end_time=end_time,
+            on_chunk_done=on_chunk_done,
+        )
+
+    from app.data_providers import custom as custom_sources
+
+    if not custom_sources.provider_has_dataset(provider_name, "daily"):
+        logger.warning("selected provider %s has no daily dataset", provider_name)
+        return pl.DataFrame()
+    provider = custom_sources.get_provider(provider_name)
+    end = end_time or datetime.now()
+    start = start_time or (end - timedelta(days=count or 365))
+    try:
+        return provider.get_daily(
+            symbols,
+            start_time=start,
+            end_time=end,
+            on_chunk_done=on_chunk_done,
+        )
+    except Exception as exc:
+        logger.warning("selected provider %s daily fetch failed: %s", provider_name, exc)
+        return pl.DataFrame()
+
+
 def sync_and_persist_daily_batch(
     symbols: list[str],
     repo: KlineRepository,

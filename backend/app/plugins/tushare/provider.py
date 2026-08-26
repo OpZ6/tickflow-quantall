@@ -1,0 +1,390 @@
+"""Tushare Pro 数据源 provider。
+
+通过 tushare SDK 拉 A 股日K/除权/指数/财务/资金流。
+归一化到项目内部 schema(normalizer.py),与 TickFlow/stock-sdk provider 同台路由。
+Token 从环境变量 TUSHARE_TOKEN 读;依赖用延迟 import(函数内),未安装不阻断启动。
+"""
+from __future__ import annotations
+
+import logging
+import os
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
+
+import polars as pl
+
+from app.data_providers.normalizer import (
+    normalize_adj_factors,
+    normalize_daily,
+)
+from app.tickflow.rate_limits import chunked
+
+logger = logging.getLogger(__name__)
+
+_DATASETS = ("daily", "adj_factor", "index", "financial", "moneyflow")
+_BATCH = 80
+_TIMEOUT = 30.0
+
+
+@dataclass
+class _TushareConfig:
+    """轻量 config shim,让 custom loader 的 list_plugins/provider_has_dataset 识别本 provider。"""
+
+    name: str = "tushare"
+    display_name: str = "Tushare Pro (A 股官方行情)"
+    datasets: dict = field(default_factory=lambda: dict.fromkeys(_DATASETS))
+    path: None = None
+    builtin: bool = True
+
+
+def _yyyymmdd(dt: datetime | None) -> str | None:
+    return dt.strftime("%Y%m%d") if dt else None
+
+
+_DATE_COLS = ("trade_date", "end_date", "ann_date", "list_date")
+
+
+def _prep_dates(raw):
+    """预处理 Tushare pandas 返回: YYYYMMDD 字符串 → date 对象。
+
+    Polars cast(pl.Date) 只认 ISO 'YYYY-MM-DD'; Tushare 用 'YYYYMMDD' 字符串,
+    不预处理会被 strict=False cast 变 null。覆盖 trade_date/end_date/ann_date/list_date。
+    """
+    if raw is None or not hasattr(raw, "columns"):
+        return raw
+    if hasattr(raw, "iloc"):  # pandas DataFrame
+        import pandas as pd
+
+        raw = raw.copy()
+        for col in _DATE_COLS:
+            if col in raw.columns and raw[col].dtype == object:
+                raw[col] = pd.to_datetime(raw[col], format="%Y%m%d", errors="coerce").dt.date
+    return raw
+
+
+def _get_pro():
+    """创建 Tushare pro 客户端。token 从环境变量读。"""
+    token = os.environ.get("TUSHARE_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("Tushare token 未配置:设置 TUSHARE_TOKEN 环境变量")
+    import tushare as ts
+
+    return ts.pro_api(token, timeout=_TIMEOUT)
+
+
+_TUSHARE_FINANCIAL_API: dict[str, str] = {
+    "income": "income",
+    "balance_sheet": "balancesheet",
+    "cash_flow": "cashflow",
+    "metrics": "fina_indicator",
+    "shares": "daily_basic",
+}
+
+
+class TushareProvider:
+    """Tushare Pro 数据源。方法签名对齐 stocksdk provider,供 services 层路由。"""
+
+    name = "tushare"
+    builtin = True
+
+    def __init__(self) -> None:
+        self.config = _TushareConfig()
+
+    def close(self) -> None:  # loader.load_all 会对每个 provider 调 close
+        pass
+
+    # ---- daily ----
+    def get_daily(
+        self,
+        symbols: list[str],
+        start_time: datetime | None,
+        end_time: datetime | None,
+        asset_type: str = "stock",
+        on_chunk_done: Callable[[int, int], None] | None = None,
+    ) -> pl.DataFrame:
+        if not symbols:
+            return pl.DataFrame()
+
+        if start_time and end_time and start_time.date() == end_time.date():
+            return self._get_daily_by_date(start_time)
+
+        logger.info("Tushare daily 拉取开始(%d symbols)", len(symbols))
+        frames: list[pl.DataFrame] = []
+        chunks = chunked(symbols, _BATCH)
+        for i, chunk in enumerate(chunks):
+            try:
+                pro = _get_pro()
+                raw = pro.daily(
+                    ts_code=",".join(chunk),
+                    start_date=_yyyymmdd(start_time),
+                    end_date=_yyyymmdd(end_time),
+                )
+            except Exception as e:
+                logger.warning("Tushare daily 拉取失败(%d symbols): %s", len(chunk), e)
+                raw = None
+            raw = _prep_dates(raw)
+            df = normalize_daily(raw, source=self.name)
+            if not df.is_empty():
+                frames.append(df)
+            if on_chunk_done:
+                on_chunk_done(i + 1, len(chunks))
+        return pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()
+
+    def _get_daily_by_date(self, dt: datetime) -> pl.DataFrame:
+        """按交易日批量拉全市场(一次调用)。"""
+        try:
+            pro = _get_pro()
+            raw = pro.daily(trade_date=_yyyymmdd(dt))
+        except Exception as e:
+            logger.warning("Tushare daily by_date 拉取失败: %s", e)
+            return pl.DataFrame()
+        raw = _prep_dates(raw)
+        return normalize_daily(raw, source=self.name)
+
+    # ---- adj_factor ----
+    def get_adj_factors(
+        self,
+        symbols: list[str],
+        start_time: datetime | None,
+        end_time: datetime | None,
+        asset_type: str = "stock",
+        on_chunk_done: Callable[[int, int], None] | None = None,
+    ) -> pl.DataFrame:
+        if not symbols:
+            return pl.DataFrame()
+        logger.info("Tushare adj_factor 拉取开始(%d symbols)", len(symbols))
+        frames: list[pl.DataFrame] = []
+        chunks = chunked(symbols, _BATCH)
+        for i, chunk in enumerate(chunks):
+            try:
+                pro = _get_pro()
+                raw = pro.adj_factor(
+                    ts_code=",".join(chunk),
+                    start_date=_yyyymmdd(start_time),
+                    end_date=_yyyymmdd(end_time),
+                )
+            except Exception as e:
+                logger.warning("Tushare adj_factor 拉取失败(%d symbols): %s", len(chunk), e)
+                raw = None
+            raw = _prep_dates(raw)
+            df = self._normalize_adj(raw)
+            if not df.is_empty():
+                frames.append(df)
+            if on_chunk_done:
+                on_chunk_done(i + 1, len(chunks))
+        return pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()
+
+    @staticmethod
+    def _normalize_adj(raw) -> pl.DataFrame:
+        """Tushare adj_factor 标准化。
+
+        Tushare 返回 ts_code/trade_date/adj_factor;normalize_adj_factors 缺 ts_code→symbol 映射,
+        故在此预处理后复用 normalize_adj_factors。
+        """
+        if raw is None:
+            return pl.DataFrame()
+        if hasattr(raw, "reset_index"):
+            df = pl.from_pandas(raw.reset_index())
+        elif isinstance(raw, pl.DataFrame):
+            df = raw
+        else:
+            df = pl.DataFrame(raw)
+        if df.is_empty():
+            return df
+        # Tushare trade_date 可能是 'YYYYMMDD' 字符串, 预解析为 Date
+        if "trade_date" in df.columns and df.schema["trade_date"] == pl.Utf8:
+            df = df.with_columns(pl.col("trade_date").str.to_date("%Y%m%d"))
+        rename_map: dict[str, str] = {}
+        if "ts_code" in df.columns:
+            rename_map["ts_code"] = "symbol"
+        if "adj_factor" in df.columns:
+            rename_map["adj_factor"] = "ex_factor"
+        if rename_map:
+            df = df.rename(rename_map)
+        return normalize_adj_factors(df, source="tushare")
+
+    # ---- instruments (标的维表) ----
+    def get_instruments(self, asset_type: str = "stock") -> list[dict]:
+        if asset_type != "stock":
+            return []
+        try:
+            pro = _get_pro()
+            raw = pro.stock_basic(
+                exchange="",
+                list_status="L",
+                fields="ts_code,symbol,name,area,industry,market,exchange,curr_type,list_status,list_date,delist_date,is_hs",
+            )
+        except Exception as e:
+            logger.warning("Tushare instruments 拉取失败: %s", e)
+            return []
+        rows: list[dict] = []
+        if raw is not None and not raw.empty:
+            for _, r in raw.iterrows():
+                rows.append({
+                    "symbol": str(r.get("ts_code") or ""),
+                    "name": str(r.get("name") or ""),
+                    "code": str(r.get("symbol") or ""),
+                    "exchange": str(r.get("exchange") or ""),
+                })
+        return rows
+
+    # ---- index_daily (指数日K,供 index_sync 用) ----
+    def get_index_daily(
+        self,
+        symbols: list[str],
+        start_time: datetime | None,
+        end_time: datetime | None,
+    ) -> pl.DataFrame:
+        if not symbols:
+            return pl.DataFrame()
+        frames: list[pl.DataFrame] = []
+        for sym in symbols:
+            try:
+                pro = _get_pro()
+                raw = pro.index_daily(
+                    ts_code=sym,
+                    start_date=_yyyymmdd(start_time),
+                    end_date=_yyyymmdd(end_time),
+                )
+            except Exception as e:
+                logger.warning("Tushare index_daily 拉取失败(%s): %s", sym, e)
+                raw = None
+            raw = _prep_dates(raw)
+            df = normalize_daily(raw, default_symbol=sym, source=self.name)
+            if not df.is_empty():
+                frames.append(df)
+        return pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()
+
+    # ---- financials (财务报表, 绕过 TickFlow Expert 门槛) ----
+
+    def get_financials(
+        self,
+        table: str,
+        symbols: list[str],
+        latest_only: bool = True,
+    ) -> pl.DataFrame:
+        """拉取财务数据,对齐 GenericHTTPProvider.get_financials 签名。
+
+        table: metrics/income/balance_sheet/cash_flow/shares
+        返回 Polars DataFrame,至少含 symbol 列;字段由 Tushare 决定。
+        shares 表用 daily_basic(含流通股本/总股本),按当日拉。
+        """
+        api_name = _TUSHARE_FINANCIAL_API.get(table)
+        if api_name is None:
+            raise ValueError(f"Tushare 不支持财务表: {table}")
+        if not symbols:
+            return pl.DataFrame()
+        logger.info("Tushare financials %s 拉取开始(%d symbols)", table, len(symbols))
+        frames: list[pl.DataFrame] = []
+        chunks = chunked(symbols, _BATCH)
+        for chunk in chunks:
+            try:
+                pro = _get_pro()
+                if table == "shares":
+                    raw = pro.daily_basic(
+                        ts_code=",".join(chunk),
+                        fields="ts_code,trade_date,close,turnover_rate,float_share,total_share,circ_mv,total_mv,pe,pb",
+                    )
+                else:
+                    kwargs: dict = {"ts_code": ",".join(chunk)}
+                    raw = getattr(pro, api_name)(**kwargs)
+            except Exception as e:
+                logger.warning("Tushare financials %s 拉取失败(%d symbols): %s", table, len(chunk), e)
+                raw = None
+            raw = _prep_dates(raw)
+            df = self._to_polars_with_symbol(raw)
+            if not df.is_empty():
+                frames.append(df)
+        if not frames:
+            return pl.DataFrame()
+        result = pl.concat(frames, how="diagonal_relaxed")
+        if latest_only and table != "shares":
+            date_col = next((c for c in ("end_date", "ann_date", "trade_date") if c in result.columns), None)
+            if date_col:
+                result = result.sort("symbol", date_col).group_by("symbol").last()
+        return result
+
+    # ---- moneyflow (个股资金流, 替代 MarketLab proxy) ----
+    def get_moneyflow(
+        self,
+        symbols: list[str],
+        start_time: datetime | None,
+        end_time: datetime | None,
+    ) -> pl.DataFrame:
+        """拉个股资金流(主力/超大单/大单/中单/小单净流入)。
+
+        替代 MarketLab sector_flow 的代理公式 quality=proxy。
+        """
+        if not symbols:
+            return pl.DataFrame()
+        logger.info("Tushare moneyflow 拉取开始(%d symbols)", len(symbols))
+        frames: list[pl.DataFrame] = []
+        chunks = chunked(symbols, _BATCH)
+        for chunk in chunks:
+            try:
+                pro = _get_pro()
+                raw = pro.moneyflow(
+                    ts_code=",".join(chunk),
+                    start_date=_yyyymmdd(start_time),
+                    end_date=_yyyymmdd(end_time),
+                )
+            except Exception as e:
+                logger.warning("Tushare moneyflow 拉取失败(%d symbols): %s", len(chunk), e)
+                raw = None
+            raw = _prep_dates(raw)
+            df = self._to_polars_with_symbol(raw)
+            if not df.is_empty():
+                frames.append(df)
+        return pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()
+
+    @staticmethod
+    def _to_polars_with_symbol(raw) -> pl.DataFrame:
+        """把 Tushare 返回(pandas/None)转 Polars,确保有 symbol 列(ts_code→symbol)。"""
+        if raw is None:
+            return pl.DataFrame()
+        if hasattr(raw, "reset_index"):
+            df = pl.from_pandas(raw.reset_index())
+        elif isinstance(raw, pl.DataFrame):
+            df = raw
+        else:
+            df = pl.DataFrame(raw)
+        if df.is_empty():
+            return df
+        if "ts_code" in df.columns:
+            df = df.rename({"ts_code": "symbol"})
+        if "trade_date" in df.columns and df.schema["trade_date"] == pl.Utf8:
+            df = df.with_columns(pl.col("trade_date").str.to_date("%Y%m%d"))
+        if "end_date" in df.columns and df.schema["end_date"] == pl.Utf8:
+            df = df.with_columns(pl.col("end_date").str.to_date("%Y%m%d"))
+        return df
+
+    # ---- test (设置页试拉) ----
+    def test_dataset(self, dataset: str, symbols: list[str] | None = None) -> dict:
+        symbols = symbols or ["600519.SH"]
+        if dataset == "daily":
+            df = self.get_daily(symbols, None, None)
+            return _preview("daily", df)
+        if dataset == "adj_factor":
+            df = self.get_adj_factors(symbols, None, None)
+            return _preview("adj_factor", df)
+        if dataset == "index":
+            df = self.get_index_daily(symbols or ["000001.SH"], None, None)
+            return _preview("index", df)
+        if dataset == "financial":
+            df = self.get_financials("income", symbols)
+            return _preview("financial", df)
+        if dataset == "moneyflow":
+            df = self.get_moneyflow(symbols, None, None)
+            return _preview("moneyflow", df)
+        raise ValueError(f"Tushare 不支持数据集: {dataset}")
+
+
+def _preview(dataset: str, df: pl.DataFrame) -> dict:
+    return {
+        "provider": "tushare",
+        "dataset": dataset,
+        "rows": df.height,
+        "columns": df.columns,
+        "preview": df.head(5).to_dicts() if not df.is_empty() else [],
+    }

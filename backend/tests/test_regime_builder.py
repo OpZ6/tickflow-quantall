@@ -405,3 +405,4 @@ def test_build_regime_mask_first_formal_day_requires_warmup_predecessor(tmp_path
     )
     assert mask is not None
     assert mask.tolist() == [True, False, True]
+    # 1/1 首日 → True; 1/2 由 1/1(weak) → False

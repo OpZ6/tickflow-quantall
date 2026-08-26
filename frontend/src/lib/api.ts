@@ -54,6 +54,17 @@ export interface CapabilitiesResponse {
   capabilities: Record<string, CapabilityLimits>
 }
 
+export interface ChanlunStatus {
+  available: boolean
+  viewer_url: string | null
+  detail: string
+  capabilities: {
+    structures: string[]
+    main_indicators: number
+    sub_indicators: number
+  }
+}
+
 // ===== Financials =====
 export interface FinancialStatus {
   available: boolean
@@ -1530,9 +1541,280 @@ export interface StrategyAlertEvent {
   [key: string]: unknown
 }
 
+// ===== Chanlun (缠论原生分析) =====
+export interface ChanlunBi {
+  start_time: number
+  start_price: number
+  end_time: number
+  end_price: number
+  direction: 'up' | 'down'
+  start_index: number | null
+  end_index: number | null
+  is_sure: boolean
+  confirm_index: number | null
+}
+
+export interface ChanlunSegment {
+  start_time: number
+  start_price: number
+  end_time: number
+  end_price: number
+  direction: 'up' | 'down'
+  is_sure: boolean
+}
+
+export interface ChanlunZhongshu {
+  start_time: number
+  end_time: number
+  low: number
+  high: number
+}
+
+export interface ChanlunBsp {
+  time: number
+  direction: 'buy' | 'sell'
+  type: string
+  price: number
+  level: 'bi' | 'seg'
+  fx_confirmed: boolean
+}
+
+export interface ChanlunAnalysis {
+  merged_klines: { start_time: number; end_time: number; high: number; low: number; dir: string; n: number }[]
+  fenxing: { time: number; type: 'bottom' | 'top'; value: number }[]
+  bi: ChanlunBi[]
+  segments: ChanlunSegment[]
+  zhongshu: ChanlunZhongshu[]
+  macd: { time: number; dif: number; dea: number; histogram: number }[]
+  bsp: ChanlunBsp[]
+}
+
+export interface ChanlunCandle {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume?: number
+}
+
+export interface ChanlunCandleRow {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume?: number
+}
+
+export interface ChanlunOfficialResponse {
+  available: boolean
+  detail?: string
+  source?: 'pro' | 'free'
+  name?: string | null
+  /** ZenChart 自带 K 线窗口 (官方/叠加模式的图表底座) */
+  candles?: ChanlunCandle[]
+  counts?: { bi: number; segments: number; zhongshu: number; bsp: number }
+  official?: {
+    bi: ChanlunBi[]
+    segments: ChanlunSegment[]
+    zhongshu: ChanlunZhongshu[]
+    bsp: ChanlunBsp[]
+  }
+}
+
+export interface EtfMomentumRow {
+  rank: number
+  previous_rank: number | null
+  rank_change: number | null
+  symbol: string
+  name: string
+  as_of: string
+  return_1d_pct: number
+  return_5d_pct: number
+  return_20d_pct: number
+  return_50d_pct: number
+  weighted_momentum_pct: number
+  slope_momentum_pct: number | null
+  volume_ratio_5_20: number | null
+  momentum_change_pct: number | null
+}
+
+export interface EtfMomentumResponse {
+  available: boolean
+  detail?: string | null
+  unit: 'percent'
+  formula?: string
+  rows: EtfMomentumRow[]
+}
+
+export interface SectorFlowResponse {
+  available: boolean
+  quality: 'observed' | 'proxy' | 'unavailable'
+  basis?: string
+  unit?: 'CNY'
+  detail?: string | null
+  dates?: string[]
+  rows: { sector: string; total_flow_yuan: number; points: { date: string; flow_yuan: number }[] }[]
+}
+
+export interface SectorRadarRow {
+  rank: number
+  sector: string
+  as_of: string
+  score: number
+  return_pct: number
+  flow_yuan: number
+  flow_ratio_pct: number
+  ema_swing_pct: number
+  positive_days_30: number
+  swing_ratio_pct: number
+  swing_amount_yuan: number
+  swing_rank: number
+  swing_rank_pct: number
+  swing_score: number
+  swing_rank_change_1d: number
+  swing_rank_change_3d: number
+  swing_rank_change_5d: number
+  swing_top_30d: number
+  swing_bottom_30d: number
+  ratio_rank: number
+  ratio_rank_pct: number
+  ratio_score: number
+  ratio_rank_change_1d: number
+  ratio_rank_change_3d: number
+  ratio_rank_change_5d: number
+  ratio_top_30d: number
+  ratio_bottom_30d: number
+  amount_rank: number
+  amount_rank_pct: number
+  amount_score: number
+  amount_rank_change_1d: number
+  amount_rank_change_3d: number
+  amount_rank_change_5d: number
+  amount_top_30d: number
+  amount_bottom_30d: number
+}
+
+export interface SectorRadarResponse {
+  available: boolean
+  quality: 'observed' | 'proxy' | 'unavailable'
+  basis?: string
+  detail?: string | null
+  as_of?: string
+  available_dates?: string[]
+  universe_size?: number
+  unit?: 'CNY'
+  rows: SectorRadarRow[]
+}
+
+export interface MacroContributionRow {
+  name: string
+  return_pct?: number
+  signed_deviation?: number
+  share?: number
+  direction?: number
+  state: string
+  contribution_pct?: number
+}
+
+export interface MacroDispersionResponse {
+  available: boolean
+  window: string
+  unit: 'percent'
+  as_of?: string
+  basis?: string
+  detail?: string
+  mean_pct: number
+  dispersion: number
+  ma3: number
+  percentile: number | null
+  ma3_percentile: number | null
+  change_1d: number
+  change_5d: number
+  zone: string
+  industry_count: number
+  history: { date: string; dispersion: number; ma3: number; mean_pct?: number; industry_count?: number }[]
+  indices: { symbol: string; label: string; name: string; points: { date: string; normalized: number }[] }[]
+  contributions: MacroContributionRow[]
+  contribution_windows: Record<'1' | '3' | '5' | '10', { high: MacroContributionRow[]; low: MacroContributionRow[] }>
+}
+
+export interface PositionResult {
+  shares: number
+  market_value: number
+  risk_budget: number
+  planned_loss: number
+  capital_usage_pct: number
+  reward_risk: number
+  target_price: number
+  target_r: number
+  breakeven_price: number
+  breakeven_r: number
+  projected_profit: number
+}
+
+export interface PitResult { target: number; depth_pct: number; upside_pct: number }
+export interface DrawdownResult {
+  actual_r: number; draw_amount: number; exit_price: number
+  max_profit_pct: number; locked_profit_pct: number; target_achieved: boolean
+}
+
+export interface SimulationResult {
+  paths: number
+  trades: number
+  kelly_pct: number
+  half_kelly_pct: number
+  expectancy_r: number
+  break_even_pct: number
+  p10_final: number
+  p50_final: number
+  p90_final: number
+  p50_max_drawdown_pct: number
+  p95_max_drawdown_pct: number
+  loss_probability_pct: number
+  sample_paths: number[][]
+}
+
 // ===== API surface =====
 export const api = {
   health: () => request<{ status: string; version: string; mode: string }>('/health'),
+  chanlunStatus: () => request<ChanlunStatus>('/api/chanlun/status', { quiet: true }),
+  /** 对给定 K 线运行缠论分析 (包含处理/分型/笔/线段/中枢/买卖点) */
+  chanlunAnalyze: (candles: ChanlunCandle[]) =>
+    request<ChanlunAnalysis>('/api/chanlun/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ candles }),
+    }),
+  /** 窗口补全的日 K OHLCV (本地不足时后端实时拉取补齐, 不落盘) */
+  chanlunCandles: (symbol: string, days = 500) =>
+    request<{ symbol: string; source: string; provider: string; rows: ChanlunCandleRow[] }>(
+      `/api/chanlun/candles?symbol=${encodeURIComponent(symbol)}&days=${days}`,
+    ),
+  /** ZenChart 官方分析图层 (叠加对比; Pro 需服务端配置 token) */
+  chanlunOfficial: (symbol: string, level = 'D1', limit = 300) =>
+    request<ChanlunOfficialResponse>(
+      `/api/chanlun/official?symbol=${encodeURIComponent(symbol)}&level=${level}&limit=${limit}`,
+      { quiet: true },
+    ),
+  marketLabEtfMomentum: (limit = 40) =>
+    request<EtfMomentumResponse>(`/api/market-lab/etf-momentum?limit=${limit}`),
+  marketLabSectorFlow: (dimension: 'industry' | 'concept' = 'industry') =>
+    request<SectorFlowResponse>(`/api/market-lab/sector-flow?dimension=${dimension}`),
+  marketLabSectorRadar: (dimension: 'industry' | 'concept' = 'industry', asOf?: string) =>
+    request<SectorRadarResponse>(`/api/market-lab/sector-radar?dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`),
+  marketLabMacroDispersion: () =>
+    request<MacroDispersionResponse>('/api/market-lab/macro-dispersion'),
+  marketLabPosition: (payload: { balance: number; risk_pct: number; entry: number; stop: number; target?: number; mode: 'brave' | 'sensitive'; trade_type: 'B1' | 'B2' }) =>
+    request<PositionResult>('/api/market-lab/position', { method: 'POST', body: JSON.stringify(payload) }),
+  marketLabPit: (payload: { top: number; bottom: number; current: number }) =>
+    request<PitResult>('/api/market-lab/pit', { method: 'POST', body: JSON.stringify(payload) }),
+  marketLabDrawdown: (payload: { entry: number; stop: number; high: number; target_r: number; drawdown_pct: number }) =>
+    request<DrawdownResult>('/api/market-lab/drawdown', { method: 'POST', body: JSON.stringify(payload) }),
+  marketLabSimulate: (payload: {
+    balance: number; win_rate: number; win_r: number; loss_r: number
+    risk_pct: number; trades: number; paths: number; seed?: number
+  }) => request<SimulationResult>('/api/market-lab/simulate', { method: 'POST', body: JSON.stringify(payload) }),
 
   // ===== Auth (访问认证) =====
   authStatus: () =>
@@ -3247,4 +3529,70 @@ export interface AnalysisMenu {
   created_at?: string | null
   updated_at?: string | null
   builtin?: boolean
+}
+
+// ===== QuantX (情绪 + 复盘 + 驾驶舱) =====
+
+export interface CatalogRecord {
+  trade_date: string
+  stage: string
+  metrics: Record<string, number | string | boolean | null>
+  themes: Array<{ name: string; count: number }>
+  change_summary?: string
+  deltas?: Record<string, number>
+}
+
+export interface CatalogData {
+  schema_version: number
+  generated_at: string
+  stats: { total_dates: number; complete: number; degraded?: number; failed?: number; data_only?: number; draft_only?: number }
+  records: CatalogRecord[]
+  theme_events?: Array<{ trade_date: string; name: string; count: number; lifecycle: string }>
+}
+
+export interface QuantXDataTables {
+  trade_date: string
+  market_overview?: any
+  market_breadth?: any
+  market_liquidity?: any
+  limit_summary?: any
+  limit_ladder?: any
+  limit_stocks?: any
+  promotion_stats?: any
+  premium_stats?: any
+  theme_snapshot?: any
+  theme_rankings?: any
+  theme_history?: any
+  theme_stocks?: any
+  sentiment_state?: any
+  risk_signals?: any
+  participation?: any
+  sector_fund_flow?: any
+  sector_rotation?: any
+  screening_candidates?: any
+  trend_history?: any
+  trend_pool?: any
+  _computed?: any
+  quality?: any
+  manifest?: any
+}
+
+export const quantxApi = {
+  getCatalog: () =>
+    request<CatalogData>(`/api/quantx-data/catalog`),
+
+  buildCatalog: () =>
+    request<{ schema_version: number; stats: CatalogData['stats']; records: CatalogRecord[] }>(`/api/quantx-data/catalog`),
+
+  getTables: (date: string) =>
+    request<QuantXDataTables>(`/api/quantx-data/${date}/tables`),
+
+  runData: (tradeDate: string, options?: { force?: boolean; recompute?: boolean; sources?: string[] }) =>
+    request<any>(`/api/quantx-data/runs`, {
+      method: 'POST',
+      body: JSON.stringify({ trade_date: tradeDate, ...options }),
+    }),
+
+  recomputeData: (date: string) =>
+    request<any>(`/api/quantx-data/runs/${date}/recompute`, { method: 'POST' }),
 }

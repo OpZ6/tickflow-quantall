@@ -101,6 +101,13 @@ async function mapPool(items, concurrency, worker) {
   return results
 }
 
+function assertNoWorkerErrors(results, op) {
+  const errors = results
+    .map((result, index) => result && result.__error ? `#${index}: ${result.__error}` : null)
+    .filter(Boolean)
+  if (errors.length) throw new Error(`${op} worker failed (${errors.length}/${results.length}): ${errors.slice(0, 3).join('; ')}`)
+}
+
 /** code + marketId → app 符号(600519.SH)。反推失败则退化用 code 前缀猜测。 */
 function toAppSymbol(code, marketId) {
   const suffix = MARKET_ID_TO_SUFFIX[String(marketId)] || guessSuffix(code)
@@ -152,6 +159,7 @@ async function opDaily(sdk, job) {
   const rows = await mapPool(symbols, concurrency, (sym) =>
     fetchDaily(sdk, sym, { adjust, period, start, end })
   )
+  assertNoWorkerErrors(rows, 'daily')
   symbols.forEach((sym, i) => {
     const r = rows[i]
     out[sym] = Array.isArray(r) ? r : []
@@ -162,7 +170,7 @@ async function opDaily(sdk, job) {
 async function opAdj(sdk, job) {
   const { symbols = [], start, end, concurrency = 6 } = job
   const out = {}
-  await mapPool(symbols, concurrency, async (sym) => {
+  const results = await mapPool(symbols, concurrency, async (sym) => {
     const [none, hfq] = await Promise.all([
       fetchDaily(sdk, sym, { adjust: 'none', start, end }),
       fetchDaily(sdk, sym, { adjust: 'hfq', start, end }),
@@ -179,13 +187,14 @@ async function opAdj(sdk, job) {
     out[sym] = factors
     return factors
   })
+  assertNoWorkerErrors(results, 'adj')
   return out
 }
 
 async function opMinute(sdk, job) {
   const { symbols = [], period = 5, start, end, concurrency = 6 } = job
   const out = {}
-  await mapPool(symbols, concurrency, async (sym) => {
+  const results = await mapPool(symbols, concurrency, async (sym) => {
     const opts = { period: String(period) }
     if (start) opts.startDate = start
     if (end) opts.endDate = end
@@ -193,6 +202,7 @@ async function opMinute(sdk, job) {
     out[sym] = Array.isArray(bars) ? bars : []
     return out[sym]
   })
+  assertNoWorkerErrors(results, 'minute')
   return out
 }
 

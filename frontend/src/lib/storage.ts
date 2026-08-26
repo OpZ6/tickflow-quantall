@@ -38,6 +38,8 @@ export const storage = {
 
   /** 个股详情多日分时周期 */
   stockPreviewIntradayDays: kv<number>('stock_preview_intraday_days'),
+  /** 技术指标自定义参数 (key: 指标名, value: { 参数名: 值 }) */
+  indicatorParams:      kv<Record<string, Record<string, number>>>('indicator_params_v1'),
 
   /** 策略结果列表列配置 */
   screenerResultColumns: kv<unknown[]>('screener_result_columns'),

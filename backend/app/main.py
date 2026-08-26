@@ -16,28 +16,33 @@ from app.api import (
     abnormal,
     alerts,
     analysis,
+    auth as auth_api,
     backtest,
+    chanlun,
+    chanlun_analysis,
     data,
     ext_data,
     financials,
     indices,
     intraday,
     kline,
+    market_lab,
     market_recap,
     mining,
     monitor_rules,
     overview,
     pipeline,
+    quantx,
+    quantx_data,
     regime,
     rps,
     screener,
+    settings as settings_api,
     signals,
     stock_analysis,
     strategy,
     watchlist,
 )
-from app.api import auth as auth_api
-from app.api import settings as settings_api
 from app.api.routes import router as core_router
 from app.config import settings
 from app.enriched_generation import EnrichedGenerationUnavailableError
@@ -161,6 +166,8 @@ async def _application_lifespan(app: FastAPI):
     try:
         daily_pipeline.set_app_state(app.state)  # 供 depth_finalize job 访问 depth_service
         scheduler = daily_pipeline.start_scheduler(repo, capset)
+        from app.quantx_data.scheduler import register as register_quantx_data_scheduler
+        register_quantx_data_scheduler(scheduler, store.data_dir)
         app.state.scheduler = scheduler
     except Exception as e:  # noqa: BLE001
         logger.warning("scheduler not started: %s", e)
@@ -453,6 +460,9 @@ app.include_router(data.router)
 app.include_router(ext_data.router)
 app.include_router(financials.router)
 app.include_router(stock_analysis.router)
+app.include_router(chanlun.router)
+app.include_router(chanlun_analysis.router)
+app.include_router(market_lab.router)
 app.include_router(market_recap.router)
 app.include_router(settings_api.router)
 app.include_router(strategy.router)
@@ -460,6 +470,8 @@ app.include_router(signals.router)
 app.include_router(monitor_rules.router)
 app.include_router(alerts.router)
 app.include_router(rps.router)
+app.include_router(quantx.router)
+app.include_router(quantx_data.router)
 
 # 二次开发路由与小粒度策略在所有核心路由后注册, 禁止覆盖核心路径。
 extension_registry, extension_load_errors = configure_backend_extensions(app)
