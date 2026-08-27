@@ -72,6 +72,17 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
                 ],
                 "themes": [{"name": "人工智能", "count": 1}],
             },
+            "new_high_100d": {
+                "status": "ok",
+                "stocks": [
+                    {
+                        "code": "300002",
+                        "name": "新高样本",
+                        "pct_chg": 5.0,
+                        "concepts": ["百日新高"],
+                    }
+                ],
+            },
             "broken_board": {
                 "stocks": [{"code": "600000", "name": "乙"}],
             },
@@ -268,6 +279,10 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
         (date(2026, 8, 22), date(2026, 8, 25), 100.0),
         (date(2026, 8, 24), date(2026, 8, 25), 102.0),
     ]
+    candidates = by_id[DatasetId.SCREENING_CANDIDATE_DAILY].frame
+    assert candidates.filter(pl.col("candidate_type") == "new_high_100d")[
+        "symbol"
+    ].to_list() == ["300002"]
 
 
 def test_fact_publication_is_idempotent_and_repository_reads_canonical_data(tmp_path) -> None:

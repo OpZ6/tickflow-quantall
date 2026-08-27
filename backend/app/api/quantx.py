@@ -7,7 +7,6 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -74,32 +73,16 @@ def build_review(trade_date: str, request: Request):
 
 @router.get("/review/{trade_date}/data")
 def get_review_data(trade_date: str, request: Request):
-    d = _date_dir(request, trade_date)
-    from app.quantx_data.io import read_json
+    _date_dir(request, trade_date)
+    from app.quantx_data.review_repository import QuantXReviewRepository
 
-    snapshot = read_json(d / "review_data.json")
+    snapshot = QuantXReviewRepository(
+        _quantx_dir(request),
+        request.app.state.market_facts,
+        request.app.state.repo,
+    ).load(trade_date)
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"no review_data.json for {trade_date}")
-    day = datetime.strptime(trade_date, "%Y%m%d").date()
-    facts = request.app.state.market_facts
-    liquidity = facts.get_market_liquidity(day)
-    if not liquidity.is_empty():
-        snapshot.setdefault("metric_strip", {})["total_amount_yi"] = liquidity[
-            "total_amount_yi"
-        ].item()
-    margin = facts.get_margin_history(day - timedelta(days=120), day, as_of=day).tail(30)
-    if not margin.is_empty():
-        rows = [
-            {
-                "date": row["trade_date"].strftime("%Y%m%d"),
-                "rzye_yi": row["financing_balance_yi"],
-                "rz_net_buy_yi": row["financing_net_buy_yi"],
-            }
-            for row in margin.to_dicts()
-        ]
-        section = snapshot.setdefault("sections", {}).setdefault("s1", {})
-        section["margin_history"] = rows
-        section["margin"] = rows[-1]
     return snapshot
 
 

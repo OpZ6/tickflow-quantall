@@ -8,7 +8,7 @@
 
 - 状态：`active`
 - 建立日期：2026-08-26
-- 当前阶段：Phase 1-5 首批闭环、交易日历和原始快照保留治理已落地；更多标准事实、多日 Repository 化和全部历史差异收敛继续推进
+- 当前阶段：Phase 1-5 主链路、11 类标准事实、多日 Repository 化和单日 Review Repository 已落地；剩余展示缓存、历史对账和备份恢复演练继续推进
 - 核心工作目录：`D:\tickflow-quantall`
 - 基线日期：`20260825`
 
@@ -679,3 +679,32 @@ Goal 仍为 `active`。剩余工作集中在 `market_liquidity_daily`、`margin_
 - 前端 `pnpm build` 通过；standalone Python Playwright + Microsoft Edge headless 的 QuantX 单日/多日、Market Lab 和 11 类数据集管理面板回归通过。
 
 Goal 继续保持 `active`。下一阶段不再泛化新增表，而是按现有 QuantX 富图表字段逐项审计剩余来源读取，分类为已有 TickFlow 事实、需要新增的可复用事实或仅属 API 展示缓存，再收敛历史对账和备份恢复演练。
+
+### 17.4 2026-08-27 单日富图表 Review Repository 与百日新高事实化
+
+已完成：
+
+- 新增 `QuantXReviewRepository`。`review_data.json` 明确降级为不可复用展示字段的发布缓存；请求阶段以 11 类标准市场事实和 TickFlow 指数 Repository 覆盖可复用数据，不读取来源 JSON。
+- 单日富图表的市场宽度、成交额、情绪状态、30 日历史、两融、题材、连板梯队、行业资金、规则候选池和主要指数最新值均由 Repository 组装，同时保持原有 API 路径和前端响应结构。
+- API 新增 `data_foundation` 审计信息，逐项列出 `canonical_fields` 与仍依赖 `presentation_cache_fields` 的字段，避免把兼容缓存误称为统一事实。
+- 将问财 `new_high_100d` 纳入 `screening_candidate_daily`，以 `candidate_type=new_high_100d`、`quality_level=observed` 和独立算法版本保存；单日“百日新高”模块改从标准事实读取，且不会混入确定性规则候选池。
+- TickFlow 指数标的同步补充 `000985.CSI`（中证全指），未来日常行情同步可直接采集；在真实指数分区形成前，该指数的历史 K 线仍明确保留为展示缓存。
+- 历史迁移增加可重复的 `--dataset` 定向升级与逐 dataset 迁移版本。版本已是最新时自动跳过，避免为单表内容升级使用全量 `--force` 重写全部事实。
+- 对真实数据目录定向回填 72 个交易日的 `screening_candidate_daily`；`20260825` 共 94 行候选，其中 29 行为百日新高。回填前后其余 10 类事实的 720 个 Parquet 文件 SHA-256 全部不变，二次预检 72 日全部进入 `skipped_existing`。
+
+本阶段验证：
+
+- 市场事实、QuantX 数据和指数同步定向测试 25 项通过，相关 Ruff 与 `git diff --check` 通过。
+- standalone Python Playwright + Microsoft Edge headless 通过：单日七区和 11 个 canvas、多日面板、数据源管理与 Market Lab 均正常；单日页面额外断言 29 条百日新高来自 canonical 字段。
+- 前端 `pnpm build` 通过。
+- 首次后端全量回归暴露既有 `test_realtime_gate_blocks_on_snapshot_and_launches_repair` 的固定日期失效：fixture 固定使用 `2026-08-24`，而生产门禁使用运行当天判断自动修复窗口。已只将该测试数据改为真实今天的最近工作日，不改变生产门禁逻辑；最终全量回归 1261 项全部通过，保留 63 条既有弃用/排序警告。
+
+当前仍属于展示缓存、尚未完成统一事实化的主要字段：
+
+- `sections.s0` 的诊断细节和风险说明；
+- `sections.s1` 的 `000985.CSI` 历史 K 线、宽度热力、期指和拥挤度；
+- `sections.s3` 的退潮信号、崩盘信号、晋级历史和梯队补充字段；
+- `sections.s4` 的机构明细与短线强度；
+- `sections.s6` 的仓位与情景展示。
+
+Goal 继续保持 `active`。下一步优先完成真实 `000985.CSI` 指数采集验证、宽度/拥挤度等可复用时间序列的事实契约，再做完整后端、独立 Playwright 页面回归和数据目录备份恢复演练。

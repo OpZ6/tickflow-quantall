@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.api.quantx import router as quantx_router
 from app.api.quantx_data import router as quantx_data_router
+from app.market_facts.registry import DatasetId
 from app.market_facts.repository import MarketFactRepository
 from app.quantx_data import collectors
 from app.quantx_data.catalog import build_catalog, load_tables
@@ -72,6 +73,17 @@ def _fixture(root: Path, trade_date: str = "20260825") -> Path:
         "quicktiny": {"trade_date": trade_date, "status": "ok"},
         "dabanke": {"trade_date": trade_date, "status": "ok"},
         "sector_fund_flow_s4": {"trade_date": trade_date, "status": "ok", "sectors": [{"name": "人工智能", "pct_chg": 1.2, "net_inflow_yi": 3.5}]},
+    }
+    payloads["pywencai"]["new_high_100d"] = {
+        "status": "ok",
+        "stocks": [
+            {
+                "code": "300002",
+                "name": "新高样本",
+                "pct_chg": 5.0,
+                "concepts": ["百日新高"],
+            }
+        ],
     }
     for name in SOURCE_NAMES:
         _write(date_dir / f"{name}.json", payloads[name])
@@ -136,9 +148,11 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
     state = fact_repo.get_market_state(date(2026, 8, 25)).row(0, named=True)
     assert state["algorithm_version"] == "quantx-data-v1"
     assert state["quality_level"] == "derived"
-    assert fact_repo.get_screening_candidates(date(2026, 8, 25))[
-        "algorithm_version"
-    ].to_list() == ["quantx-rule-screen-v1"]
+    assert set(
+        fact_repo.get_screening_candidates(date(2026, 8, 25))[
+            "algorithm_version"
+        ].to_list()
+    ) == {"quantx-rule-screen-v1", "pywencai-new-high-v1"}
     assert fact_repo.is_trading_day(date(2026, 8, 26)) is False
 
 
@@ -375,12 +389,40 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     _fixture(tmp_path, "20260825")
     assert run_pipeline(tmp_path, "20260825", recompute=True)["status"] == "complete"
     date_dir = tmp_path / "quantx" / "20260825"
+    cached = json.loads((date_dir / "review_data.json").read_text(encoding="utf-8"))
+    cached["metric_strip"]["up_count"] = 999
+    cached["sections"]["s2"]["themes_pywencai"] = []
+    cached["sections"]["s2"]["new_high"] = {
+        "status": "unavailable",
+        "stocks": [],
+    }
+    cached["sections"]["s3"]["ladder_grid"] = []
+    cached["sections"]["s4"]["sector_flow"] = {"top_in": [], "top_out": []}
+    cached["sections"]["s5"]["candidates"] = []
+    _write(date_dir / "review_data.json", cached)
     for source in SOURCE_NAMES:
         (date_dir / f"{source}.json").unlink()
 
+    class FakeIndexRepository:
+        def __init__(self, data_dir):
+            self.store = SimpleNamespace(data_dir=data_dir)
+
+        def get_index_daily(self, symbol, start, end, columns=None):
+            if symbol != "000001.SH":
+                return pl.DataFrame(
+                    schema={"symbol": pl.String, "date": pl.Date, "close": pl.Float64}
+                )
+            return pl.DataFrame(
+                {
+                    "symbol": [symbol, symbol],
+                    "date": [date(2026, 8, 24), date(2026, 8, 25)],
+                    "close": [10.0, 11.0],
+                }
+            )
+
     app = FastAPI()
     app.include_router(quantx_router)
-    app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
+    app.state.repo = FakeIndexRepository(tmp_path)
     app.state.market_facts = MarketFactRepository(tmp_path)
 
     with TestClient(app) as client:
@@ -389,7 +431,23 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert response.status_code == 200
     assert set(response.json()["sections"]) == {f"s{index}" for index in range(7)}
     assert response.json()["metric_strip"]["total_amount_yi"] == 2.3
+    assert response.json()["metric_strip"]["up_count"] == 1
     assert response.json()["sections"]["s1"]["margin"]["date"] == "20260824"
+    assert response.json()["sections"]["s2"]["themes_pywencai"]
+    assert response.json()["sections"]["s2"]["new_high"]["status"] == "ok"
+    assert response.json()["sections"]["s2"]["new_high"]["stocks"][0][
+        "code"
+    ] == "300002"
+    assert response.json()["sections"]["s3"]["ladder_grid"]
+    assert response.json()["sections"]["s4"]["sector_flow"]["top_in"]
+    assert response.json()["sections"]["s5"]["candidates"]
+    index = response.json()["sections"]["s1"]["indexes"][0]
+    assert index["code"] == "000001.SH"
+    assert index["close"] == 11.0
+    assert index["pct_chg"] == 10.0
+    assert response.json()["data_foundation"]["read_mode"] == (
+        "canonical_facts_with_presentation_cache"
+    )
 
 
 def test_history_migration_is_dry_run_by_default_and_preserves_legacy(tmp_path):
@@ -447,3 +505,38 @@ def test_history_migration_can_backfill_calendar_from_published_breadth(tmp_path
     assert applied["migrated"] == ["20260825"]
     assert breadth_path.read_bytes() == breadth_before
     assert MarketFactRepository(root).is_trading_day(date(2026, 8, 25)) is True
+
+
+def test_history_migration_rebuilds_only_selected_stale_dataset(tmp_path):
+    root = _fixture(tmp_path)
+    assert migrate_quantx_history(root, apply=True)["migrated"] == ["20260825"]
+    breadth_path = root / "market_breadth_daily" / "date=2026-08-25" / "part.parquet"
+    breadth_before = breadth_path.read_bytes()
+    marker_path = root / "quantx" / "20260825" / "_market_facts_migration.json"
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    marker["dataset_versions"]["screening_candidate_daily"] = 1
+    _write(marker_path, marker)
+
+    preview = migrate_quantx_history(
+        root,
+        datasets=(DatasetId.SCREENING_CANDIDATE_DAILY,),
+    )
+    assert preview["eligible"] == ["20260825"]
+    applied = migrate_quantx_history(
+        root,
+        apply=True,
+        datasets=(DatasetId.SCREENING_CANDIDATE_DAILY,),
+    )
+
+    assert applied["migrated"] == ["20260825"]
+    assert breadth_path.read_bytes() == breadth_before
+    candidates = MarketFactRepository(root).get_screening_candidates(
+        date(2026, 8, 25)
+    )
+    assert candidates.filter(pl.col("candidate_type") == "new_high_100d").height == 1
+    repeated = migrate_quantx_history(
+        root,
+        apply=True,
+        datasets=(DatasetId.SCREENING_CANDIDATE_DAILY,),
+    )
+    assert repeated["skipped_existing"] == ["20260825"]

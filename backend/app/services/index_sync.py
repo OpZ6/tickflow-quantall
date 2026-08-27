@@ -6,8 +6,8 @@ quotes.get_by_universes 作为补充来源。日K统一走 klines.batch。
 """
 from __future__ import annotations
 
-import logging
 import gc
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
@@ -24,6 +24,18 @@ logger = logging.getLogger(__name__)
 
 # exchanges.get_instruments 查询的交易所(沪深京)
 _EXCHANGES = ["SH", "SZ", "BJ"]
+
+# QuantX single-day market regime chart uses CSI All Share.  It is not
+# discoverable from the SH/SZ/BJ exchange instrument endpoints because its
+# vendor suffix is CSI, so keep it in the shared index universe explicitly.
+_REQUIRED_INDEX_INSTRUMENTS = (
+    {
+        "symbol": "000985.CSI",
+        "name": "CSI All Share",
+        "code": "000985",
+        "asset_type": "index",
+    },
+)
 
 
 def _quotes_to_index_instruments(resp) -> pl.DataFrame:
@@ -95,7 +107,7 @@ def _fetch_instruments_by_type(instrument_type: str, asset_type_label: str) -> p
                     "symbol": str(symbol),
                     "name": item.get("name") or str(symbol),
                 })
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("get_instruments(%s, type=%s) failed: %s", ex, instrument_type, e)
 
     if not rows:
@@ -127,6 +139,7 @@ def sync_index_instruments(
 
     # 1) 免费通道:按开关分别拉 index / etf
     if pull_index:
+        index_parts.append(pl.DataFrame(_REQUIRED_INDEX_INSTRUMENTS))
         index_df = _fetch_instruments_by_type("index", "index")
         if not index_df.is_empty():
             index_parts.append(index_df)
@@ -141,7 +154,7 @@ def sync_index_instruments(
         try:
             from app.tickflow import policy
             capset = policy.detect_capabilities(force=False)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         if capset is not None and capset.has(Cap.QUOTE_POOL):
             tf = get_client()
@@ -156,7 +169,7 @@ def sync_index_instruments(
                         if not sup.is_empty():
                             index_parts.append(sup)
                         break
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.debug("CN_Index universe supplement failed: %s", e)
 
     total = 0
@@ -260,7 +273,7 @@ def _load_etf_factors(repo: KlineRepository) -> pl.DataFrame:
         return pl.DataFrame()
     try:
         return pl.read_parquet(factor_path)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("ETF 复权因子读取失败: %s", e)
         return pl.DataFrame()
 
@@ -273,7 +286,7 @@ def sync_etf_adj_factor(
     end_time: datetime | None = None,
     on_chunk_done=None,
 ) -> tuple[int, list[str]]:
-    """同步 ETF 复权因子；失败由调用方降级为 warning。"""
+    """同步 ETF 复权因子; 失败由调用方降级为 warning。"""
     return kline_sync.sync_adj_factor(
         symbols,
         repo,
@@ -336,7 +349,7 @@ def sync_and_persist_etf_daily(
 
         repo.append_etf_daily(raw)
         batch_factors = factors.filter(pl.col("symbol").is_in(chunk)) if not factors.is_empty() else factors
-        # ETF 使用复权和通用技术指标；不传 instruments，避免套用 A股涨跌停/连板逻辑。
+        # ETF 使用复权和通用技术指标; 不传 instruments, 避免套用 A股涨跌停/连板逻辑。
         enriched = compute_enriched(raw, factors=batch_factors, instruments=None)
         repo.append_etf_enriched(enriched)
         total_rows += raw.height

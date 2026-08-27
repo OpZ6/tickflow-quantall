@@ -910,6 +910,43 @@ def _build_screening_candidates(
                 ),
             }
         )
+    pywencai = sources.get("pywencai") or {}
+    new_high = (
+        pywencai.get("new_high_100d")
+        if isinstance(pywencai.get("new_high_100d"), dict)
+        else {}
+    )
+    for item in _records(new_high, "stocks", "records", "rows"):
+        symbol = _stock_code(item.get("code") or item.get("ts_code"))
+        if not symbol:
+            continue
+        rows.append(
+            {
+                "trade_date": _trade_date(trade_date),
+                "symbol": symbol,
+                "exchange": _exchange(symbol),
+                "asset_type": "stock",
+                "name": str(item.get("name") or ""),
+                "candidate_type": "new_high_100d",
+                "priority": "signal",
+                "score": None,
+                "pct_chg": _number(item.get("pct_chg")),
+                "net_mf_yi": None,
+                "industry": str(item.get("industry") or ""),
+                "rules_matched": ["new_high_100d"],
+                "included": True,
+                "algorithm_version": "pywencai-new-high-v1",
+                "input_generation": run_id,
+                **_metadata(
+                    source="pywencai",
+                    source_record_id=f"pywencai:new_high_100d:{trade_date}:{symbol}",
+                    observed_at=ingested_at,
+                    ingested_at=ingested_at,
+                    run_id=run_id,
+                    quality_level="observed",
+                ),
+            }
+        )
     frame = _frame(DatasetId.SCREENING_CANDIDATE_DAILY, rows)
     if not frame.is_empty():
         frame = frame.unique(

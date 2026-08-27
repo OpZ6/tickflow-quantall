@@ -19,6 +19,11 @@ from .collectors import SOURCE_SPECS
 from .io import read_json, write_json_atomic
 from .repository import QuantXTableRepository
 
+_DATASET_MIGRATION_VERSIONS = {
+    dataset_id: 1 for dataset_id in DatasetId
+}
+_DATASET_MIGRATION_VERSIONS[DatasetId.SCREENING_CANDIDATE_DAILY] = 2
+
 
 def _date_dirs(data_root: Path) -> list[Path]:
     quantx = data_root / "quantx"
@@ -72,10 +77,17 @@ def migrate_quantx_history(
     *,
     apply: bool = False,
     force: bool = False,
+    datasets: tuple[DatasetId | str, ...] | None = None,
 ) -> dict:
     """Preflight or publish all migratable dates without changing legacy files."""
     data_root = Path(data_root)
     repo = MarketFactRepository(data_root)
+    targeted = bool(datasets)
+    dataset_ids = (
+        tuple(dict.fromkeys(DatasetId(item) for item in datasets))
+        if datasets
+        else tuple(DatasetId)
+    )
     result = {
         "dry_run": not apply,
         "eligible": [],
@@ -84,14 +96,31 @@ def migrate_quantx_history(
         "skipped_incomplete": {},
         "failed": {},
     }
-    dataset_ids = tuple(DatasetId)
-
     for date_dir in _date_dirs(data_root):
         day = datetime.strptime(date_dir.name, "%Y%m%d").date()
+        marker_path = date_dir / "_market_facts_migration.json"
+        marker = read_json(marker_path)
+        prior_versions = (
+            marker.get("dataset_versions", {})
+            if isinstance(marker, dict)
+            and isinstance(marker.get("dataset_versions"), dict)
+            else {}
+        )
         missing_ids = {
             item for item in dataset_ids if not repo.has_partition(item, day)
         }
-        if not force and not missing_ids:
+        stale_ids = (
+            {
+                item
+                for item in dataset_ids
+                if int(prior_versions.get(item.value, 0))
+                < _DATASET_MIGRATION_VERSIONS[item]
+            }
+            if targeted
+            else set()
+        )
+        selected_ids = set(dataset_ids) if force else missing_ids | stale_ids
+        if not selected_ids:
             result["skipped_existing"].append(date_dir.name)
             continue
         run_id = f"migration-{date_dir.name}-{uuid4().hex[:12]}"
@@ -102,8 +131,7 @@ def migrate_quantx_history(
                 run_id,
                 structured_tables=_structured_tables(date_dir),
             )
-            if not force:
-                batches = [batch for batch in batches if batch.dataset_id in missing_ids]
+            batches = [batch for batch in batches if batch.dataset_id in selected_ids]
         except FactValidationError as exc:
             result["skipped_incomplete"][date_dir.name] = str(exc)
             continue
@@ -130,14 +158,23 @@ def migrate_quantx_history(
             date_dir / "review_data.json",
             build_review_data(date_dir),
         )
-        write_json_atomic(
-            date_dir / "_market_facts_migration.json",
+        dataset_versions = dict(prior_versions)
+        dataset_versions.update(
             {
-                "schema_version": 1,
+                item.value: _DATASET_MIGRATION_VERSIONS[item]
+                for item in selected_ids
+            }
+        )
+        write_json_atomic(
+            marker_path,
+            {
+                "schema_version": 2,
                 "trade_date": date_dir.name,
                 "run_id": run_id,
                 "migrated_at": datetime.now(UTC).isoformat(timespec="seconds"),
                 "legacy_preserved": True,
+                "migration_scope": sorted(item.value for item in selected_ids),
+                "dataset_versions": dataset_versions,
                 "fact_artifacts": artifacts,
                 "reconciliation": QuantXTableRepository(
                     data_root / "quantx", repo

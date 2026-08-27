@@ -344,7 +344,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         ),
         DatasetId.SCREENING_CANDIDATE_DAILY: DatasetSpec(
             dataset_id=DatasetId.SCREENING_CANDIDATE_DAILY,
-            description="Deterministic daily rule-screen candidates",
+            description="Daily rule-screen and observed signal candidates",
             schema_version=1,
             primary_key=("trade_date", "candidate_type", "symbol"),
             partition_keys=("trade_date",),
@@ -429,7 +429,7 @@ ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
         ),
         DatasetId.SCREENING_CANDIDATE_DAILY: SourceRoute(
             DatasetId.SCREENING_CANDIDATE_DAILY,
-            ("quantx_rule_screen_v1",),
+            ("quantx_rule_screen_v1", "pywencai"),
         ),
     }
 )

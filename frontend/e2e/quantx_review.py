@@ -30,10 +30,23 @@ def main() -> None:
         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         page.locator("h2").filter(has_text=EXPECTED_SECTIONS[-1]).wait_for(timeout=10_000)
 
+        response = page.request.get(
+            f"{args.base_url.rstrip('/')}/api/quantx/review/{args.date}/data"
+        )
+        assert response.ok
+        payload = response.json()
+        foundation = payload["data_foundation"]
+        assert foundation["read_mode"] == "canonical_facts_with_presentation_cache"
+        assert "sections.s2.new_high" in foundation["canonical_fields"]
+        assert "sections.s2.new_high" not in foundation["presentation_cache_fields"]
+
         headings = page.locator("h2").all_inner_texts()
         missing = [title for title in EXPECTED_SECTIONS if title not in headings]
         assert not missing, f"missing QuantX review sections: {missing}"
         assert page.locator("canvas").count() == 11
+        new_high = page.get_by_role("heading", name="百日新高")
+        new_high.wait_for()
+        assert new_high.locator("..").locator("span").count() == 29
 
         browser.close()
 

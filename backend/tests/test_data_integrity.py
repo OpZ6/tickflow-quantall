@@ -5,7 +5,7 @@ null); 历史交易日的 quote_ts 时刻 < 15:00 即盘中快照 → 坏。
 """
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
 
 import polars as pl
@@ -198,9 +198,9 @@ def test_branch4_start_without_stale_day_uses_latest():
 
 def test_timezone_conversion_is_cn():
     # quote_ts 是毫秒 Unix 时间戳, 必须按 UTC+8 折算 — 15:00 边界用例
-    ts = int(datetime(2026, 8, 21, 7, 0, tzinfo=timezone.utc).timestamp() * 1000)  # 北京 15:00
+    ts = int(datetime(2026, 8, 21, 7, 0, tzinfo=UTC).timestamp() * 1000)  # 北京 15:00
     assert _is_snapshot(FRIDAY, ts) is False
-    ts_morning = int(datetime(2026, 8, 21, 3, 58, tzinfo=timezone.utc).timestamp() * 1000)  # 北京 11:58
+    ts_morning = int(datetime(2026, 8, 21, 3, 58, tzinfo=UTC).timestamp() * 1000)  # 北京 11:58
     assert _is_snapshot(FRIDAY, ts_morning) is True
 
 
@@ -270,8 +270,22 @@ def test_realtime_gate_blocks_on_snapshot_and_launches_repair(tmp_path, monkeypa
     from app.api import settings as settings_api
     from app.services import data_integrity
 
-    _write_daily_partition(tmp_path, "kline_daily", FRIDAY, _ts_ms(FRIDAY, time(11, 58)))
-    _write_daily_partition(tmp_path, "kline_daily", TODAY, _ts_ms(TODAY, time(10, 0)))
+    real_today = datetime.now(CN_TZ).date()
+    snapshot_day = real_today - timedelta(days=1)
+    while snapshot_day.weekday() >= 5:
+        snapshot_day -= timedelta(days=1)
+    _write_daily_partition(
+        tmp_path,
+        "kline_daily",
+        snapshot_day,
+        _ts_ms(snapshot_day, time(11, 58)),
+    )
+    _write_daily_partition(
+        tmp_path,
+        "kline_daily",
+        real_today,
+        _ts_ms(real_today, time(10, 0)),
+    )
 
     launched = []
     monkeypatch.setattr(
@@ -294,7 +308,7 @@ def test_realtime_gate_blocks_on_snapshot_and_launches_repair(tmp_path, monkeypa
     assert "盘中快照" in exc_info.value.detail
     assert "job-x" in exc_info.value.detail
     # 修复任务以最早坏日为起点, 且实时行情未被开启
-    assert launched == [(FRIDAY, "realtime_gate")]
+    assert launched == [(snapshot_day, "realtime_gate")]
     assert saved == {}
 
 
