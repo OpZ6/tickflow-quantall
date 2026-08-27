@@ -402,6 +402,7 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
         "latest": {"congestion_pct": 999},
         "table": [],
     }
+    cached["sections"]["s1"]["kline_history"] = []
     cached["sections"]["s3"]["ladder_grid"] = []
     cached["sections"]["s3"]["advance_history"] = []
     cached["sections"]["s3"]["ebb_signals"] = []
@@ -421,6 +422,20 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
             self.store = SimpleNamespace(data_dir=data_dir)
 
         def get_index_daily(self, symbol, start, end, columns=None):
+            if symbol == "000985.SH":
+                dates = [date(2026, 7, 27) + timedelta(days=index) for index in range(30)]
+                closes = [100.0 + index + index % 3 for index in range(30)]
+                return pl.DataFrame(
+                    {
+                        "symbol": [symbol] * 30,
+                        "date": dates,
+                        "open": [value - 0.5 for value in closes],
+                        "high": [value + 2.0 for value in closes],
+                        "low": [value - 1.0 for value in closes],
+                        "close": closes,
+                        "volume": [1_000_000.0 + index for index in range(30)],
+                    }
+                )
             if symbol != "000001.SH":
                 return pl.DataFrame(
                     schema={"symbol": pl.String, "date": pl.Date, "close": pl.Float64}
@@ -470,6 +485,17 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert index["code"] == "000001.SH"
     assert index["close"] == 11.0
     assert index["pct_chg"] == 10.0
+    all_a = next(
+        row
+        for row in response.json()["sections"]["s1"]["indexes"]
+        if row["code"] == "000985.CSI"
+    )
+    assert all_a["close"] == 131.0
+    history = response.json()["sections"]["s1"]["kline_history"]
+    assert len(history) == 30
+    assert history[-1]["date"] == "20260825"
+    assert history[-1]["ma5"] == 128.2
+    assert history[-1]["cci5"] is not None
     assert response.json()["data_foundation"]["read_mode"] == (
         "canonical_facts_with_presentation_cache"
     )
@@ -477,6 +503,12 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
         "canonical_fields"
     ]
     assert "sections.s1.congestion" not in response.json()["data_foundation"][
+        "presentation_cache_fields"
+    ]
+    assert "sections.s1.kline_history" in response.json()["data_foundation"][
+        "canonical_fields"
+    ]
+    assert "sections.s1.kline_history" not in response.json()["data_foundation"][
         "presentation_cache_fields"
     ]
 

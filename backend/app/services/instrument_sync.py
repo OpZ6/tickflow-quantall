@@ -79,7 +79,11 @@ def sync_instruments(data_dir: Path) -> int:
     all_rows = _fetch_instruments_via_provider()
     if all_rows is None:
         # 未命中非 tickflow provider → 走 tickflow 直连
-        tf = get_client()
+        try:
+            tf = get_client()
+        except Exception as exc:
+            logger.warning("instrument client unavailable, keep local dimension: %s", exc)
+            return 0
         all_rows = []
         for ex in _EXCHANGES:
             try:

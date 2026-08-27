@@ -17,6 +17,26 @@ from app.quantx_data.collectors import SOURCE_SPECS
 
 router = APIRouter(prefix="/api/data-sources", tags=["data-sources"])
 
+_CORE_DATASETS = (
+    {
+        "dataset_id": "kline_index_daily",
+        "description": "TickFlow canonical daily index OHLCV",
+        "schema_version": 1,
+        "primary_key": ["symbol", "date"],
+        "partition_keys": ["date"],
+        "required_columns": ["symbol", "date", "open", "high", "low", "close", "volume"],
+        "field_units": {"volume": "provider_native"},
+        "freshness": "trading_day_close",
+    },
+)
+
+_CORE_ROUTES = (
+    {
+        "dataset_id": "kline_index_daily",
+        "sources": ["tickflow_index_kline", "tencent_index"],
+    },
+)
+
 
 def _data_root(request: Request) -> Path:
     return Path(request.app.state.repo.store.data_dir)
@@ -54,13 +74,37 @@ def datasets() -> dict[str, Any]:
                 "freshness": spec.freshness,
             }
             for spec in DATASETS.values()
-        ]
+        ] + list(_CORE_DATASETS)
     }
 
 
 @router.get("/sources")
 def sources() -> dict[str, Any]:
     rows = [
+        {
+            "source_id": "tickflow_index_kline",
+            "display_name": "TickFlow index K-line",
+            "supported_datasets": ["kline_index_daily"],
+            "collector_type": "provider",
+            "collector": "tickflow",
+            "credentials_ref": None,
+            "credentials_configured": True,
+            "dependency_available": True,
+            "max_retries": 0,
+            "freshness_required": True,
+        },
+        {
+            "source_id": "tencent_index",
+            "display_name": "Tencent public index K-line fallback",
+            "supported_datasets": ["kline_index_daily"],
+            "collector_type": "provider",
+            "collector": "tencent_index",
+            "credentials_ref": None,
+            "credentials_configured": True,
+            "dependency_available": True,
+            "max_retries": 0,
+            "freshness_required": True,
+        },
         {
             "source_id": "tickflow_enriched_aggregate",
             "display_name": "TickFlow enriched aggregate",
@@ -151,7 +195,7 @@ def routes() -> dict[str, Any]:
         "routes": [
             {"dataset_id": dataset_id.value, "sources": list(route.sources)}
             for dataset_id, route in ROUTES.items()
-        ]
+        ] + list(_CORE_ROUTES)
     }
 
 
@@ -174,6 +218,12 @@ def health(request: Request) -> dict[str, Any]:
         }
     except ValueError as exc:
         retention = {"status": "invalid_configuration", "error": str(exc)}
+    index_root = data_root / "kline_index_daily"
+    index_partitions = sorted(
+        path.name[5:]
+        for path in index_root.glob("date=*")
+        if path.is_dir() and path.name.startswith("date=")
+    ) if index_root.is_dir() else []
     return {
         "latest_trade_date": trade_date,
         "run_id": manifest.get("run_id"),
@@ -196,6 +246,12 @@ def health(request: Request) -> dict[str, Any]:
                 "latest_partition": available[-1].isoformat() if available else None,
             }
             for dataset_id in DatasetId
+        ] + [
+            {
+                "dataset_id": "kline_index_daily",
+                "partition_count": len(index_partitions),
+                "latest_partition": index_partitions[-1] if index_partitions else None,
+            }
         ],
         "snapshot_retention": retention,
     }

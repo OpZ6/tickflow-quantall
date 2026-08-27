@@ -2002,6 +2002,8 @@ class KlineRepository:
             return
         from app.indicators.pipeline import ENRICHED_STORAGE_COLS
         storage_cols = [c for c in ENRICHED_STORAGE_COLS if c in df.columns]
+        if "data_source" in df.columns:
+            storage_cols.append("data_source")
         df_storage = df.select(storage_cols)
         self._write_daily_partition(df_storage, "kline_index_enriched")
 

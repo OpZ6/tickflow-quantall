@@ -11,6 +11,10 @@ import polars as pl
 
 from app.market_facts.registry import DatasetId, get_route
 from app.market_facts.repository import MarketFactRepository
+from app.services.index_sync import (
+    QUANTX_ALL_A_DISPLAY_SYMBOL,
+    QUANTX_ALL_A_STORAGE_SYMBOL,
+)
 
 from .io import read_json
 
@@ -86,7 +90,6 @@ class QuantXReviewRepository:
     _PRESENTATION_CACHE_FIELDS = (
         "sections.s0.diagnosis",
         "sections.s0.risks",
-        "sections.s1.kline_history",
         "sections.s1.width_heat",
         "sections.s1.futures",
         "sections.s3.ladder_detail.supplemental_fields",
@@ -124,6 +127,7 @@ class QuantXReviewRepository:
         self._apply_sectors(snapshot, selected_day, canonical_fields)
         self._apply_new_high(snapshot, selected_day, canonical_fields)
         self._apply_candidates(snapshot, selected_day, canonical_fields)
+        self._apply_kline_history(snapshot, selected_day, canonical_fields)
         self._apply_indexes(snapshot, selected_day, canonical_fields)
 
         snapshot["data_foundation"] = {
@@ -650,19 +654,20 @@ class QuantXReviewRepository:
             if isinstance(row, dict)
         }
         updated = []
-        for code in (
-            "000001.SH",
-            "399001.SZ",
-            "399006.SZ",
-            "000688.SH",
-            "000300.SH",
-            "000016.SH",
-            "399303.SZ",
-            "399905.SZ",
+        for display_code, storage_code in (
+            ("000001.SH", "000001.SH"),
+            ("399001.SZ", "399001.SZ"),
+            ("399006.SZ", "399006.SZ"),
+            ("000688.SH", "000688.SH"),
+            ("000300.SH", "000300.SH"),
+            ("000016.SH", "000016.SH"),
+            ("399303.SZ", "399303.SZ"),
+            ("399905.SZ", "399905.SZ"),
+            (QUANTX_ALL_A_DISPLAY_SYMBOL, QUANTX_ALL_A_STORAGE_SYMBOL),
         ):
             try:
                 frame = self.indexes.get_index_daily(
-                    code,
+                    storage_code,
                     day - timedelta(days=10),
                     day,
                     ["symbol", "date", "close"],
@@ -681,11 +686,11 @@ class QuantXReviewRepository:
                 if previous_close not in (None, 0) and row.get("close") is not None
                 else None
             )
-            previous = cached_by_code.get(code, {})
+            previous = cached_by_code.get(display_code, {})
             updated.append(
                 {
                     **previous,
-                    "code": code,
+                    "code": display_code,
                     "close": row.get("close"),
                     "pct_chg": pct_chg,
                 }
@@ -702,3 +707,71 @@ class QuantXReviewRepository:
                 {**strip_rows.get(row["code"], {}), **row} for row in updated[:4]
             ]
             fields.extend(["metric_strip.indexes", "sections.s1.indexes"])
+
+    def _apply_kline_history(
+        self,
+        snapshot: dict[str, Any],
+        day: date,
+        fields: list[str],
+    ) -> None:
+        if self.indexes is None or not hasattr(self.indexes, "get_index_daily"):
+            return
+        try:
+            frame = self.indexes.get_index_daily(
+                QUANTX_ALL_A_STORAGE_SYMBOL,
+                day - timedelta(days=240),
+                day,
+                ["symbol", "date", "open", "high", "low", "close", "volume"],
+            )
+        except (OSError, RuntimeError, ValueError):
+            return
+        required = {"date", "open", "high", "low", "close"}
+        if frame.is_empty() or not required.issubset(frame.columns):
+            return
+        frame = frame.sort("date")
+        typical_price = (
+            pl.col("high") + pl.col("low") + pl.col("close")
+        ) / 3
+        frame = (
+            frame.with_columns(typical_price.alias("_typical_price"))
+            .with_columns(
+                pl.col("close").rolling_mean(5).alias("ma5"),
+                pl.col("close").rolling_mean(10).alias("ma10"),
+                pl.col("close").rolling_mean(20).alias("ma20"),
+                pl.col("_typical_price").rolling_mean(5).alias("_typical_ma5"),
+                pl.col("_typical_price")
+                .rolling_map(
+                    lambda values: (values - values.mean()).abs().mean(),
+                    window_size=5,
+                )
+                .alias("_mean_deviation5"),
+            )
+            .with_columns(
+                pl.when(pl.col("_mean_deviation5") > 0)
+                .then(
+                    (pl.col("_typical_price") - pl.col("_typical_ma5"))
+                    / (0.015 * pl.col("_mean_deviation5"))
+                )
+                .otherwise(None)
+                .alias("cci5")
+            )
+            .tail(130)
+        )
+        rows = []
+        for row in frame.to_dicts():
+            rows.append(
+                {
+                    "date": row["date"].strftime("%Y%m%d"),
+                    "open": row.get("open"),
+                    "high": row.get("high"),
+                    "low": row.get("low"),
+                    "close": row.get("close"),
+                    "vol": row.get("volume"),
+                    "ma5": round(row["ma5"], 2) if row.get("ma5") is not None else None,
+                    "ma10": round(row["ma10"], 2) if row.get("ma10") is not None else None,
+                    "ma20": round(row["ma20"], 2) if row.get("ma20") is not None else None,
+                    "cci5": round(row["cci5"], 1) if row.get("cci5") is not None else None,
+                }
+            )
+        _section(snapshot, "s1")["kline_history"] = rows
+        fields.append("sections.s1.kline_history")

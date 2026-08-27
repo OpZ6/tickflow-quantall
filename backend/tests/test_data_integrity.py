@@ -401,7 +401,7 @@ def test_pipeline_self_heals_snapshot_day(tmp_path, monkeypatch):
     降级为从坏日起的范围拉取, 并把坏 enriched 分区删后重算。"""
     from app.config import settings as app_settings
     from app.jobs import daily_pipeline
-    from app.services import instrument_sync, kline_sync
+    from app.services import index_sync, instrument_sync, kline_sync
     from app.tickflow.repository import DataStore, KlineRepository
 
     today = datetime.now(CN_TZ).date()
@@ -416,6 +416,26 @@ def test_pipeline_self_heals_snapshot_day(tmp_path, monkeypatch):
 
     # 网络函数离线化: 维表同步 + 日K batch 拉取(记录参数)
     monkeypatch.setattr(instrument_sync, "sync_instruments", lambda data_dir: 0)
+    monkeypatch.setattr(
+        index_sync,
+        "sync_index_instruments",
+        lambda repo, pull_index, pull_etf: 1,
+    )
+    index_fallback_calls: list[dict] = []
+
+    def _fake_index_fallback(repo, *, start_date, end_date):
+        index_fallback_calls.append(
+            {"start": start_date.date(), "end": end_date.date()}
+        )
+        return 1
+
+    monkeypatch.setattr(
+        index_sync,
+        "sync_quantx_all_a_fallback",
+        _fake_index_fallback,
+    )
+    monkeypatch.setattr(daily_pipeline._prefs, "get_pipeline_pull_index", lambda: True)
+    monkeypatch.setattr(daily_pipeline._prefs, "get_pipeline_pull_etf", lambda: False)
     batch_calls: list[dict] = []
 
     def _fake_batch(universe, repo, capset, start_date=None, end_date=None, on_chunk_done=None):
@@ -438,6 +458,9 @@ def test_pipeline_self_heals_snapshot_day(tmp_path, monkeypatch):
     assert batch_calls and batch_calls[0]["start"] == yesterday
     assert result["integrity_repair_from"] == yesterday.isoformat()
     assert result["integrity_issues"] >= 1
+    assert index_fallback_calls == [
+        {"start": today - timedelta(days=365), "end": today}
+    ]
     # 坏 enriched 分区被删后当"新日期"重算写回 (无 prune 时 Step 2 走 skip 不写)
     enriched_left = sorted(
         p.name for p in (tmp_path / "kline_daily_enriched").glob("date=*")

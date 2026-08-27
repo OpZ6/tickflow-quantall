@@ -607,13 +607,24 @@ def test_data_source_management_api_exposes_contracts_without_secrets(tmp_path) 
     assert health.status_code == 200
     assert calendar.status_code == 200
     assert {item["dataset_id"] for item in datasets.json()["datasets"]} == {
-        item.value for item in DatasetId
+        *(item.value for item in DatasetId),
+        "kline_index_daily",
     }
     route = next(
         item for item in routes.json()["routes"]
         if item["dataset_id"] == DatasetId.LIMIT_EVENT_DAILY.value
     )
     assert route["sources"][0] == "pywencai"
+    index_route = next(
+        item for item in routes.json()["routes"]
+        if item["dataset_id"] == "kline_index_daily"
+    )
+    assert index_route["sources"] == ["tickflow_index_kline", "tencent_index"]
+    fallback_source = next(
+        item for item in sources.json()["sources"]
+        if item["source_id"] == "tencent_index"
+    )
+    assert fallback_source["credentials_ref"] is None
     source = next(item for item in sources.json()["sources"] if item["source_id"] == "tushare")
     assert source["credentials_ref"] == "TUSHARE_TOKEN"
     assert "token" not in source
@@ -621,6 +632,7 @@ def test_data_source_management_api_exposes_contracts_without_secrets(tmp_path) 
         item["dataset_id"]: item for item in health.json()["datasets"]
     }
     assert dataset_health["trading_calendar"]["partition_count"] == 1
+    assert dataset_health["kline_index_daily"]["partition_count"] == 0
     assert health.json()["snapshot_retention"]["retention_days"] == 730
     assert "metadata_paths" not in health.json()["snapshot_retention"]
     assert calendar.json()["calendar"] == [

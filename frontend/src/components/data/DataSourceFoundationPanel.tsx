@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 
 const DATASET_LABELS: Record<string, string> = {
+  kline_index_daily: '指数日 K',
   trading_calendar: '交易日历',
   market_breadth_daily: '市场宽度',
   market_liquidity_daily: '市场流动性',

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 import polars as pl
 
+from app.data_providers.tencent_index import fetch_index_daily as fetch_tencent_index_daily
 from app.indicators.pipeline import compute_enriched
 from app.services import kline_sync, preferences
 from app.tickflow.capabilities import Cap, CapabilitySet
@@ -25,12 +26,16 @@ logger = logging.getLogger(__name__)
 # exchanges.get_instruments 查询的交易所(沪深京)
 _EXCHANGES = ["SH", "SZ", "BJ"]
 
-# QuantX single-day market regime chart uses CSI All Share.  It is not
-# discoverable from the SH/SZ/BJ exchange instrument endpoints because its
-# vendor suffix is CSI, so keep it in the shared index universe explicitly.
+# QuantX displays the Tushare-style ``000985.CSI`` identifier, while TickFlow's
+# exchange and K-line APIs expose the same CSI All Share index as ``000985.SH``.
+# Keep storage/provider identifiers separate from presentation identifiers so
+# the scheduled index sync can actually fetch the series.
+QUANTX_ALL_A_DISPLAY_SYMBOL = "000985.CSI"
+QUANTX_ALL_A_STORAGE_SYMBOL = "000985.SH"
+
 _REQUIRED_INDEX_INSTRUMENTS = (
     {
-        "symbol": "000985.CSI",
+        "symbol": QUANTX_ALL_A_STORAGE_SYMBOL,
         "name": "CSI All Share",
         "code": "000985",
         "asset_type": "index",
@@ -93,7 +98,11 @@ def _fetch_instruments_by_type(instrument_type: str, asset_type_label: str) -> p
     instrument_type: 'index' / 'etf'
     asset_type_label: 写入 instruments 表的 asset_type 标记('index' / 'etf')
     """
-    tf = get_client()
+    try:
+        tf = get_client()
+    except Exception as exc:
+        logger.warning("index instrument client unavailable: %s", exc)
+        return pl.DataFrame()
     rows: list[dict] = []
     for ex in _EXCHANGES:
         try:
@@ -157,20 +166,24 @@ def sync_index_instruments(
         except Exception:
             pass
         if capset is not None and capset.has(Cap.QUOTE_POOL):
-            tf = get_client()
-            for kwargs in (
-                {"universes": ["CN_Index"]},
-                {"universes": ["CN_Index"], "as_dataframe": False},
-            ):
-                try:
-                    resp = tf.quotes.get_by_universes(**kwargs)
-                    if resp is not None and len(resp) > 0:
-                        sup = _quotes_to_index_instruments(resp)
-                        if not sup.is_empty():
-                            index_parts.append(sup)
-                        break
-                except Exception as e:
-                    logger.debug("CN_Index universe supplement failed: %s", e)
+            try:
+                tf = get_client()
+            except Exception as exc:
+                logger.debug("CN_Index universe client unavailable: %s", exc)
+            else:
+                for kwargs in (
+                    {"universes": ["CN_Index"]},
+                    {"universes": ["CN_Index"], "as_dataframe": False},
+                ):
+                    try:
+                        resp = tf.quotes.get_by_universes(**kwargs)
+                        if resp is not None and len(resp) > 0:
+                            sup = _quotes_to_index_instruments(resp)
+                            if not sup.is_empty():
+                                index_parts.append(sup)
+                            break
+                    except Exception as e:
+                        logger.debug("CN_Index universe supplement failed: %s", e)
 
     total = 0
     if index_parts:
@@ -265,6 +278,34 @@ def sync_and_persist_index_daily(
         gc.collect()
     repo.refresh_index_views()
     return total_rows
+
+
+def sync_quantx_all_a_fallback(
+    repo: KlineRepository,
+    *,
+    start_date: datetime,
+    end_date: datetime,
+) -> int:
+    """Publish the required CSI All Share series when TickFlow K-line is unavailable."""
+    if start_date > end_date:
+        return 0
+    raw = fetch_tencent_index_daily(
+        QUANTX_ALL_A_STORAGE_SYMBOL,
+        start_date.date(),
+        end_date.date(),
+    )
+    if raw.is_empty():
+        return 0
+    repo.append_index_daily(raw)
+    enriched = compute_enriched(raw, factors=None, instruments=None)
+    repo.append_index_enriched(enriched)
+    repo.refresh_index_views()
+    logger.info(
+        "QuantX required index fallback synced: %s, +%d rows",
+        QUANTX_ALL_A_STORAGE_SYMBOL,
+        raw.height,
+    )
+    return raw.height
 
 
 def _load_etf_factors(repo: KlineRepository) -> pl.DataFrame:

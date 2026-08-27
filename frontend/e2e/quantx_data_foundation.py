@@ -47,7 +47,10 @@ def main() -> None:
             response = page.request.get(f"{base_url}/api/data-sources/{endpoint}")
             assert response.ok, f"data source endpoint failed: {endpoint}"
         datasets_response = page.request.get(f"{base_url}/api/data-sources/datasets").json()
-        assert len(datasets_response["datasets"]) == 12
+        assert len(datasets_response["datasets"]) == 13
+        assert "kline_index_daily" in {
+            item["dataset_id"] for item in datasets_response["datasets"]
+        }
         calendar_response = page.request.get(
             f"{base_url}/api/data-sources/calendar?start=2026-08-25&end=2026-08-26"
         )

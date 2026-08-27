@@ -40,6 +40,7 @@ def main() -> None:
         canonical = foundation["canonical_fields"]
         presentation_cache = foundation["presentation_cache_fields"]
         for field in (
+            "sections.s1.kline_history",
             "sections.s1.congestion",
             "sections.s2.new_high",
             "sections.s2.participation",
@@ -54,6 +55,8 @@ def main() -> None:
             assert field not in presentation_cache
         assert len(payload["sections"]["s3"]["ebb_signals"]) == 4
         assert len(payload["sections"]["s3"]["crash_signals"]) == 3
+        assert len(payload["sections"]["s1"]["kline_history"]) == 130
+        assert payload["sections"]["s1"]["kline_history"][-1]["date"] == args.date
 
         headings = page.locator("h2").all_inner_texts()
         missing = [title for title in EXPECTED_SECTIONS if title not in headings]

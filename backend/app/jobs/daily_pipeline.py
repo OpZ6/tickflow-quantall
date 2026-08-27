@@ -422,6 +422,49 @@ def run_now(
     etf_adj_symbols = 0
     pull_index = _prefs.get_pipeline_pull_index()
     pull_etf = _prefs.get_pipeline_pull_etf()
+    index_fallback_attempted = False
+
+    if pull_index and not capset.has(Cap.KLINE_DAILY_BATCH):
+        index_fallback_attempted = True
+        emit("sync_index", 88, "同步 QuantX 必需指数 (腾讯备用源)…")
+        try:
+            index_count = index_sync.sync_index_instruments(
+                repo,
+                pull_index=True,
+                pull_etf=False,
+            )
+            required_history = repo.get_index_daily(
+                index_sync.QUANTX_ALL_A_STORAGE_SYMBOL,
+                today - _td(days=730),
+                today,
+                ["date"],
+            )
+            if override_start_date:
+                index_start = override_start_date
+            elif not required_history.is_empty():
+                latest_required = required_history["date"].max()
+                index_start = latest_required + _td(days=1)
+            else:
+                index_start = today - _td(days=365)
+            if index_stale_day is not None and index_start > index_stale_day:
+                index_start = index_stale_day
+            written_index_daily = index_sync.sync_quantx_all_a_fallback(
+                repo,
+                start_date=_dt.combine(index_start, _dt.min.time()),
+                end_date=_dt.combine(today, _dt.min.time()),
+            )
+            _invalidate("index_instruments")
+            _invalidate("index_daily")
+            _invalidate("index_enriched")
+            emit(
+                "sync_index",
+                89,
+                f"QuantX 必需指数完成,{index_count} 只/{written_index_daily} 行 (腾讯备用源)",
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("required QuantX index fallback failed: %s", e)
+            emit("sync_index", 89, f"QuantX 必需指数备用同步失败:{e}")
+            stage_errors.append(f"required QuantX index fallback: {e}")
 
     if capset.has(Cap.KLINE_DAILY_BATCH) and (pull_index or pull_etf):
         _types = []
@@ -540,7 +583,7 @@ def run_now(
             logger.warning("sync_index/etf failed: %s", e)
             emit("sync_index", 89, f"指数/ETF同步失败:{e}")
             stage_errors.append(f"index/etf sync: {e}")
-    else:
+    elif not index_fallback_attempted:
         skipped.append("sync_index")
 
     # Step 2.5: 分钟 K 同步(可选) — 未启用或无 capability 时静默跳过(不 emit)
