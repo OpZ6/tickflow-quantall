@@ -127,6 +127,7 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
         "theme_member_daily",
         "sector_flow_daily",
         "market_state_daily",
+        "market_signal_daily",
         "screening_candidate_daily",
     }
     fact_repo = MarketFactRepository(root)
@@ -379,6 +380,7 @@ def test_tables_api_reads_canonical_facts_and_reports_legacy_drift(tmp_path):
     assert response.status_code == 200
     payload = response.json()
     assert payload["market_breadth"]["up_count"] == 1
+    assert payload["market_liquidity"]["top5pct_amount_ratio_pct"] == 43.48
     assert payload["data_foundation"]["read_mode"] == "canonical_with_legacy_enrichment"
     breadth_status = payload["data_foundation"]["reconciliation"]["market_breadth_daily"]
     assert breadth_status["status"] == "mismatch"
@@ -396,9 +398,20 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
         "status": "unavailable",
         "stocks": [],
     }
+    cached["sections"]["s1"]["congestion"] = {
+        "latest": {"congestion_pct": 999},
+        "table": [],
+    }
     cached["sections"]["s3"]["ladder_grid"] = []
+    cached["sections"]["s3"]["advance_history"] = []
+    cached["sections"]["s3"]["ebb_signals"] = []
+    cached["sections"]["s3"]["crash_signals"] = []
+    cached["sections"]["s2"]["participation"] = {"conditions": []}
+    cached["sections"]["s2"]["ebb_risk"] = {"signal_count": 999}
     cached["sections"]["s4"]["sector_flow"] = {"top_in": [], "top_out": []}
     cached["sections"]["s5"]["candidates"] = []
+    cached["sections"]["s6"]["position"] = {"band": "错误缓存"}
+    cached["sections"]["s6"]["scenes"] = []
     _write(date_dir / "review_data.json", cached)
     for source in SOURCE_NAMES:
         (date_dir / f"{source}.json").unlink()
@@ -438,9 +451,21 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert response.json()["sections"]["s2"]["new_high"]["stocks"][0][
         "code"
     ] == "300002"
+    congestion = response.json()["sections"]["s1"]["congestion"]
+    assert congestion["latest"]["congestion_pct"] == 43.48
+    assert congestion["table"][-1][2:] == [1.0, 2.3, 43.48]
     assert response.json()["sections"]["s3"]["ladder_grid"]
+    assert response.json()["sections"]["s3"]["advance_history"][-1][
+        "date"
+    ] == "20260825"
+    assert len(response.json()["sections"]["s3"]["ebb_signals"]) == 4
+    assert len(response.json()["sections"]["s3"]["crash_signals"]) == 3
+    assert len(response.json()["sections"]["s2"]["participation"]["conditions"]) == 4
+    assert response.json()["sections"]["s2"]["ebb_risk"]["signal_count"] == 1
     assert response.json()["sections"]["s4"]["sector_flow"]["top_in"]
     assert response.json()["sections"]["s5"]["candidates"]
+    assert response.json()["sections"]["s6"]["position"]["band"] != "错误缓存"
+    assert len(response.json()["sections"]["s6"]["scenes"]) == 3
     index = response.json()["sections"]["s1"]["indexes"][0]
     assert index["code"] == "000001.SH"
     assert index["close"] == 11.0
@@ -448,6 +473,12 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert response.json()["data_foundation"]["read_mode"] == (
         "canonical_facts_with_presentation_cache"
     )
+    assert "sections.s1.congestion" in response.json()["data_foundation"][
+        "canonical_fields"
+    ]
+    assert "sections.s1.congestion" not in response.json()["data_foundation"][
+        "presentation_cache_fields"
+    ]
 
 
 def test_history_migration_is_dry_run_by_default_and_preserves_legacy(tmp_path):

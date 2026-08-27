@@ -1,6 +1,7 @@
 """Normalize QuantX source payloads into canonical market fact batches."""
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -26,6 +27,8 @@ def _frame(dataset_id: DatasetId, rows: list[dict[str, Any]]) -> pl.DataFrame:
     spec = get_dataset(dataset_id)
     if not rows:
         return pl.DataFrame(schema=spec.storage_schema)
+    for row in rows:
+        row["schema_version"] = spec.schema_version
     return pl.DataFrame(
         rows,
         schema=spec.storage_schema,
@@ -219,12 +222,14 @@ def _build_market_breadth(
         up_count = sum(value is not None and value > 0 for value in changes)
         down_count = sum(value is not None and value < 0 for value in changes)
         flat_count = sum(value is not None and value == 0 for value in changes)
+        unknown_count = sum(value is None for value in changes)
         total_count = len(daily)
     elif summary:
         up_count = int(summary.get("up_count") or 0)
         down_count = int(summary.get("down_count") or 0)
         flat_count = int(summary.get("flat_count") or 0)
         total_count = int(summary.get("total_stocks") or up_count + down_count + flat_count)
+        unknown_count = max(total_count - up_count - down_count - flat_count, 0)
     else:
         raise FactValidationError(f"cannot build market_breadth_daily for {trade_date}")
     up_ratio_pct = round(up_count / total_count * 100, 2) if total_count else None
@@ -234,6 +239,7 @@ def _build_market_breadth(
         "up_count": up_count,
         "down_count": down_count,
         "flat_count": flat_count,
+        "unknown_count": unknown_count,
         "total_count": total_count,
         "up_ratio_pct": up_ratio_pct,
         "advance_decline": up_count - down_count,
@@ -300,6 +306,27 @@ def _build_market_liquidity(
             _frame(DatasetId.MARKET_LIQUIDITY_DAILY, []),
         )
     congestion = table.get("congestion") if isinstance(table.get("congestion"), dict) else {}
+    top5pct_amount = None
+    top5pct_ratio = None
+    if amounts and total_amount:
+        top5pct_count = max(1, int(len(amounts) * 0.05))
+        top5pct_amount = round(
+            sum(sorted(amounts, reverse=True)[:top5pct_count]), 2
+        )
+        top5pct_ratio = round(top5pct_amount / total_amount * 100, 2)
+    else:
+        top5pct_ratio = _number(
+            summary.get("top5pct_amount_ratio")
+            or summary.get("top5_amount_ratio")
+        )
+        if top5pct_ratio is not None:
+            top5pct_amount = round(total_amount * top5pct_ratio / 100, 2)
+    top20_ratio = _number(summary.get("top20_amount_ratio"))
+    if top20_ratio is None and amounts and total_amount:
+        top20_ratio = round(
+            sum(sorted(amounts, reverse=True)[:20]) / total_amount * 100,
+            2,
+        )
     row = {
         "trade_date": _trade_date(trade_date),
         "market": "CN_A",
@@ -307,8 +334,10 @@ def _build_market_liquidity(
         "top5_amount_yi": _number(table.get("top5_amount_yi"))
         if table.get("top5_amount_yi") is not None
         else (round(sum(sorted(amounts, reverse=True)[:5]), 2) if amounts else None),
-        "top5_amount_ratio_pct": _number(summary.get("top5_amount_ratio")),
-        "top20_amount_ratio_pct": _number(summary.get("top20_amount_ratio")),
+        "top5pct_amount_yi": top5pct_amount,
+        "top5_amount_ratio_pct": top5pct_ratio,
+        "top5pct_amount_ratio_pct": top5pct_ratio,
+        "top20_amount_ratio_pct": top20_ratio,
         "volume_ratio_pct": _number(congestion.get("volume_ratio")),
         **_metadata(
             source=source,
@@ -864,6 +893,95 @@ def _build_market_state(
     )
 
 
+def _json_value(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _build_market_signals(
+    trade_date: str,
+    structured: dict[str, dict[str, Any]],
+    run_id: str,
+    ingested_at: str,
+) -> FactBatch:
+    computed = structured.get("_computed") or structured.get("sentiment_state") or {}
+    rows: list[dict[str, Any]] = []
+
+    def append_signal(
+        *,
+        group: str,
+        signal_id: str,
+        signal_name: str,
+        payload: dict[str, Any],
+        verdict: str = "",
+    ) -> None:
+        rows.append(
+            {
+                "trade_date": _trade_date(trade_date),
+                "market": "CN_A",
+                "signal_group": group,
+                "signal_id": signal_id,
+                "signal_name": signal_name,
+                "ok": payload.get("ok"),
+                "triggered": payload.get("triggered"),
+                "available": payload.get("available"),
+                "status": str(payload.get("status") or ""),
+                "group_verdict": verdict,
+                "value_json": _json_value(payload.get("value")),
+                "baseline_json": _json_value(payload.get("baseline")),
+                "evidence": str(
+                    payload.get("evidence") or payload.get("note") or ""
+                ),
+                "algorithm_version": "quantx-data-v1",
+                "input_generation": run_id,
+                **_metadata(
+                    source="quantx_deterministic_v1",
+                    source_record_id=(
+                        f"quantx_deterministic_v1:{trade_date}:{group}:{signal_id}"
+                    ),
+                    observed_at=ingested_at,
+                    ingested_at=ingested_at,
+                    run_id=run_id,
+                    quality_level="derived",
+                ),
+            }
+        )
+
+    participation = computed.get("participation_check") or {}
+    for signal_id, payload in (participation.get("conditions") or {}).items():
+        if isinstance(payload, dict):
+            append_signal(
+                group="participation",
+                signal_id=str(signal_id),
+                signal_name=str(signal_id),
+                payload=payload,
+                verdict=str(participation.get("verdict") or ""),
+            )
+    ebb = computed.get("ebb_risk_check") or {}
+    for signal_id, payload in (ebb.get("signals") or {}).items():
+        if isinstance(payload, dict):
+            append_signal(
+                group="ebb",
+                signal_id=str(signal_id),
+                signal_name=str(signal_id),
+                payload=payload,
+                verdict=str(ebb.get("verdict") or ""),
+            )
+    crash = computed.get("crash_signals") or {}
+    for index, payload in enumerate(crash.get("signals") or [], start=1):
+        if isinstance(payload, dict):
+            append_signal(
+                group="crash",
+                signal_id=f"crash_{index}",
+                signal_name=str(payload.get("name") or f"crash_{index}"),
+                payload=payload,
+            )
+    return FactBatch(
+        DatasetId.MARKET_SIGNAL_DAILY,
+        _trade_date(trade_date),
+        _frame(DatasetId.MARKET_SIGNAL_DAILY, rows),
+    )
+
+
 def _build_screening_candidates(
     trade_date: str,
     sources: dict[str, dict[str, Any]],
@@ -988,6 +1106,7 @@ def build_initial_fact_batches(
         ),
         _build_sector_flows(trade_date, sources, run_id, ingested_at),
         _build_market_state(trade_date, structured, run_id, ingested_at),
+        _build_market_signals(trade_date, structured, run_id, ingested_at),
         _build_screening_candidates(
             trade_date, sources, structured, run_id, ingested_at
         ),

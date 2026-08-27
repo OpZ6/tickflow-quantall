@@ -1,6 +1,7 @@
 """Canonical read model for the QuantX single-day rich dashboard."""
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -38,10 +39,40 @@ def _preferred(frame: pl.DataFrame, dataset_id: DatasetId) -> pl.DataFrame:
     return frame.head(0)
 
 
+def _preferred_by_day(
+    frame: pl.DataFrame,
+    dataset_id: DatasetId,
+) -> pl.DataFrame:
+    if frame.is_empty() or "source" not in frame.columns:
+        return frame
+    ranks = {
+        source: rank for rank, source in enumerate(get_route(dataset_id).sources)
+    }
+    return (
+        frame.with_columns(
+            pl.col("source")
+            .replace_strict(ranks, default=len(ranks))
+            .alias("_source_rank")
+        )
+        .sort(["trade_date", "_source_rank"])
+        .unique(subset=["trade_date"], keep="first", maintain_order=True)
+        .drop("_source_rank")
+    )
+
+
 def _section(snapshot: dict[str, Any], name: str) -> dict[str, Any]:
     sections = snapshot.setdefault("sections", {})
     section = sections.setdefault(name, {})
     return section if isinstance(section, dict) else {}
+
+
+def _decoded(value: str | None) -> Any:
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
 
 
 class QuantXReviewRepository:
@@ -53,19 +84,14 @@ class QuantXReviewRepository:
     """
 
     _PRESENTATION_CACHE_FIELDS = (
-        "sections.s0.diagnosis_details",
+        "sections.s0.diagnosis",
         "sections.s0.risks",
-        "sections.s1.kline_history.000985.CSI",
+        "sections.s1.kline_history",
         "sections.s1.width_heat",
         "sections.s1.futures",
-        "sections.s1.congestion",
-        "sections.s3.ebb_signals",
-        "sections.s3.crash_signals",
-        "sections.s3.advance_history",
         "sections.s3.ladder_detail.supplemental_fields",
         "sections.s4.institution",
         "sections.s4.dx_strength",
-        "sections.s6.position_and_scenarios",
     )
 
     def __init__(
@@ -88,6 +114,10 @@ class QuantXReviewRepository:
 
         self._apply_market(snapshot, selected_day, canonical_fields)
         self._apply_history(snapshot, selected_day, canonical_fields)
+        self._apply_congestion(snapshot, selected_day, canonical_fields)
+        self._apply_advance_history(snapshot, selected_day, canonical_fields)
+        self._apply_position(snapshot, selected_day, canonical_fields)
+        self._apply_risk_signals(snapshot, selected_day, canonical_fields)
         self._apply_margin(snapshot, selected_day, canonical_fields)
         self._apply_themes(snapshot, selected_day, canonical_fields)
         self._apply_ladder(snapshot, selected_day, canonical_fields)
@@ -185,7 +215,7 @@ class QuantXReviewRepository:
         )
         amount_by_day = {
             row["trade_date"]: row.get("total_amount_yi")
-            for row in _preferred(
+            for row in _preferred_by_day(
                 liquidity, DatasetId.MARKET_LIQUIDITY_DAILY
             ).to_dicts()
         }
@@ -200,6 +230,221 @@ class QuantXReviewRepository:
         ]
         _section(snapshot, "s1")["up_count_history"] = rows
         fields.append("sections.s1.up_count_history")
+
+    def _apply_congestion(
+        self,
+        snapshot: dict[str, Any],
+        day: date,
+        fields: list[str],
+    ) -> None:
+        liquidity = _preferred_by_day(
+            self.facts.get_range(
+                DatasetId.MARKET_LIQUIDITY_DAILY,
+                day - timedelta(days=120),
+                day,
+            ),
+            DatasetId.MARKET_LIQUIDITY_DAILY,
+        ).tail(10)
+        if liquidity.is_empty():
+            return
+        close_by_day: dict[date, float | None] = {}
+        if self.indexes is not None and hasattr(self.indexes, "get_index_daily"):
+            try:
+                index = self.indexes.get_index_daily(
+                    "000001.SH",
+                    day - timedelta(days=120),
+                    day,
+                    ["symbol", "date", "close"],
+                )
+            except (OSError, RuntimeError, ValueError):
+                index = pl.DataFrame()
+            if not index.is_empty():
+                close_by_day = {
+                    row["date"]: row.get("close") for row in index.to_dicts()
+                }
+        amount_column = (
+            "top5pct_amount_yi"
+            if "top5pct_amount_yi" in liquidity.columns
+            else "top5_amount_yi"
+        )
+        ratio_column = (
+            "top5pct_amount_ratio_pct"
+            if "top5pct_amount_ratio_pct" in liquidity.columns
+            else "top5_amount_ratio_pct"
+        )
+        rows = []
+        for row in liquidity.to_dicts():
+            ratio = row.get(ratio_column)
+            total = row.get("total_amount_yi")
+            amount = row.get(amount_column)
+            if amount is None and ratio is not None and total is not None:
+                amount = round(total * ratio / 100, 2)
+            rows.append(
+                [
+                    row["trade_date"].isoformat(),
+                    close_by_day.get(row["trade_date"]),
+                    amount,
+                    total,
+                    ratio,
+                ]
+            )
+        latest = rows[-1]
+        _section(snapshot, "s1")["congestion"] = {
+            "latest": {
+                "date": latest[0],
+                "close": latest[1],
+                "top5_amount": latest[2],
+                "total_amount": latest[3],
+                "congestion_pct": latest[4],
+            },
+            "table": rows,
+        }
+        fields.append("sections.s1.congestion")
+
+    def _apply_advance_history(
+        self,
+        snapshot: dict[str, Any],
+        day: date,
+        fields: list[str],
+    ) -> None:
+        states = self.facts.get_range(
+            DatasetId.MARKET_STATE_DAILY,
+            day - timedelta(days=120),
+            day,
+        ).tail(20)
+        if states.is_empty():
+            return
+        _section(snapshot, "s3")["advance_history"] = [
+            {
+                "date": row["trade_date"].strftime("%Y%m%d"),
+                "advance_rate": row.get("advance_rate_pct"),
+                "premium_rate": row.get("premium_rate_pct"),
+                "limit_up_count": row.get("limit_up_count"),
+                "max_board": row.get("max_board"),
+                "seal_rate": row.get("seal_rate_pct"),
+            }
+            for row in states.to_dicts()
+        ]
+        fields.append("sections.s3.advance_history")
+
+    def _apply_position(
+        self,
+        snapshot: dict[str, Any],
+        day: date,
+        fields: list[str],
+    ) -> None:
+        state = self.facts.get_market_state(day)
+        if state.is_empty():
+            return
+        score = state["market_heat_score"].item()
+        if score is None:
+            return
+        if score >= 70:
+            position = {
+                "band": "高仓位(70-90%)",
+                "action": "积极参与主线,关注退潮信号",
+            }
+        elif score >= 50:
+            position = {
+                "band": "中等仓位(40-60%)",
+                "action": "脉冲处理,关注主线确认",
+            }
+        elif score >= 30:
+            position = {
+                "band": "低仓位(10-30%)",
+                "action": "谨慎参与,等待情绪修复",
+            }
+        else:
+            position = {
+                "band": "空仓或极低仓位(0-10%)",
+                "action": "规避风险,等待冰点反转",
+            }
+        section = _section(snapshot, "s6")
+        section["position"] = position
+        section["scenes"] = [
+            {
+                "name": "走强",
+                "condition": "热度>70 + 参与度=参与 + 退潮未触发",
+                "tone": "positive",
+            },
+            {
+                "name": "震荡",
+                "condition": "热度40-70 + 参与度=脉冲处理",
+                "tone": "neutral",
+            },
+            {
+                "name": "走弱",
+                "condition": "热度<40 或 退潮确认 或 崩塌触发",
+                "tone": "negative",
+            },
+        ]
+        fields.extend(["sections.s6.position", "sections.s6.scenes"])
+
+    def _apply_risk_signals(
+        self,
+        snapshot: dict[str, Any],
+        day: date,
+        fields: list[str],
+    ) -> None:
+        signals = self.facts.get_market_signals(day)
+        if signals.is_empty():
+            return
+        participation = signals.filter(
+            pl.col("signal_group") == "participation"
+        ).sort("signal_id")
+        ebb = signals.filter(pl.col("signal_group") == "ebb").sort("signal_id")
+        crash = signals.filter(pl.col("signal_group") == "crash").sort(
+            "signal_id"
+        )
+        section2 = _section(snapshot, "s2")
+        section3 = _section(snapshot, "s3")
+        if not participation.is_empty():
+            rows = participation.to_dicts()
+            section2["participation"] = {
+                "conditions": [
+                    {
+                        "name": row["signal_name"],
+                        "value": _decoded(row.get("value_json")),
+                        "ok": row.get("ok"),
+                        "available": row.get("available"),
+                    }
+                    for row in rows
+                ],
+                "verdict": rows[0].get("group_verdict") or "",
+                "satisfied": sum(row.get("ok") is True for row in rows),
+                "total": len(rows),
+            }
+            fields.append("sections.s2.participation")
+        if not ebb.is_empty():
+            rows = ebb.to_dicts()
+            section2["ebb_risk"] = {
+                "verdict": rows[0].get("group_verdict") or "",
+                "signal_count": sum(
+                    row.get("triggered") is True for row in rows
+                ),
+            }
+            section3["ebb_signals"] = [
+                {
+                    "name": row["signal_name"],
+                    "triggered": row.get("triggered"),
+                    "available": row.get("available"),
+                    "value": _decoded(row.get("value_json")),
+                    "baseline": _decoded(row.get("baseline_json")),
+                }
+                for row in rows
+            ]
+            fields.extend(["sections.s2.ebb_risk", "sections.s3.ebb_signals"])
+        if not crash.is_empty():
+            section3["crash_signals"] = [
+                {
+                    "name": row["signal_name"],
+                    "triggered": row.get("triggered"),
+                    "status": row.get("status") or "",
+                    "evidence": row.get("evidence") or "",
+                }
+                for row in crash.to_dicts()
+            ]
+            fields.append("sections.s3.crash_signals")
 
     def _apply_margin(
         self,

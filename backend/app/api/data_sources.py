@@ -104,7 +104,7 @@ def sources() -> dict[str, Any]:
         {
             "source_id": "quantx_deterministic_v1",
             "display_name": "QuantX deterministic state derivation",
-            "supported_datasets": ["market_state_daily"],
+            "supported_datasets": ["market_state_daily", "market_signal_daily"],
             "collector_type": "provider",
             "collector": "deterministic_derivation",
             "credentials_ref": None,

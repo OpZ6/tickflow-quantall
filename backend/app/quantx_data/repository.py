@@ -117,6 +117,11 @@ class QuantXTableRepository:
             canonical = {
                 "total_amount_yi": row["total_amount_yi"],
                 "top5_amount_yi": row["top5_amount_yi"],
+                "top5pct_amount_yi": row.get("top5pct_amount_yi"),
+                "top5pct_amount_ratio_pct": row.get(
+                    "top5pct_amount_ratio_pct"
+                ),
+                "top20_amount_ratio_pct": row.get("top20_amount_ratio_pct"),
             }
         legacy = tables.get("market_liquidity") or {}
         differences = _differences(canonical, legacy)

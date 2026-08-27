@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.data_sources import router as data_sources_router
+from app.market_facts.adapters import load_tickflow_market_aggregate
 from app.market_facts.builders import build_initial_fact_batches
 from app.market_facts.registry import DatasetId, get_dataset, get_route
 from app.market_facts.repository import MarketFactRepository
@@ -146,6 +147,53 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
     }
 
 
+def _signal_tables() -> dict[str, dict]:
+    return {
+        "_computed": {
+            "participation_check": {
+                "conditions": {
+                    "height_ge_4": {"ok": True, "available": True, "value": 5},
+                    "ladder_complete": {"ok": True, "available": True, "value": "完整"},
+                    "volume_stable": {"ok": False, "available": True, "value": "缩量"},
+                    "direction_aligned": {"ok": False, "available": True, "value": "背离"},
+                },
+                "verdict": "脉冲处理",
+            },
+            "ebb_risk_check": {
+                "signals": {
+                    key: {
+                        "available": True,
+                        "triggered": key == "relay_payoff_weak",
+                        "value": index,
+                        "baseline": 1.0,
+                    }
+                    for index, key in enumerate(
+                        (
+                            "relay_payoff_weak",
+                            "seal_quality_weak",
+                            "ladder_compressed",
+                            "loss_effect_expanding",
+                        ),
+                        start=1,
+                    )
+                },
+                "verdict": "退潮预警",
+            },
+            "crash_signals": {
+                "signals": [
+                    {
+                        "name": f"崩塌信号{index}",
+                        "triggered": index == 1,
+                        "status": "观察",
+                        "evidence": f"证据{index}",
+                    }
+                    for index in range(1, 4)
+                ]
+            },
+        }
+    }
+
+
 def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
     dataset_ids = {
         DatasetId.TRADING_CALENDAR,
@@ -158,12 +206,17 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         DatasetId.THEME_MEMBER_DAILY,
         DatasetId.SECTOR_FLOW_DAILY,
         DatasetId.MARKET_STATE_DAILY,
+        DatasetId.MARKET_SIGNAL_DAILY,
         DatasetId.SCREENING_CANDIDATE_DAILY,
     }
 
     for dataset_id in dataset_ids:
         spec = get_dataset(dataset_id)
-        assert spec.schema_version == 1
+        expected_version = {
+            DatasetId.MARKET_BREADTH_DAILY: 2,
+            DatasetId.MARKET_LIQUIDITY_DAILY: 3,
+        }.get(dataset_id, 1)
+        assert spec.schema_version == expected_version
         assert "trade_date" in spec.required_columns
 
     assert get_dataset(DatasetId.TRADING_CALENDAR).partition_keys == ("as_of_date",)
@@ -183,10 +236,18 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         "tickflow_enriched_aggregate",
         "tickflow_published_fact",
     )
+    assert get_route(DatasetId.MARKET_SIGNAL_DAILY).sources == (
+        "quantx_deterministic_v1",
+    )
 
 
 def test_fact_builders_normalize_breadth_and_limit_events() -> None:
-    batches = build_initial_fact_batches("20260825", _sources(), "run-1")
+    batches = build_initial_fact_batches(
+        "20260825",
+        _sources(),
+        "run-1",
+        structured_tables=_signal_tables(),
+    )
     by_id = {batch.dataset_id: batch for batch in batches}
 
     calendar = by_id[DatasetId.TRADING_CALENDAR].frame.sort("trade_date")
@@ -219,6 +280,7 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
             "up_count": 1,
             "down_count": 1,
             "flat_count": 1,
+            "unknown_count": 0,
             "total_count": 3,
             "up_ratio_pct": 33.33,
             "advance_decline": 0,
@@ -227,9 +289,9 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
             "observed_at": "2026-08-25T16:01:00+08:00",
             "ingested_at": breadth[0]["ingested_at"],
             "run_id": "run-1",
-            "schema_version": 1,
-                "quality_level": "fallback",
-                "is_fallback": True,
+            "schema_version": 2,
+            "quality_level": "fallback",
+            "is_fallback": True,
         }
     ]
 
@@ -271,6 +333,8 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
 
     liquidity = by_id[DatasetId.MARKET_LIQUIDITY_DAILY].frame.row(0, named=True)
     assert liquidity["total_amount_yi"] == 2.3
+    assert liquidity["top5pct_amount_yi"] == 1.0
+    assert liquidity["top5pct_amount_ratio_pct"] == 43.48
     assert liquidity["source"] == "tushare"
     assert liquidity["is_fallback"] is True
 
@@ -283,6 +347,49 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
     assert candidates.filter(pl.col("candidate_type") == "new_high_100d")[
         "symbol"
     ].to_list() == ["300002"]
+    signals = by_id[DatasetId.MARKET_SIGNAL_DAILY].frame
+    assert signals.group_by("signal_group").len().sort("signal_group").to_dicts() == [
+        {"signal_group": "crash", "len": 3},
+        {"signal_group": "ebb", "len": 4},
+        {"signal_group": "participation", "len": 4},
+    ]
+    assert signals.filter(
+        (pl.col("signal_group") == "participation")
+        & (pl.col("signal_id") == "height_ge_4")
+    )["ok"].item() is True
+
+
+def test_tickflow_adapter_derives_returns_from_previous_partition(tmp_path) -> None:
+    table = tmp_path / "kline_daily_enriched"
+    previous = table / "date=2026-08-24"
+    current = table / "date=2026-08-25"
+    previous.mkdir(parents=True)
+    current.mkdir(parents=True)
+    pl.DataFrame(
+        {
+            "symbol": ["000001.SZ", "600000.SH"],
+            "raw_close": [10.0, 20.0],
+            "amount": [80_000_000.0, 70_000_000.0],
+        }
+    ).write_parquet(previous / "part.parquet")
+    pl.DataFrame(
+        {
+            "symbol": ["000001.SZ", "600000.SH", "300001.SZ"],
+            "raw_close": [11.0, 18.0, 30.0],
+            "amount": [100_000_000.0, 80_000_000.0, 50_000_000.0],
+        }
+    ).write_parquet(current / "part.parquet")
+
+    payload = load_tickflow_market_aggregate(tmp_path, "20260825")
+
+    assert payload is not None
+    assert payload["previous_trade_date"] == "20260824"
+    assert payload["input_table"] == "kline_daily_enriched"
+    assert payload["daily"] == [
+        {"symbol": "000001.SZ", "pct_chg": 10.0, "amount_yi": 1.0},
+        {"symbol": "600000.SH", "pct_chg": -10.0, "amount_yi": 0.8},
+        {"symbol": "300001.SZ", "pct_chg": None, "amount_yi": 0.5},
+    ]
 
 
 def test_fact_publication_is_idempotent_and_repository_reads_canonical_data(tmp_path) -> None:

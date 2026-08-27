@@ -99,6 +99,7 @@ class DataStore:
             "theme_member_daily",
             "sector_flow_daily",
             "market_state_daily",
+            "market_signal_daily",
             "screening_candidate_daily",
         ):
             (self.data_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -237,6 +238,8 @@ class DataStore:
                 SELECT * FROM read_parquet('{d}/sector_flow_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW market_state_daily AS
                 SELECT * FROM read_parquet('{d}/market_state_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW market_signal_daily AS
+                SELECT * FROM read_parquet('{d}/market_signal_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW screening_candidate_daily AS
                 SELECT * FROM read_parquet('{d}/screening_candidate_daily/**/*.parquet', union_by_name=true)""",
         ]
@@ -2118,6 +2121,7 @@ class KlineRepository:
             "theme_member_daily": f"{d}/theme_member_daily/**/*.parquet",
             "sector_flow_daily": f"{d}/sector_flow_daily/**/*.parquet",
             "market_state_daily": f"{d}/market_state_daily/**/*.parquet",
+            "market_signal_daily": f"{d}/market_signal_daily/**/*.parquet",
             "screening_candidate_daily": f"{d}/screening_candidate_daily/**/*.parquet",
         }
         for name, path in views.items():

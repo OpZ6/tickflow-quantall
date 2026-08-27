@@ -159,6 +159,9 @@ class MarketFactRepository:
     def get_market_state(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.MARKET_STATE_DAILY, trade_date)
 
+    def get_market_signals(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.MARKET_SIGNAL_DAILY, trade_date)
+
     def get_screening_candidates(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.SCREENING_CANDIDATE_DAILY, trade_date)
 

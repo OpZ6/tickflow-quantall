@@ -8,7 +8,7 @@
 
 - 状态：`active`
 - 建立日期：2026-08-26
-- 当前阶段：Phase 1-5 主链路、11 类标准事实、多日 Repository 化和单日 Review Repository 已落地；剩余展示缓存、历史对账和备份恢复演练继续推进
+- 当前阶段：Phase 1-5 主链路、12 类标准事实、多日 Repository 化和单日 Review Repository 已落地；剩余展示缓存、历史对账和备份恢复演练继续推进
 - 核心工作目录：`D:\tickflow-quantall`
 - 基线日期：`20260825`
 
@@ -708,3 +708,33 @@ Goal 继续保持 `active`。下一阶段不再泛化新增表，而是按现有
 - `sections.s6` 的仓位与情景展示。
 
 Goal 继续保持 `active`。下一步优先完成真实 `000985.CSI` 指数采集验证、宽度/拥挤度等可复用时间序列的事实契约，再做完整后端、独立 Playwright 页面回归和数据目录备份恢复演练。
+
+### 17.5 2026-08-27 市场聚合纠偏与确定性风险信号事实化
+
+已完成：
+
+- 修正 TickFlow enriched 聚合适配器：真实日 K 分区没有 `change_pct/pct_chg` 时，使用当日 `raw_close/close` 与前一交易日 TickFlow 分区计算涨跌幅；缺少前收盘的标的明确计入 `unknown_count`，不再静默混入平盘。
+- `market_breadth_daily` 升级为 schema v2，`market_liquidity_daily` 升级为 schema v3。后者区分“成交额前五只股票”和“成交额前 5% 股票”，新增 `top5pct_amount_yi` 与 `top5pct_amount_ratio_pct`，并直接从个股成交额求和，避免由四舍五入比例反推金额。
+- 72 个历史交易日的市场宽度和流动性已定向重建，全部采用 `tickflow_enriched_aggregate` 主数据源。`20260825` 市场宽度为上涨 4232、下跌 1245、平盘 66、未知 3、合计 5546；总成交额 18442.78 亿元，成交额前 5% 股票合计 8451.80 亿元、占比 45.83%。
+- 单日 Review 的成交拥挤度、20 日上涨家数历史、仓位区间和三类情景已改由标准事实与指数 Repository 组装，不再信任 `review_data.json` 中这些同名缓存字段。
+- 新增第 12 类标准事实 `market_signal_daily`，以 `(trade_date, market, signal_group, signal_id)` 为主键，规范化保存参与度、退潮和崩溃三组确定性信号及其触发状态、可用性、值、基准、证据、算法版本和输入 generation。
+- 单日 Review 的参与度检查、退潮风险摘要、退潮信号和崩溃信号已改由 `market_signal_daily` 还原；`review_data.json` 只保留仍未事实化的展示字段。
+- 72 个历史交易日完成 `market_signal_daily` 非破坏性回填，二次预检 `eligible=[]`，72 日均为 `skipped_existing`，8 个周末或未完成目录继续保持 `skipped_incomplete`。
+- `20260825` 的风险事实共 11 行：参与度 4、退潮 4、崩溃 3；来源统一标记为 `quantx_deterministic_v1`。
+
+本阶段验证：
+
+- 市场事实、QuantX 数据与 Repository 定向回归 34 项通过，相关改动模块 Ruff 检查通过；`app/tickflow/repository.py` 的新增视图仅为四行聚焦改动，该文件仍有本任务开始前已存在的全文件 lint 债务，未顺带清理。
+- 后端完整回归 1262 项全部通过，保留 63 条既有弃用/排序警告。
+- 前端 `pnpm build` 通过；standalone Python Playwright + Microsoft Edge headless 的 QuantX 单日富图表和数据底座跨页面回归通过。首次跨页面运行捕获两次瞬态 `ERR_NETWORK_CHANGED`，单独重跑全绿，未复现。
+- 真实 API 验证返回 12 类数据集、拥挤度 45.83%、20 日上涨家数历史、参与度 4 条、退潮 4 条、崩溃 3 条；审计字段确认这些内容不再列入 `presentation_cache_fields`。
+
+当前仍属于展示缓存的主要字段：
+
+- `sections.s0` 的诊断细节和风险说明；
+- `sections.s1` 的 `000985.CSI` 历史 K 线、宽度热力图和期指；
+- `sections.s3` 的晋级历史与梯队补充字段；
+- `sections.s4` 的机构明细与短线强度；
+- `sections.s6` 的 DX/实验性展示字段。
+
+Goal 继续保持 `active`。下一阶段优先处理机构连续性、宽度热力图和真实指数历史；随后完成历史逐日对账、数据目录备份与隔离恢复演练。只有文档第 12 节 Definition of Done 全部满足后，才可将 Goal 标记为 `complete`。

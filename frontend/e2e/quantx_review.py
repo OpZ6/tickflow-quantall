@@ -37,8 +37,23 @@ def main() -> None:
         payload = response.json()
         foundation = payload["data_foundation"]
         assert foundation["read_mode"] == "canonical_facts_with_presentation_cache"
-        assert "sections.s2.new_high" in foundation["canonical_fields"]
-        assert "sections.s2.new_high" not in foundation["presentation_cache_fields"]
+        canonical = foundation["canonical_fields"]
+        presentation_cache = foundation["presentation_cache_fields"]
+        for field in (
+            "sections.s1.congestion",
+            "sections.s2.new_high",
+            "sections.s2.participation",
+            "sections.s2.ebb_risk",
+            "sections.s3.advance_history",
+            "sections.s3.ebb_signals",
+            "sections.s3.crash_signals",
+            "sections.s6.position",
+            "sections.s6.scenes",
+        ):
+            assert field in canonical
+            assert field not in presentation_cache
+        assert len(payload["sections"]["s3"]["ebb_signals"]) == 4
+        assert len(payload["sections"]["s3"]["crash_signals"]) == 3
 
         headings = page.locator("h2").all_inner_texts()
         missing = [title for title in EXPECTED_SECTIONS if title not in headings]

@@ -20,6 +20,7 @@ class DatasetId(StrEnum):
     THEME_MEMBER_DAILY = "theme_member_daily"
     SECTOR_FLOW_DAILY = "sector_flow_daily"
     MARKET_STATE_DAILY = "market_state_daily"
+    MARKET_SIGNAL_DAILY = "market_signal_daily"
     SCREENING_CANDIDATE_DAILY = "screening_candidate_daily"
 
 
@@ -86,7 +87,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         DatasetId.MARKET_BREADTH_DAILY: DatasetSpec(
             dataset_id=DatasetId.MARKET_BREADTH_DAILY,
             description="A-share daily advancing, declining and flat counts",
-            schema_version=1,
+            schema_version=2,
             primary_key=("trade_date", "market"),
             partition_keys=("trade_date",),
             required_columns=(
@@ -95,6 +96,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 "up_count",
                 "down_count",
                 "flat_count",
+                "unknown_count",
                 "total_count",
                 "up_ratio_pct",
                 "advance_decline",
@@ -106,6 +108,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                     "up_count": pl.Int64,
                     "down_count": pl.Int64,
                     "flat_count": pl.Int64,
+                    "unknown_count": pl.Int64,
                     "total_count": pl.Int64,
                     "up_ratio_pct": pl.Float64,
                     "advance_decline": pl.Int64,
@@ -116,7 +119,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         DatasetId.MARKET_LIQUIDITY_DAILY: DatasetSpec(
             dataset_id=DatasetId.MARKET_LIQUIDITY_DAILY,
             description="A-share daily turnover and concentration metrics",
-            schema_version=1,
+            schema_version=3,
             primary_key=("trade_date", "market"),
             partition_keys=("trade_date",),
             required_columns=("trade_date", "market", "total_amount_yi"),
@@ -126,7 +129,9 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                     "market": pl.String,
                     "total_amount_yi": pl.Float64,
                     "top5_amount_yi": pl.Float64,
+                    "top5pct_amount_yi": pl.Float64,
                     "top5_amount_ratio_pct": pl.Float64,
+                    "top5pct_amount_ratio_pct": pl.Float64,
                     "top20_amount_ratio_pct": pl.Float64,
                     "volume_ratio_pct": pl.Float64,
                 }
@@ -135,7 +140,9 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 {
                     "total_amount_yi": "CNY_100M",
                     "top5_amount_yi": "CNY_100M",
+                    "top5pct_amount_yi": "CNY_100M",
                     "top5_amount_ratio_pct": "percent",
+                    "top5pct_amount_ratio_pct": "percent",
                     "top20_amount_ratio_pct": "percent",
                     "volume_ratio_pct": "percent",
                 }
@@ -342,6 +349,40 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 }
             ),
         ),
+        DatasetId.MARKET_SIGNAL_DAILY: DatasetSpec(
+            dataset_id=DatasetId.MARKET_SIGNAL_DAILY,
+            description="Deterministic participation, ebb and crash signals",
+            schema_version=1,
+            primary_key=("trade_date", "market", "signal_group", "signal_id"),
+            partition_keys=("trade_date",),
+            required_columns=(
+                "trade_date",
+                "market",
+                "signal_group",
+                "signal_id",
+                "algorithm_version",
+            ),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "market": pl.String,
+                    "signal_group": pl.String,
+                    "signal_id": pl.String,
+                    "signal_name": pl.String,
+                    "ok": pl.Boolean,
+                    "triggered": pl.Boolean,
+                    "available": pl.Boolean,
+                    "status": pl.String,
+                    "group_verdict": pl.String,
+                    "value_json": pl.String,
+                    "baseline_json": pl.String,
+                    "evidence": pl.String,
+                    "algorithm_version": pl.String,
+                    "input_generation": pl.String,
+                }
+            ),
+            field_units=MappingProxyType({}),
+        ),
         DatasetId.SCREENING_CANDIDATE_DAILY: DatasetSpec(
             dataset_id=DatasetId.SCREENING_CANDIDATE_DAILY,
             description="Daily rule-screen and observed signal candidates",
@@ -425,6 +466,10 @@ ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
         ),
         DatasetId.MARKET_STATE_DAILY: SourceRoute(
             DatasetId.MARKET_STATE_DAILY,
+            ("quantx_deterministic_v1",),
+        ),
+        DatasetId.MARKET_SIGNAL_DAILY: SourceRoute(
+            DatasetId.MARKET_SIGNAL_DAILY,
             ("quantx_deterministic_v1",),
         ),
         DatasetId.SCREENING_CANDIDATE_DAILY: SourceRoute(
