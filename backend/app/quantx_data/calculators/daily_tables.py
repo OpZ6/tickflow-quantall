@@ -121,7 +121,10 @@ def _theme_tables(trade_date: str, sources: dict[str, dict[str, Any]]) -> dict[s
         if item.get("name"):
             counts[str(item["name"])] += int(item.get("count") or 0)
     for item in _records(py.get("limit_up", {}), "stocks"):
-        for theme in item.get("concepts", []) if isinstance(item.get("concepts"), list) else []:
+        concepts = item.get("concepts", []) if isinstance(item.get("concepts"), list) else []
+        if not concepts and str(item.get("reason") or "").strip():
+            concepts = [str(item["reason"]).strip()]
+        for theme in concepts:
             stocks_by_theme[str(theme)].append(item)
     rankings = [{"name": name, "count": count, "rank": i + 1} for i, (name, count) in enumerate(counts.most_common(50))]
     return {

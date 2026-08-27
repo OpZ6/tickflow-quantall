@@ -6,9 +6,10 @@
 
 > 在 `tickflow-quantall` 中将 QuantX 数据采集、数据源管理、标准化事实存储、Repository 调用、质量治理与调度发布统一到 TickFlow 数据底座，同时保持现有 QuantX 单日富图表和多日面板兼容。
 
-- 状态：`active`
+- 状态：`complete`
 - 建立日期：2026-08-26
-- 当前阶段：Phase 1-5 主链路、12 类标准事实、多日 Repository 化和单日 Review Repository 已落地；剩余展示缓存、历史对账和备份恢复演练继续推进
+- 完成日期：2026-08-27
+- 当前阶段：Phase 1-6 已完成；13 类标准市场事实、TickFlow 核心指数 K 线、单日/多日 Repository、逐日对账及备份恢复工具均已落地
 - 核心工作目录：`D:\tickflow-quantall`
 - 基线日期：`20260825`
 
@@ -509,22 +510,22 @@ POST /api/data-runs/backfill
 只有全部满足，Goal 才能完成：
 
 - [x] QuantX API 不再直接读取来源级 JSON；
-- [ ] 主系统与 QuantX 对同一指数、成交额和市场宽度只有一个事实值；
-- [ ] 更换来源不需要修改 QuantX 计算器和前端；
+- [x] 主系统与 QuantX 对同一指数、成交额和市场宽度只有一个事实值；
+- [x] 更换来源不需要修改 QuantX 计算器和前端；
 - [x] 必需性落在 dataset，而不是 Tushare、问财等具体来源；
 - [x] 单源失败可以按确定性规则走备用来源并显示降级；
 - [x] 同一来源和日期重复运行不产生重复事实记录；
 - [x] 离线 recompute 不发起网络请求；
 - [x] 失败运行不覆盖上一版成功数据；
 - [x] 每个结果可追溯到来源、原始哈希、run ID、schema 和算法版本；
-- [ ] 历史 QuantX 日期完成迁移和逐日对账；
+- [x] 历史 QuantX 日期完成迁移和逐日对账；
 - [x] `20260825` 单日七区、富图表和多日面板结果保持兼容；
 - [x] Market Lab 与 QuantX 共用 `MarketFactRepository`；
 - [x] 数据源设置页可以查看路由、健康、依赖、覆盖率和最近运行；
 - [x] 原始快照具备压缩、去重和可配置保留策略；
-- [ ] 后端单元、集成、幂等、回滚、降级、历史回放测试通过；
+- [x] 后端单元、集成、幂等、回滚、降级、历史回放测试通过；
 - [x] 前端 TypeScript 构建及 standalone Playwright 页面回归通过；
-- [ ] 当前数据目录完成备份和迁移演练，没有不可恢复删除。
+- [x] 当前数据目录完成备份和迁移演练，没有不可恢复删除。
 
 ## 13. 测试与验证矩阵
 
@@ -815,3 +816,35 @@ Goal 继续保持 `active`。下一阶段优先完成机构面板的语义决策
 - 后端完整回归 1,268 项全部通过，保留 63 条既有弃用警告；standalone Python Playwright + Microsoft Edge headless 单日富图表回归通过，并断言梯队换手率和成交额来自 canonical 字段。
 
 Goal 继续保持 `active`。剩余核心工作是逐日对账与数据目录备份、隔离恢复演练。
+
+### 17.10 2026-08-27 逐日对账、题材成员修复与备份恢复演练
+
+已完成：
+
+- 新增 `backend/scripts/audit_quantx_data_foundation.py`，以存在 `review_data.json` 的 72 个已发布 QuantX 交易日为基准，对 13 类标准事实逐日检查分区存在性、空表、完整 schema、schema version、分区键、来源计数和质量等级，并生成稳定的路径/大小/内容 SHA-256 集合指纹。默认只生成证据报告，`--strict` 可在存在缺失或无效分区时返回非零退出码。
+- 首轮 936 个预期分区对账只得到 861 个有效分区，揭示 `theme_member_daily` 72 天全部为空。根因是历史问财快照把涨停个股题材放在 `reason`，旧转换只读取 `concepts`。修复后按“`concepts` 优先、`reason` 兜底”生成确定性成员事实，定向非破坏迁移恢复 71 天、5,758 行；`20260625` 当日源数据确实没有成员，保留合法空结果。
+- 题材成员迁移前后，其他 12 类事实的集合 SHA-256 均为 `fa8efa089892e28354313658a44c0f84059fdf0677db50d33b9f011723438d16`，证明定向迁移没有改写任务外事实。
+- 最终对账为 936 个预期分区中 932 个有效；4 个非 `present` 结果分别是 `20260427`、`20260710` 两个已知行业宽度源缺口，以及 `20260625` 的题材成员、规则候选两个合法空结果。事实集合包含 934 个 Parquet、8,084,961 字节，SHA-256 为 `f62898c5e7ce5f13619b55269819020a7853ae70fd7e257d4e989ec34d0aa810`。缺口不以未来值、零值或其他日期伪造补齐。
+- 新增 `backend/scripts/backup_quantx_data_foundation.py` 的 `create`、`verify`、`restore` 三种模式。备份范围由标准事实、QuantX 原始/规范化/展示兼容资产、原始来源快照、个股/指数 K 线及维表组成；明确排除回测矩阵缓存、运行暂存、日志、用户设置和其他可重建/任务外目录。
+- 工具要求备份目录和恢复目录不存在或为空，禁止写入源数据目录内部、禁止覆盖已有文件，校验 manifest 路径穿越，并对每个文件复制前后计算 SHA-256。恢复只能写入隔离空目录，不删除源数据或备份。
+- 实际备份位于 `D:\tickflow-quantall-backups\quantx-foundation-20260827-143857`，包含 3,617 个文件、958,744,141 字节，集合 SHA-256 为 `3190d74757818842d5e177472cd4ace874eae3fa8da21e265ae3c5a87908e9ce`。隔离恢复位于 `D:\tickflow-quantall-restore-drill\quantx-foundation-20260827-143857`，逐文件复验通过，没有执行清理或不可恢复删除。
+- 在隔离恢复目录重新运行相同对账，得到相同的 932 个有效分区、4 个显式缺口和完全相同的事实集合指纹；`MarketFactRepository` 成功读取 `20260825` 的 65 行题材成员及 65 行连板梯队，`QuantXReviewRepository` 成功还原单日富图表数据并覆盖 26 个 canonical 字段。
+
+运维命令：
+
+```powershell
+cd backend
+uv run python scripts/audit_quantx_data_foundation.py --data-root ..\data --output <对账报告.json>
+uv run python scripts/backup_quantx_data_foundation.py create ..\data <空备份目录>
+uv run python scripts/backup_quantx_data_foundation.py verify <备份目录>
+uv run python scripts/backup_quantx_data_foundation.py restore <备份目录> <空恢复目录>
+```
+
+最终验证：
+
+- 新增对账、指纹、备份完整性、损坏检测、路径安全和隔离恢复测试共 6 项通过；相关模块 Ruff 检查通过。
+- 清除测试进程继承的 SOCKS 代理变量后，后端完整回归 `1274 passed, 63 warnings`。首次未清除代理的运行有 10 项 HTTP 客户端测试因缺少 `socksio` 失败，均由环境代理引起，清除后全量重跑无失败。
+- 前端 `npm run build` 通过，保留既有 ECharts 大 chunk 提示。
+- standalone Python Playwright + Microsoft Edge headless 的 QuantX 单日富图表回归通过；数据底座四页面回归首次在后台完整性修复并发时捕获一次瞬态 `ERR_CONNECTION_CLOSED`，待该后台任务结束后完整重跑通过，单日页面保持 12 个 canvas，数据源、QuantX 多日和 Market Lab 断言均通过。
+
+Goal 的 Definition of Done 已全部满足。剩余 2 个行业宽度缺日是明确、不可凭空补造的历史来源缺口；期指与真正机构身份数据仍属于未来新增数据源范围，不影响本 Goal 对现有确定性表格链路的完成判定。

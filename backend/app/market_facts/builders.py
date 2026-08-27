@@ -885,19 +885,29 @@ def _build_theme_members(
     payload = sources.get("pywencai") or {}
     table = structured.get("theme_stocks") or {}
     themes = table.get("themes") if isinstance(table.get("themes"), dict) else {}
-    pairs: list[tuple[str, dict[str, Any]]] = []
+    pairs: list[tuple[str, dict[str, Any], str]] = []
     for theme, members in themes.items():
         if isinstance(members, list):
             pairs.extend(
-                (str(theme), item) for item in members if isinstance(item, dict)
+                (str(theme), item, "limit_up_member")
+                for item in members
+                if isinstance(item, dict)
             )
     if not pairs:
         limit_up = payload.get("limit_up") if isinstance(payload.get("limit_up"), dict) else {}
         for item in _records(limit_up, "stocks", "records", "rows"):
             concepts = item.get("concepts") or item.get("themes") or []
             if isinstance(concepts, list):
-                pairs.extend((str(theme), item) for theme in concepts if str(theme).strip())
-    for theme_name, item in pairs:
+                pairs.extend(
+                    (str(theme), item, "limit_up_member")
+                    for theme in concepts
+                    if str(theme).strip()
+                )
+            if not concepts and str(item.get("reason") or "").strip():
+                pairs.append(
+                    (str(item["reason"]).strip(), item, "limit_up_reason")
+                )
+    for theme_name, item, role in pairs:
         symbol = _stock_code(item.get("code") or item.get("ts_code"))
         theme_name = theme_name.strip()
         if not symbol or not theme_name:
@@ -911,7 +921,7 @@ def _build_theme_members(
                 "exchange": _exchange(symbol),
                 "asset_type": "stock",
                 "name": str(item.get("name") or ""),
-                "role": "limit_up_leader",
+                "role": role,
                 **_metadata(
                     source="pywencai",
                     source_record_id=f"pywencai:{trade_date}:{theme_name}:{symbol}",
