@@ -74,6 +74,9 @@ def main() -> None:
 
         page.goto(f"{base_url}/quantx", wait_until="networkidle", timeout=30_000)
         page.get_by_test_id("quantx-data-coverage").wait_for()
+        page.get_by_test_id("sector-flow-continuity").wait_for()
+        page.get_by_text("行业资金覆盖", exact=True).wait_for()
+        page.get_by_text("行业资金与规则候选连续性", exact=True).wait_for()
         page.screenshot(
             path=str(RESULTS / "quantx-data-foundation-multiday.png"), full_page=True
         )

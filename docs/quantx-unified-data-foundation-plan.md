@@ -139,7 +139,7 @@ retention_policy
 | `limit_ladder_daily` | 交易日/板数/股票 | `trade_date, board_height, symbol` | QuantX、连板面板 |
 | `theme_observation_daily` | 来源/题材/交易日 | `source, theme_id, trade_date` | 题材归因、生命周期 |
 | `theme_stock_daily` | 题材/股票/交易日 | `theme_id, symbol, trade_date` | 龙头、机会雷达 |
-| `sector_flow_daily` | 行业/来源/交易日 | `sector_id, source, trade_date` | 实验室、机构连续性 |
+| `sector_flow_daily` | 行业/来源/交易日 | `sector_id, source, trade_date` | 实验室、行业资金连续性 |
 | `hot_rank_daily` | 来源/股票/交易日 | `source, symbol, trade_date` | 热度、候选池 |
 
 ### 5.4 公共字段与单位
@@ -555,7 +555,7 @@ POST /api/data-runs/backfill
 
 - QuantX 单日七个区块完整；
 - 富图表 canvas 数量和关键标题不回退；
-- 多日矩阵、交易日历、生命周期、机会雷达和机构连续性存在；
+- 多日矩阵、交易日历、生命周期、机会雷达和行业资金连续性存在；
 - API 无 500、浏览器控制台无错误；
 - 使用 standalone Python Playwright + Microsoft Edge headless 验证。
 
@@ -644,12 +644,12 @@ POST /api/data-runs/backfill
 
 - 新增 `limit_ladder_daily`、`theme_member_daily`、`market_state_daily`、`screening_candidate_daily` 四类标准事实；连板梯队、题材成员、确定性市场状态和规则候选池不再只存在于 QuantX JSON。
 - `MarketFactRepository` 增加上述四类事实的稳定读取接口，TickFlow DuckDB 初始化和刷新流程同步注册全部九类市场事实视图。
-- QuantX 多日计算器的日期选择、情绪窗口、题材共识与生命周期、行业机会雷达、个股机会雷达和机构连续性全部改读 `MarketFactRepository`。
+- QuantX 多日计算器的日期选择、情绪窗口、题材共识与生命周期、行业机会雷达、个股机会雷达和行业资金连续性全部改读 `MarketFactRepository`。
 - 多日计算路径已冻结来源 JSON 读取；仅 `load_multiday_snapshot()` 保留对已发布 `multiday_snapshot.json` API 缓存的读取。
 - 新增离线回归：事实发布后删除来源和结构化 JSON，多日快照仍可完整重建。
 - 对真实历史执行非破坏性增量回填：72 个交易日补齐四类新事实，0 失败；8 个周末或未完成目录保持 `skipped_incomplete`，未覆盖既有五类事实和旧 JSON。
 - 回填后二次预检显示 72 个日期全部进入 `skipped_existing`，验证迁移幂等。
-- 从统一事实库重建 72 份多日缓存；`20260825` 保持 20 日窗口、38 个当前题材、12 个题材雷达、12 个行业雷达、16 个个股雷达和 5 条机构连续性结果。
+- 从统一事实库重建 72 份多日缓存；`20260825` 保持 20 日窗口、38 个当前题材、12 个题材雷达、12 个行业雷达、16 个个股雷达和行业资金连续性结果。
 
 本阶段验证：
 
@@ -789,3 +789,16 @@ Goal 继续保持 `active`。下一阶段优先为宽度热力图定义真实可
 - 两组 standalone Python Playwright + Microsoft Edge headless 回归通过：单日页面保持七区并增至 12 个 canvas，宽度热力图实际渲染 31 个行业和 4 个均线窗口；多日、Market Lab 与数据源管理跨页回归同时通过。
 
 Goal 继续保持 `active`。下一阶段优先完成机构面板的语义决策，再处理期指、梯队补充字段和数据目录备份恢复演练。
+
+### 17.8 2026-08-27 “机构连续性”语义纠正
+
+已完成：
+
+- 代码级追溯确认：原 `institution_continuity` 的行业数据来自 `sector_flow_daily.net_inflow_yi`，个股数据来自 `screening_candidate_daily`；数据中没有机构席位、机构身份或机构买卖额，因此不能继续命名为机构趋势。
+- 多日派生 schema 升级为 `tickflow-quantx-multiday-v2`，新增权威字段 `sector_flow_continuity`、`data_coverage.sector_flow_days` 和窗口内 `sector_flow`，并显式返回 `semantics=sector_flow_and_rule_candidates` 及计算基础。
+- 旧 `institution_continuity`、`institution_days` 和窗口内 `institution` 仅作兼容别名，其值与新字段严格一致；前端不再消费或展示这些误导名称。
+- 多日面板改为“行业资金与规则候选连续性”，覆盖卡改为“行业资金覆盖”，并在标题下明示“不代表机构身份”。
+- 从统一事实 Repository 重建全部 72 份多日快照；`20260825` 返回 20/20 行业资金覆盖，新旧字段对账一致。
+- 后端完整回归 1,268 项全部通过，保留 63 条既有弃用警告；前端构建与 standalone Python Playwright + Microsoft Edge headless 跨页回归通过。
+
+该决策不排斥未来接入真正的龙虎榜机构席位数据；但在有可审计的机构身份源之前，不会把行业资金流或规则候选伪装成机构数据。Goal 继续保持 `active`。

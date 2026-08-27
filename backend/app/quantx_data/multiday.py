@@ -20,7 +20,7 @@ from app.market_facts.repository import MarketFactRepository
 
 from .io import read_json, validate_trade_date, write_json_atomic
 
-SCHEMA_VERSION = "tickflow-quantx-multiday-v1"
+SCHEMA_VERSION = "tickflow-quantx-multiday-v2"
 WINDOWS = (5, 10, 20)
 
 
@@ -205,9 +205,9 @@ def _record(repo: MarketFactRepository, trade_date: date) -> dict[str, Any]:
             for item in ths.head(12).to_dicts()
             if _canonical_theme(item.get("theme_name"))
         ],
-        "institution": {
+        "market_activity": {
             "sectors": _sector_rows(repo, trade_date),
-            "core_stocks": _core_stocks(repo, trade_date),
+            "rule_candidates": _core_stocks(repo, trade_date),
         },
     }
 
@@ -260,11 +260,11 @@ def _component(key: str, values: list[float | None], threshold: float, *, revers
     return {"key": key, "first": first, "last": last, "delta": round(last - first, 2) if first is not None and last is not None else None, "arrow": display}
 
 
-def _institution_continuity(records: list[dict[str, Any]]) -> dict[str, Any]:
+def _sector_flow_continuity(records: list[dict[str, Any]]) -> dict[str, Any]:
     industries: dict[str, dict[str, Any]] = {}
     stocks: dict[str, dict[str, Any]] = {}
     for record in records:
-        for item in (record.get("institution") or {}).get("sectors") or []:
+        for item in (record.get("market_activity") or {}).get("sectors") or []:
             name = item["name"]
             row = industries.setdefault(name, {"name": name, "active_days": 0, "net_inflow_sum_yi": 0.0, "last_net_inflow_yi": None, "last_pct_chg": None, "last_seen": None, "source": item.get("source")})
             row["active_days"] += 1
@@ -272,7 +272,7 @@ def _institution_continuity(records: list[dict[str, Any]]) -> dict[str, Any]:
             row["last_net_inflow_yi"] = item.get("net_inflow_yi")
             row["last_pct_chg"] = item.get("pct_chg")
             row["last_seen"] = record["trade_date"]
-        for item in (record.get("institution") or {}).get("core_stocks") or []:
+        for item in (record.get("market_activity") or {}).get("rule_candidates") or []:
             code = item.get("code")
             if not code:
                 continue
@@ -285,16 +285,22 @@ def _institution_continuity(records: list[dict[str, Any]]) -> dict[str, Any]:
         row["net_inflow_sum_yi"] = round(row["net_inflow_sum_yi"], 2)
     industry_rows.sort(key=lambda item: (-abs(item["net_inflow_sum_yi"]), -item["active_days"], item["name"]))
     stock_rows = sorted(stocks.values(), key=lambda item: (-item["active_days"], -(item.get("score") or 0), item["code"]))
-    observed_days = sum(bool((record.get("institution") or {}).get("sectors")) for record in records)
+    observed_days = sum(
+        bool((record.get("market_activity") or {}).get("sectors")) for record in records
+    )
+    rule_candidates = stock_rows[:20]
     return {
+        "semantics": "sector_flow_and_rule_candidates",
+        "basis": "sector_flow_daily.net_inflow_yi + screening_candidate_daily",
         "available": observed_days > 0,
         "coverage": round(observed_days / len(records), 3) if records else 0.0,
         "industries": industry_rows[:20],
-        "core_stocks": stock_rows[:20],
+        "rule_candidates": rule_candidates,
+        "core_stocks": rule_candidates,
         "direction": (
             f"{'净流入' if industry_rows[0]['net_inflow_sum_yi'] >= 0 else '净流出'}:{industry_rows[0]['name']}连续{industry_rows[0]['active_days']}日"
             if industry_rows
-            else "暂无机构趋势数据"
+            else "暂无行业资金连续性数据"
         ),
     }
 
@@ -327,6 +333,7 @@ def _window_signal(records: list[dict[str, Any]], window: int) -> dict[str, Any]
     }
     valid_ratio = len(scoped) / window
     confidence = "high" if valid_ratio >= 0.85 else "medium" if valid_ratio >= 0.6 else "low"
+    sector_flow = _sector_flow_continuity(scoped)
     return {
         "window": window,
         "date_range": [scoped[0]["trade_date"], scoped[-1]["trade_date"]] if scoped else [],
@@ -334,7 +341,8 @@ def _window_signal(records: list[dict[str, Any]], window: int) -> dict[str, Any]
         "confidence": confidence,
         "market": {"direction": direction, "tone": tone, "components": [heat, breadth, relay, risk]},
         "themes": themes,
-        "institution": _institution_continuity(scoped),
+        "sector_flow": sector_flow,
+        "institution": sector_flow,
     }
 
 
@@ -389,7 +397,7 @@ def _opportunity_radar(records: list[dict[str, Any]]) -> dict[str, Any]:
             row["score"] += weight * float(item.get("rank_strength") or 0)
             row["active_days"] += 1
             row.update({"last_seen": record["trade_date"], "lifecycle": item.get("lifecycle"), "leaders": item.get("leaders", [])})
-        for item in (record.get("institution") or {}).get("sectors") or []:
+        for item in (record.get("market_activity") or {}).get("sectors") or []:
             row = sector_scores.setdefault(item["name"], {"name": item["name"], "score": 0.0, "active_days": 0, "last_seen": record["trade_date"], "net_inflow_yi": item.get("net_inflow_yi"), "pct_chg": item.get("pct_chg")})
             flow = max(-50.0, min(50.0, _number(item.get("net_inflow_yi"), 0.0) or 0.0))
             price = max(-10.0, min(10.0, _number(item.get("pct_chg"), 0.0) or 0.0))
@@ -397,7 +405,7 @@ def _opportunity_radar(records: list[dict[str, Any]]) -> dict[str, Any]:
             row["active_days"] += 1
             row.update({"last_seen": record["trade_date"], "net_inflow_yi": item.get("net_inflow_yi"), "pct_chg": item.get("pct_chg")})
         leader_codes = {leader["code"]: leader for theme in record.get("themes") or [] for leader in theme.get("leaders") or [] if leader.get("code")}
-        cores = {item["code"]: item for item in (record.get("institution") or {}).get("core_stocks") or [] if item.get("code")}
+        cores = {item["code"]: item for item in (record.get("market_activity") or {}).get("rule_candidates") or [] if item.get("code")}
         for code, item in {**leader_codes, **cores}.items():
             row = stock_scores.setdefault(code, {"code": code, "name": item.get("name"), "score": 0.0, "active_days": 0, "last_seen": record["trade_date"], "source": item.get("source", "theme_leader")})
             row["score"] += weight * (70 if code in cores else 55)
@@ -408,8 +416,8 @@ def _opportunity_radar(records: list[dict[str, Any]]) -> dict[str, Any]:
             row["score"] = round(max(0.0, min(100.0, row["score"])), 1)
     coverage = {
         "themes": round(sum(bool(record.get("themes")) for record in recent) / len(recent), 2) if recent else 0.0,
-        "sectors": round(sum(bool((record.get("institution") or {}).get("sectors")) for record in recent) / len(recent), 2) if recent else 0.0,
-        "stocks": round(sum(bool((record.get("institution") or {}).get("core_stocks")) for record in recent) / len(recent), 2) if recent else 0.0,
+        "sectors": round(sum(bool((record.get("market_activity") or {}).get("sectors")) for record in recent) / len(recent), 2) if recent else 0.0,
+        "stocks": round(sum(bool((record.get("market_activity") or {}).get("rule_candidates")) for record in recent) / len(recent), 2) if recent else 0.0,
     }
     return {
         "schema_version": "opportunity-radar-v1",
@@ -425,6 +433,11 @@ def _snapshot_from_records(records: list[dict[str, Any]], events: list[dict[str,
     trade_date = latest["trade_date"]
     current_names = {item["name"] for item in latest["themes"]}
     latest_events = [event for event in events if event["trade_date"] == trade_date]
+    sector_flow_continuity = _sector_flow_continuity(records[-20:])
+    sector_flow_days = sum(
+        bool((record.get("market_activity") or {}).get("sectors"))
+        for record in records[-20:]
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -441,10 +454,12 @@ def _snapshot_from_records(records: list[dict[str, Any]], events: list[dict[str,
         },
         "factor_attribution": latest["factor_attribution"],
         "opportunity_radar": _opportunity_radar(records),
-        "institution_continuity": _institution_continuity(records[-20:]),
+        "sector_flow_continuity": sector_flow_continuity,
+        "institution_continuity": sector_flow_continuity,
         "data_coverage": {
             "theme_days": sum(bool(record["themes"]) for record in records[-20:]),
-            "institution_days": sum(bool((record.get("institution") or {}).get("sectors")) for record in records[-20:]),
+            "sector_flow_days": sector_flow_days,
+            "institution_days": sector_flow_days,
             "window_days": min(20, len(records)),
         },
     }

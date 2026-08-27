@@ -3688,6 +3688,18 @@ export interface QuantXWindowSignal {
   market: { direction: string; tone: string; components: QuantXWindowComponent[] }
   themes: { mainline: any[]; warming: any[]; cooling: any[] }
   institution: any
+  sector_flow: any
+}
+
+export interface QuantXSectorFlowContinuity {
+  semantics: string
+  basis: string
+  available: boolean
+  coverage: number
+  direction: string
+  industries: any[]
+  rule_candidates: any[]
+  core_stocks: any[]
 }
 
 export interface QuantXMultidaySnapshot {
@@ -3701,8 +3713,9 @@ export interface QuantXMultidaySnapshot {
   theme_lifecycle: { current: any[]; events: any[]; exited: any[]; heatmap: { dates: string[]; rows: Array<{ name: string; values: Array<number | null> }> } }
   factor_attribution: Array<{ name: string; count: number }>
   opportunity_radar: { coverage_confidence: Record<string, number>; themes: any[]; sectors: any[]; stocks: any[] }
-  institution_continuity: { available: boolean; coverage: number; direction: string; industries: any[]; core_stocks: any[] }
-  data_coverage: { theme_days: number; institution_days: number; window_days: number }
+  sector_flow_continuity: QuantXSectorFlowContinuity
+  institution_continuity: QuantXSectorFlowContinuity
+  data_coverage: { theme_days: number; sector_flow_days: number; institution_days: number; window_days: number }
 }
 
 export const quantxApi = {

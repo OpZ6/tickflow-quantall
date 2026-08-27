@@ -7,7 +7,7 @@ import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import {
   FactorAttribution,
-  InstitutionContinuity,
+  SectorFlowContinuity,
   OpportunityRadar,
   ThemeLifecyclePanel,
   TradingCalendar,
@@ -82,13 +82,13 @@ export function QuantXCatalog() {
       <div className="grid gap-2 sm:grid-cols-3" data-testid="quantx-data-coverage">
         <div className="rounded-lg border border-border bg-elevated/30 p-2"><div className="text-[10px] text-muted">窗口覆盖</div><div className="font-mono text-lg">{snapshot.data_coverage.window_days}/20 日</div></div>
         <div className="rounded-lg border border-border bg-elevated/30 p-2"><div className="text-[10px] text-muted">题材覆盖</div><div className="font-mono text-lg">{snapshot.data_coverage.theme_days}/20 日</div></div>
-        <div className="rounded-lg border border-border bg-elevated/30 p-2"><div className="text-[10px] text-muted">机构覆盖</div><div className="font-mono text-lg">{snapshot.data_coverage.institution_days}/20 日</div></div>
+        <div className="rounded-lg border border-border bg-elevated/30 p-2"><div className="text-[10px] text-muted">行业资金覆盖</div><div className="font-mono text-lg">{snapshot.data_coverage.sector_flow_days}/20 日</div></div>
       </div>
       <WindowSignalMatrix data={snapshot} active={windowSize} onChange={setWindowSize} />
       <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]"><TradingCalendar rows={snapshot.calendar} selectedDate={selectedDate} onSelect={setSelectedDate} /><WindowStatistics data={snapshot} active={windowSize} /></div>
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]"><ThemeLifecyclePanel data={snapshot} /><FactorAttribution rows={snapshot.factor_attribution} /></div>
       <OpportunityRadar data={snapshot.opportunity_radar} />
-      <InstitutionContinuity data={snapshot.institution_continuity} />
+      <SectorFlowContinuity data={snapshot.sector_flow_continuity} />
     </>}
 
     {!snapshot && !snapshotQuery.isLoading && records.length === 0 && <div className="rounded-xl border border-border py-20 text-center text-sm text-muted"><Database className="mx-auto mb-2 h-8 w-8" />暂无 QuantX 数据</div>}

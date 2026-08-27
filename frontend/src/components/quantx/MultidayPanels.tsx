@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUp, Building2, CalendarDays, Radar, Shapes, TrendingUp } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, CalendarDays, Radar, Shapes, TrendingUp } from 'lucide-react'
 import type { QuantXMultidaySnapshot, QuantXWindowComponent } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
@@ -110,10 +110,10 @@ export function OpportunityRadar({ data }: { data: QuantXMultidaySnapshot['oppor
   </Panel>
 }
 
-export function InstitutionContinuity({ data }: { data: QuantXMultidaySnapshot['institution_continuity'] }) {
+export function SectorFlowContinuity({ data }: { data: QuantXMultidaySnapshot['sector_flow_continuity'] }) {
   const industries = useMemo(() => data.industries.map(row => ({ ...row, net_inflow_sum_yi: Number(row.net_inflow_sum_yi ?? 0).toFixed(2) })), [data.industries])
-  return <Panel title="机构趋势连续性" icon={<Building2 className="h-4 w-4" />} hint={`${data.direction} · 覆盖 ${(data.coverage * 100).toFixed(0)}%`} testId="institution-continuity">
+  return <Panel title="行业资金与规则候选连续性" icon={<TrendingUp className="h-4 w-4" />} hint={`${data.direction} · 覆盖 ${(data.coverage * 100).toFixed(0)}% · 不代表机构身份`} testId="sector-flow-continuity">
     <MiniTable columns={[["name", "行业"], ["active_days", "活跃日"], ["net_inflow_sum_yi", "累计净流入(亿)"], ["last_pct_chg", "最新涨跌"], ["last_seen", "最近"]]} rows={industries} />
-    {data.core_stocks.length > 0 && <div className="mt-4"><h3 className="mb-2 text-xs font-semibold">连续核心</h3><MiniTable columns={[["code", "代码"], ["name", "名称"], ["priority", "层级"], ["active_days", "活跃日"], ["source", "来源"]]} rows={data.core_stocks} /></div>}
+    {data.rule_candidates.length > 0 && <div className="mt-4"><h3 className="mb-2 text-xs font-semibold">连续规则候选</h3><MiniTable columns={[["code", "代码"], ["name", "名称"], ["priority", "层级"], ["active_days", "活跃日"], ["source", "规则类型"]]} rows={data.rule_candidates} /></div>}
   </Panel>
 }

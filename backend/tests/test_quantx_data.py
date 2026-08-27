@@ -319,7 +319,16 @@ def test_multiday_snapshot_contains_all_deterministic_dashboard_sections(tmp_pat
     assert snapshot["theme_lifecycle"]["current"][0]["name"] == "人工智能"
     assert snapshot["factor_attribution"][0]["name"] == "人工智能"
     assert set(snapshot["opportunity_radar"]) >= {"themes", "sectors", "stocks", "coverage_confidence"}
-    assert snapshot["institution_continuity"]["industries"][0]["name"] == "人工智能"
+    continuity = snapshot["sector_flow_continuity"]
+    assert continuity["industries"][0]["name"] == "人工智能"
+    assert continuity["semantics"] == "sector_flow_and_rule_candidates"
+    assert continuity["basis"] == (
+        "sector_flow_daily.net_inflow_yi + screening_candidate_daily"
+    )
+    assert continuity["rule_candidates"] == continuity["core_stocks"]
+    assert snapshot["institution_continuity"] == continuity
+    assert snapshot["data_coverage"]["sector_flow_days"] == 5
+    assert snapshot["data_coverage"]["institution_days"] == 5
     assert "review_decision" not in snapshot
 
 
@@ -354,7 +363,7 @@ def test_multiday_rebuild_persists_versioned_snapshots_and_catalog_stays_compact
 
     assert result["rebuilt"] == 2
     payload = json.loads((tmp_path / "quantx" / "20260825" / "multiday_snapshot.json").read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "tickflow-quantx-multiday-v1"
+    assert payload["schema_version"] == "tickflow-quantx-multiday-v2"
     catalog = json.loads((tmp_path / "quantx" / "catalog.json").read_text(encoding="utf-8"))
     assert "window_signals" not in catalog["records"][-1]
     assert catalog["records"][-1]["multiday_available"] is True
