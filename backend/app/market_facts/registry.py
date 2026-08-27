@@ -207,7 +207,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         DatasetId.LIMIT_LADDER_DAILY: DatasetSpec(
             dataset_id=DatasetId.LIMIT_LADDER_DAILY,
             description="Daily consecutive limit-up ladder membership",
-            schema_version=1,
+            schema_version=2,
             primary_key=("trade_date", "board_height", "symbol"),
             partition_keys=("trade_date",),
             required_columns=("trade_date", "board_height", "symbol", "exchange"),
@@ -221,9 +221,13 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                     "source_code": pl.String,
                     "name": pl.String,
                     "theme_name": pl.String,
+                    "turnover_pct": pl.Float64,
+                    "amount_yi": pl.Float64,
                 }
             ),
-            field_units=MappingProxyType({}),
+            field_units=MappingProxyType(
+                {"turnover_pct": "percent", "amount_yi": "CNY_100M"}
+            ),
         ),
         DatasetId.THEME_OBSERVATION_DAILY: DatasetSpec(
             dataset_id=DatasetId.THEME_OBSERVATION_DAILY,

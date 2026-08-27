@@ -91,7 +91,6 @@ class QuantXReviewRepository:
         "sections.s0.diagnosis",
         "sections.s0.risks",
         "sections.s1.futures",
-        "sections.s3.ladder_detail.supplemental_fields",
         "sections.s4.institution",
         "sections.s4.dx_strength",
     )
@@ -566,12 +565,12 @@ class QuantXReviewRepository:
                 "name": row.get("name") or "",
                 "limit_times": row["board_height"],
                 "theme_name": row.get("theme_name") or "",
-                "turnover_pct": None,
-                "amount_yi": None,
+                "turnover_pct": row.get("turnover_pct"),
+                "amount_yi": row.get("amount_yi"),
             }
             for row in ladder.to_dicts()
         ]
-        fields.extend(["sections.s3.ladder_grid", "sections.s3.ladder_detail.core"])
+        fields.extend(["sections.s3.ladder_grid", "sections.s3.ladder_detail"])
 
     def _apply_sectors(
         self,

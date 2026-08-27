@@ -64,7 +64,7 @@ def _fixture(root: Path, trade_date: str = "20260825") -> Path:
         },
         "akshare": {"trade_date": trade_date, "status": "ok", "sector_fund_flow": []},
         "ths_hot": {"trade_date": trade_date, "status": "ok", "reason_tags": [{"tag": "人工智能", "count": 2}], "stocks": [{"code": "000001", "name": "甲", "reason": "人工智能"}]},
-        "zhangtingke": {"trade_date": trade_date, "status": "ok", "ladder_by_height": {"2": [{"code": "000001", "name": "甲", "limit_times": 2}]}, "ladder_stocks": [{"code": "000001", "name": "甲", "limit_times": 2}]},
+        "zhangtingke": {"trade_date": trade_date, "status": "ok", "ladder_by_height": {"2": [{"code": "000001", "name": "甲", "limit_times": 2, "theme_name": "人工智能", "turnover_pct": 12.34, "amount_yi": 8.76}]}, "ladder_stocks": [{"code": "000001", "name": "甲", "limit_times": 2, "theme_name": "人工智能", "turnover_pct": 12.34, "amount_yi": 8.76}]},
         "zhangtingjun": {"trade_date": trade_date, "status": "ok"},
         "pywencai": {"trade_date": trade_date, "status": "ok", "limit_up": {"count": 1, "stocks": [{"code": "000001", "name": "甲", "limit_times": 2, "concepts": ["人工智能"]}], "ladder": {"2": ["甲"]}, "themes": [{"name": "人工智能", "count": 1}]}, "broken_board": {"count": 0, "stocks": []}, "limit_down": {"count": 0, "stocks": []}, "seal_rate": 100, "broken_rate": 0},
         "duanxianxia": {"trade_date": trade_date, "status": "ok"},
@@ -500,6 +500,14 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert congestion["latest"]["congestion_pct"] == 43.48
     assert congestion["table"][-1][2:] == [1.0, 2.3, 43.48]
     assert response.json()["sections"]["s3"]["ladder_grid"]
+    assert response.json()["sections"]["s3"]["ladder_detail"][0]["turnover_pct"] == 12.34
+    assert response.json()["sections"]["s3"]["ladder_detail"][0]["amount_yi"] == 8.76
+    assert "sections.s3.ladder_detail" in response.json()["data_foundation"][
+        "canonical_fields"
+    ]
+    assert "sections.s3.ladder_detail.supplemental_fields" not in response.json()[
+        "data_foundation"
+    ]["presentation_cache_fields"]
     assert response.json()["sections"]["s3"]["advance_history"][-1][
         "date"
     ] == "20260825"

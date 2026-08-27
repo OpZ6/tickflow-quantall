@@ -852,6 +852,8 @@ def _build_limit_ladder(
                 "source_code": str(raw_code or symbol),
                 "name": str(item.get("name") or ""),
                 "theme_name": str(item.get("theme_name") or ""),
+                "turnover_pct": _number(item.get("turnover_pct")),
+                "amount_yi": _number(item.get("amount_yi")),
                 **_metadata(
                     source=source,
                     source_record_id=f"{source}:{trade_date}:{height}:{symbol}",

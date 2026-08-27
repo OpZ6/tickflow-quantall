@@ -94,7 +94,14 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
         "zhangtingke": {
             "trade_date": trade_date,
             "ladder_stocks": [
-                {"code": "000001", "name": "甲", "limit_times": 2}
+                {
+                    "code": "000001",
+                    "name": "甲",
+                    "limit_times": 2,
+                    "theme_name": "人工智能",
+                    "turnover_pct": 12.34,
+                    "amount_yi": 8.76,
+                }
             ],
         },
         "ths_hot": {
@@ -240,6 +247,7 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         expected_version = {
             DatasetId.MARKET_BREADTH_DAILY: 2,
             DatasetId.MARKET_LIQUIDITY_DAILY: 3,
+            DatasetId.LIMIT_LADDER_DAILY: 2,
         }.get(dataset_id, 1)
         assert spec.schema_version == expected_version
         assert "trade_date" in spec.required_columns
@@ -349,6 +357,9 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
     ]
     assert events["source"].unique().to_list() == ["pywencai"]
     assert events["is_fallback"].to_list() == [False, False, False]
+    ladder = by_id[DatasetId.LIMIT_LADDER_DAILY].frame.row(0, named=True)
+    assert ladder["turnover_pct"] == 12.34
+    assert ladder["amount_yi"] == 8.76
 
     themes = by_id[DatasetId.THEME_OBSERVATION_DAILY].frame
     assert set(themes["source"].to_list()) == {"ths_hot", "pywencai", "deepq"}

@@ -47,6 +47,7 @@ def main() -> None:
             "sections.s2.participation",
             "sections.s2.ebb_risk",
             "sections.s3.advance_history",
+            "sections.s3.ladder_detail",
             "sections.s3.ebb_signals",
             "sections.s3.crash_signals",
             "sections.s6.position",
@@ -56,6 +57,9 @@ def main() -> None:
             assert field not in presentation_cache
         assert len(payload["sections"]["s3"]["ebb_signals"]) == 4
         assert len(payload["sections"]["s3"]["crash_signals"]) == 3
+        assert payload["sections"]["s3"]["ladder_detail"][0]["turnover_pct"] is not None
+        assert payload["sections"]["s3"]["ladder_detail"][0]["amount_yi"] is not None
+        assert "sections.s3.ladder_detail.supplemental_fields" not in presentation_cache
         assert len(payload["sections"]["s1"]["kline_history"]) == 130
         assert payload["sections"]["s1"]["kline_history"][-1]["date"] == args.date
         assert len(payload["sections"]["s1"]["width_heat"]) == 31

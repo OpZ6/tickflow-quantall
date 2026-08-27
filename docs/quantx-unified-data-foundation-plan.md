@@ -802,3 +802,16 @@ Goal 继续保持 `active`。下一阶段优先完成机构面板的语义决策
 - 后端完整回归 1,268 项全部通过，保留 63 条既有弃用警告；前端构建与 standalone Python Playwright + Microsoft Edge headless 跨页回归通过。
 
 该决策不排斥未来接入真正的龙虎榜机构席位数据；但在有可审计的机构身份源之前，不会把行业资金流或规则候选伪装成机构数据。Goal 继续保持 `active`。
+
+### 17.9 2026-08-27 连板梯队补充字段事实化与期指缺口确认
+
+已完成：
+
+- `limit_ladder_daily` 升级为 schema v2，在原有交易日、板数、股票和题材之外，新增换手率 `turnover_pct` 与成交额 `amount_yi`，单位分别为百分比和亿元。
+- QuantX Review 的 `sections.s3.ladder_detail` 现在整体由 Repository 还原，不再把换手率与成交额列为展示缓存补充字段。
+- 定向非破坏迁移重建 72 个分区、5,831 行梯队事实，其中 3,715 行同时具有真实换手率和成交额；缺失日保持 null，不用零或估算值伪造。
+- 迁移前后除目标梯队表之外的 1,842 个 Parquet 聚合 SHA-256 均为 `71895C89D8618DC3E063FF2F5E4F973CA358B5377C0E37158A1CD0AFED433F01`，二次预检的 72 个交易日全部进入 `skipped_existing`。
+- 同时审计确认：现有原始 Tushare 快照和 72 份 Review 缓存中的期指记录均为 0。因没有可迁移真值，本阶段不新建空期指事实表，也不对 UI 伪造展示。未来只有在引入可审计的股指期货行情与持仓源后才建立独立事实契约。
+- 后端完整回归 1,268 项全部通过，保留 63 条既有弃用警告；standalone Python Playwright + Microsoft Edge headless 单日富图表回归通过，并断言梯队换手率和成交额来自 canonical 字段。
+
+Goal 继续保持 `active`。剩余核心工作是逐日对账与数据目录备份、隔离恢复演练。
