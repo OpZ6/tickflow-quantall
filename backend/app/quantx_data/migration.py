@@ -134,6 +134,16 @@ def migrate_quantx_history(
                 structured_tables=_structured_tables(date_dir),
             )
             batches = [batch for batch in batches if batch.dataset_id in selected_ids]
+            if targeted:
+                empty_ids = [batch.dataset_id for batch in batches if batch.frame.is_empty()]
+                batches = [batch for batch in batches if not batch.frame.is_empty()]
+                selected_ids = {batch.dataset_id for batch in batches}
+                if empty_ids and not batches:
+                    result["skipped_incomplete"][date_dir.name] = (
+                        "no rows for targeted datasets: "
+                        + ", ".join(sorted(item.value for item in empty_ids))
+                    )
+                    continue
         except FactValidationError as exc:
             result["skipped_incomplete"][date_dir.name] = str(exc)
             continue

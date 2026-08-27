@@ -47,8 +47,11 @@ def main() -> None:
             response = page.request.get(f"{base_url}/api/data-sources/{endpoint}")
             assert response.ok, f"data source endpoint failed: {endpoint}"
         datasets_response = page.request.get(f"{base_url}/api/data-sources/datasets").json()
-        assert len(datasets_response["datasets"]) == 13
+        assert len(datasets_response["datasets"]) == 14
         assert "kline_index_daily" in {
+            item["dataset_id"] for item in datasets_response["datasets"]
+        }
+        assert "sector_breadth_daily" in {
             item["dataset_id"] for item in datasets_response["datasets"]
         }
         calendar_response = page.request.get(
@@ -63,7 +66,8 @@ def main() -> None:
             timeout=30_000,
         )
         page.wait_for_function("document.querySelectorAll('h2').length >= 7")
-        assert page.locator("canvas").count() == 11
+        page.get_by_test_id("sector-breadth-heatmap").locator("canvas").wait_for()
+        assert page.locator("canvas").count() == 12
         page.screenshot(
             path=str(RESULTS / "quantx-data-foundation-daily.png"), full_page=True
         )

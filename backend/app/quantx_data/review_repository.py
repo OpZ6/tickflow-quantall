@@ -90,7 +90,6 @@ class QuantXReviewRepository:
     _PRESENTATION_CACHE_FIELDS = (
         "sections.s0.diagnosis",
         "sections.s0.risks",
-        "sections.s1.width_heat",
         "sections.s1.futures",
         "sections.s3.ladder_detail.supplemental_fields",
         "sections.s4.institution",
@@ -117,6 +116,7 @@ class QuantXReviewRepository:
 
         self._apply_market(snapshot, selected_day, canonical_fields)
         self._apply_history(snapshot, selected_day, canonical_fields)
+        self._apply_sector_breadth(snapshot, selected_day, canonical_fields)
         self._apply_congestion(snapshot, selected_day, canonical_fields)
         self._apply_advance_history(snapshot, selected_day, canonical_fields)
         self._apply_position(snapshot, selected_day, canonical_fields)
@@ -234,6 +234,32 @@ class QuantXReviewRepository:
         ]
         _section(snapshot, "s1")["up_count_history"] = rows
         fields.append("sections.s1.up_count_history")
+
+    def _apply_sector_breadth(
+        self,
+        snapshot: dict[str, Any],
+        day: date,
+        fields: list[str],
+    ) -> None:
+        breadth = _preferred(
+            self.facts.get_sector_breadth(day),
+            DatasetId.SECTOR_BREADTH_DAILY,
+        )
+        if breadth.is_empty():
+            return
+        rows = [
+            {
+                "code": row["sector_id"],
+                "name": row["sector_name"],
+                "ma5": row["above_ma5_pct"],
+                "ma10": row["above_ma10_pct"],
+                "ma20": row["above_ma20_pct"],
+                "ma60": row["above_ma60_pct"],
+            }
+            for row in breadth.sort("sector_id").to_dicts()
+        ]
+        _section(snapshot, "s1")["width_heat"] = rows
+        fields.append("sections.s1.width_heat")
 
     def _apply_congestion(
         self,

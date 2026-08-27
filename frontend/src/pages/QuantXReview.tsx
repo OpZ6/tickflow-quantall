@@ -173,6 +173,57 @@ function UpCountChart({ history }: { history: any[] }) {
   return <div ref={ref} className="w-full" style={{ height: 400 }} />
 }
 
+function SectorBreadthHeatmap({ data }: { data: any[] }) {
+  const ct = useChartTheme()
+  const rows = useMemo(
+    () => [...data].sort((a, b) => Number(b.ma20 || 0) - Number(a.ma20 || 0)),
+    [data],
+  )
+  const windows = ['MA5', 'MA10', 'MA20', 'MA60']
+  const values = useMemo(
+    () => rows.flatMap((row, rowIndex) => windows.map((window, columnIndex) => [
+      columnIndex,
+      rowIndex,
+      Number(row[window.toLowerCase()] || 0),
+    ])),
+    [rows],
+  )
+  const option = useMemo(() => ({
+    animation: false,
+    grid: { left: 92, right: 72, top: 16, bottom: 36 },
+    tooltip: {
+      position: 'top',
+      formatter: (p: any) => {
+        const row = rows[p.value[1]]
+        return `<b>${row?.name || row?.code || '-'}</b><br>${windows[p.value[0]]}: <b>${Number(p.value[2]).toFixed(1)}%</b><br><span style="color:${ct.text}">成分股收盘价站上该均线的占比</span>`
+      },
+    },
+    xAxis: { type: 'category', data: windows, splitArea: { show: true }, axisLabel: { color: ct.text }, axisLine: { lineStyle: { color: ct.border } } },
+    yAxis: { type: 'category', inverse: true, data: rows.map(row => row.name || row.code), splitArea: { show: true }, axisLabel: { color: ct.text, fontSize: 10 }, axisLine: { lineStyle: { color: ct.border } } },
+    visualMap: {
+      min: 0,
+      max: 100,
+      calculable: true,
+      orient: 'vertical',
+      right: 4,
+      top: 'center',
+      text: ['强', '弱'],
+      textStyle: { color: ct.text },
+      inRange: { color: [GREEN, '#243447', YELLOW, ORANGE, RED] },
+    },
+    series: [{
+      name: '站上均线占比',
+      type: 'heatmap',
+      data: values,
+      label: { show: true, color: '#fff', fontSize: 9, formatter: (p: any) => `${Number(p.value[2]).toFixed(0)}%` },
+      emphasis: { itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.45)' } },
+    }],
+  }), [rows, values, ct.text, ct.border])
+  const ref = useEChart(option, [rows, values, ct.text])
+  if (!rows.length) return null
+  return <div ref={ref} className="w-full" style={{ height: Math.max(480, rows.length * 22 + 70) }} />
+}
+
 function CongestionGauge({ pct }: { pct: number }) {
   const ct = useChartTheme()
   const option = useMemo(() => ({
@@ -457,6 +508,7 @@ export function QuantXReview() {
       {s1.indexes?.length > 0 && <IndexChart indexes={s1.indexes} />}
       {s1.kline_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4 mt-4"><h4 className="text-xs font-semibold text-muted mb-1">全A K线 + CCI5 (近{s1.kline_history.length}日)</h4><KlineChart history={s1.kline_history} /></div>)}
       {s1.up_count_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">涨跌家数 + 成交额 (近{s1.up_count_history.filter((d: any) => d.date && d.up_count > 0).length}日)</h4><UpCountChart history={s1.up_count_history} /></div>)}
+      {s1.width_heat?.length > 0 && (<div data-testid="sector-breadth-heatmap" className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">申万一级行业均线宽度（站上均线成分股占比）</h4><SectorBreadthHeatmap data={s1.width_heat} /></div>)}
       {s1.margin_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">融资余额 + 净买入 (近{s1.margin_history.length}日)</h4><MarginChart history={s1.margin_history} /></div>)}
       {congestionPct > 0 && (
         <div className="grid grid-cols-2 gap-4 mb-4">

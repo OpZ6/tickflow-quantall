@@ -98,6 +98,7 @@ class DataStore:
             "theme_observation_daily",
             "theme_member_daily",
             "sector_flow_daily",
+            "sector_breadth_daily",
             "market_state_daily",
             "market_signal_daily",
             "screening_candidate_daily",
@@ -236,6 +237,8 @@ class DataStore:
                 SELECT * FROM read_parquet('{d}/theme_member_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW sector_flow_daily AS
                 SELECT * FROM read_parquet('{d}/sector_flow_daily/**/*.parquet', union_by_name=true)""",
+            f"""CREATE OR REPLACE VIEW sector_breadth_daily AS
+                SELECT * FROM read_parquet('{d}/sector_breadth_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW market_state_daily AS
                 SELECT * FROM read_parquet('{d}/market_state_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW market_signal_daily AS
@@ -2122,6 +2125,7 @@ class KlineRepository:
             "theme_observation_daily": f"{d}/theme_observation_daily/**/*.parquet",
             "theme_member_daily": f"{d}/theme_member_daily/**/*.parquet",
             "sector_flow_daily": f"{d}/sector_flow_daily/**/*.parquet",
+            "sector_breadth_daily": f"{d}/sector_breadth_daily/**/*.parquet",
             "market_state_daily": f"{d}/market_state_daily/**/*.parquet",
             "market_signal_daily": f"{d}/market_signal_daily/**/*.parquet",
             "screening_candidate_daily": f"{d}/screening_candidate_daily/**/*.parquet",

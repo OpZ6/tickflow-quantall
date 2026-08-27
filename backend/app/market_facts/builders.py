@@ -11,6 +11,40 @@ import polars as pl
 
 from app.market_facts.registry import DatasetId, get_dataset
 
+_SW_LEVEL1_NAMES = {
+    "801010.SI": "农林牧渔",
+    "801030.SI": "基础化工",
+    "801040.SI": "钢铁",
+    "801050.SI": "有色金属",
+    "801080.SI": "电子",
+    "801110.SI": "家用电器",
+    "801120.SI": "食品饮料",
+    "801130.SI": "纺织服饰",
+    "801140.SI": "轻工制造",
+    "801150.SI": "医药生物",
+    "801160.SI": "公用事业",
+    "801170.SI": "交通运输",
+    "801180.SI": "房地产",
+    "801200.SI": "商贸零售",
+    "801210.SI": "社会服务",
+    "801230.SI": "综合",
+    "801710.SI": "建筑材料",
+    "801720.SI": "建筑装饰",
+    "801730.SI": "电力设备",
+    "801740.SI": "国防军工",
+    "801750.SI": "计算机",
+    "801760.SI": "传媒",
+    "801770.SI": "通信",
+    "801780.SI": "银行",
+    "801790.SI": "非银金融",
+    "801880.SI": "汽车",
+    "801890.SI": "机械设备",
+    "801950.SI": "煤炭",
+    "801960.SI": "石油石化",
+    "801970.SI": "环保",
+    "801980.SI": "美容护理",
+}
+
 
 class FactValidationError(ValueError):
     """Raised when a required canonical dataset cannot be constructed."""
@@ -697,6 +731,73 @@ def _build_sector_flows(
     )
 
 
+def _build_sector_breadth(
+    trade_date: str,
+    sources: dict[str, dict[str, Any]],
+    run_id: str,
+    ingested_at: str,
+) -> FactBatch:
+    payload = sources.get("legulegu") or {}
+    width_api = payload.get("width_api")
+    width_api = width_api if isinstance(width_api, dict) else {}
+    width = (
+        width_api.get("ma_market_width_primary")
+        or width_api.get("ma_market_width")
+        or {}
+    )
+    if not isinstance(width, dict):
+        width = {}
+    dates = width.get("dates") if isinstance(width.get("dates"), list) else []
+    target = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+    try:
+        target_index = dates.index(target)
+    except ValueError:
+        target_index = -1
+    series = width.get("maMarketWidth")
+    series = series if isinstance(series, dict) else {}
+    rows: list[dict[str, Any]] = []
+    if target_index >= 0:
+        for sector_id, sector_name in _SW_LEVEL1_NAMES.items():
+            values = series.get(sector_id)
+            if not isinstance(values, list) or target_index >= len(values):
+                continue
+            item = values[target_index]
+            if not isinstance(item, dict):
+                continue
+            metrics = {
+                "above_ma5_pct": _number(item.get("value5")),
+                "above_ma10_pct": _number(item.get("value10")),
+                "above_ma20_pct": _number(item.get("value20")),
+                "above_ma60_pct": _number(item.get("value60")),
+            }
+            if any(value is None or not 0 <= value <= 100 for value in metrics.values()):
+                continue
+            rows.append(
+                {
+                    "trade_date": _trade_date(trade_date),
+                    "dimension": "sw_level1",
+                    "sector_id": sector_id,
+                    "sector_name": sector_name,
+                    "taxonomy_version": "SW2021",
+                    **metrics,
+                    **_metadata(
+                        source="legulegu",
+                        source_record_id=(
+                            f"legulegu:{trade_date}:sw_level1:{sector_id}"
+                        ),
+                        observed_at=_observed_at(payload),
+                        ingested_at=ingested_at,
+                        run_id=run_id,
+                    ),
+                }
+            )
+    return FactBatch(
+        DatasetId.SECTOR_BREADTH_DAILY,
+        _trade_date(trade_date),
+        _frame(DatasetId.SECTOR_BREADTH_DAILY, rows).sort("sector_id"),
+    )
+
+
 def _build_limit_ladder(
     trade_date: str,
     sources: dict[str, dict[str, Any]],
@@ -1105,6 +1206,7 @@ def build_initial_fact_batches(
             trade_date, sources, structured, run_id, ingested_at
         ),
         _build_sector_flows(trade_date, sources, run_id, ingested_at),
+        _build_sector_breadth(trade_date, sources, run_id, ingested_at),
         _build_market_state(trade_date, structured, run_id, ingested_at),
         _build_market_signals(trade_date, structured, run_id, ingested_at),
         _build_screening_candidates(

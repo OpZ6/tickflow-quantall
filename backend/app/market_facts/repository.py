@@ -156,6 +156,9 @@ class MarketFactRepository:
     def get_sector_flows(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.SECTOR_FLOW_DAILY, trade_date)
 
+    def get_sector_breadth(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.SECTOR_BREADTH_DAILY, trade_date)
+
     def get_market_state(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.MARKET_STATE_DAILY, trade_date)
 

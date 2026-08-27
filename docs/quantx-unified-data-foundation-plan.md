@@ -767,3 +767,25 @@ Goal 继续保持 `active`。下一阶段优先处理机构连续性、宽度热
 - 数据目录仍未完成独立备份与隔离恢复演练。
 
 Goal 继续保持 `active`。下一阶段优先为宽度热力图定义真实可复用事实，并对机构面板做“可靠机构源”或“明确语义降级”的取舍；随后完成逐日对账和备份恢复演练。
+
+### 17.7 2026-08-27 行业均线宽度事实化与热力图恢复
+
+已完成：
+
+- 审计确认 Legulegu 原始快照已保存 `ma_market_width_primary`，旧 Review 代码却读取不存在的 `sw_market_width`；页面空白的直接原因是契约键漂移，不是历史源数据全部缺失。
+- 新增第 14 个可发现数据集 `sector_breadth_daily`，按 `(trade_date, dimension, sector_id)` 唯一，使用 `dimension=sw_level1` 和 `taxonomy_version=SW2021`，存储申万一级行业成分股收盘价站上 MA5/10/20/60 的占比。
+- 数值只接受 0–100，且必须精确命中请求交易日；不会用相邻日或最新日替代，异常行不入库。因原始名称已乱码，展示名称由稳定 SW2021 一级代码表恢复，原快照仍保留供审计。
+- `QuantXReviewRepository` 用标准事实覆盖 `sections.s1.width_heat`，并将该字段从展示缓存列表移入 `canonical_fields`。
+- 单日 QuantX 恢复“申万一级行业均线宽度”热力图，按 MA20 强弱排序，图中显示 MA5/10/20/60 四个窗口与百分比；数据源管理页同步展示该数据集。
+- 历史定向迁移成功发布 70 个交易日、2,170 行；`20260427` 和 `20260710` 的当日原快照缺少有效数据，因此保留为可审计缺口，不用后来快照做回看偏差式回填。
+- 针对性迁移遇到空批次时进入 `skipped_incomplete`，不写空 Parquet 和迁移版本标记。迁移前后其余 1,844 个 Parquet 的聚合 SHA-256 均为 `D545D22DC8B99E3A474887743830AAC8575533535EDFFE92A4C28CEFA08CF0E4`。
+
+本阶段验证：
+
+- 契约、构建器、精确日期、异常值、空迁移与 Review API 均有定向测试，相关 Ruff 检查通过。
+- 前端 `npm run build` 通过，保留已有大 chunk 提示。
+- 完整后端回归 1,268 项全部通过，保留 63 条既有弃用警告。
+- 真实 API 返回 31 个行业、14 个可发现数据集，`sections.s1.width_heat` 已列入 canonical 且不在 presentation cache 中。
+- 两组 standalone Python Playwright + Microsoft Edge headless 回归通过：单日页面保持七区并增至 12 个 canvas，宽度热力图实际渲染 31 个行业和 4 个均线窗口；多日、Market Lab 与数据源管理跨页回归同时通过。
+
+Goal 继续保持 `active`。下一阶段优先完成机构面板的语义决策，再处理期指、梯队补充字段和数据目录备份恢复演练。

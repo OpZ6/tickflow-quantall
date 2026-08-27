@@ -8,6 +8,7 @@ const DATASET_LABELS: Record<string, string> = {
   kline_index_daily: '指数日 K',
   trading_calendar: '交易日历',
   market_breadth_daily: '市场宽度',
+  sector_breadth_daily: '行业均线宽度',
   market_liquidity_daily: '市场流动性',
   margin_daily: '融资余额',
   limit_event_daily: '涨跌停事件',

@@ -41,6 +41,7 @@ def main() -> None:
         presentation_cache = foundation["presentation_cache_fields"]
         for field in (
             "sections.s1.kline_history",
+            "sections.s1.width_heat",
             "sections.s1.congestion",
             "sections.s2.new_high",
             "sections.s2.participation",
@@ -57,11 +58,13 @@ def main() -> None:
         assert len(payload["sections"]["s3"]["crash_signals"]) == 3
         assert len(payload["sections"]["s1"]["kline_history"]) == 130
         assert payload["sections"]["s1"]["kline_history"][-1]["date"] == args.date
+        assert len(payload["sections"]["s1"]["width_heat"]) == 31
 
         headings = page.locator("h2").all_inner_texts()
         missing = [title for title in EXPECTED_SECTIONS if title not in headings]
         assert not missing, f"missing QuantX review sections: {missing}"
-        assert page.locator("canvas").count() == 11
+        page.get_by_test_id("sector-breadth-heatmap").locator("canvas").wait_for()
+        assert page.locator("canvas").count() == 12
         new_high = page.get_by_role("heading", name="百日新高")
         new_high.wait_for()
         assert new_high.locator("..").locator("span").count() == 29

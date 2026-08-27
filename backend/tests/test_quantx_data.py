@@ -69,7 +69,26 @@ def _fixture(root: Path, trade_date: str = "20260825") -> Path:
         "pywencai": {"trade_date": trade_date, "status": "ok", "limit_up": {"count": 1, "stocks": [{"code": "000001", "name": "甲", "limit_times": 2, "concepts": ["人工智能"]}], "ladder": {"2": ["甲"]}, "themes": [{"name": "人工智能", "count": 1}]}, "broken_board": {"count": 0, "stocks": []}, "limit_down": {"count": 0, "stocks": []}, "seal_rate": 100, "broken_rate": 0},
         "duanxianxia": {"trade_date": trade_date, "status": "ok"},
         "deepq": {"trade_date": trade_date, "status": "ok"},
-        "legulegu": {"trade_date": trade_date, "status": "ok"},
+        "legulegu": {
+            "trade_date": trade_date,
+            "status": "ok",
+            "scraped_at": f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}T16:07:00+08:00",
+            "width_api": {
+                "ma_market_width_primary": {
+                    "dates": [
+                        f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+                    ],
+                    "maMarketWidth": {
+                        "801010.SI": [
+                            {"value5": 75, "value10": 65, "value20": 55, "value60": 45}
+                        ],
+                        "801030.SI": [
+                            {"value5": 25, "value10": 35, "value20": 45, "value60": 55}
+                        ],
+                    },
+                }
+            },
+        },
         "quicktiny": {"trade_date": trade_date, "status": "ok"},
         "dabanke": {"trade_date": trade_date, "status": "ok"},
         "sector_fund_flow_s4": {"trade_date": trade_date, "status": "ok", "sectors": [{"name": "人工智能", "pct_chg": 1.2, "net_inflow_yi": 3.5}]},
@@ -126,6 +145,7 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
         "theme_observation_daily",
         "theme_member_daily",
         "sector_flow_daily",
+        "sector_breadth_daily",
         "market_state_daily",
         "market_signal_daily",
         "screening_candidate_daily",
@@ -403,6 +423,7 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
         "table": [],
     }
     cached["sections"]["s1"]["kline_history"] = []
+    cached["sections"]["s1"]["width_heat"] = [{"code": "poisoned", "ma20": 999}]
     cached["sections"]["s3"]["ladder_grid"] = []
     cached["sections"]["s3"]["advance_history"] = []
     cached["sections"]["s3"]["ebb_signals"] = []
@@ -511,6 +532,22 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert "sections.s1.kline_history" not in response.json()["data_foundation"][
         "presentation_cache_fields"
     ]
+    width_heat = response.json()["sections"]["s1"]["width_heat"]
+    assert [row["code"] for row in width_heat] == ["801010.SI", "801030.SI"]
+    assert width_heat[0] == {
+        "code": "801010.SI",
+        "name": "农林牧渔",
+        "ma5": 75.0,
+        "ma10": 65.0,
+        "ma20": 55.0,
+        "ma60": 45.0,
+    }
+    assert "sections.s1.width_heat" in response.json()["data_foundation"][
+        "canonical_fields"
+    ]
+    assert "sections.s1.width_heat" not in response.json()["data_foundation"][
+        "presentation_cache_fields"
+    ]
 
 
 def test_history_migration_is_dry_run_by_default_and_preserves_legacy(tmp_path):
@@ -603,3 +640,23 @@ def test_history_migration_rebuilds_only_selected_stale_dataset(tmp_path):
         datasets=(DatasetId.SCREENING_CANDIDATE_DAILY,),
     )
     assert repeated["skipped_existing"] == ["20260825"]
+
+
+def test_targeted_history_migration_does_not_publish_empty_partition(tmp_path):
+    root = _fixture(tmp_path)
+    legulegu_path = root / "quantx" / "20260825" / "legulegu.json"
+    legulegu = json.loads(legulegu_path.read_text(encoding="utf-8"))
+    legulegu["width_api"] = {}
+    _write(legulegu_path, legulegu)
+
+    result = migrate_quantx_history(
+        root,
+        apply=True,
+        datasets=(DatasetId("sector_breadth_daily"),),
+    )
+
+    assert result["migrated"] == []
+    assert result["skipped_incomplete"] == {
+        "20260825": "no rows for targeted datasets: sector_breadth_daily"
+    }
+    assert not (root / "sector_breadth_daily" / "date=2026-08-25").exists()

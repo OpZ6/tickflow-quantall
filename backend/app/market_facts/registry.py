@@ -19,6 +19,7 @@ class DatasetId(StrEnum):
     THEME_OBSERVATION_DAILY = "theme_observation_daily"
     THEME_MEMBER_DAILY = "theme_member_daily"
     SECTOR_FLOW_DAILY = "sector_flow_daily"
+    SECTOR_BREADTH_DAILY = "sector_breadth_daily"
     MARKET_STATE_DAILY = "market_state_daily"
     MARKET_SIGNAL_DAILY = "market_signal_daily"
     SCREENING_CANDIDATE_DAILY = "screening_candidate_daily"
@@ -302,6 +303,44 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 }
             ),
         ),
+        DatasetId.SECTOR_BREADTH_DAILY: DatasetSpec(
+            dataset_id=DatasetId.SECTOR_BREADTH_DAILY,
+            description="Share of SW level-1 constituents closing above moving averages",
+            schema_version=1,
+            primary_key=("trade_date", "dimension", "sector_id"),
+            partition_keys=("trade_date",),
+            required_columns=(
+                "trade_date",
+                "dimension",
+                "sector_id",
+                "sector_name",
+                "above_ma5_pct",
+                "above_ma10_pct",
+                "above_ma20_pct",
+                "above_ma60_pct",
+            ),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "dimension": pl.String,
+                    "sector_id": pl.String,
+                    "sector_name": pl.String,
+                    "taxonomy_version": pl.String,
+                    "above_ma5_pct": pl.Float64,
+                    "above_ma10_pct": pl.Float64,
+                    "above_ma20_pct": pl.Float64,
+                    "above_ma60_pct": pl.Float64,
+                }
+            ),
+            field_units=MappingProxyType(
+                {
+                    "above_ma5_pct": "percent",
+                    "above_ma10_pct": "percent",
+                    "above_ma20_pct": "percent",
+                    "above_ma60_pct": "percent",
+                }
+            ),
+        ),
         DatasetId.MARKET_STATE_DAILY: DatasetSpec(
             dataset_id=DatasetId.MARKET_STATE_DAILY,
             description="Deterministic daily QuantX market and sentiment state",
@@ -463,6 +502,10 @@ ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
         DatasetId.SECTOR_FLOW_DAILY: SourceRoute(
             DatasetId.SECTOR_FLOW_DAILY,
             ("sector_fund_flow_s4", "akshare", "enriched_ohlcv_proxy"),
+        ),
+        DatasetId.SECTOR_BREADTH_DAILY: SourceRoute(
+            DatasetId.SECTOR_BREADTH_DAILY,
+            ("legulegu",),
         ),
         DatasetId.MARKET_STATE_DAILY: SourceRoute(
             DatasetId.MARKET_STATE_DAILY,

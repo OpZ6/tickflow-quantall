@@ -144,6 +144,29 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
                 }
             ],
         },
+        "legulegu": {
+            "trade_date": trade_date,
+            "scraped_at": "2026-08-25T16:07:00+08:00",
+            "width_api": {
+                "ma_market_width_primary": {
+                    "dates": ["2026-08-24", "2026-08-25"],
+                    "swCodeNames": [
+                        {"indexCode": "801010.SI", "indexName": "broken-name"},
+                        {"indexCode": "801030.SI", "indexName": "broken-name"},
+                    ],
+                    "maMarketWidth": {
+                        "801010.SI": [
+                            {"value5": 40, "value10": 30, "value20": 20, "value60": 10},
+                            {"value5": 75, "value10": 65, "value20": 55, "value60": 45},
+                        ],
+                        "801030.SI": [
+                            {"value5": 20, "value10": 30, "value20": 40, "value60": 50},
+                            {"value5": 25, "value10": 35, "value20": 45, "value60": 55},
+                        ],
+                    },
+                }
+            },
+        },
     }
 
 
@@ -195,6 +218,7 @@ def _signal_tables() -> dict[str, dict]:
 
 
 def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
+    sector_breadth_id = DatasetId("sector_breadth_daily")
     dataset_ids = {
         DatasetId.TRADING_CALENDAR,
         DatasetId.MARKET_BREADTH_DAILY,
@@ -208,6 +232,7 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         DatasetId.MARKET_STATE_DAILY,
         DatasetId.MARKET_SIGNAL_DAILY,
         DatasetId.SCREENING_CANDIDATE_DAILY,
+        sector_breadth_id,
     }
 
     for dataset_id in dataset_ids:
@@ -239,6 +264,10 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
     assert get_route(DatasetId.MARKET_SIGNAL_DAILY).sources == (
         "quantx_deterministic_v1",
     )
+    assert get_route(sector_breadth_id).sources == ("legulegu",)
+    sector_breadth = get_dataset(sector_breadth_id)
+    assert sector_breadth.field_units["above_ma20_pct"] == "percent"
+    assert sector_breadth.primary_key == ("trade_date", "dimension", "sector_id")
 
 
 def test_fact_builders_normalize_breadth_and_limit_events() -> None:
@@ -357,6 +386,65 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
         (pl.col("signal_group") == "participation")
         & (pl.col("signal_id") == "height_ge_4")
     )["ok"].item() is True
+    sector_breadth = by_id[DatasetId("sector_breadth_daily")].frame
+    assert sector_breadth.select(
+        "sector_id",
+        "sector_name",
+        "dimension",
+        "taxonomy_version",
+        "above_ma5_pct",
+        "above_ma10_pct",
+        "above_ma20_pct",
+        "above_ma60_pct",
+        "source",
+        "quality_level",
+    ).to_dicts() == [
+        {
+            "sector_id": "801010.SI",
+            "sector_name": "农林牧渔",
+            "dimension": "sw_level1",
+            "taxonomy_version": "SW2021",
+            "above_ma5_pct": 75.0,
+            "above_ma10_pct": 65.0,
+            "above_ma20_pct": 55.0,
+            "above_ma60_pct": 45.0,
+            "source": "legulegu",
+            "quality_level": "observed",
+        },
+        {
+            "sector_id": "801030.SI",
+            "sector_name": "基础化工",
+            "dimension": "sw_level1",
+            "taxonomy_version": "SW2021",
+            "above_ma5_pct": 25.0,
+            "above_ma10_pct": 35.0,
+            "above_ma20_pct": 45.0,
+            "above_ma60_pct": 55.0,
+            "source": "legulegu",
+            "quality_level": "observed",
+        },
+    ]
+
+
+def test_sector_breadth_requires_exact_date_and_valid_percentages() -> None:
+    sources = _sources()
+    width = sources["legulegu"]["width_api"]["ma_market_width_primary"]
+    width["dates"] = ["2026-08-24", "2026-08-26"]
+    batches = build_initial_fact_batches("20260825", sources, "run-1")
+    sector_breadth = next(
+        batch for batch in batches if batch.dataset_id == DatasetId("sector_breadth_daily")
+    )
+    assert sector_breadth.frame.is_empty()
+
+    sources = _sources()
+    sources["legulegu"]["width_api"]["ma_market_width_primary"]["maMarketWidth"]["801010.SI"][
+        1
+    ]["value20"] = 101.0
+    batches = build_initial_fact_batches("20260825", sources, "run-1")
+    sector_breadth = next(
+        batch for batch in batches if batch.dataset_id == DatasetId("sector_breadth_daily")
+    )
+    assert sector_breadth.frame["sector_id"].to_list() == ["801030.SI"]
 
 
 def test_tickflow_adapter_derives_returns_from_previous_partition(tmp_path) -> None:
