@@ -57,6 +57,19 @@ interface ExtFieldConfig {
   showIndustryGroupStats?: boolean
 }
 
+const DEFAULT_EXT_FIELDS: ExtFieldConfig = {
+  concept: {
+    field: 'ext_gn_ths.所属概念',
+    display: { displayMode: 'tag' },
+  },
+  industry: {
+    field: 'ext_hy_ths.所属同花顺行业',
+    display: { displayMode: 'tag' },
+  },
+  showConceptStats: true,
+  showIndustryStats: true,
+}
+
 const DEFAULT_BF: BrokenFailedConfig = {
   brokenMinBoards: 0,
   failedMinBoards: 0,
@@ -67,8 +80,12 @@ const DEFAULT_BF: BrokenFailedConfig = {
 }
 
 function loadExtFields(): ExtFieldConfig {
-  const raw = storage.limitLadderExtFields.get({}) as any
-  if (!raw) return {}
+  const raw = storage.limitLadderExtFields.get(DEFAULT_EXT_FIELDS) as any
+  // Older builds persisted an empty object even though the built-in concept
+  // and industry datasets were available. Treat that legacy state as
+  // uninitialized; an intentional "不显示" save retains the other config
+  // properties and therefore remains distinguishable from {}.
+  if (!raw || Object.keys(raw).length === 0) return DEFAULT_EXT_FIELDS
   // 兼容旧格式 { concept: "id.field", conceptSep: "x" }
   if (typeof raw.concept === 'string') {
     return {
@@ -361,6 +378,8 @@ const StockCard = React.memo(function StockCard({ stock, extFields, direction, s
                 <button
                   key={i}
                   type="button"
+                  data-dimension-kind="concept"
+                  data-dimension-value={t}
                   onClick={event => { event.stopPropagation(); onDimensionClick('concept', t, extFields.concept?.field) }}
                   className={`${isTextConcept ? textCls : conceptCls} hover:brightness-95`}
                 >
@@ -375,6 +394,8 @@ const StockCard = React.memo(function StockCard({ stock, extFields, direction, s
                 <button
                   key={i}
                   type="button"
+                  data-dimension-kind="industry"
+                  data-dimension-value={t}
                   onClick={event => { event.stopPropagation(); onDimensionClick('industry', t, extFields.industry?.field) }}
                   className={`${isTextIndustry ? textCls : industryCls} hover:brightness-95`}
                 >
@@ -887,6 +908,8 @@ function TagStats({ title, tiers, extFields, fieldKey, color, selectedTag, onSel
             return (
               <button
                 key={name}
+                data-dimension-kind={fieldKey}
+                data-dimension-value={name}
                 onClick={() => {
                   onSelect(isSelected ? null : { fieldKey, tag: name })
                   onDimensionClick(fieldKey, name, extFields[fieldKey]?.field)
@@ -1028,6 +1051,8 @@ function TierGroup({ tier, defaultOpen, extFields, filterKeys, bf, onStockClick,
                       return (
                         <button
                           key={name}
+                          data-dimension-kind="concept"
+                          data-dimension-value={name}
                           onClick={() => {
                             onSelectTag(isSelected ? null : { fieldKey: 'concept', tag: name })
                             onDimensionClick('concept', name, extFields.concept?.field)
@@ -1058,6 +1083,8 @@ function TierGroup({ tier, defaultOpen, extFields, filterKeys, bf, onStockClick,
                       return (
                         <button
                           key={name}
+                          data-dimension-kind="industry"
+                          data-dimension-value={name}
                           onClick={() => {
                             onSelectTag(isSelected ? null : { fieldKey: 'industry', tag: name })
                             onDimensionClick('industry', name, extFields.industry?.field)
@@ -1473,19 +1500,27 @@ export function LimitUpLadder() {
   }, [])
 
   const toggleConcept = useCallback(() => {
+    if (!extFields.concept?.field) {
+      setShowExtConfig(true)
+      return
+    }
     setShowConcept(prev => {
       const next = !prev
       storage.limitLadderShowExt.set({ concept: next, industry: showIndustry })
       return next
     })
-  }, [showIndustry])
+  }, [extFields.concept?.field, showIndustry])
   const toggleIndustry = useCallback(() => {
+    if (!extFields.industry?.field) {
+      setShowExtConfig(true)
+      return
+    }
     setShowIndustry(prev => {
       const next = !prev
       storage.limitLadderShowExt.set({ concept: showConcept, industry: next })
       return next
     })
-  }, [showConcept])
+  }, [extFields.industry?.field, showConcept])
   const [previewSymbol, setPreviewSymbol] = useState<string | null>(null)
   const [previewName, setPreviewName] = useState('')
   const [selectedTag, setSelectedTag] = useState<{ fieldKey: 'concept' | 'industry'; tag: string } | null>(null)
@@ -1645,6 +1680,8 @@ export function LimitUpLadder() {
             {/* 显示组: 概念/行业 */}
             <button
               onClick={toggleConcept}
+              aria-pressed={showConcept}
+              title={extFields.concept?.field ? '显示或隐藏概念标签' : '配置概念字段'}
               className={`px-2 py-1 text-xs transition-colors ${
                 showConcept
                   ? 'bg-yellow-500/15 text-yellow-400 font-medium'
@@ -1655,6 +1692,8 @@ export function LimitUpLadder() {
             </button>
             <button
               onClick={toggleIndustry}
+              aria-pressed={showIndustry}
+              title={extFields.industry?.field ? '显示或隐藏行业标签' : '配置行业字段'}
               className={`px-2 py-1 text-xs transition-colors ${
                 showIndustry
                   ? 'bg-blue-500/15 text-blue-400 font-medium'
