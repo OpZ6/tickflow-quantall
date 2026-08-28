@@ -48,28 +48,34 @@ export function WindowSignalMatrix({ data, active, onChange }: { data: QuantXMul
   </Panel>
 }
 
-export function TradingCalendar({ rows, selectedDate, onSelect }: { rows: QuantXMultidaySnapshot['calendar']; selectedDate: string; onSelect: (date: string) => void }) {
-  return <Panel title="交易日历" icon={<CalendarDays className="h-4 w-4" />} hint="点击日期联动整个多日面板" testId="trading-calendar">
-    <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-10">
+export function TradingCalendarGrid({ rows, selectedDate, onSelect, compact = false }: { rows: QuantXMultidaySnapshot['calendar']; selectedDate: string; onSelect: (date: string) => void; compact?: boolean }) {
+  return (
+    <div className={cn('grid grid-cols-5 gap-1.5', !compact && 'sm:grid-cols-10')}>
       {rows.slice(-30).map(row => {
         const heat = Number(row.market_heat_score ?? 0)
         const background = heat >= 70 ? 'bg-red-500/25' : heat >= 50 ? 'bg-orange-500/20' : heat >= 35 ? 'bg-blue-500/20' : 'bg-slate-500/15'
-        return <button key={row.trade_date} aria-label={`选择交易日 ${row.trade_date}`} onClick={() => onSelect(row.trade_date)} className={cn('rounded border px-1 py-2 text-center transition-colors', background, selectedDate === row.trade_date ? 'border-accent ring-1 ring-accent' : 'border-border')}>
+        return <button key={row.trade_date} aria-label={`选择交易日 ${row.trade_date}`} onClick={() => onSelect(row.trade_date)} className={cn('cursor-pointer rounded border px-1 text-center transition-colors', compact ? 'py-1' : 'py-2', background, selectedDate === row.trade_date ? 'border-accent ring-1 ring-accent' : 'border-border hover:border-muted')}>
           <div className="font-mono text-[10px] text-muted">{row.trade_date.slice(4, 6)}-{row.trade_date.slice(6)}</div>
           <div className="text-base font-bold">{row.market_heat_score ?? '--'}</div>
         </button>
       })}
     </div>
+  )
+}
+
+export function TradingCalendar({ rows, selectedDate, onSelect }: { rows: QuantXMultidaySnapshot['calendar']; selectedDate: string; onSelect: (date: string) => void }) {
+  return <Panel title="交易日历" icon={<CalendarDays className="h-4 w-4" />} hint="点击日期联动整个多日面板" testId="trading-calendar">
+    <TradingCalendarGrid rows={rows} selectedDate={selectedDate} onSelect={onSelect} />
   </Panel>
 }
 
-export function WindowStatistics({ data, active }: { data: QuantXMultidaySnapshot; active: WindowSize }) {
+export function WindowStatistics({ data, active, compact = false }: { data: QuantXMultidaySnapshot; active: WindowSize; compact?: boolean }) {
   const stats = data.window_statistics[String(active) as '5' | '10' | '20']
   const cards = [
     ['热度', stats.market_heat], ['涨停家数', stats.limit_up], ['封板率', stats.seal_rate], ['连板高度', stats.max_board],
   ] as const
   return <Panel title={`${active} 日窗口统计情报`} icon={<Radar className="h-4 w-4" />} hint={`${stats.valid_days} 个有效交易日 · 风险日 ${stats.risk_days}`} testId="window-statistics">
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div className={cn('grid grid-cols-2 gap-2', !compact && 'sm:grid-cols-4')}>
       {cards.map(([label, item]) => <div key={label} className="rounded-lg border border-border bg-base/50 p-2"><div className="text-[10px] text-muted">{label}</div><div className="mt-1 font-mono text-lg font-semibold">{item?.average ?? '--'}</div><div className="text-[10px] text-muted">高 {item?.max ?? '--'} · 低 {item?.min ?? '--'}</div></div>)}
     </div>
   </Panel>

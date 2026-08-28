@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
@@ -11,7 +11,6 @@ import {
   Gauge,
   Layers3,
   Loader2,
-  Maximize2,
   RefreshCw,
   ShieldAlert,
   Sparkles,
@@ -24,7 +23,7 @@ import {
   OpportunityRadar,
   SectorFlowContinuity,
   ThemeLifecyclePanel,
-  TradingCalendar,
+  TradingCalendarGrid,
   WindowSignalMatrix,
   WindowStatistics,
   type WindowSize,
@@ -40,7 +39,6 @@ import {
   IndexChart,
   KlineChart,
   MarginChart,
-  ScoreBar,
   SectorBreadthHeatmap,
   SectorFlowChart,
   SectorScatterChart,
@@ -49,7 +47,6 @@ import {
 } from './QuantXReview'
 
 type DeepTab = 'market' | 'themes' | 'emotion' | 'flow' | 'watch' | 'data' | 'quality'
-type ViewMode = 'compact' | 'full'
 
 const DEEP_TABS: Array<[DeepTab, string]> = [
   ['market', '市场趋势'],
@@ -137,16 +134,12 @@ function MetricRibbon({ data }: { data: QuantXReviewData }) {
   )
 }
 
-function DashboardHeader({ date, dates, windowSize, view, refreshing, coverage, onDate, onWindow, onView, onRefresh }: {
+function DashboardHeader({ date, dates, refreshing, coverage, onDate, onRefresh }: {
   date: string
   dates: string[]
-  windowSize: WindowSize
-  view: ViewMode
   refreshing: boolean
   coverage?: string
   onDate: (date: string) => void
-  onWindow: (window: WindowSize) => void
-  onView: (view: ViewMode) => void
   onRefresh: () => void
 }) {
   const index = dates.indexOf(date)
@@ -165,10 +158,8 @@ function DashboardHeader({ date, dates, windowSize, view, refreshing, coverage, 
       </label>
       <button aria-label="后一交易日" disabled={!next} onClick={() => next && onDate(next)} className="cursor-pointer rounded border border-border p-1.5 disabled:cursor-not-allowed disabled:opacity-30"><ChevronRight className="h-3.5 w-3.5" /></button>
       <button type="button" disabled={!latest || latest === date} onClick={() => latest && onDate(latest)} className="cursor-pointer rounded border border-border px-2 py-1.5 text-[10px] text-muted disabled:cursor-not-allowed disabled:opacity-40">最新</button>
-      <SmallTabs values={[[5, '5日'], [10, '10日'], [20, '20日']]} active={windowSize} onChange={onWindow} label="多日窗口" />
       <div className="ml-auto flex items-center gap-2 text-[10px] text-muted">
         <span className="hidden items-center gap-1 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-green-400" />{coverage || '覆盖待确认'}</span>
-        <SmallTabs values={[["compact", '紧凑'], ["full", '全部展开']]} active={view} onChange={onView} label="页面密度" />
         <button type="button" onClick={onRefresh} disabled={refreshing} className="inline-flex cursor-pointer items-center gap-1 rounded border border-border px-2 py-1.5 text-foreground disabled:cursor-not-allowed disabled:opacity-50">
           {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}刷新
         </button>
@@ -207,7 +198,7 @@ function DecisionRail({ data }: { data: QuantXReviewData }) {
   )
 }
 
-function EmotionSummary({ data, records }: { data: QuantXReviewData; records: Array<{ trade_date: string; metrics: Record<string, number | string | boolean | null> }> }) {
+function EmotionCalendar({ data, records, multiday, date, onDate }: { data: QuantXReviewData; records: Array<{ trade_date: string; metrics: Record<string, number | string | boolean | null> }>; multiday?: QuantXMultidaySnapshot; date: string; onDate: (date: string) => void }) {
   const dates = records.slice(-20).map(row => row.trade_date)
   const scores = {
     heat: records.slice(-20).map(row => num(row.metrics.market_heat_score) ?? 0),
@@ -215,14 +206,22 @@ function EmotionSummary({ data, records }: { data: QuantXReviewData; records: Ar
     trend: records.slice(-20).map(row => num(row.metrics.trend_sentiment_score) ?? 0),
   }
   return (
-    <div className="grid gap-2 lg:grid-cols-[1fr_120px]">
-      <EmotionTrendChart dates={dates} scores={scores} height={178} />
-      <div className="space-y-2 border-l border-border pl-2">
-        <div className="flex justify-between"><span className="text-muted">市场热度</span><b className="text-red-400">{data.emotion.market_heat.score ?? '--'}</b></div>
-        <div className="flex justify-between"><span className="text-muted">短线情绪</span><b>{data.emotion.short_term_sentiment.score ?? '--'}</b></div>
-        <div className="flex justify-between"><span className="text-muted">趋势情绪</span><b>{data.emotion.trend_sentiment.score ?? '--'}</b></div>
-        <div className="flex justify-between"><span className="text-muted">最高板</span><b>{data.emotion.height_trend.latest_max_board}</b></div>
-        <div className="flex justify-between"><span className="text-muted">晋级率</span><b>{data.sections.s3.advance.advance_rate ?? '--'}%</b></div>
+    <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,.9fr)]">
+      <div className="min-w-0">
+        <div className="grid grid-cols-5 gap-1.5">
+          {[
+            ['市场热度', data.emotion.market_heat.score, 'text-red-400'],
+            ['短线情绪', data.emotion.short_term_sentiment.score, ''],
+            ['趋势情绪', data.emotion.trend_sentiment.score, ''],
+            ['最高板', data.emotion.height_trend.latest_max_board, ''],
+            ['晋级率', `${data.sections.s3.advance.advance_rate ?? '--'}%`, ''],
+          ].map(([label, value, tone]) => <div key={String(label)} className="rounded border border-border bg-base/40 px-2 py-1.5"><div className="truncate text-[9px] text-muted">{label}</div><div className={cn('font-mono text-sm font-bold', String(tone))}>{value ?? '--'}</div></div>)}
+        </div>
+        <EmotionTrendChart dates={dates} scores={scores} height={220} />
+      </div>
+      <div className="min-w-0 border-t border-border pt-2 xl:border-l xl:border-t-0 xl:pl-3 xl:pt-0">
+        <div className="mb-2 flex items-center justify-between"><div><h3 className="text-xs font-semibold">交易日情绪分数</h3><p className="text-[10px] text-muted">点击日期切换整页；颜色对应市场热度</p></div><CalendarDays className="h-4 w-4 text-accent" /></div>
+        {multiday ? <TradingCalendarGrid rows={multiday.calendar} selectedDate={date} onSelect={onDate} compact /> : <div className="py-16 text-center text-xs text-muted">该日期无交易日历快照</div>}
       </div>
     </div>
   )
@@ -262,14 +261,12 @@ function QualityPanel({ data }: { data: any }) {
   return <div className="grid gap-3 xl:grid-cols-2"><div><h3 className="mb-2 text-xs font-semibold">数据来源</h3><GenericRows rows={data.sources || []} /></div><div><h3 className="mb-2 text-xs font-semibold">Market Facts</h3><GenericRows rows={data.facts || []} /></div><div className="rounded border border-border p-3 text-xs"><div>发布状态：{data.status}</div><div>标准事实：{data.fact_summary?.present_partition_count ?? '--'}/{data.fact_summary?.expected_partition_count ?? '--'}</div><div>Review：{data.view?.schema_version ?? '--'} · canonical {data.view?.canonical_count ?? '--'} · derived {data.view?.derived_count ?? '--'}</div><div>多日：{data.multiday?.schema_version ?? '--'}</div></div><div className="rounded border border-border p-3 text-xs"><div>对账：{data.reconciliation?.status ?? '--'} · 缺口 {data.reconciliation?.gap_count ?? '--'}</div><div className="mt-1 text-orange-300">{(data.warnings || []).join('；') || '无警告'}</div><div className="mt-1 text-red-300">{(data.errors || []).join('；') || '无错误'}</div></div></div>
 }
 
-function DeepSection({ tab, review, multiday, records, tables, quality }: { tab: DeepTab; review: QuantXReviewData; multiday?: QuantXMultidaySnapshot; records: any[]; tables?: Record<string, any>; quality?: any }) {
+function DeepSection({ tab, review, multiday, tables, quality }: { tab: DeepTab; review: QuantXReviewData; multiday?: QuantXMultidaySnapshot; tables?: Record<string, any>; quality?: any }) {
   const { s1, s2, s3, s4, s5, s6 } = review.sections
-  const dates = records.slice(-20).map(row => row.trade_date)
-  const scores = { heat: records.slice(-20).map(row => num(row.metrics.market_heat_score) ?? 0), short: records.slice(-20).map(row => num(row.metrics.short_term_sentiment_score) ?? 0), trend: records.slice(-20).map(row => num(row.metrics.trend_sentiment_score) ?? 0) }
-  if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="全A K线 + CCI5" className="xl:col-span-2"><KlineChart history={s1.kline_history} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel><Panel title="行业均线宽度" className="xl:col-span-2"><SectorBreadthHeatmap data={s1.width_heat} /></Panel><Panel title="拥挤度"><CongestionGauge pct={s1.congestion?.latest.congestion_pct ?? 0} /></Panel><Panel title="拥挤度历史"><GenericRows rows={(s1.congestion?.table || []).map(row => ({ date: row[0], close: row[1], top5_amount: row[2], total_amount: row[3], congestion_pct: row[4] }))} /></Panel></div>
-  if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /><OpportunityRadar data={multiday.opportunity_radar} /></>}<Panel title="参与度条件"><GenericRows rows={s2.participation?.conditions || []} /></Panel><Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} /></Panel><Panel title="百日新高" className="xl:col-span-2"><GenericRows rows={s2.new_high?.stocks || []} /></Panel></div>
-  if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="情绪三件套"><div className="space-y-2"><ScoreBar label="市场热度" score={s3.emotion_scores.market_heat ?? 0} zone={s3.emotion_zones.market_heat || ''} /><ScoreBar label="短线情绪" score={s3.emotion_scores.short_term ?? 0} zone={s3.emotion_zones.short_term || ''} /><ScoreBar label="趋势情绪" score={s3.emotion_scores.trend ?? 0} zone={s3.emotion_zones.trend || ''} /></div></Panel><Panel title="情绪趋势"><EmotionTrendChart dates={dates} scores={scores} /></Panel><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel><Panel title="连板梯队网格"><GenericRows rows={s3.ladder_grid} /></Panel><Panel title="连板详细记录"><GenericRows rows={s3.ladder_detail} /></Panel><Panel title="退潮信号"><GenericRows rows={s3.ebb_signals} /></Panel><Panel title="崩塌信号"><GenericRows rows={s3.crash_signals} /></Panel></div>
-  if (tab === 'flow') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="行业流入 / 流出" className="xl:col-span-2"><SectorFlowChart topIn={s4.sector_flow.top_in} topOut={s4.sector_flow.top_out} /></Panel><Panel title="行业资金树图"><SectorTreemapChart data={s4.sector_treemap} /></Panel><Panel title="涨跌幅 × 净流入"><SectorScatterChart data={s4.sector_treemap} /></Panel>{multiday && <><div className="xl:col-span-2"><SectorFlowContinuity data={multiday.sector_flow_continuity} /></div><Panel title="机构趋势连续性"><GenericRows rows={multiday.institution_continuity.industries || []} /></Panel><Panel title="机构规则候选"><GenericRows rows={multiday.institution_continuity.rule_candidates || []} /></Panel><Panel title="核心个股" className="xl:col-span-2"><GenericRows rows={[...(multiday.sector_flow_continuity.core_stocks || []), ...(multiday.institution_continuity.core_stocks || [])]} /></Panel></>}</div>
+  if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel><Panel title="拥挤度"><CongestionGauge pct={s1.congestion?.latest.congestion_pct ?? 0} /></Panel><Panel title="拥挤度历史"><GenericRows rows={(s1.congestion?.table || []).map(row => ({ date: row[0], close: row[1], top5_amount: row[2], total_amount: row[3], congestion_pct: row[4] }))} /></Panel></div>
+  if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /></>}<Panel title="参与度条件"><GenericRows rows={s2.participation?.conditions || []} /></Panel><Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} /></Panel><Panel title="百日新高" className="xl:col-span-2"><GenericRows rows={s2.new_high?.stocks || []} /></Panel></div>
+  if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel><Panel title="连板梯队网格"><GenericRows rows={s3.ladder_grid} /></Panel><Panel title="连板详细记录"><GenericRows rows={s3.ladder_detail} /></Panel><Panel title="退潮信号"><GenericRows rows={s3.ebb_signals} /></Panel><Panel title="崩塌信号"><GenericRows rows={s3.crash_signals} /></Panel></div>
+  if (tab === 'flow') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="行业流入 / 流出" className="xl:col-span-2"><SectorFlowChart topIn={s4.sector_flow.top_in} topOut={s4.sector_flow.top_out} /></Panel><Panel title="涨跌幅 × 净流入" className="xl:col-span-2"><SectorScatterChart data={s4.sector_treemap} /></Panel>{multiday && <><div className="xl:col-span-2"><SectorFlowContinuity data={multiday.sector_flow_continuity} /></div><Panel title="机构趋势连续性"><GenericRows rows={multiday.institution_continuity.industries || []} /></Panel><Panel title="机构规则候选"><GenericRows rows={multiday.institution_continuity.rule_candidates || []} /></Panel><Panel title="核心个股" className="xl:col-span-2"><GenericRows rows={[...(multiday.sector_flow_continuity.core_stocks || []), ...(multiday.institution_continuity.core_stocks || [])]} /></Panel></>}</div>
   if (tab === 'watch') return <div className="grid gap-3 xl:grid-cols-[1.4fr_1fr]"><Panel title="完整关注名单"><GenericRows rows={s5.candidates} /></Panel><Panel title="仓位与次日场景"><div className="rounded bg-base/40 p-3 text-sm"><b>{s6.position?.band || '--'}</b><p className="mt-1 text-xs text-muted">{s6.position?.action || '--'}</p></div><div className="mt-2"><GenericRows rows={s6.scenes} /></div><p className="mt-3 rounded border border-border p-3 text-xs text-muted">{review.emotion.daily_summary}</p></Panel></div>
   if (tab === 'data') return <CompleteDataPanel data={tables} />
   return <QualityPanel data={quality} />
@@ -279,12 +276,7 @@ export function QuantXDashboard() {
   const { date: routeDate } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [params, setParams] = useSearchParams()
-  const windowValue = Number(params.get('window'))
-  const windowSize: WindowSize = windowValue === 5 || windowValue === 10 ? windowValue : 20
-  const view: ViewMode = params.get('view') === 'full' ? 'full' : 'compact'
-  const rawTab = params.get('tab') as DeepTab | null
-  const activeTab: DeepTab = DEEP_TABS.some(([value]) => value === rawTab) ? rawTab! : 'market'
+  const [windowSize, setWindowSize] = useState<WindowSize>(20)
   const [breadthLevel, setBreadthLevel] = useState<1 | 2>(1)
 
   const catalog = useQuery({ queryKey: QK.quantxCatalog, queryFn: quantxApi.getCatalog, staleTime: 30_000, retry: false })
@@ -294,18 +286,13 @@ export function QuantXDashboard() {
   const date = routeDate || latest
 
   useEffect(() => {
-    if (!routeDate && latest) {
-      const search = params.toString()
-      navigate(`/quantx/${latest}${search ? `?${search}` : ''}`, { replace: true })
-    }
+    if (!routeDate && latest) navigate(`/quantx/${latest}`, { replace: true })
   }, [latest, navigate, routeDate])
 
   const reviewQuery = useQuery({ queryKey: QK.quantxReview(date), queryFn: () => quantxApi.getReviewData(date), enabled: Boolean(date), retry: false, staleTime: 0 })
   const multidayQuery = useQuery({ queryKey: QK.quantxMultiday(date), queryFn: () => quantxApi.getMultiday(date), enabled: Boolean(date), retry: false, staleTime: 30_000 })
-  const needTables = view === 'full' || activeTab === 'data'
-  const needQuality = view === 'full' || activeTab === 'quality'
-  const tablesQuery = useQuery({ queryKey: QK.quantxTables(date), queryFn: () => quantxApi.getTables(date), enabled: Boolean(date) && needTables, retry: false, staleTime: 30_000 })
-  const qualityQuery = useQuery({ queryKey: QK.quantxObservability(date), queryFn: () => quantxApi.getObservability(date), enabled: Boolean(date) && needQuality, retry: false, staleTime: 30_000 })
+  const tablesQuery = useQuery({ queryKey: QK.quantxTables(date), queryFn: () => quantxApi.getTables(date), enabled: Boolean(date), retry: false, staleTime: 30_000 })
+  const qualityQuery = useQuery({ queryKey: QK.quantxObservability(date), queryFn: () => quantxApi.getObservability(date), enabled: Boolean(date), retry: false, staleTime: 30_000 })
   const refresh = useMutation({
     mutationFn: () => quantxApi.runData(date, { force: true }),
     onSuccess: async () => {
@@ -321,12 +308,7 @@ export function QuantXDashboard() {
     onError: (error: Error) => toast(`QuantX 刷新失败：${error.message}`, 'error'),
   })
 
-  const updateParam = (key: string, value: string) => {
-    const next = new URLSearchParams(params)
-    next.set(key, value)
-    setParams(next, { replace: true })
-  }
-  const goDate = (target: string) => navigate(`/quantx/${target}?${params.toString()}`)
+  const goDate = (target: string) => navigate(`/quantx/${target}`)
 
   if (catalog.isLoading || (!routeDate && !latest)) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
   if (!date || catalog.error) return <div className="py-16 text-center text-sm text-muted">QuantX 日期目录不可用：{String(catalog.error || '暂无已发布日期')}</div>
@@ -337,7 +319,7 @@ export function QuantXDashboard() {
   if (review.data_foundation.canonical_fields.length === 0) {
     return (
       <div className="mx-auto max-w-[1720px] px-3 pb-16 md:px-4">
-        <DashboardHeader date={date} dates={dates} windowSize={windowSize} view={view} refreshing={refresh.isPending} coverage="标准事实为空" onDate={goDate} onWindow={value => updateParam('window', String(value))} onView={value => updateParam('view', value)} onRefresh={() => refresh.mutate()} />
+        <DashboardHeader date={date} dates={dates} refreshing={refresh.isPending} coverage="标准事实为空" onDate={goDate} onRefresh={() => refresh.mutate()} />
         <div data-testid="quantx-dashboard-empty" className="mt-8 rounded-xl border border-border py-20 text-center text-sm text-muted">该交易日没有可用的标准事实数据</div>
       </div>
     )
@@ -349,7 +331,7 @@ export function QuantXDashboard() {
 
   return (
     <div className="mx-auto max-w-[1720px] px-3 pb-16 md:px-4" data-testid="quantx-unified-dashboard">
-      <DashboardHeader date={date} dates={dates} windowSize={windowSize} view={view} refreshing={refresh.isPending} coverage={coverage} onDate={goDate} onWindow={value => updateParam('window', String(value))} onView={value => updateParam('view', value)} onRefresh={() => refresh.mutate()} />
+      <DashboardHeader date={date} dates={dates} refreshing={refresh.isPending} coverage={coverage} onDate={goDate} onRefresh={() => refresh.mutate()} />
       <div className="mt-2 space-y-2">
         <MetricRibbon data={review} />
         <div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
@@ -357,28 +339,23 @@ export function QuantXDashboard() {
           <Panel testId="quantx-theme-mainline" title="题材主线" hint="强度 · 连续性 · 生命周期" icon={<Layers3 className="h-3.5 w-3.5" />} className="xl:[grid-column:span_6/span_6]"><ThemeMainline review={review} multiday={multiday} /></Panel>
           <Panel testId="quantx-decision-rail" title="今日决断" hint="仓位 · 风险 · 预案" icon={<ShieldAlert className="h-3.5 w-3.5" />} className="xl:[grid-column:span_4/span_4]"><DecisionRail data={review} /></Panel>
 
-          {multiday ? <div className="xl:[grid-column:span_5/span_5]"><WindowSignalMatrix data={multiday} active={windowSize} onChange={value => updateParam('window', String(value))} /><WindowDetails snapshot={multiday} windowSize={windowSize} /></div> : <Panel title="多日信号矩阵" className="xl:[grid-column:span_5/span_5]"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
-          <Panel testId="quantx-emotion-cycle" title="情绪周期时间轴" hint="热度 · 高度 · 晋级" icon={<Activity className="h-3.5 w-3.5" />} className="xl:[grid-column:span_7/span_7]"><EmotionSummary data={review} records={records} /></Panel>
-          <div className="xl:[grid-column:span_4/span_4]">{multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}</div>
+          {multiday ? <div className="xl:[grid-column:span_7/span_7]"><WindowSignalMatrix data={multiday} active={windowSize} onChange={setWindowSize} /><WindowDetails snapshot={multiday} windowSize={windowSize} /></div> : <Panel title="多日信号矩阵" className="xl:[grid-column:span_7/span_7]"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
+          <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="趋势、分数与日期上下文统一展示" icon={<Activity className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
 
+          <div className="xl:[grid-column:span_5/span_5]">{multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}</div>
           <Panel testId="quantx-sector-breadth" title={`申万${breadthLevel === 1 ? '一级' : '二级'}行业均线宽度`} hint="MA5 / MA10 / MA20 / MA60" icon={<Gauge className="h-3.5 w-3.5" />} actions={<SmallTabs values={[[1, '一级'], [2, '二级']]} active={breadthLevel} onChange={setBreadthLevel} label="行业层级" />} className="xl:[grid-column:span_7/span_7]"><SectorBreadthHeatmap data={breadth} maxRows={10} height={250} /></Panel>
-          <Panel testId="quantx-capital-ecosystem" title="资金生态" hint="行业净流入结构" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_5/span_5]"><SectorTreemapChart data={s.s4.sector_treemap} height={250} /></Panel>
           <Panel testId="quantx-watchlist" title="关注池与触发条件" hint={`${s.s5.candidates.length} 个候选`} icon={<AlertTriangle className="h-3.5 w-3.5" />} className="xl:[grid-column:span_4/span_4]"><div className="max-h-[250px] overflow-auto"><Watchlist data={review} /></div></Panel>
+
+          <Panel testId="quantx-capital-ecosystem" title="资金生态" hint="行业净流入结构" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_6/span_6]"><SectorTreemapChart data={s.s4.sector_treemap} height={292} /></Panel>
+          <div className="grid gap-2 xl:[grid-column:span_10/span_10] xl:grid-cols-3">{multiday ? ([5, 10, 20] as WindowSize[]).map(value => <WindowStatistics key={value} data={multiday} active={value} compact />) : <Panel title="窗口统计情报"><div className="py-12 text-center text-xs text-muted">暂无多日窗口统计</div></Panel>}</div>
         </div>
 
         <section data-testid="quantx-deep-workspace" className="rounded-lg border border-border bg-elevated/20">
-          <header className="flex flex-wrap items-center gap-2 border-b border-border px-3">
-            <div className="mr-2 flex items-center gap-1.5 py-2 text-xs font-semibold"><Maximize2 className="h-3.5 w-3.5 text-accent" />深度图表与完整数据</div>
-            <div className="flex flex-wrap" role="tablist" aria-label="QuantX深度分析">
-              {DEEP_TABS.map(([value, label]) => <button key={value} role="tab" aria-selected={activeTab === value} onClick={() => updateParam('tab', value)} className={cn('cursor-pointer border-b-2 px-3 py-2 text-[11px] transition-colors', activeTab === value ? 'border-accent text-foreground' : 'border-transparent text-muted hover:text-foreground')}>{label}</button>)}
-            </div>
-          </header>
+          <header className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs font-semibold"><Database className="h-3.5 w-3.5 text-accent" />深度图表与完整数据</header>
           <div className="p-3">
-            {view === 'compact' ? <DeepSection tab={activeTab} review={review} multiday={multiday} records={records} tables={tablesQuery.data as Record<string, any> | undefined} quality={qualityQuery.data} /> : <div className="space-y-8">{DEEP_TABS.map(([tab, label]) => <section key={tab}><h2 className="mb-3 flex items-center gap-2 border-b border-border pb-2 text-sm font-semibold"><Database className="h-4 w-4 text-accent" />{label}</h2><DeepSection tab={tab} review={review} multiday={multiday} records={records} tables={tablesQuery.data as Record<string, any> | undefined} quality={qualityQuery.data} /></section>)}</div>}
+            <div className="space-y-8">{DEEP_TABS.map(([tab, label]) => <section key={tab}><h2 className="mb-3 flex items-center gap-2 border-b border-border pb-2 text-sm font-semibold"><Database className="h-4 w-4 text-accent" />{label}</h2><DeepSection tab={tab} review={review} multiday={multiday} tables={tablesQuery.data as Record<string, any> | undefined} quality={qualityQuery.data} /></section>)}</div>
           </div>
         </section>
-
-        {multiday && view === 'full' && <div className="grid gap-3 xl:grid-cols-2"><TradingCalendar rows={multiday.calendar} selectedDate={date} onSelect={goDate} /><WindowStatistics data={multiday} active={windowSize} /></div>}
       </div>
     </div>
   )

@@ -15,7 +15,7 @@ OVERVIEW_PANELS = (
     "quantx-market-pulse",
     "quantx-theme-mainline",
     "quantx-decision-rail",
-    "quantx-emotion-cycle",
+    "quantx-emotion-calendar",
     "quantx-sector-breadth",
     "quantx-capital-ecosystem",
     "quantx-watchlist",
@@ -115,9 +115,20 @@ def _verify_page(
         raise AssertionError(f"metric ribbon missing for {trade_date}")
     if not page.get_by_test_id("quantx-deep-workspace").is_visible():
         raise AssertionError(f"deep workspace missing for {trade_date}")
+    deep_workspace = page.get_by_test_id("quantx-deep-workspace")
     for label in DEEP_SECTIONS:
-        if not page.get_by_role("tab", name=label, exact=True).is_visible():
-            raise AssertionError(f"deep tab missing for {trade_date}: {label}")
+        if not deep_workspace.get_by_role(
+            "heading", name=label, exact=True
+        ).is_visible():
+            raise AssertionError(f"deep section missing for {trade_date}: {label}")
+    if page.locator('[aria-label="多日窗口"]').count():
+        raise AssertionError("obsolete global window switch is still rendered")
+    if page.get_by_role("tab", name="全部展开", exact=True).count():
+        raise AssertionError("obsolete compact/full switch is still rendered")
+    if page.get_by_role("heading", name="情绪趋势", exact=True).count():
+        raise AssertionError("duplicate emotion trend panel is still rendered")
+    if page.get_by_role("heading", name="全A K线 + CCI5", exact=True).count():
+        raise AssertionError("duplicate full-market K-line panel is still rendered")
 
     selected_date = page.get_by_label("QuantX交易日", exact=True).input_value()
     if selected_date != trade_date:
@@ -131,31 +142,20 @@ def _verify_page(
         )
     if not page.get_by_text("最高板", exact=True).first.is_visible():
         raise AssertionError(f"height summary missing for {trade_date}")
-    page.evaluate("window.scrollTo(0, 0)")
-    compact_screenshot = output_dir / f"quantx-dashboard-compact-{trade_date}.png"
-    page.screenshot(path=str(compact_screenshot), full_page=True)
-
     page.get_by_role("tab", name="二级", exact=True).click()
     page.get_by_text("申万二级行业均线宽度", exact=True).wait_for(
         state="visible", timeout=30_000
     )
     page.get_by_role("tab", name="一级", exact=True).click()
 
-    page.get_by_role("tab", name="全部展开", exact=True).click()
-    deep_workspace = page.get_by_test_id("quantx-deep-workspace")
-    for label in DEEP_SECTIONS:
-        deep_workspace.get_by_role("heading", name=label, exact=True).wait_for(
-            state="visible", timeout=30_000
-        )
-    page.get_by_text("交易日历", exact=True).wait_for(
+    page.get_by_text("交易日情绪分数", exact=True).wait_for(
         state="visible", timeout=30_000
     )
-    full_canvas_count = page.locator("canvas").count()
-    if full_canvas_count < canvas_count:
-        raise AssertionError(
-            f"full mode lost charts for {trade_date}: "
-            f"{full_canvas_count} < {canvas_count}"
-        )
+    calendar_date = page.get_by_label(f"选择交易日 {trade_date}", exact=True)
+    if not calendar_date.is_visible():
+        raise AssertionError(f"selected date missing from emotion calendar: {trade_date}")
+    if "ring-accent" not in (calendar_date.get_attribute("class") or ""):
+        raise AssertionError(f"emotion calendar did not highlight {trade_date}")
 
     api_response = page.request.get(
         f"{api_url.rstrip('/')}/api/quantx/review/{trade_date}/data",
@@ -185,7 +185,7 @@ def _verify_page(
         raise AssertionError(f"daily summary missing for {trade_date}")
 
     page.evaluate("window.scrollTo(0, 0)")
-    screenshot = output_dir / f"quantx-dashboard-full-{trade_date}.png"
+    screenshot = output_dir / f"quantx-dashboard-{trade_date}.png"
     page.screenshot(path=str(screenshot), full_page=True)
     page.remove_listener("console", on_console)
     page.remove_listener("pageerror", on_page_error)
@@ -204,13 +204,11 @@ def _verify_page(
     return {
         "trade_date": trade_date,
         "canvas_count": canvas_count,
-        "full_canvas_count": full_canvas_count,
         "derived_field_count": len(foundation.get("derived_fields") or []),
         "implicit_cache_field_count": len(
             foundation.get("implicit_cache_fields") or []
         ),
-        "compact_screenshot": str(compact_screenshot),
-        "full_screenshot": str(screenshot),
+        "screenshot": str(screenshot),
     }
 
 
