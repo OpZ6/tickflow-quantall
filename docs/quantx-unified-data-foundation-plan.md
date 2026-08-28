@@ -1,5 +1,7 @@
 # QuantX 统一数据底座与数据源管理实施规划
 
+> 实施记录：本文保留 Goal、迁移证据和阶段审计。当前数据契约以 [`data-foundation.md`](data-foundation.md) 为准，运行方式以 [`quantx-data-pipeline.md`](quantx-data-pipeline.md) 为准。
+
 ## 1. Goal
 
 ### 1.1 当前 Goal

@@ -5,6 +5,8 @@ from datetime import datetime
 
 from playwright.sync_api import sync_playwright
 
+from app.quantx_data.browser_runtime import launch_chromium
+
 OUTPUT_DIR = None
 TRADE_DATE = None
 BASE_URL = "https://sq.deepq.tech"
@@ -14,7 +16,7 @@ def scrape() -> dict:
     result = {"updateTime": "", "sector_rotation": [], "latest_day": {}}
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = launch_chromium(p, headless=True)
         api_data = {}
 
         def capture_sector_rotation(response):

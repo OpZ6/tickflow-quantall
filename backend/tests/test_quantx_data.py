@@ -265,9 +265,9 @@ def test_source_retry_keeps_full_source_contract(tmp_path, monkeypatch):
     calls: list[str] = []
     original = collectors.collect_source
 
-    def offline_retry(module_name, trade_date, output_dir, source):
-        if source != "pywencai":
-            raise AssertionError(f"unexpected network retry: {source}")
+    def offline_retry(spec, trade_date, output_dir):
+        if spec.name != "pywencai":
+            raise AssertionError(f"unexpected network retry: {spec.name}")
         payload = json.loads((root / "quantx" / trade_date / "pywencai.json").read_text(encoding="utf-8"))
         output_dir.mkdir(parents=True, exist_ok=True)
         path = output_dir / "pywencai.json"
@@ -278,7 +278,7 @@ def test_source_retry_keeps_full_source_contract(tmp_path, monkeypatch):
         calls.append(spec.name)
         return original(spec, *args, **kwargs)
 
-    monkeypatch.setattr(collectors, "_collect_legacy", offline_retry)
+    monkeypatch.setattr("app.quantx_data.source_manager._collect_with_timeout", offline_retry)
     monkeypatch.setattr("app.quantx_data.pipeline.collect_source", observe)
     retried = run_pipeline(root, "20260825", retry_sources=["pywencai"])
     assert retried["status"] == "complete"
@@ -416,6 +416,37 @@ def test_tables_api_reads_canonical_facts_and_reports_legacy_drift(tmp_path):
     assert breadth_status["differences"]["up_count"] == {"canonical": 1, "legacy": 999}
 
 
+def test_observability_api_reports_source_fact_view_and_publication_lineage(tmp_path):
+    _fixture(tmp_path, "20260825")
+    assert run_pipeline(tmp_path, "20260825", recompute=True)["status"] == "complete"
+    app = FastAPI()
+    app.include_router(quantx_data_router)
+    app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
+    app.state.market_facts = MarketFactRepository(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/quantx-data/observability/20260825?pipeline_job_id=job-demo"
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pipeline_job_id"] == "job-demo"
+    assert payload["quantx_run_id"].startswith("20260825-")
+    assert len(payload["sources"]) == 12
+    assert len(payload["facts"]) == 13
+    assert payload["fact_summary"]["present_partition_count"] == 13
+    assert payload["view"]["schema_version"] == "quantx-review.v2"
+    assert payload["view"]["fallback_count"] == 0
+    assert payload["reconciliation"]["status"] == "ok"
+    assert payload["multiday"]["published"] is True
+    assert payload["catalog"]["published"] is True
+    tushare = next(item for item in payload["sources"] if item["source_id"] == "tushare")
+    assert tushare["required"] is True
+    assert tushare["freshness"] == "reused"
+    assert tushare["manifest_health"] == "present"
+
+
 def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path):
     _fixture(tmp_path, "20260825")
     assert run_pipeline(tmp_path, "20260825", recompute=True)["status"] == "complete"
@@ -443,6 +474,15 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     cached["sections"]["s5"]["candidates"] = []
     cached["sections"]["s6"]["position"] = {"band": "错误缓存"}
     cached["sections"]["s6"]["scenes"] = []
+    cached["sections"]["s0"]["diagnosis"] = [{"name": "错误缓存"}]
+    cached["sections"]["s0"]["risks"] = [{"name": "错误缓存"}]
+    cached["sections"]["s3"]["emotion_zones"] = {
+        "market_heat": "错误缓存",
+        "short_term": "错误缓存",
+        "trend": "错误缓存",
+    }
+    cached["emotion"]["height_trend"] = {"latest_max_board": 999}
+    cached["emotion"]["daily_summary"] = "错误缓存"
     _write(date_dir / "review_data.json", cached)
     for source in SOURCE_NAMES:
         (date_dir / f"{source}.json").unlink()
@@ -502,7 +542,14 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert response.json()["sections"]["s3"]["ladder_grid"]
     assert response.json()["sections"]["s3"]["ladder_detail"][0]["turnover_pct"] == 12.34
     assert response.json()["sections"]["s3"]["ladder_detail"][0]["amount_yi"] == 8.76
+    height_history = response.json()["sections"]["s3"]["height_history"]
+    assert height_history[-1]["date"] == "20260825"
+    assert height_history[-1]["height"] == 2
+    assert height_history[-1]["name"] == "甲"
     assert "sections.s3.ladder_detail" in response.json()["data_foundation"][
+        "canonical_fields"
+    ]
+    assert "sections.s3.height_history" in response.json()["data_foundation"][
         "canonical_fields"
     ]
     assert "sections.s3.ladder_detail.supplemental_fields" not in response.json()[
@@ -519,8 +566,14 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert response.json()["sections"]["s5"]["candidates"]
     assert response.json()["sections"]["s6"]["position"]["band"] != "错误缓存"
     assert len(response.json()["sections"]["s6"]["scenes"]) == 3
+    assert response.json()["sections"]["s0"]["diagnosis"][0]["name"] == "市场热度"
+    assert response.json()["sections"]["s0"]["risks"][0]["name"] != "错误缓存"
+    assert response.json()["sections"]["s3"]["emotion_zones"]["market_heat"] != "错误缓存"
+    assert response.json()["emotion"]["height_trend"]["latest_max_board"] == 2
+    assert response.json()["emotion"]["daily_summary"] != "错误缓存"
     index = response.json()["sections"]["s1"]["indexes"][0]
     assert index["code"] == "000001.SH"
+    assert index["name"] == "上证指数"
     assert index["close"] == 11.0
     assert index["pct_chg"] == 10.0
     all_a = next(
@@ -528,15 +581,14 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
         for row in response.json()["sections"]["s1"]["indexes"]
         if row["code"] == "000985.CSI"
     )
+    assert all_a["name"] == "中证全指"
     assert all_a["close"] == 131.0
     history = response.json()["sections"]["s1"]["kline_history"]
     assert len(history) == 30
     assert history[-1]["date"] == "20260825"
     assert history[-1]["ma5"] == 128.2
     assert history[-1]["cci5"] is not None
-    assert response.json()["data_foundation"]["read_mode"] == (
-        "canonical_facts_with_presentation_cache"
-    )
+    assert response.json()["data_foundation"]["read_mode"] == "canonical_view_v2"
     assert "sections.s1.congestion" in response.json()["data_foundation"][
         "canonical_fields"
     ]
@@ -565,6 +617,60 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert "sections.s1.width_heat" not in response.json()["data_foundation"][
         "presentation_cache_fields"
     ]
+    foundation = response.json()["data_foundation"]
+    assert foundation["schema_version"] == "quantx-review.v2"
+    assert "sections.s0.diagnosis" in foundation["derived_fields"]
+    assert "sections.s0.diagnosis" not in foundation["presentation_cache_fields"]
+    assert foundation["presentation_cache_read"] is False
+    assert foundation["source_json_read"] is False
+    assert foundation["view_algorithm_version"] == "quantx-review-view-v1"
+    assert foundation["derived_field_status"]["emotion.height_trend"][
+        "status"
+    ] == "available"
+    assert foundation["fallback_fields"] == []
+    assert foundation["implicit_cache_fields"] == []
+
+
+def test_review_api_v2_survives_removed_json_and_rejects_retired_v1(tmp_path):
+    _fixture(tmp_path, "20260825")
+    assert run_pipeline(tmp_path, "20260825", recompute=True)["status"] == "complete"
+    review_path = tmp_path / "quantx" / "20260825" / "review_data.json"
+
+    class EmptyIndexRepository:
+        def __init__(self, data_dir):
+            self.store = SimpleNamespace(data_dir=data_dir)
+
+        def get_index_daily(self, symbol, start, end, columns=None):
+            return pl.DataFrame()
+
+    app = FastAPI()
+    app.include_router(quantx_router)
+    app.state.repo = EmptyIndexRepository(tmp_path)
+    app.state.market_facts = MarketFactRepository(tmp_path)
+
+    with TestClient(app) as client:
+        schema_response = client.get("/api/quantx/review/schema/v2")
+        retired_v1 = client.get(
+            "/api/quantx/review/20260825/data?view_version=v1"
+        )
+        review_path.unlink()
+        canonical = client.get("/api/quantx/review/20260825/data")
+        retired_v1_after_unlink = client.get(
+            "/api/quantx/review/20260825/data?view_version=v1"
+        )
+
+    assert schema_response.status_code == 200
+    assert schema_response.json()["schema"]["title"] == "QuantXReviewResponseV2"
+    assert schema_response.json()["field_contracts"][
+        "metric_strip.total_amount_yi"
+    ]["unit"] == "CNY_100M"
+    assert retired_v1.status_code == 422
+    assert canonical.status_code == 200
+    assert canonical.json()["data_foundation"]["schema_version"] == (
+        "quantx-review.v2"
+    )
+    assert canonical.json()["data_foundation"]["source_json_read"] is False
+    assert retired_v1_after_unlink.status_code == 422
 
 
 def test_history_migration_is_dry_run_by_default_and_preserves_legacy(tmp_path):
@@ -677,3 +783,26 @@ def test_targeted_history_migration_does_not_publish_empty_partition(tmp_path):
         "20260825": "no rows for targeted datasets: sector_breadth_daily"
     }
     assert not (root / "sector_breadth_daily" / "date=2026-08-25").exists()
+
+
+def test_history_migration_accepts_legacy_legulegu_width_sidecar(tmp_path):
+    root = _fixture(tmp_path)
+    legulegu_path = root / "quantx" / "20260825" / "legulegu.json"
+    legulegu = json.loads(legulegu_path.read_text(encoding="utf-8"))
+    primary = legulegu.pop("width_api")["ma_market_width_primary"]
+    _write(legulegu_path, legulegu)
+    _write(
+        root / "quantx" / "20260825" / "legulegu_width.json",
+        {"https://legulegu.com/api/stockdata/member-ship/ma-market-width": primary},
+    )
+
+    result = migrate_quantx_history(
+        root,
+        apply=True,
+        datasets=(DatasetId.SECTOR_BREADTH_DAILY,),
+    )
+
+    assert result["migrated"] == ["20260825"]
+    frame = MarketFactRepository(root).get_sector_breadth(date(2026, 8, 25))
+    assert frame.height == 2
+    assert set(frame["dimension"].to_list()) == {"sw_level1"}

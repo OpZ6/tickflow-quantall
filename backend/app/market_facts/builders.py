@@ -740,24 +740,37 @@ def _build_sector_breadth(
     payload = sources.get("legulegu") or {}
     width_api = payload.get("width_api")
     width_api = width_api if isinstance(width_api, dict) else {}
-    width = (
-        width_api.get("ma_market_width_primary")
-        or width_api.get("ma_market_width")
-        or {}
-    )
-    if not isinstance(width, dict):
-        width = {}
-    dates = width.get("dates") if isinstance(width.get("dates"), list) else []
     target = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
-    try:
-        target_index = dates.index(target)
-    except ValueError:
-        target_index = -1
-    series = width.get("maMarketWidth")
-    series = series if isinstance(series, dict) else {}
     rows: list[dict[str, Any]] = []
-    if target_index >= 0:
-        for sector_id, sector_name in _SW_LEVEL1_NAMES.items():
+    scopes = (
+        (
+            "sw_level1",
+            width_api.get("ma_market_width_primary")
+            or width_api.get("ma_market_width")
+            or {},
+            _SW_LEVEL1_NAMES,
+        ),
+        ("sw_level2", width_api.get("ma_market_width_sec_level") or {}, None),
+    )
+    for dimension, width, static_names in scopes:
+        if not isinstance(width, dict):
+            continue
+        dates = width.get("dates") if isinstance(width.get("dates"), list) else []
+        try:
+            target_index = dates.index(target)
+        except ValueError:
+            continue
+        series = width.get("maMarketWidth")
+        if not isinstance(series, dict):
+            continue
+        names = static_names or {
+            str(item.get("indexCode")): str(item.get("indexName"))
+            for item in width.get("swCodeNames", [])
+            if isinstance(item, dict)
+            and item.get("indexCode")
+            and item.get("indexName")
+        }
+        for sector_id, sector_name in names.items():
             values = series.get(sector_id)
             if not isinstance(values, list) or target_index >= len(values):
                 continue
@@ -775,7 +788,7 @@ def _build_sector_breadth(
             rows.append(
                 {
                     "trade_date": _trade_date(trade_date),
-                    "dimension": "sw_level1",
+                    "dimension": dimension,
                     "sector_id": sector_id,
                     "sector_name": sector_name,
                     "taxonomy_version": "SW2021",
@@ -783,7 +796,7 @@ def _build_sector_breadth(
                     **_metadata(
                         source="legulegu",
                         source_record_id=(
-                            f"legulegu:{trade_date}:sw_level1:{sector_id}"
+                            f"legulegu:{trade_date}:{dimension}:{sector_id}"
                         ),
                         observed_at=_observed_at(payload),
                         ingested_at=ingested_at,

@@ -84,6 +84,28 @@ def test_audit_classifies_present_missing_empty_and_schema_errors(tmp_path: Path
         "schema_version_mismatch": 1,
     }
     assert result["summary"]["gap_partition_count"] == 4
+    assert result["summary"]["accepted_gap_partition_count"] == 0
+    assert result["summary"]["unaccepted_gap_partition_count"] == 4
+
+
+def test_audit_marks_registered_historical_gap_as_explicitly_accepted(
+    tmp_path: Path,
+) -> None:
+    day = date(2026, 6, 25)
+    review = tmp_path / "quantx" / "20260625" / "review_data.json"
+    review.parent.mkdir(parents=True)
+    review.write_text("{}", encoding="utf-8")
+    dataset = DatasetId.THEME_MEMBER_DAILY
+    path = tmp_path / dataset.value / f"date={day.isoformat()}" / "part.parquet"
+    path.parent.mkdir(parents=True)
+    pl.DataFrame(schema=DATASETS[dataset].storage_schema).write_parquet(path)
+
+    result = audit_quantx_data_foundation(tmp_path, datasets=(dataset,))
+
+    assert result["summary"]["accepted_gap_partition_count"] == 1
+    assert result["summary"]["unaccepted_gap_partition_count"] == 0
+    assert result["gaps"][0]["accepted"] is True
+    assert "no stock membership rows" in result["gaps"][0]["acceptance_reason"]
 
 
 def test_fact_fingerprint_is_stable_and_content_sensitive(tmp_path: Path) -> None:

@@ -825,18 +825,19 @@ def _run_tracked(fn, job_label: str) -> bool:
     return succeeded
 
 
-def _run_quantx_after_pipeline() -> None:
+def _run_quantx_after_pipeline() -> dict | None:
     """Run QuantX only after the main post-close generation is readable."""
     app_state = _get_app_state()
     repo = getattr(app_state, "repo", None) if app_state is not None else None
     data_root = getattr(getattr(repo, "store", None), "data_dir", None)
     if data_root is None:
         logger.info("dependent QuantX run skipped: application repository unavailable")
-        return
+        return None
     from app.quantx_data.scheduler import run_scheduled
 
     result = run_scheduled(data_root)
     logger.info("dependent QuantX result: %s", result)
+    return result
 
 
 def _scheduled_pipeline_task(pipeline_fn) -> None:

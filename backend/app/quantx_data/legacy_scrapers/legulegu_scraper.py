@@ -9,6 +9,8 @@ from datetime import datetime
 
 from playwright.sync_api import sync_playwright
 
+from app.quantx_data.browser_runtime import launch_chromium
+
 OUTPUT_DIR = None
 TRADE_DATE = None
 BASE_URL = "https://legulegu.com"
@@ -62,7 +64,7 @@ def scrape() -> dict:
     }
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = launch_chromium(p, headless=True)
 
         # ========== HIGH-LOW STATISTICS (API interception) ==========
         print("  [legulegu] Scraping high-low-statistics...")

@@ -23,6 +23,12 @@ class SourceSpec:
     min_records: int = 0
     freshness_required: bool = True
     max_retries: int = 2
+    display_name: str = ""
+    collector_type: str = "python"
+    credentials_ref: str | None = None
+    dependency_modules: tuple[str, ...] = ()
+    timeout_seconds: float = 30.0
+    rate_limit_rpm: int | None = None
 
 
 @dataclass
@@ -32,6 +38,7 @@ class SourceResult:
     payload: dict[str, Any] = field(default_factory=dict)
     source: str = ""
     error: str | None = None
+    error_kind: str | None = None
     used_fallback: bool = False
     record_count: int = 0
     collected_at: str | None = None
@@ -52,6 +59,7 @@ class SourceResult:
             "status": self.status,
             "source": self.source or self.name,
             "error": self.error,
+            "error_kind": self.error_kind,
             "used_fallback": self.used_fallback,
             "record_count": self.record_count,
             "collected_at": self.collected_at,

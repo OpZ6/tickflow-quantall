@@ -17,6 +17,29 @@ from app.services.index_sync import (
 )
 
 from .io import read_json
+from .review_contract import (
+    DEPRECATION_SCHEDULE,
+    REVIEW_SCHEMA_VERSION,
+    audit_review_fields,
+)
+from .review_schema import REVIEW_V2_SCHEMA_VERSION, QuantXReviewResponseV2
+from .review_view import (
+    VIEW_ALGORITHM_VERSION,
+    apply_deterministic_review_view,
+    review_view_derivation_status,
+)
+
+INDEX_DISPLAY_NAMES = {
+    "000001.SH": "上证指数",
+    "399001.SZ": "深证成指",
+    "399006.SZ": "创业板指",
+    "000688.SH": "科创50",
+    "000300.SH": "沪深300",
+    "000016.SH": "上证50",
+    "399303.SZ": "国证2000",
+    "399905.SZ": "中证500",
+    QUANTX_ALL_A_DISPLAY_SYMBOL: "中证全指",
+}
 
 
 class IndexRepository(Protocol):
@@ -64,10 +87,91 @@ def _preferred_by_day(
     )
 
 
+def _preferred_rows_by_day(
+    frame: pl.DataFrame,
+    dataset_id: DatasetId,
+) -> pl.DataFrame:
+    """Select the preferred source per date while preserving all source rows."""
+    if frame.is_empty() or "source" not in frame.columns:
+        return frame
+    selected = [
+        _preferred(
+            frame.filter(pl.col("trade_date") == trade_day),
+            dataset_id,
+        )
+        for trade_day in frame["trade_date"].unique().sort().to_list()
+    ]
+    return pl.concat(selected) if selected else frame.head(0)
+
+
 def _section(snapshot: dict[str, Any], name: str) -> dict[str, Any]:
     sections = snapshot.setdefault("sections", {})
     section = sections.setdefault(name, {})
-    return section if isinstance(section, dict) else {}
+    if isinstance(section, dict):
+        return section
+    replacement: dict[str, Any] = {}
+    sections[name] = replacement
+    return replacement
+
+
+def _clear_canonical_cache_fields(snapshot: dict[str, Any]) -> None:
+    """Prevent stale compatibility values from replacing missing facts."""
+    strip = snapshot.setdefault("metric_strip", {})
+    for key in (
+        "indexes",
+        "up_count",
+        "down_count",
+        "flat_count",
+        "total_amount_yi",
+        "advance_rate",
+    ):
+        strip.pop(key, None)
+
+    emotion = snapshot.setdefault("emotion", {})
+    for key in (
+        "market_heat",
+        "short_term_sentiment",
+        "trend_sentiment",
+        "loss_effect",
+    ):
+        emotion.pop(key, None)
+
+    fields_by_section = {
+        "s1": (
+            "indexes",
+            "kline_history",
+            "up_count_history",
+            "width_heat",
+            "width_heat_level2",
+            "margin",
+            "margin_history",
+            "congestion",
+        ),
+        "s2": (
+            "participation",
+            "ebb_risk",
+            "themes_pywencai",
+            "themes_ths",
+            "new_high",
+        ),
+        "s3": (
+            "emotion_scores",
+            "advance",
+            "advance_history",
+            "ebb_signals",
+            "crash_signals",
+            "ladder_grid",
+            "ladder_detail",
+            "height_history",
+        ),
+        "s4": ("sector_flow", "sector_treemap"),
+        "s5": ("candidates",),
+        "s6": ("position", "scenes"),
+    }
+    for section_name, keys in fields_by_section.items():
+        section = _section(snapshot, section_name)
+        for key in keys:
+            section.pop(key, None)
 
 
 def _decoded(value: str | None) -> Any:
@@ -80,16 +184,9 @@ def _decoded(value: str | None) -> Any:
 
 
 class QuantXReviewRepository:
-    """Overlay reusable facts onto the immutable rich-dashboard cache.
-
-    ``review_data.json`` remains a presentation cache for fields that have no
-    shared dataset yet. Reusable market values are always replaced from the
-    canonical fact and TickFlow repositories before the API responds.
-    """
+    """Build the single-day view from repositories with an explicit V1 fallback."""
 
     _PRESENTATION_CACHE_FIELDS = (
-        "sections.s0.diagnosis",
-        "sections.s0.risks",
         "sections.s1.futures",
         "sections.s4.institution",
         "sections.s4.dx_strength",
@@ -105,11 +202,44 @@ class QuantXReviewRepository:
         self.facts = facts
         self.indexes = indexes
 
-    def load(self, trade_date: str) -> dict[str, Any] | None:
-        cached = read_json(self.quantx_dir / trade_date / "review_data.json")
-        if not isinstance(cached, dict):
+    def load(
+        self,
+        trade_date: str,
+        *,
+        view_version: str = "v2",
+    ) -> dict[str, Any] | None:
+        if view_version == "v1":
+            cached = read_json(self.quantx_dir / trade_date / "review_data.json")
+            if not isinstance(cached, dict):
+                return None
+            snapshot = deepcopy(cached)
+            _clear_canonical_cache_fields(snapshot)
+            return self._populate(
+                trade_date,
+                snapshot,
+                cache_backed=True,
+            )
+        if view_version != "v2":
+            raise ValueError(f"unsupported QuantX review version: {view_version}")
+        snapshot = QuantXReviewResponseV2.empty(trade_date).model_dump(
+            exclude={"data_foundation"}
+        )
+        response = self._populate(
+            trade_date,
+            snapshot,
+            cache_backed=False,
+        )
+        if response is None:  # pragma: no cover - defensive contract guard
             return None
-        snapshot = deepcopy(cached)
+        return QuantXReviewResponseV2.model_validate(response).model_dump()
+
+    def _populate(
+        self,
+        trade_date: str,
+        snapshot: dict[str, Any],
+        *,
+        cache_backed: bool,
+    ) -> dict[str, Any]:
         selected_day = _day(trade_date)
         canonical_fields: list[str] = []
 
@@ -118,7 +248,6 @@ class QuantXReviewRepository:
         self._apply_sector_breadth(snapshot, selected_day, canonical_fields)
         self._apply_congestion(snapshot, selected_day, canonical_fields)
         self._apply_advance_history(snapshot, selected_day, canonical_fields)
-        self._apply_position(snapshot, selected_day, canonical_fields)
         self._apply_risk_signals(snapshot, selected_day, canonical_fields)
         self._apply_margin(snapshot, selected_day, canonical_fields)
         self._apply_themes(snapshot, selected_day, canonical_fields)
@@ -129,13 +258,44 @@ class QuantXReviewRepository:
         self._apply_kline_history(snapshot, selected_day, canonical_fields)
         self._apply_indexes(snapshot, selected_day, canonical_fields)
 
+        loss_effect = snapshot.get("emotion", {}).get("loss_effect", {})
+        derived_fields = apply_deterministic_review_view(
+            snapshot,
+            loss_severity=str(loss_effect.get("severity") or ""),
+        )
+        audit = audit_review_fields(
+            snapshot,
+            canonical_fields=canonical_fields,
+            derived_fields=derived_fields,
+            cache_backed=cache_backed,
+            schema_version=(
+                REVIEW_SCHEMA_VERSION if cache_backed else REVIEW_V2_SCHEMA_VERSION
+            ),
+        )
+        derivation_status = review_view_derivation_status(snapshot)
+
         snapshot["data_foundation"] = {
-            "read_mode": "canonical_facts_with_presentation_cache",
-            "cache_artifact": "review_data.json",
-            "source_json_read": False,
+            "read_mode": (
+                "canonical_facts_with_presentation_cache"
+                if cache_backed
+                else "canonical_view_v2"
+            ),
+            "cache_artifact": "review_data.json" if cache_backed else None,
+            "source_json_read": cache_backed,
+            "presentation_cache_read": cache_backed,
             "canonical_fields": sorted(set(canonical_fields)),
-            "presentation_cache_fields": list(self._PRESENTATION_CACHE_FIELDS),
+            "derived_fields": sorted(set(derived_fields)),
+            "view_algorithm_version": VIEW_ALGORITHM_VERSION,
+            "derived_field_status": derivation_status,
+            "presentation_cache_fields": (
+                list(self._PRESENTATION_CACHE_FIELDS) if cache_backed else []
+            ),
+            **audit,
         }
+        if cache_backed:
+            snapshot["data_foundation"]["deprecation_schedule"] = (
+                DEPRECATION_SCHEDULE
+            )
         return snapshot
 
     def _apply_market(
@@ -173,15 +333,16 @@ class QuantXReviewRepository:
         row = state.row(0, named=True)
         strip["advance_rate"] = row.get("advance_rate_pct")
         emotion = snapshot.setdefault("emotion", {})
-        for name, score_key, zone_key in (
-            ("market_heat", "market_heat_score", "market_heat_zone"),
-            ("short_term_sentiment", "short_term_sentiment_score", None),
-            ("trend_sentiment", "trend_sentiment_score", None),
+        for name, score_key in (
+            ("market_heat", "market_heat_score"),
+            ("short_term_sentiment", "short_term_sentiment_score"),
+            ("trend_sentiment", "trend_sentiment_score"),
         ):
-            target = emotion.setdefault(name, {})
-            target["score"] = row.get(score_key)
-            if zone_key is not None:
-                target["zone"] = row.get(zone_key)
+            emotion[name] = {"score": row.get(score_key)}
+        emotion["loss_effect"] = {
+            "severity": row.get("loss_severity") or "",
+            "limit_down_count": row.get("limit_down_count"),
+        }
         s3 = _section(snapshot, "s3")
         s3["emotion_scores"] = {
             "market_heat": row.get("market_heat_score"),
@@ -196,6 +357,7 @@ class QuantXReviewRepository:
             [
                 "metric_strip.advance_rate",
                 "emotion.scores",
+                "emotion.loss_effect",
                 "sections.s3.emotion_scores",
                 "sections.s3.advance",
             ]
@@ -246,19 +408,28 @@ class QuantXReviewRepository:
         )
         if breadth.is_empty():
             return
-        rows = [
-            {
-                "code": row["sector_id"],
-                "name": row["sector_name"],
-                "ma5": row["above_ma5_pct"],
-                "ma10": row["above_ma10_pct"],
-                "ma20": row["above_ma20_pct"],
-                "ma60": row["above_ma60_pct"],
-            }
-            for row in breadth.sort("sector_id").to_dicts()
-        ]
-        _section(snapshot, "s1")["width_heat"] = rows
-        fields.append("sections.s1.width_heat")
+        def serialize(frame: pl.DataFrame) -> list[dict[str, Any]]:
+            return [
+                {
+                    "code": row["sector_id"],
+                    "name": row["sector_name"],
+                    "ma5": row["above_ma5_pct"],
+                    "ma10": row["above_ma10_pct"],
+                    "ma20": row["above_ma20_pct"],
+                    "ma60": row["above_ma60_pct"],
+                }
+                for row in frame.sort("sector_id").to_dicts()
+            ]
+
+        section = _section(snapshot, "s1")
+        level1 = breadth.filter(pl.col("dimension") == "sw_level1")
+        level2 = breadth.filter(pl.col("dimension") == "sw_level2")
+        if not level1.is_empty():
+            section["width_heat"] = serialize(level1)
+            fields.append("sections.s1.width_heat")
+        if not level2.is_empty():
+            section["width_heat_level2"] = serialize(level2)
+            fields.append("sections.s1.width_heat_level2")
 
     def _apply_congestion(
         self,
@@ -570,7 +741,57 @@ class QuantXReviewRepository:
             }
             for row in ladder.to_dicts()
         ]
-        fields.extend(["sections.s3.ladder_grid", "sections.s3.ladder_detail"])
+        history = _preferred_rows_by_day(
+            self.facts.get_range(
+                DatasetId.LIMIT_LADDER_DAILY,
+                day - timedelta(days=180),
+                day,
+            ),
+            DatasetId.LIMIT_LADDER_DAILY,
+        )
+        if not history.is_empty():
+            height_history: list[dict[str, Any]] = []
+            for trade_day in sorted(history["trade_date"].unique().to_list()):
+                daily = history.filter(pl.col("trade_date") == trade_day).sort(
+                    ["board_height", "symbol"], descending=[True, False]
+                )
+                heights = sorted(
+                    {int(value) for value in daily["board_height"].to_list()},
+                    reverse=True,
+                )
+                if not heights:
+                    continue
+                highest = daily.filter(pl.col("board_height") == heights[0])
+                leader = highest.row(0, named=True)
+                second_height = heights[1] if len(heights) > 1 else 0
+                second_names = (
+                    daily.filter(pl.col("board_height") == second_height)["name"]
+                    .drop_nulls()
+                    .head(5)
+                    .to_list()
+                    if second_height
+                    else []
+                )
+                height_history.append(
+                    {
+                        "date": trade_day.strftime("%Y%m%d"),
+                        "height": heights[0],
+                        "name": leader.get("name") or "",
+                        "names": highest["name"].drop_nulls().head(5).to_list(),
+                        "second_height": second_height,
+                        "second_names": second_names,
+                        "turnover_pct": leader.get("turnover_pct"),
+                        "amount_yi": leader.get("amount_yi"),
+                    }
+                )
+            section["height_history"] = height_history[-60:]
+        fields.extend(
+            [
+                "sections.s3.ladder_grid",
+                "sections.s3.ladder_detail",
+                "sections.s3.height_history",
+            ]
+        )
 
     def _apply_sectors(
         self,
@@ -625,6 +846,11 @@ class QuantXReviewRepository:
         )
         if frame.is_empty():
             return
+        frame = frame.sort(
+            ["priority", "score", "symbol"],
+            descending=[False, True, False],
+            nulls_last=True,
+        )
         _section(snapshot, "s5")["candidates"] = [
             {
                 "code": row["symbol"],
@@ -716,6 +942,7 @@ class QuantXReviewRepository:
                 {
                     **previous,
                     "code": display_code,
+                    "name": previous.get("name") or INDEX_DISPLAY_NAMES[display_code],
                     "close": row.get("close"),
                     "pct_chg": pct_chg,
                 }

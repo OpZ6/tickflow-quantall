@@ -10,9 +10,22 @@ const backendTarget = `http://${proxyHost}:${backendPort}`
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    // dnd-kit/framer-motion both consume React hooks.  Pin every dependency to
+    // the application's React instance so a stale optimize-deps graph cannot
+    // load a second dispatcher ("Cannot read properties of null (useMemo)").
+    dedupe: ['react', 'react-dom'],
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      '@dnd-kit/core',
+      '@dnd-kit/sortable',
+      '@dnd-kit/utilities',
+    ],
   },
   server: {
     host: '0.0.0.0',   // dev.sh / dev.ps1 会用 CLI --host 覆盖

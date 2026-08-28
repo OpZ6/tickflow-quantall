@@ -458,6 +458,45 @@ def test_sector_breadth_requires_exact_date_and_valid_percentages() -> None:
     assert sector_breadth.frame["sector_id"].to_list() == ["801030.SI"]
 
 
+def test_sector_breadth_includes_sw_level2_payload() -> None:
+    sources = _sources()
+    sources["legulegu"]["width_api"]["ma_market_width_sec_level"] = {
+        "dates": ["2026-08-24", "2026-08-25"],
+        "swCodeNames": [
+            {
+                "indexCode": "801735.SI",
+                "indexName": "光伏设备",
+                "parentIndustryCode": "801730.SI",
+            }
+        ],
+        "maMarketWidth": {
+            "801735.SI": [
+                {"value5": 10, "value10": 20, "value20": 30, "value60": 40},
+                {"value5": 60, "value10": 50, "value20": 40, "value60": 30},
+            ]
+        },
+    }
+
+    batches = build_initial_fact_batches("20260825", sources, "run-1")
+    breadth = next(
+        batch.frame
+        for batch in batches
+        if batch.dataset_id == DatasetId.SECTOR_BREADTH_DAILY
+    )
+    level2 = breadth.filter(pl.col("dimension") == "sw_level2")
+
+    assert level2.select(
+        "sector_id", "sector_name", "above_ma5_pct", "above_ma20_pct"
+    ).to_dicts() == [
+        {
+            "sector_id": "801735.SI",
+            "sector_name": "光伏设备",
+            "above_ma5_pct": 60.0,
+            "above_ma20_pct": 40.0,
+        }
+    ]
+
+
 def test_tickflow_adapter_derives_returns_from_previous_partition(tmp_path) -> None:
     table = tmp_path / "kline_daily_enriched"
     previous = table / "date=2026-08-24"

@@ -1,7 +1,6 @@
 """Read-only discovery and health API for the shared data foundation."""
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 from datetime import date
@@ -13,7 +12,7 @@ from fastapi import APIRouter, Request
 from app.market_facts.registry import DATASETS, ROUTES, DatasetId, datasets_for_source
 from app.market_facts.repository import MarketFactRepository
 from app.market_facts.snapshots import SnapshotRetentionPolicy, SourceSnapshotStore
-from app.quantx_data.collectors import SOURCE_SPECS
+from app.quantx_data.collectors import SOURCE_MANAGER, SOURCE_SPECS
 
 router = APIRouter(prefix="/api/data-sources", tags=["data-sources"])
 
@@ -171,19 +170,15 @@ def sources() -> dict[str, Any]:
         },
     ]
     for spec in SOURCE_SPECS:
-        package = "tushare" if spec.collector == "tushare" else None
+        source = SOURCE_MANAGER.describe(spec.name)
+        credentials_ref = source["credentials_ref"]
         rows.append(
             {
-                "source_id": spec.name,
-                "display_name": spec.name,
+                **source,
                 "supported_datasets": [item.value for item in datasets_for_source(spec.name)],
-                "collector_type": "provider" if spec.collector == "tushare" else "python",
-                "collector": spec.collector,
-                "credentials_ref": "TUSHARE_TOKEN" if spec.name == "tushare" else None,
-                "credentials_configured": bool(os.environ.get("TUSHARE_TOKEN")) if spec.name == "tushare" else True,
-                "dependency_available": importlib.util.find_spec(package) is not None if package else True,
-                "max_retries": spec.max_retries,
-                "freshness_required": spec.freshness_required,
+                "credentials_configured": (
+                    bool(os.environ.get(credentials_ref)) if credentials_ref else True
+                ),
             }
         )
     return {"sources": rows}

@@ -6,73 +6,74 @@ is persisted as source data and never interpreted as editorial or LLM text.
 from __future__ import annotations
 
 import importlib
-import logging
-import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .io import read_json
 from .schemas import SourceResult, SourceSpec
+from .source_manager import SourceManager, collect_from_descriptor
 
-logger = logging.getLogger(__name__)
-
-SOURCE_SPECS: tuple[SourceSpec, ...] = (
-    SourceSpec("tushare", True, "tushare", "market", min_records=1),
-    SourceSpec("akshare", False, "legacy:akshare_scraper", "market"),
-    SourceSpec("ths_hot", False, "legacy:ths_hot_scraper", "theme"),
-    SourceSpec("zhangtingke", False, "legacy:zhangtingke_scraper", "limit"),
-    SourceSpec("zhangtingjun", False, "legacy:zhangtingjun_scraper", "limit"),
-    SourceSpec("pywencai", True, "legacy:pywencai_scraper", "limit", min_records=1),
-    SourceSpec("duanxianxia", False, "legacy:duanxianxia_scraper", "limit"),
-    SourceSpec("deepq", False, "legacy:deepq_scraper", "theme"),
-    SourceSpec("legulegu", False, "legacy:legulegu_scraper", "market"),
-    SourceSpec("quicktiny", False, "legacy:quicktiny_scraper", "limit"),
-    SourceSpec("dabanke", False, "legacy:dabanke_scraper", "limit"),
-    SourceSpec("sector_fund_flow_s4", False, "legacy:sector_fund_flow_s4_scraper", "fund_flow"),
+_BUILTIN_SPECS: tuple[SourceSpec, ...] = (
+    SourceSpec(
+        "tushare",
+        True,
+        "tushare",
+        "market",
+        min_records=1,
+        display_name="Tushare Pro",
+        collector_type="provider",
+        credentials_ref="TUSHARE_TOKEN",
+        dependency_modules=("tushare",),
+        timeout_seconds=60,
+        rate_limit_rpm=180,
+    ),
+    SourceSpec("akshare", False, "legacy:akshare_scraper", "market", display_name="AKShare", timeout_seconds=90),
+    SourceSpec("ths_hot", False, "legacy:ths_hot_scraper", "theme", display_name="同花顺热点", timeout_seconds=60),
+    SourceSpec("zhangtingke", False, "legacy:zhangtingke_scraper", "limit", display_name="涨停客", timeout_seconds=60),
+    SourceSpec("zhangtingjun", False, "legacy:zhangtingjun_scraper", "limit", display_name="涨停君", timeout_seconds=90),
+    SourceSpec(
+        "pywencai",
+        True,
+        "legacy:pywencai_scraper",
+        "limit",
+        min_records=1,
+        display_name="同花顺问财",
+        dependency_modules=("pywencai",),
+        timeout_seconds=90,
+    ),
+    SourceSpec("duanxianxia", False, "legacy:duanxianxia_scraper", "limit", display_name="短线侠", timeout_seconds=90),
+    SourceSpec("deepq", False, "legacy:deepq_scraper", "theme", display_name="DeepQ", timeout_seconds=60),
+    SourceSpec("legulegu", False, "legacy:legulegu_scraper", "market", display_name="乐咕乐股", timeout_seconds=180),
+    SourceSpec(
+        "quicktiny",
+        False,
+        "legacy:quicktiny_scraper",
+        "limit",
+        display_name="QuickTiny",
+        credentials_ref="QUICKTINY_LOGIN_STATE",
+        collector_type="browser",
+        timeout_seconds=120,
+    ),
+    SourceSpec(
+        "dabanke",
+        False,
+        "legacy:dabanke_scraper",
+        "limit",
+        display_name="打板客",
+        credentials_ref="DABANKE_LOGIN_STATE",
+        collector_type="browser",
+        timeout_seconds=120,
+    ),
+    SourceSpec(
+        "sector_fund_flow_s4",
+        False,
+        "legacy:sector_fund_flow_s4_scraper",
+        "fund_flow",
+        display_name="S4 行业资金流",
+        collector_type="browser",
+        timeout_seconds=120,
+    ),
 )
-
-SPEC_BY_NAME = {item.name: item for item in SOURCE_SPECS}
-
-
-def _count_records(payload: dict[str, Any]) -> int:
-    counts: list[int] = []
-    for key in ("stocks", "sectors", "records", "rows", "data", "daily", "indexes", "daily_basic"):
-        value = payload.get(key)
-        if isinstance(value, list):
-            counts.append(len(value))
-        elif isinstance(value, dict):
-            list_count = sum(len(item) for item in value.values() if isinstance(item, list))
-            if list_count:
-                counts.append(list_count)
-            elif value and all(isinstance(item, dict) for item in value.values()):
-                counts.append(len(value))
-    if counts:
-        return max(counts)
-    for value in payload.values():
-        if isinstance(value, dict):
-            count = _count_records(value)
-            if count:
-                return count
-    return 0
-
-
-def _payload_status(payload: dict[str, Any]) -> str:
-    status = str(payload.get("status") or "ok").lower()
-    if status in {"ok", "complete", "partial", "degraded"}:
-        return "ok" if status == "complete" else status
-    if status in {"unavailable", "error", "failed"}:
-        return "error"
-    return "ok" if _count_records(payload) else "empty"
-
-
-def _load_existing(date_dir: Path, name: str) -> dict[str, Any] | None:
-    candidates = (date_dir / "normalized" / f"{name}.json", date_dir / f"{name}.json")
-    for path in candidates:
-        payload = read_json(path)
-        if isinstance(payload, dict) and payload:
-            return payload
-    return None
 
 
 def _collect_tushare(trade_date: str, output_dir: Path | None = None) -> dict[str, Any]:
@@ -95,6 +96,21 @@ def _collect_legacy(module_name: str, trade_date: str, output_dir: Path, source:
     return payload
 
 
+def _collector_for(spec: SourceSpec):
+    def collect(trade_date: str, output_dir: Path) -> dict[str, Any]:
+        return collect_from_descriptor(spec.collector, spec.name, trade_date, output_dir)
+
+    return collect
+
+
+SOURCE_MANAGER = SourceManager()
+for _spec in _BUILTIN_SPECS:
+    SOURCE_MANAGER.register(_spec, _collector_for(_spec))
+
+SOURCE_SPECS = SOURCE_MANAGER.specs
+SPEC_BY_NAME = SOURCE_MANAGER.spec_by_name
+
+
 def collect_source(
     spec: SourceSpec,
     trade_date: str,
@@ -104,71 +120,15 @@ def collect_source(
     force: bool = False,
     allow_network: bool = True,
 ) -> SourceResult:
-    existing = None if force else _load_existing(read_dir or date_dir, spec.name)
-    if existing is not None:
-        observed_date = str(existing.get("trade_date") or existing.get("as_of") or "")
-        if spec.freshness_required and observed_date != trade_date:
-            return SourceResult(
-                name=spec.name,
-                status="stale",
-                payload=existing,
-                source=str(existing.get("source") or "tickflow_snapshot"),
-                error=f"payload date {observed_date} != requested {trade_date}",
-                record_count=_count_records(existing),
-                reused_snapshot=True,
-                attempts=1,
-            )
-        status = _payload_status(existing)
-        return SourceResult(
-            name=spec.name,
-            status=status,
-            payload=existing,
-            source=str(existing.get("source") or "tickflow_snapshot"),
-            record_count=_count_records(existing),
-            collected_at=str(existing.get("scraped_at") or existing.get("collected_at") or ""),
-            input_path=str(date_dir / f"{spec.name}.json"),
-            reused_snapshot=True,
-            attempts=1,
-        )
-
-    if not allow_network:
-        return SourceResult(name=spec.name, status="missing", error="no reusable snapshot; recompute is offline")
-
-    last_error: str | None = None
-    for attempt in range(spec.max_retries + 1):
-        try:
-            if spec.collector == "tushare":
-                payload = _collect_tushare(trade_date, date_dir / "raw")
-            else:
-                module_name = spec.collector.split(":", 1)[1]
-                payload = _collect_legacy(module_name, trade_date, date_dir / "raw", spec.name)
-            status = _payload_status(payload)
-            if status == "error" and attempt < spec.max_retries:
-                time.sleep(0.25 * (attempt + 1))
-                continue
-            return SourceResult(
-                name=spec.name,
-                status=status,
-                payload=payload,
-                source=str(payload.get("source") or spec.name),
-                record_count=_count_records(payload),
-                collected_at=str(payload.get("scraped_at") or datetime.now().isoformat(timespec="seconds")),
-                attempts=attempt + 1,
-            )
-        except Exception as exc:  # source isolation is intentional; quality decides final status
-            last_error = f"{type(exc).__name__}: {exc}"
-            logger.warning("QuantX source %s failed (attempt %d/%d): %s", spec.name, attempt + 1, spec.max_retries + 1, exc)
-            if attempt < spec.max_retries:
-                time.sleep(0.25 * (attempt + 1))
-                continue
-            break
-    return SourceResult(name=spec.name, status="error", error=last_error, attempts=spec.max_retries + 1)
+    return SOURCE_MANAGER.collect(
+        spec.name,
+        trade_date,
+        date_dir,
+        read_dir=read_dir,
+        force=force,
+        allow_network=allow_network,
+    )
 
 
 def source_specs(names: list[str] | None = None) -> list[SourceSpec]:
-    if not names:
-        return list(SOURCE_SPECS)
-    unknown = sorted(set(names) - set(SPEC_BY_NAME))
-    if unknown:
-        raise ValueError(f"unknown QuantX source(s): {', '.join(unknown)}")
-    return [SPEC_BY_NAME[name] for name in names]
+    return SOURCE_MANAGER.select(names)

@@ -11,6 +11,7 @@ from typing import Any
 
 import polars as pl
 
+from app.market_facts.accepted_gaps import ACCEPTED_HISTORICAL_GAPS
 from app.market_facts.registry import DATASETS, DatasetId
 
 
@@ -179,6 +180,13 @@ def audit_quantx_data_foundation(
     if not include_artifacts:
         fingerprint.pop("artifacts")
     gap_checks = [item for item in checks if item["status"] != "present"]
+    for item in gap_checks:
+        reason = ACCEPTED_HISTORICAL_GAPS.get(
+            (item["trade_date"], item["dataset_id"])
+        )
+        item["accepted"] = reason is not None
+        item["acceptance_reason"] = reason
+    accepted_gap_count = sum(1 for item in gap_checks if item["accepted"])
     return {
         "schema_version": 1,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -190,8 +198,11 @@ def audit_quantx_data_foundation(
             "expected_partition_count": len(checks),
             "present_partition_count": status_counts["present"],
             "gap_partition_count": len(gap_checks),
+            "accepted_gap_partition_count": accepted_gap_count,
+            "unaccepted_gap_partition_count": len(gap_checks) - accepted_gap_count,
             "status_counts": dict(sorted(status_counts.items())),
         },
+        "checks": checks,
         "dataset_coverage": dataset_coverage,
         "gaps": gap_checks,
         "fact_fingerprint": fingerprint,

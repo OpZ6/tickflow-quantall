@@ -10,6 +10,10 @@ import json
 import os
 import time
 
+from playwright.sync_api import sync_playwright
+
+from app.quantx_data.browser_runtime import launch_chromium
+
 
 def _s4_records_from_data(data: dict) -> list:
     items = data.get("data", {}).get("diff") or []
@@ -44,8 +48,6 @@ def run(trade_date: str = "20260702", output_dir: str = "output/data") -> str:
     os.makedirs(output_dir, exist_ok=True)
     print(f"\n{'='*50}\n[sector_fund_flow_s4] Fetching Eastmoney s:4 sector fund flow...")
 
-    from playwright.sync_api import sync_playwright
-
     for _k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
         os.environ.pop(_k, None)
 
@@ -54,7 +56,8 @@ def run(trade_date: str = "20260702", output_dir: str = "output/data") -> str:
     for attempt in range(3):
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(
+                browser = launch_chromium(
+                    p,
                     headless=True,
                     args=["--disable-blink-features=AutomationControlled"],
                 )

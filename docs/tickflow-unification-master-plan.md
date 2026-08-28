@@ -1,5 +1,7 @@
 # TickFlow 大一统迁移总规划
 
+> 历史状态：本文记录从 Quantall prototype 迁移到独立仓库的阶段计划，不代表当前目录、完成状态或开发契约。当前开发从 [`README.md`](README.md) 进入。
+
 > 本文档是 quantall 能力迁移到 TickFlow 的权威规划。所有后续迁移工作以此为参照,进度记录在文末。
 >
 > 范围:`prototypes/tickflow`(目标平台)+ `apps/quantx`、`apps/quants`、`apps/quantt`、根目录 `skills/quantr`(能力来源)。

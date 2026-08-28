@@ -273,6 +273,9 @@ class ExtConfigStore:
             json.dumps(config.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        # A same-size rewrite can retain the directory signature on Windows.
+        # Explicit invalidation makes the next read observe the saved config.
+        _load_all_cache.pop(str(self._base), None)
 
     def delete(self, config_id: str) -> bool:
         import shutil
@@ -283,6 +286,7 @@ class ExtConfigStore:
         if not cp.exists():
             return False
         shutil.rmtree(cp.parent, ignore_errors=True)
+        _load_all_cache.pop(str(self._base), None)
         return True
 
     def _migrate_legacy(self, old_path: Path) -> None:

@@ -3647,30 +3647,109 @@ export interface QuantXDataTables {
   manifest?: any
 }
 
-export interface QuantXReviewData {
+export interface QuantXReviewIndexRow {
+  code: string
+  name: string
+  close: number | null
+  pct_chg: number | null
+}
+
+export interface QuantXReviewDataV2 {
   trade_date: string
   metric_strip: {
-    indexes: Array<{ code: string; name: string; close: number; pct_chg: number }>
-    up_count: number
-    down_count: number
-    flat_count: number
-    total_amount_yi: number
+    indexes: QuantXReviewIndexRow[]
+    up_count: number | null
+    down_count: number | null
+    flat_count: number | null
+    total_amount_yi: number | null
     advance_rate: number | null
   }
   emotion: {
-    market_heat: { score: number; zone: string }
-    short_term_sentiment: { score: number; zone: string }
-    trend_sentiment: { score: number; zone: string }
-    loss_effect: { severity?: string; limit_down_count?: number | null }
-    height_trend: { latest_max_board?: number; previous_high_5d?: number | null; height_compressed?: boolean }
+    market_heat: { score: number | null; zone: string }
+    short_term_sentiment: { score: number | null; zone: string }
+    trend_sentiment: { score: number | null; zone: string }
+    loss_effect: { severity: string; limit_down_count: number | null }
+    height_trend: {
+      days: Array<{ date: string; max_board: number }>
+      latest_max_board: number
+      previous_high_5d: number | null
+      height_compressed: boolean
+      evidence: string
+    }
     daily_summary: string
   }
-  sections: Record<string, {
-    title: string
-    llm_block: string
-    [key: string]: unknown
-  }>
+  sections: {
+    s0: {
+      diagnosis: Array<{ name: string; value: string; zone: string }>
+      risks: Array<{ name: string; triggered: boolean; status?: string; evidence?: string }>
+    }
+    s1: {
+      indexes: QuantXReviewIndexRow[]
+      kline_history: Array<Record<string, number | string | null>>
+      up_count_history: Array<{ date: string; up_count: number; down_count: number; total_amount_yi: number | null }>
+      width_heat: Array<{ code: string; name: string; ma5: number | null; ma10: number | null; ma20: number | null; ma60: number | null }>
+      width_heat_level2: Array<{ code: string; name: string; ma5: number | null; ma10: number | null; ma20: number | null; ma60: number | null }>
+      margin: { date: string; rzye_yi: number | null; rz_net_buy_yi: number | null } | null
+      margin_history: Array<{ date: string; rzye_yi: number | null; rz_net_buy_yi: number | null }>
+      congestion: {
+        latest: { date: string; close: number | null; top5_amount: number | null; total_amount: number | null; congestion_pct: number | null }
+        table: Array<[string, number | null, number | null, number | null, number | null]>
+      } | null
+    }
+    s2: {
+      participation: { conditions: Array<{ name: string; value: unknown; ok: boolean | null; available: boolean | null }>; verdict: string; satisfied: number; total: number } | null
+      ebb_risk: { verdict: string; signal_count: number } | null
+      themes_pywencai: Array<{ name: string; count: number | null; rank: number | null }>
+      themes_ths: Array<{ tag: string; count: number | null; rank: number | null }>
+      new_high: { status: string; stocks: Array<{ code: string; name: string; pct_chg: number | null }> } | null
+    }
+    s3: {
+      emotion_scores: { market_heat?: number | null; short_term?: number | null; trend?: number | null }
+      emotion_zones: { market_heat?: string; short_term?: string; trend?: string }
+      advance: { advance_rate?: number | null; premium_rate?: number | null }
+      advance_history: Array<{ date: string; advance_rate: number | null; premium_rate: number | null; limit_up_count: number | null; max_board: number | null; seal_rate: number | null }>
+      ebb_signals: Array<{ name: string; triggered: boolean | null; available: boolean | null; value?: unknown; baseline?: unknown }>
+      crash_signals: Array<{ name: string; triggered: boolean | null; status: string; evidence: string }>
+      ladder_grid: Array<{ level: string; count: number; names: string[] }>
+      ladder_detail: Array<Record<string, unknown>>
+      height_history: Array<{ date: string; height: number; name: string; names: string[]; second_height: number; second_names: string[]; turnover_pct: number | null; amount_yi: number | null }>
+    }
+    s4: {
+      sector_flow: { top_in: Array<Record<string, unknown>>; top_out: Array<Record<string, unknown>> }
+      sector_treemap: Array<{ name: string; value: number | null; pct_chg: number | null }>
+    }
+    s5: {
+      candidates: Array<{ code: string; name: string; limit_times: number | null; reason: string; score: number | null; priority: string | null }>
+    }
+    s6: {
+      position: { band: string; action: string } | null
+      scenes: Array<{ name: string; condition: string; tone: 'positive' | 'neutral' | 'negative' }>
+    }
+  }
+  data_foundation: {
+    schema_version: 'quantx-review.v2'
+    read_mode: 'canonical_view_v2'
+    cache_artifact: null
+    source_json_read: false
+    presentation_cache_read: false
+    canonical_fields: string[]
+    derived_fields: string[]
+    view_algorithm_version: string
+    derived_field_status: Record<string, {
+      status: 'available' | 'missing_inputs'
+      inputs: string[]
+      missing_inputs: string[]
+      algorithm_version: string
+    }>
+    presentation_fields: string[]
+    presentation_cache_fields: string[]
+    deprecated_fields: string[]
+    fallback_fields: string[]
+    implicit_cache_fields: string[]
+  }
 }
+
+export type QuantXReviewData = QuantXReviewDataV2
 
 export interface QuantXWindowComponent {
   key: 'heat' | 'breadth' | 'relay' | 'risk'
@@ -3718,6 +3797,46 @@ export interface QuantXMultidaySnapshot {
   data_coverage: { theme_days: number; sector_flow_days: number; institution_days: number; window_days: number }
 }
 
+export interface QuantXObservability {
+  trade_date: string
+  pipeline_job_id: string | null
+  quantx_run_id: string | null
+  status: string
+  published_at: string | null
+  sources: Array<{
+    source_id: string
+    display_name: string
+    required: boolean
+    status: string
+    freshness: 'fresh' | 'reused'
+    record_count: number
+    credential_readiness: string
+    dependency_readiness: string
+    manifest_health: string
+    live_probe: string
+    error: string | null
+    error_kind: string | null
+  }>
+  facts: Array<{
+    dataset_id: string
+    path: string
+    status: string
+    row_count: number | null
+    coverage: number
+    quality_level: string
+    sha256: string | null
+  }>
+  fact_summary: { expected_partition_count: number; present_partition_count: number; gap_partition_count: number }
+  view: { schema_version: string | null; canonical_count: number; derived_count: number; cache_count: number; fallback_count: number; implicit_cache_count: number }
+  reconciliation: { status: string; gap_count: number; fingerprint: string | null }
+  multiday: { published: boolean; schema_version: string | null; generated_at: string | null }
+  catalog: { published: boolean; stage: string | null; generated_at: string | null }
+  metrics: { field_drift: number; stale_snapshot: number; empty_result: number; rate_limit: number }
+  warnings: string[]
+  errors: string[]
+  refreshed_at: string
+}
+
 export const quantxApi = {
   getCatalog: () =>
     request<CatalogData>(`/api/quantx-data/catalog`),
@@ -3742,4 +3861,13 @@ export const quantxApi = {
 
   recomputeData: (date: string) =>
     request<any>(`/api/quantx-data/runs/${date}/recompute`, { method: 'POST' }),
+
+  resumeData: (date: string) =>
+    request<any>(`/api/quantx-data/runs/${date}/resume`, { method: 'POST' }),
+
+  retrySource: (date: string, source: string) =>
+    request<any>(`/api/quantx-data/runs/${date}/sources/${encodeURIComponent(source)}/retry`, { method: 'POST' }),
+
+  getObservability: (date: string, pipelineJobId?: string | null) =>
+    request<QuantXObservability>(`/api/quantx-data/observability/${encodeURIComponent(date)}${pipelineJobId ? `?pipeline_job_id=${encodeURIComponent(pipelineJobId)}` : ''}`),
 }

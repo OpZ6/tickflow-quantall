@@ -27,6 +27,7 @@ _DATASET_MIGRATION_VERSIONS[DatasetId.MARKET_LIQUIDITY_DAILY] = 3
 _DATASET_MIGRATION_VERSIONS[DatasetId.LIMIT_LADDER_DAILY] = 2
 _DATASET_MIGRATION_VERSIONS[DatasetId.THEME_MEMBER_DAILY] = 2
 _DATASET_MIGRATION_VERSIONS[DatasetId.SCREENING_CANDIDATE_DAILY] = 2
+_DATASET_MIGRATION_VERSIONS[DatasetId.SECTOR_BREADTH_DAILY] = 2
 
 
 def _date_dirs(data_root: Path) -> list[Path]:
@@ -48,6 +49,24 @@ def _sources(data_root: Path, date_dir: Path) -> dict[str, dict]:
             payload = read_json(date_dir / f"{spec.name}.json")
         if isinstance(payload, dict):
             payloads[spec.name] = payload
+    legacy_width = read_json(date_dir / "legulegu_width.json")
+    if isinstance(legacy_width, dict):
+        width_payload = next(
+            (
+                item
+                for item in legacy_width.values()
+                if isinstance(item, dict)
+                and isinstance(item.get("dates"), list)
+                and isinstance(item.get("maMarketWidth"), dict)
+            ),
+            None,
+        )
+        if width_payload is not None:
+            legulegu = dict(payloads.get("legulegu") or {})
+            width_api = dict(legulegu.get("width_api") or {})
+            width_api.setdefault("ma_market_width", width_payload)
+            legulegu["width_api"] = width_api
+            payloads["legulegu"] = legulegu
     aggregate = load_tickflow_market_aggregate(data_root, date_dir.name)
     if aggregate is not None:
         payloads["tickflow_enriched_aggregate"] = aggregate
@@ -82,6 +101,7 @@ def migrate_quantx_history(
     apply: bool = False,
     force: bool = False,
     datasets: tuple[DatasetId | str, ...] | None = None,
+    trade_dates: tuple[str, ...] | None = None,
 ) -> dict:
     """Preflight or publish all migratable dates without changing legacy files."""
     data_root = Path(data_root)
@@ -100,7 +120,10 @@ def migrate_quantx_history(
         "skipped_incomplete": {},
         "failed": {},
     }
+    selected_dates = set(trade_dates or ())
     for date_dir in _date_dirs(data_root):
+        if selected_dates and date_dir.name not in selected_dates:
+            continue
         day = datetime.strptime(date_dir.name, "%Y%m%d").date()
         marker_path = date_dir / "_market_facts_migration.json"
         marker = read_json(marker_path)

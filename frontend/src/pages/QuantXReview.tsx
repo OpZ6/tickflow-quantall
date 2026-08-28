@@ -3,7 +3,7 @@
  * A-share 色彩: 红=涨/正, 绿=跌/负。固定范围, 无 dataZoom。
  * 不读取 HTML 报告，也不渲染或请求 LLM 分析内容。
  */
-import { useMemo, useRef, useEffect } from 'react'
+import { useMemo, useRef, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import * as echarts from 'echarts'
@@ -23,6 +23,16 @@ const ORANGE = '#f78166'
 const CYAN = '#58a6ff'
 const PURPLE = '#bc8cff'
 const YELLOW = '#d2991d'
+
+const SECTION_TITLES = {
+  s0: '一、顶部决断',
+  s1: '二、大盘环境',
+  s2: '三、主线题材',
+  s3: '四、连板情绪',
+  s4: '五、资金生态与趋势容量',
+  s5: '六、关注名单',
+  s6: '七、次日预案与复盘校验',
+} as const
 
 function scoreColor(score: number): string {
   if (score >= 70) return RED
@@ -434,23 +444,6 @@ function SectorScatterChart({ data }: { data: any[] }) {
   return <div ref={ref} className="w-full" style={{ height: 480 }} />
 }
 
-function DxStrengthTable({ data }: { data: any[] }) {
-  if (!data.length) return null
-  return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      <table className="w-full text-xs">
-        <thead className="bg-elevated"><tr><th className="px-2 py-1.5 text-left text-muted">#</th><th className="px-2 py-1.5 text-left text-muted">板块</th><th className="px-2 py-1.5 text-right text-muted">强度分</th><th className="px-2 py-1.5 text-right text-muted">涨停</th></tr></thead>
-        <tbody>
-          {data.map((s, i) => {
-            const score = typeof s.score === 'string' ? parseInt(s.score) || 0 : s.score || 0
-            return (<tr key={i} className="border-t border-border hover:bg-elevated/50"><td className="px-2 py-1 text-muted">{i + 1}</td><td className="px-2 py-1 font-medium">{s.name}</td><td className="px-2 py-1 text-right font-mono">{score.toLocaleString()}</td><td className="px-2 py-1 text-right text-accent">{s.limit_up_count ?? '-'}</td></tr>)
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 // ═══ 主页面 ═══
 
 export function QuantXReview() {
@@ -460,6 +453,7 @@ export function QuantXReview() {
   const dates = useMemo(() => (catalog?.records || []).map(r => r.trade_date), [catalog])
   const recentRecords = useMemo(() => (catalog?.records || []).slice(-20), [catalog])
   const { data, isLoading, error } = useQuery({ queryKey: QK.quantxReview(date), queryFn: () => quantxApi.getReviewData(date), retry: false, enabled: !!date, staleTime: 0 })
+  const [sectorBreadthLevel, setSectorBreadthLevel] = useState<1 | 2>(1)
 
   if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
   if (error || !data) return (
@@ -468,7 +462,7 @@ export function QuantXReview() {
   )
 
   const ms = data.metric_strip, em = data.emotion, s = data.sections
-  const s0 = s['s0'] as any, s1 = s['s1'] as any, s2 = s['s2'] as any, s3 = s['s3'] as any, s4 = s['s4'] as any, s5 = s['s5'] as any, s6 = s['s6'] as any
+  const { s0, s1, s2, s3, s4, s5, s6 } = s
   const emotionTrendData = {
     dates: recentRecords.map(r => r.trade_date),
     scores: {
@@ -479,36 +473,78 @@ export function QuantXReview() {
   }
   const congestionPct = s1?.congestion?.latest?.congestion_pct ?? 0
   const congestionTable = s1?.congestion?.table || []
+  const sectorBreadth = sectorBreadthLevel === 2
+    ? (s1.width_heat_level2 || [])
+    : (s1.width_heat || [])
+
+  if (data.data_foundation.canonical_fields.length === 0) {
+    return (
+      <div className="mx-auto max-w-6xl p-4 pb-20">
+        <DateNav date={date} dates={dates} />
+        <div data-testid="quantx-review-empty" className="mt-8 rounded-xl border border-border py-20 text-center text-sm text-muted">
+          该交易日没有可用的标准事实数据
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-6xl p-4 pb-20">
       <DateNav date={date} dates={dates} />
       {/* Metric strip */}
       <div className="flex gap-2 flex-wrap mt-4 mb-2">
-        {ms.indexes.map(idx => (
-          <div key={idx.code} className={cn('rounded-lg border px-3 py-1.5 flex flex-col items-center flex-1 min-w-[80px]', idx.pct_chg > 0 ? 'border-red-500/30 bg-red-500/5' : idx.pct_chg < 0 ? 'border-green-500/30 bg-green-500/5' : 'border-border bg-elevated')}>
+        {ms.indexes.map(idx => {
+          const pctChange = idx.pct_chg ?? 0
+          return (
+          <div key={idx.code} className={cn('rounded-lg border px-3 py-1.5 flex flex-col items-center flex-1 min-w-[80px]', pctChange > 0 ? 'border-red-500/30 bg-red-500/5' : pctChange < 0 ? 'border-green-500/30 bg-green-500/5' : 'border-border bg-elevated')}>
             <span className="text-[10px] text-muted">{idx.name}</span>
-            <span className={cn('text-sm font-bold', idx.pct_chg > 0 ? 'text-red-400' : idx.pct_chg < 0 ? 'text-green-400' : '')}>{idx.pct_chg > 0 ? '+' : ''}{idx.pct_chg.toFixed(2)}%</span>
+            <span className={cn('text-sm font-bold', pctChange > 0 ? 'text-red-400' : pctChange < 0 ? 'text-green-400' : '')}>{pctChange > 0 ? '+' : ''}{pctChange.toFixed(2)}%</span>
           </div>
-        ))}
+          )
+        })}
         <div className="rounded-lg border border-border px-3 py-1.5 flex flex-col items-center flex-1 min-w-[80px]"><span className="text-[10px] text-muted">涨跌平</span><span className="text-sm font-bold"><span className="text-red-400">{ms.up_count}</span>/<span className="text-green-400">{ms.down_count}</span>/{ms.flat_count}</span></div>
-        <div className="rounded-lg border border-border px-3 py-1.5 flex flex-col items-center flex-1 min-w-[80px]"><span className="text-[10px] text-muted">成交额</span><span className="text-sm font-bold">{ms.total_amount_yi.toFixed(0)}亿</span></div>
+        <div className="rounded-lg border border-border px-3 py-1.5 flex flex-col items-center flex-1 min-w-[80px]"><span className="text-[10px] text-muted">成交额</span><span className="text-sm font-bold">{ms.total_amount_yi != null ? `${ms.total_amount_yi.toFixed(0)}亿` : '--'}</span></div>
         <div className="rounded-lg border border-border px-3 py-1.5 flex flex-col items-center flex-1 min-w-[80px]"><span className="text-[10px] text-muted">晋级率</span><span className="text-sm font-bold">{ms.advance_rate != null ? `${ms.advance_rate}%` : '--'}</span></div>
       </div>
 
       {/* s0 */}
-      <SectionTitle icon={Zap}>{s0.title}</SectionTitle>
+      <SectionTitle icon={Zap}>{SECTION_TITLES.s0}</SectionTitle>
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-border bg-elevated/50 p-3"><h4 className="text-xs font-semibold text-muted mb-2">多维诊断</h4><div className="space-y-1">{s0.diagnosis?.map((d: any, i: number) => (<div key={i} className="flex justify-between text-xs"><span className="text-muted">{d.name}</span><span className="font-medium">{d.value} {d.zone}</span></div>))}</div></div>
         <div className="rounded-lg border border-border bg-elevated/50 p-3"><h4 className="text-xs font-semibold text-muted mb-2">风险清单</h4><div className="space-y-1">{s0.risks?.map((r: any, i: number) => (<div key={i} className="flex items-center gap-2 text-xs">{r.triggered ? <XCircle className="h-3 w-3 text-red-400 shrink-0" /> : <CheckCircle2 className="h-3 w-3 text-green-400 shrink-0" />}<span className="text-foreground/80">{r.name}</span><span className="text-muted ml-auto">{r.status || (r.triggered ? '触发' : '未触发')}</span></div>))}</div></div>
       </div>
 
       {/* s1 */}
-      <SectionTitle icon={TrendingUp}>{s1.title}</SectionTitle>
+      <SectionTitle icon={TrendingUp}>{SECTION_TITLES.s1}</SectionTitle>
       {s1.indexes?.length > 0 && <IndexChart indexes={s1.indexes} />}
       {s1.kline_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4 mt-4"><h4 className="text-xs font-semibold text-muted mb-1">全A K线 + CCI5 (近{s1.kline_history.length}日)</h4><KlineChart history={s1.kline_history} /></div>)}
       {s1.up_count_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">涨跌家数 + 成交额 (近{s1.up_count_history.filter((d: any) => d.date && d.up_count > 0).length}日)</h4><UpCountChart history={s1.up_count_history} /></div>)}
-      {s1.width_heat?.length > 0 && (<div data-testid="sector-breadth-heatmap" className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">申万一级行业均线宽度（站上均线成分股占比）</h4><SectorBreadthHeatmap data={s1.width_heat} /></div>)}
+      {(s1.width_heat?.length > 0 || s1.width_heat_level2?.length > 0) && (
+        <div data-testid="sector-breadth-heatmap" className="rounded-lg border border-border bg-elevated/30 p-3 mb-4">
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <h4 className="text-xs font-semibold text-muted">
+              申万{sectorBreadthLevel === 1 ? '一级' : '二级'}行业均线宽度（站上均线成分股占比）
+            </h4>
+            <div className="flex rounded border border-border bg-surface p-0.5" aria-label="申万行业层级">
+              {([1, 2] as const).map(level => (
+                <button
+                  key={level}
+                  type="button"
+                  disabled={level === 2 && !s1.width_heat_level2?.length}
+                  onClick={() => setSectorBreadthLevel(level)}
+                  className={cn(
+                    'rounded px-2 py-1 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-35',
+                    sectorBreadthLevel === level ? 'bg-accent/15 text-accent' : 'text-muted hover:text-foreground',
+                  )}
+                >
+                  {level === 1 ? '一级行业' : '二级行业'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <SectorBreadthHeatmap data={sectorBreadth} />
+        </div>
+      )}
       {s1.margin_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">融资余额 + 净买入 (近{s1.margin_history.length}日)</h4><MarginChart history={s1.margin_history} /></div>)}
       {congestionPct > 0 && (
         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -518,7 +554,7 @@ export function QuantXReview() {
       )}
 
       {/* s2 */}
-      <SectionTitle icon={Layers3}>{s2.title}</SectionTitle>
+      <SectionTitle icon={Layers3}>{SECTION_TITLES.s2}</SectionTitle>
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="rounded-lg border border-border bg-elevated/50 p-3"><h4 className="text-xs font-semibold text-muted mb-2">参与度: {s2.participation?.verdict} ({s2.participation?.satisfied}/{s2.participation?.total})</h4><div className="space-y-1">{s2.participation?.conditions?.map((c: any, i: number) => (<div key={i} className="flex justify-between text-xs"><span className="text-muted">{c.name}</span><span>{c.value} {c.ok === true ? '✓' : c.ok === false ? '✗' : '?'}</span></div>))}</div></div>
         <div className="rounded-lg border border-border bg-elevated/50 p-3"><h4 className="text-xs font-semibold text-muted mb-2">退潮: {s2.ebb_risk?.verdict} ({s2.ebb_risk?.signal_count}/4)</h4><p className="text-xs text-muted">详见连板情绪区</p></div>
@@ -530,7 +566,7 @@ export function QuantXReview() {
       {s2.new_high?.status === 'ok' && s2.new_high.stocks?.length > 0 && (<div className="mb-4"><h4 className="text-xs font-semibold text-muted mb-2">百日新高</h4><div className="flex flex-wrap gap-2">{s2.new_high.stocks.map((nh: any, i: number) => (<span key={i} className="rounded border border-border px-2 py-0.5 text-xs">{nh.name} {nh.pct_chg?.toFixed(1)}%</span>))}</div></div>)}
 
       {/* s3 */}
-      <SectionTitle icon={Flame}>{s3.title}</SectionTitle>
+      <SectionTitle icon={Flame}>{SECTION_TITLES.s3}</SectionTitle>
       <div className="rounded-xl border border-border bg-elevated/30 p-4 mb-4 space-y-3"><div className="flex items-center gap-2 mb-2"><Activity className="h-4 w-4 text-accent" /><span className="text-sm font-semibold">情绪三件套</span></div><ScoreBar label="市场热度" score={s3.emotion_scores?.market_heat ?? 0} zone={s3.emotion_zones?.market_heat ?? ''} /><ScoreBar label="短线情绪" score={s3.emotion_scores?.short_term ?? 0} zone={s3.emotion_zones?.short_term ?? ''} /><ScoreBar label="趋势情绪" score={s3.emotion_scores?.trend ?? 0} zone={s3.emotion_zones?.trend ?? ''} /></div>
       {emotionTrendData.dates.length > 1 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">情绪趋势 (近{emotionTrendData.dates.length}日)</h4><EmotionTrendChart dates={emotionTrendData.dates} scores={emotionTrendData.scores} /></div>)}
       {s3.height_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">连板高度历史 (markLine: 3板/5板)</h4><HeightChart history={s3.height_history} /></div>)}
@@ -547,18 +583,17 @@ export function QuantXReview() {
       </div>
 
       {/* s4 */}
-      <SectionTitle icon={Gauge}>{s4.title}</SectionTitle>
+      <SectionTitle icon={Gauge}>{SECTION_TITLES.s4}</SectionTitle>
       <div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><SectorFlowChart topIn={s4.sector_flow?.top_in || []} topOut={s4.sector_flow?.top_out || []} /></div>
       {s4.sector_treemap?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">行业资金 treemap (红流入/绿流出)</h4><SectorTreemapChart data={s4.sector_treemap} /></div>)}
       {s4.sector_treemap?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">行业散点 (涨跌幅 vs 净流入)</h4><SectorScatterChart data={s4.sector_treemap} /></div>)}
-      {s4.dx_strength?.length > 0 && (<div className="mb-4"><h4 className="text-xs font-semibold text-muted mb-1">短线侠强度榜</h4><DxStrengthTable data={s4.dx_strength} /></div>)}
 
       {/* s5 */}
-      <SectionTitle icon={FileText}>{s5.title}</SectionTitle>
+      <SectionTitle icon={FileText}>{SECTION_TITLES.s5}</SectionTitle>
       {s5.candidates?.length > 0 && (<div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">{s5.candidates.map((c: any, i: number) => (<div key={i} className="rounded-lg border border-border bg-elevated/50 p-3"><div className="flex items-center justify-between mb-1"><span className="font-semibold text-sm">{c.name}</span><span className="text-xs text-accent">{c.limit_times}板</span></div><div className="text-xs text-muted font-mono">{c.code}</div><div className="text-[10px] text-muted/70 mt-1">{c.reason}</div></div>))}</div>)}
 
       {/* s6 */}
-      <SectionTitle icon={BookOpenCheck}>{s6.title}</SectionTitle>
+      <SectionTitle icon={BookOpenCheck}>{SECTION_TITLES.s6}</SectionTitle>
       <div className="rounded-lg border border-border bg-elevated/50 p-4 mb-4"><div className="text-sm font-semibold mb-1">{s6.position?.band}</div><div className="text-xs text-muted">{s6.position?.action}</div></div>
       <div className="grid grid-cols-3 gap-3 mb-4">{s6.scenes?.map((sc: any, i: number) => (<div key={i} className={cn('rounded-lg border p-3 text-center', sc.tone === 'positive' ? 'border-red-500/30' : sc.tone === 'negative' ? 'border-green-500/30' : 'border-border')}><div className="text-sm font-semibold">{sc.name}</div><div className="text-[10px] text-muted mt-1">{sc.condition}</div></div>))}</div>
       {em.daily_summary && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mt-6"><p className="text-sm text-foreground/80">{em.daily_summary}</p></div>)}

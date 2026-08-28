@@ -1,10 +1,14 @@
 # TickFlow 独立 QuantX 数据流水线
 
+> 文档角色：运维运行手册。数据契约和新增来源规则以 [`data-foundation.md`](data-foundation.md) 为准。
+
 本原型只负责 QuantX Review 背后的市场数据表格：采集、原始留存、标准化、确定性指标计算、跨日趋势、质量校验、结构化 API 和 React 展示。
 
 它不读取 `apps/quantx/output`，不生成或消费 LLM 判断、Review Editor、HTML 文案、反思知识、PNG/PDF。
 
-TickFlow 的 `/quantx/:date` 单日页面通过 `/api/quantx/review/:date/data` 将同一日期目录中的确定性 JSON 组装为七区数据，并原生渲染 ECharts；该适配器不读取 `review.html`，也不消费其中的 LLM 占位或编辑内容。`/quantx` 多日驾驶舱继续使用 `/api/quantx-data/catalog` 和 `/api/quantx-data/multiday/:date`。
+TickFlow 的 `/quantx/:date` 单日页面默认通过 `/api/quantx/review/:date/data` 读取 `quantx-review.v2`，从类型化空结构、Market Facts、KlineRepository 和确定性 ViewBuilder 原生组装七区并渲染 ECharts；运行时不读取 `review_data.json`、`review.html` 或来源 JSON。`review_data.json` 仅保留为历史迁移证据，短期排障必须显式使用 `?view_version=v1`。`/quantx` 多日驾驶舱继续使用 `/api/quantx-data/catalog` 和 `/api/quantx-data/multiday/:date`。
+
+V2 契约可通过 `GET /api/quantx/review/schema/v2` 查看；提交前运行 `python scripts/audit_quantx_review_consumers.py`，确保所有前端读取字段都具有唯一来源分类。
 
 ## 运行
 
@@ -19,6 +23,12 @@ uv run python ../scripts/run_quantx_data.py --date 20260825 --source pywencai --
 每个日期的结构化产物位于 `data/quantx/YYYYMMDD/`。`raw/` 保留采集器原始对象，`normalized/` 保存统一交易日/代码字段后的对象；`_pipeline_status.json` 是运行状态，`_data_manifest.json` 保存来源状态、请求次数、原始/规范化 SHA-256、产物哈希和降级警告。只有 `complete` 或 `degraded` 才会发布新快照。
 
 流水线始终按完整来源契约验收。单源重试只强制刷新目标来源，其余来源复用同日期快照；`--recompute` 和对应 API 只读本地来源，不触网。必需来源缺失/过期会 `failed`，可选来源缺失会 `degraded`，失败时保留上一次已发布的表格文件。
+
+### 运行时依赖与凭据
+
+QuantX 的 Tushare、AKShare、PyWencai 和 Playwright 适配器是后端默认运行时依赖，`uv sync --frozen` 会在本仓库 `backend/.venv` 内安装。Windows 的 Playwright 适配器使用已安装的 Microsoft Edge channel，不依赖仓库外的 QuantX 服务或单独报告目录。
+
+Tushare 凭据只从 `TUSHARE_TOKEN` 环境变量读取，不得写入仓库配置。QuickTiny 是需要用户登录态的可选证据源；未配置 `QUICKTINY_LOGIN_STATE` 时必须显式报告 `needs_login_state`/`degraded`，不得伪装成成功。
 
 ## API
 
@@ -42,6 +52,8 @@ GET  /api/quantx-data/{date}/fund-flow
 GET  /api/quantx-data/{date}/candidates
 GET  /api/quantx-data/{date}/quality
 ```
+
+`POST /api/pipeline/run` 会先完成 TickFlow 主行情、enriched 和指数更新，然后在同一任务结果中运行并返回 `quantx` 发布结果。主数据更新成功但 QuantX 发布失败时，手动数据任务不得伪报为完整成功。
 
 `GET /catalog` 只扫描并返回紧凑日期目录，不写文件；`POST /catalog/rebuild?trade_date=YYYYMMDD`
 显式重建并原子写入选定日期的 `multiday_snapshot.json`。维护场景可传

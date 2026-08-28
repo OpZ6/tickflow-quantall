@@ -7,12 +7,32 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
+from app.api import pipeline as pipeline_api
 from app.jobs import daily_pipeline
 from app.services import pipeline_jobs, preferences, quote_service
 from app.services.pipeline_jobs import JobStore
 from app.services.quote_service import QuoteService
 from app.strategy import monitor_rules
 from app.strategy.monitor import MonitorRuleEngine
+
+
+def test_manual_pipeline_publishes_dependent_quantx(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        daily_pipeline,
+        "run_now",
+        lambda repo, capset, on_progress: calls.append("main") or {"daily_days": 1},
+    )
+    monkeypatch.setattr(
+        daily_pipeline,
+        "_run_quantx_after_pipeline",
+        lambda: calls.append("quantx") or {"trade_date": "20260827", "status": "complete"},
+    )
+
+    result = pipeline_api._run_pipeline_and_quantx(object(), object(), lambda *_args: None)
+
+    assert calls == ["main", "quantx"]
+    assert result["quantx"] == {"trade_date": "20260827", "status": "complete"}
 
 # ── JobStore 单飞 ────────────────────────────────────────────────────────
 

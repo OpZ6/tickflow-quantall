@@ -49,6 +49,7 @@ import { PipelineScopeConfig } from '@/components/data/PipelineScopeConfig'
 import { PageSettingsModal, getCardVisibility, getCardOrder, type CardKey } from '@/components/data/PageSettingsModal'
 import { QuoteConfigCard } from '@/components/data/QuoteConfigCard'
 import { DataSourceFoundationPanel } from '@/components/data/DataSourceFoundationPanel'
+import { QuantXObservabilityPanel } from '@/components/data/QuantXObservabilityPanel'
 import { EnrichedSchemaModal } from '@/components/data/SchemaModal'
 import { Skeleton } from '@/components/data/Skeleton'
 import { ExtDataStatCard } from '@/components/ext-data/ExtDataStatCard'
@@ -888,6 +889,7 @@ export function Data() {
         </div>
 
         <DataSourceFoundationPanel />
+        <QuantXObservabilityPanel pipelineJobId={history.data?.jobs?.[0]?.id ?? null} />
 
         {/* 数据画像 */}
         <div>

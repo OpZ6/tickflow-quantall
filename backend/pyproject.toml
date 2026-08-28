@@ -35,6 +35,13 @@ dependencies = [
     # AI(可选,但默认装上)
     "openai>=1.40",               # OpenAI 兼容适配器复用 openai SDK
     "httpx>=0.27",
+    "socksio>=1.0",               # httpx 自动读取 ALL_PROXY/HTTPS_PROXY 时不得因缺依赖中断数据任务
+    # Independent QuantX deterministic data pipeline. These are runtime
+    # dependencies because the scheduled pipeline invokes the sources by default.
+    "tushare>=1.4",
+    "akshare>=1.18",
+    "playwright>=1.62",
+    "pywencai>=0.13",
     "platformdirs>=4.0",          # 桌面版用户数据目录 (跨平台持久可写)
     "winotify>=1.1; sys_platform == 'win32'",  # Windows 系统通知 (进操作中心)
     "plyer>=2.1",                 # 系统通知跨平台兜底 (macOS/Linux)
@@ -64,14 +71,8 @@ desktop = [
     "pywebview>=5.0",
 ]
 
-# 本机走 SOCKS 代理时的出网支持 (httpx 检测到 ALL_PROXY 需要它)。
-# 启用:`uv sync --extra socks`
-socks = [
-    "socksio>=1.0",
-]
-
-# Tushare Pro 数据源插件依赖 (quantall 能力迁移用, 替代 Quants ETL)。
-# 启用:`uv sync --extra tushare`
+# Backward-compatible installer flag. Tushare is also a core dependency because
+# the independent QuantX scheduled pipeline invokes it by default.
 tushare = [
     "tushare>=1.4",
 ]

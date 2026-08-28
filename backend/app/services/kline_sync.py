@@ -251,13 +251,19 @@ def sync_and_persist_daily_batch(
     end_time = end_date or datetime.now()
     start_time = start_date or (end_time - timedelta(days=365))
 
+    failed_symbols: list[str] = []
     df = sync_daily_batch(
         symbols, count=count, batch_size=limit.batch, rpm=limit.rpm,
         start_time=start_time, end_time=end_time,
         on_chunk_done=on_chunk_done,
+        failed_out=failed_symbols,
     )
 
     if df.is_empty():
+        if failed_symbols:
+            raise RuntimeError(
+                f"日K同步失败: {len(failed_symbols)}/{len(symbols)} 只标的未获取, 已保留旧数据"
+            )
         return 0
 
     repo.append_daily(df)

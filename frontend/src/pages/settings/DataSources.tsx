@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import { Check, Database, Eye, EyeOff, KeyRound, Plus, RefreshCw, Zap, FileWarning, Puzzle, AlertCircle, CheckCircle2, Loader2, Save, Trash2 } from 'lucide-react'
 import { api, type DataSourceItem, type PluginDataSourceItem } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
@@ -597,14 +598,19 @@ export function SettingsDataSourcesPanel() {
               {sources.data?.config_dir}
             </span>
           </div>
-          <button
-            onClick={() => reload.mutate()}
-            disabled={reload.isPending}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-btn text-xs text-muted hover:text-foreground hover:bg-elevated transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3 w-3 ${reload.isPending ? 'animate-spin' : ''}`} />
-            重新加载
-          </button>
+          <div className="flex items-center gap-2">
+            <Link to="/data" className="px-2.5 py-1 text-xs text-accent hover:underline">
+              QuantX 发布状态
+            </Link>
+            <button
+              onClick={() => reload.mutate()}
+              disabled={reload.isPending}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-btn text-xs text-muted hover:text-foreground hover:bg-elevated transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3 w-3 ${reload.isPending ? 'animate-spin' : ''}`} />
+              重新加载
+            </button>
+          </div>
         </div>
 
         {/* 插件化说明 (置顶黄色提示条): 接入自有行情 → 把文档交给 AI */}

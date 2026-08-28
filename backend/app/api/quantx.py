@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -52,6 +53,17 @@ def compute_emotion_state(trade_date: str, request: Request):
 
 # ---- review V4 ----
 
+
+@router.get("/review/schema/v2")
+def get_review_v2_schema():
+    from app.quantx_data.review_contract import review_v2_contract_manifest
+    from app.quantx_data.review_schema import QuantXReviewResponseV2
+
+    return {
+        "schema": QuantXReviewResponseV2.model_json_schema(),
+        "field_contracts": review_v2_contract_manifest(),
+    }
+
 @router.get("/review/{trade_date}", response_class=HTMLResponse)
 def get_review(trade_date: str, request: Request):
     d = _date_dir(request, trade_date)
@@ -72,7 +84,11 @@ def build_review(trade_date: str, request: Request):
 
 
 @router.get("/review/{trade_date}/data")
-def get_review_data(trade_date: str, request: Request):
+def get_review_data(
+    trade_date: str,
+    request: Request,
+    view_version: Literal["v2"] = "v2",
+):
     _date_dir(request, trade_date)
     from app.quantx_data.review_repository import QuantXReviewRepository
 
@@ -80,9 +96,7 @@ def get_review_data(trade_date: str, request: Request):
         _quantx_dir(request),
         request.app.state.market_facts,
         request.app.state.repo,
-    ).load(trade_date)
-    if snapshot is None:
-        raise HTTPException(status_code=404, detail=f"no review_data.json for {trade_date}")
+    ).load(trade_date, view_version=view_version)
     return snapshot
 
 

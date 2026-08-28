@@ -7,6 +7,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.api.data import invalidate_storage_cache
 from app.jobs import daily_pipeline
 from app.services.pipeline_jobs import (
     JobCancelledError,
@@ -14,7 +15,6 @@ from app.services.pipeline_jobs import (
     release_run_slot,
     try_acquire_run_slot,
 )
-from app.api.data import invalidate_storage_cache
 
 # 长时间任务专用线程池（隔离于 FastAPI 默认线程池，防止阻塞请求处理）
 _long_task_executor = _cf.ThreadPoolExecutor(max_workers=2, thread_name_prefix="long-task")
@@ -22,6 +22,14 @@ _long_task_executor = _cf.ThreadPoolExecutor(max_workers=2, thread_name_prefix="
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
+
+
+def _run_pipeline_and_quantx(repo, capset, progress) -> dict:
+    """Run the main data pipeline and its dependent QuantX publication."""
+
+    result = daily_pipeline.run_now(repo, capset, on_progress=progress)
+    result["quantx"] = daily_pipeline._run_quantx_after_pipeline()
+    return result
 
 
 @router.post("/run")
@@ -62,8 +70,8 @@ async def run_now(request: Request) -> dict:
             def _run() -> dict:
                 if qs:
                     with qs.paused():
-                        return daily_pipeline.run_now(repo, capset, on_progress=progress)
-                return daily_pipeline.run_now(repo, capset, on_progress=progress)
+                        return _run_pipeline_and_quantx(repo, capset, progress)
+                return _run_pipeline_and_quantx(repo, capset, progress)
 
             result = await loop.run_in_executor(_long_task_executor, _run)
             job_store.succeed(job_id, result)

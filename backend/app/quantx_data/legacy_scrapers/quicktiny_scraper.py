@@ -15,6 +15,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from playwright.sync_api import sync_playwright
 
+from app.quantx_data.browser_runtime import launch_chromium
+
 OUTPUT_DIR = None
 TRADE_DATE = None
 BASE_URL = "https://stock.quicktiny.cn"
@@ -187,7 +189,8 @@ def scrape() -> dict:
         return result
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
+        browser = launch_chromium(
+            p,
             headless=True,
             args=["--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", "--no-sandbox"],
         )

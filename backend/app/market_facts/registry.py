@@ -309,7 +309,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         ),
         DatasetId.SECTOR_BREADTH_DAILY: DatasetSpec(
             dataset_id=DatasetId.SECTOR_BREADTH_DAILY,
-            description="Share of SW level-1 constituents closing above moving averages",
+            description="Share of SW level-1/2 constituents closing above moving averages",
             schema_version=1,
             primary_key=("trade_date", "dimension", "sector_id"),
             partition_keys=("trade_date",),
@@ -541,3 +541,45 @@ def datasets_for_source(source_id: str) -> tuple[DatasetId, ...]:
         for dataset_id, route in ROUTES.items()
         if source_id in route.sources
     )
+
+
+def validate_registry_contracts() -> list[str]:
+    """Return structural errors in dataset and source-route declarations."""
+    errors: list[str] = []
+    for dataset_id, spec in DATASETS.items():
+        prefix = dataset_id.value
+        if spec.dataset_id != dataset_id:
+            errors.append(f"{prefix}: mapping key does not match spec.dataset_id")
+        schema_columns = set(spec.storage_schema)
+        required = set(spec.required_columns)
+        primary_key = set(spec.primary_key)
+        partitions = set(spec.partition_keys)
+        for label, columns in (
+            ("required_columns", required),
+            ("primary_key", primary_key),
+            ("partition_keys", partitions),
+            ("field_units", set(spec.field_units)),
+        ):
+            missing = sorted(columns - schema_columns)
+            if missing:
+                errors.append(
+                    f"{prefix}: {label} missing from storage_schema: {', '.join(missing)}"
+                )
+        missing_required_keys = sorted((primary_key | partitions) - required)
+        if missing_required_keys:
+            errors.append(
+                f"{prefix}: key columns missing from required_columns: "
+                f"{', '.join(missing_required_keys)}"
+            )
+        if spec.schema_version < 1:
+            errors.append(f"{prefix}: schema_version must be >= 1")
+        route = ROUTES.get(dataset_id)
+        if route is None:
+            errors.append(f"{prefix}: source route is missing")
+        elif route.dataset_id != dataset_id:
+            errors.append(f"{prefix}: route key does not match route.dataset_id")
+        elif not route.sources:
+            errors.append(f"{prefix}: source route must not be empty")
+    for dataset_id in ROUTES.keys() - DATASETS.keys():
+        errors.append(f"{dataset_id.value}: route has no dataset contract")
+    return errors

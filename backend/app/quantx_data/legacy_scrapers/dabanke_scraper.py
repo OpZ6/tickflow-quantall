@@ -12,6 +12,8 @@ from typing import Any
 
 from playwright.sync_api import sync_playwright
 
+from app.quantx_data.browser_runtime import launch_chromium
+
 OUTPUT_DIR = None
 TRADE_DATE = None
 BASE_URL = "https://dabanke.com"
@@ -119,7 +121,8 @@ def scrape(trade_date: str | None = None) -> dict:
         "member_pages": {},
     }
     with sync_playwright() as p:
-        browser = p.chromium.launch(
+        browser = launch_chromium(
+            p,
             headless=True,
             args=["--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", "--no-sandbox"],
         )
