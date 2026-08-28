@@ -200,7 +200,7 @@ export function SectorBreadthHeatmap({ data, maxRows, height }: { data: any[]; m
   )
   const option = useMemo(() => ({
     animation: false,
-    grid: { left: 92, right: 72, top: 16, bottom: 36 },
+    grid: { left: 86, right: 58, top: 44, bottom: 12 },
     tooltip: {
       position: 'top',
       formatter: (p: any) => {
@@ -208,15 +208,15 @@ export function SectorBreadthHeatmap({ data, maxRows, height }: { data: any[]; m
         return `<b>${row?.name || row?.code || '-'}</b><br>${windows[p.value[0]]}: <b>${Number(p.value[2]).toFixed(1)}%</b><br><span style="color:${ct.text}">成分股收盘价站上该均线的占比</span>`
       },
     },
-    xAxis: { type: 'category', data: windows, splitArea: { show: true }, axisLabel: { color: ct.text }, axisLine: { lineStyle: { color: ct.border } } },
-    yAxis: { type: 'category', inverse: true, data: rows.map(row => row.name || row.code), splitArea: { show: true }, axisLabel: { color: ct.text, fontSize: 10 }, axisLine: { lineStyle: { color: ct.border } } },
+    xAxis: { type: 'category', position: 'top', data: windows, splitArea: { show: true }, axisLabel: { color: ct.textStrong, fontSize: 10, fontWeight: 600 }, axisLine: { lineStyle: { color: ct.border } }, axisTick: { show: false } },
+    yAxis: { type: 'category', inverse: true, data: rows.map(row => row.name || row.code), splitArea: { show: true }, axisLabel: { color: ct.text, fontSize: 9, width: 72, overflow: 'truncate' }, axisLine: { lineStyle: { color: ct.border } }, axisTick: { show: false } },
     visualMap: {
       min: 0,
       max: 100,
       calculable: true,
       orient: 'vertical',
       right: 4,
-      top: 'center',
+      top: 52,
       text: ['强', '弱'],
       textStyle: { color: ct.text },
       inRange: { color: [GREEN, '#243447', YELLOW, ORANGE, RED] },

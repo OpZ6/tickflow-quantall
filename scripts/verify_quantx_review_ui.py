@@ -53,6 +53,9 @@ def _args() -> argparse.Namespace:
 
 def _block_telemetry(route) -> None:
     url = route.request.url.lower()
+    if any(marker in url for marker in ("rsms.me", "fonts.googleapis.com", "fonts.gstatic.com")):
+        route.fulfill(status=204, content_type="text/css", body="")
+        return
     if any(
         marker in url
         for marker in ("google-analytics", "googletagmanager", "sentry.io")
@@ -139,6 +142,20 @@ def _verify_page(
         lifecycle.get_by_role("heading", name=label, exact=True).wait_for(
             state="visible", timeout=30_000
         )
+    for test_id in (
+        "theme-lifecycle-current",
+        "theme-lifecycle-events",
+        "theme-lifecycle-heatmap",
+    ):
+        metrics = page.get_by_test_id(test_id).evaluate(
+            "element => ({clientHeight: element.clientHeight, scrollHeight: element.scrollHeight, overflowY: getComputedStyle(element).overflowY})"
+        )
+        if metrics["overflowY"] in {"auto", "scroll"}:
+            raise AssertionError(f"nested lifecycle scrolling detected: {test_id}")
+    current_box = page.get_by_test_id("theme-lifecycle-current").bounding_box()
+    events_box = page.get_by_test_id("theme-lifecycle-events").bounding_box()
+    if not current_box or not events_box or events_box["y"] <= current_box["y"]:
+        raise AssertionError("lifecycle events must use the full-width row below the summary")
     for section in ("data", "quality"):
         disclosure = page.get_by_test_id(f"quantx-collapsible-{section}")
         if disclosure.get_attribute("aria-expanded") != "false":
@@ -166,9 +183,26 @@ def _verify_page(
     )
     if dimensions["scrollHeight"] <= dimensions["clientHeight"]:
         raise AssertionError("level-2 breadth must expose its complete scrollable matrix")
+    legend = page.get_by_test_id("quantx-sector-breadth-legend")
+    for label in (
+        "站上5日均线占比",
+        "站上10日均线占比",
+        "站上20日均线占比",
+        "站上60日均线占比",
+    ):
+        if not legend.get_by_text(label, exact=True).is_visible():
+            raise AssertionError(f"breadth semantics missing: {label}")
+    capital_box = page.get_by_test_id("quantx-capital-ecosystem").bounding_box()
+    breadth_box = page.get_by_test_id("quantx-sector-breadth").bounding_box()
+    if not capital_box or not breadth_box or capital_box["width"] <= breadth_box["width"]:
+        raise AssertionError("capital ecosystem must be wider than sector breadth")
     breadth_screenshot = output_dir / f"quantx-breadth-level2-{trade_date}.png"
     page.get_by_test_id("quantx-sector-breadth").screenshot(
         path=str(breadth_screenshot)
+    )
+    capital_breadth_screenshot = output_dir / f"quantx-capital-breadth-{trade_date}.png"
+    page.get_by_test_id("quantx-capital-breadth-row").screenshot(
+        path=str(capital_breadth_screenshot)
     )
     page.get_by_role("tab", name="一级", exact=True).click()
 
@@ -178,6 +212,16 @@ def _verify_page(
     page.get_by_test_id("theme-lifecycle").screenshot(
         path=str(lifecycle_screenshot)
     )
+    congestion = page.get_by_test_id("quantx-congestion-panel")
+    congestion.get_by_text("近十日拥挤度历史", exact=True).wait_for(
+        state="visible", timeout=30_000
+    )
+    if deep_workspace.get_by_role("heading", name="拥挤度", exact=True).count():
+        raise AssertionError("standalone congestion gauge is still rendered")
+    if deep_workspace.get_by_role("heading", name="拥挤度历史", exact=True).count():
+        raise AssertionError("standalone congestion history is still rendered")
+    congestion_screenshot = output_dir / f"quantx-congestion-{trade_date}.png"
+    congestion.screenshot(path=str(congestion_screenshot))
 
     page.get_by_text("交易日情绪分数", exact=True).wait_for(
         state="visible", timeout=30_000
@@ -226,6 +270,20 @@ def _verify_page(
     page.get_by_text("数据来源", exact=True).wait_for(
         state="visible", timeout=60_000
     )
+    quality_text = page.get_by_test_id("quantx-deep-quality").inner_text()
+    if "[object Object]" in quality_text:
+        raise AssertionError("quality tables contain unreadable nested object values")
+    table_audit = page.get_by_test_id("quantx-adaptive-table").evaluate_all(
+        "elements => elements.map((wrapper, index) => { const table = wrapper.querySelector('table'); return {index, wrapperWidth: wrapper.clientWidth, tableWidth: table ? table.getBoundingClientRect().width : 0}; })"
+    )
+    undersized_tables = [row for row in table_audit if row["tableWidth"] + 1 < row["wrapperWidth"]]
+    if undersized_tables:
+        raise AssertionError(f"tables do not fit their cards: {undersized_tables}")
+    deep_table_screenshots: dict[str, str] = {}
+    for tab in ("themes", "emotion", "watch", "quality"):
+        target = output_dir / f"quantx-deep-{tab}-{trade_date}.png"
+        page.get_by_test_id(f"quantx-deep-{tab}").screenshot(path=str(target))
+        deep_table_screenshots[tab] = str(target)
 
     page.evaluate("window.scrollTo(0, 0)")
     screenshot = output_dir / f"quantx-dashboard-{trade_date}.png"
@@ -254,8 +312,12 @@ def _verify_page(
         "new_high_count": len(new_high.get("stocks") or []),
         "screenshot": str(screenshot),
         "breadth_screenshot": str(breadth_screenshot),
+        "capital_breadth_screenshot": str(capital_breadth_screenshot),
         "risk_screenshot": str(risk_screenshot),
         "lifecycle_screenshot": str(lifecycle_screenshot),
+        "congestion_screenshot": str(congestion_screenshot),
+        "adaptive_table_count": len(table_audit),
+        "deep_table_screenshots": deep_table_screenshots,
     }
 
 

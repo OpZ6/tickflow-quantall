@@ -83,24 +83,41 @@ export function WindowStatistics({ data, active, compact = false }: { data: Quan
 
 function MiniTable({ columns, rows }: { columns: Array<[string, string]>; rows: any[] }) {
   if (!rows.length) return <div className="py-8 text-center text-xs text-muted">当前覆盖范围暂无数据</div>
-  return <div className="overflow-x-auto"><table className="w-max text-[11px]"><thead><tr>{columns.map(([key, label]) => <th key={key} className="whitespace-nowrap border-b border-border px-2 py-1.5 text-left text-muted first:pl-0">{label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.code || row.name || index}-${index}`} className="border-b border-border/60">{columns.map(([key]) => <td key={key} className="max-w-44 truncate whitespace-nowrap px-2 py-1.5 first:pl-0" title={String(row[key] ?? '')}>{row[key] ?? '--'}</td>)}</tr>)}</tbody></table></div>
+  return <div data-testid="quantx-adaptive-table" className="overflow-x-auto"><table className="w-max min-w-full table-auto text-[11px]"><thead><tr>{columns.map(([key, label]) => <th key={key} className="whitespace-nowrap border-b border-border px-2 py-1.5 text-left text-muted first:pl-0">{label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.code || row.name || index}-${index}`} className="border-b border-border/60">{columns.map(([key]) => { const value = LIFECYCLE_LABELS[String(row[key])] || row[key] || '--'; return <td key={key} className="max-w-44 truncate whitespace-nowrap px-2 py-1.5 first:pl-0 tabular-nums" title={String(value)}>{value}</td> })}</tr>)}</tbody></table></div>
+}
+
+const LIFECYCLE_LABELS: Record<string, string> = { new: '新生', strengthening: '增强', continuing: '延续', weakening: '转弱', exited: '退出' }
+
+function LifecycleEventGrid({ rows }: { rows: any[] }) {
+  if (!rows.length) return <div className="py-8 text-center text-xs text-muted">当前窗口无生灭事件</div>
+  return <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2 xl:grid-cols-4">{rows.map((row, index) => <div key={`${row.name}-${row.lifecycle}-${index}`} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border/50 py-1.5 text-[10px]"><span className="truncate font-medium" title={row.name}>{row.name}</span><span className={cn('rounded px-1.5 py-0.5', row.lifecycle === 'exited' || row.lifecycle === 'weakening' ? 'bg-green-500/10 text-green-300' : row.lifecycle === 'new' || row.lifecycle === 'strengthening' ? 'bg-red-500/10 text-red-300' : 'bg-elevated text-muted')}>{LIFECYCLE_LABELS[row.lifecycle] || row.lifecycle || '--'}</span><span className="tabular-nums text-muted">{row.streak ?? '--'}日</span></div>)}</div>
+}
+
+function LifecycleHeatmap({ heat }: { heat: QuantXMultidaySnapshot['theme_lifecycle']['heatmap'] }) {
+  if (!heat.rows.length) return <div className="py-8 text-center text-xs text-muted">当前窗口无连续性数据</div>
+  const columns = `72px repeat(${heat.dates.length}, minmax(10px, 1fr))`
+  return <div className="text-[9px]" style={{ display: 'grid', gridTemplateColumns: columns, gap: '3px 2px' }}>
+    <div className="text-muted">题材</div>
+    {heat.dates.map(date => <div key={date} title={date} className="truncate text-center text-muted">{date.slice(-2)}</div>)}
+    {heat.rows.map(row => <div key={row.name} className="contents"><div className="truncate py-0.5 font-medium" title={row.name}>{row.name}</div>{row.values.map((value, index) => <span key={index} title={`${row.name} ${heat.dates[index]} ${value ?? 0}`} className="h-4 min-w-0 rounded-sm" style={{ background: value == null ? 'hsl(var(--border))' : `rgba(248,81,73,${Math.max(.08, value / 110)})` }} />)}</div>)}
+  </div>
 }
 
 export function ThemeLifecyclePanel({ data }: { data: QuantXMultidaySnapshot }) {
   const heat = data.theme_lifecycle.heatmap
   return <Panel title="题材生灭与连续性" icon={<Shapes className="h-4 w-4" />} hint="多源排名归一化后计算生命周期" testId="theme-lifecycle">
-    <div data-testid="theme-lifecycle-all" className="grid items-start gap-3 xl:grid-cols-3">
-      <section className="max-h-[440px] min-w-0 overflow-auto rounded-lg border border-border/70 bg-base/25 p-2.5">
+    <div data-testid="theme-lifecycle-all" className="grid items-start gap-3 xl:grid-cols-12">
+      <section data-testid="theme-lifecycle-current" className="min-w-0 rounded-lg border border-border/70 bg-base/25 p-2.5 xl:col-span-5">
         <h3 className="mb-2 text-xs font-semibold">当日结构</h3>
         <MiniTable columns={[["name", "题材"], ["source_count", "来源"], ["rank_strength", "强度"], ["streak", "连续"], ["lifecycle", "状态"]]} rows={data.theme_lifecycle.current.slice(0, 20)} />
       </section>
-      <section className="max-h-[440px] min-w-0 overflow-auto rounded-lg border border-border/70 bg-base/25 p-2.5">
-        <h3 className="mb-2 text-xs font-semibold">跨日生灭</h3>
-        <MiniTable columns={[["name", "题材"], ["lifecycle", "事件"], ["streak", "连续日"], ["source_count", "来源"]]} rows={[...data.theme_lifecycle.events, ...data.theme_lifecycle.exited]} />
-      </section>
-      <section className="max-h-[440px] min-w-0 overflow-auto rounded-lg border border-border/70 bg-base/25 p-2.5">
+      <section data-testid="theme-lifecycle-heatmap" className="min-w-0 rounded-lg border border-border/70 bg-base/25 p-2.5 xl:col-span-7">
         <h3 className="mb-2 text-xs font-semibold">连续性热力图</h3>
-        <div className="overflow-x-auto"><table className="w-max text-[10px]"><thead><tr><th className="sticky left-0 bg-elevated pr-2 text-left">题材</th>{heat.dates.map(date => <th key={date} className="px-0.5 font-normal text-muted">{date.slice(4)}</th>)}</tr></thead><tbody>{heat.rows.map(row => <tr key={row.name}><td className="sticky left-0 max-w-28 truncate bg-elevated py-1 pr-2 font-medium" title={row.name}>{row.name}</td>{row.values.map((value, index) => <td key={index} title={`${row.name} ${heat.dates[index]} ${value ?? 0}`} className="p-0.5"><span className="block h-5 w-5 rounded-sm" style={{ background: value == null ? 'hsl(var(--border))' : `rgba(248,81,73,${Math.max(.08, value / 110)})` }} /></td>)}</tr>)}</tbody></table></div>
+        <LifecycleHeatmap heat={heat} />
+      </section>
+      <section data-testid="theme-lifecycle-events" className="min-w-0 rounded-lg border border-border/70 bg-base/25 p-2.5 xl:col-span-12">
+        <h3 className="mb-2 text-xs font-semibold">跨日生灭</h3>
+        <LifecycleEventGrid rows={[...data.theme_lifecycle.events, ...data.theme_lifecycle.exited]} />
       </section>
     </div>
   </Panel>

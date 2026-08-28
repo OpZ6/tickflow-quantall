@@ -242,11 +242,50 @@ function WindowDetails({ snapshot, windowSize }: { snapshot: QuantXMultidaySnaps
   return <div className="mt-2 grid gap-2 md:grid-cols-3">{groups.map(([label, rows]) => <div key={label} className="rounded border border-border bg-base/30 p-2"><div className="mb-1 text-[10px] text-muted">{label}题材</div><div className="flex flex-wrap gap-1">{rows.slice(0, 6).map((row: any, index: number) => <span key={`${row.name || row}-${index}`} className="rounded bg-elevated px-1.5 py-0.5 text-[10px]">{row.name || String(row)}</span>)}{!rows.length && <span className="text-[10px] text-muted">暂无</span>}</div></div>)}</div>
 }
 
-function GenericRows({ rows }: { rows: any[] }) {
+const COLUMN_LABELS: Record<string, string> = {
+  trade_date: '交易日', date: '日期', code: '代码', name: '名称', source: '来源', source_count: '来源数',
+  count: '数量', rank: '排名', score: '评分', priority: '优先级', status: '状态', available: '可用', ok: '达标',
+  value: '当前值', baseline: '基线', evidence: '证据', reason: '触发原因', condition: '条件', tone: '情景',
+  limit_times: '连板数', theme_name: '题材', turnover_pct: '换手率(%)', amount_yi: '成交额(亿)', pct_chg: '涨跌幅(%)',
+  congestion_pct: '拥挤度(%)', close: '全A收盘', top5_amount: '前5%成交额(亿)', total_amount: '全市场成交额(亿)',
+  concepts: '概念', lifecycle: '生命周期', streak: '连续日', rank_strength: '强度', active_days: '活跃日', last_seen: '最近出现',
+  net_inflow_yi: '净流入(亿)', net_inflow_sum_yi: '累计净流入(亿)', last_pct_chg: '最新涨跌(%)', direction: '方向',
+  candidate_type: '候选类型', display_name: '显示名称', collector_type: '采集器类型', collector: '采集器', credentials_ref: '凭据引用',
+  source_id: '数据源 ID', credentials_configured: '凭据已配置', credential_readiness: '凭据状态', dependency_available: '依赖可用', dependency_status: '依赖状态',
+  dataset_id: '数据集', path: '分区路径', partition_path: '分区路径', row_count: '行数', schema_version: 'Schema', quality_level: '质量等级',
+  source_counts: '来源分布', quality_counts: '质量分布', coverage: '覆盖率', observed_count: '观测数', expected_count: '应有数',
+}
+
+const VALUE_LABELS: Record<string, string> = {
+  true: '是', false: '否', new: '新生', strengthening: '增强', continuing: '延续', weakening: '转弱', exited: '退出',
+  positive: '积极', neutral: '中性', negative: '谨慎', rule: '规则', signal: '信号', limit_up: '涨停', new_high_100d: '百日新高',
+  ready: '就绪', missing: '缺失', present: '已存在', degraded: '降级', fallback: '回退', limit_up_consecutive_limit_up: '连续涨停',
+}
+
+function displayCell(value: unknown): string {
+  if (value == null || value === '') return '--'
+  if (Array.isArray(value)) return value.map(displayCell).join('；') || '--'
+  if (typeof value === 'object') return Object.entries(value as Record<string, unknown>).map(([key, item]) => `${COLUMN_LABELS[key] || key}: ${displayCell(item)}`).join('，') || '--'
+  return VALUE_LABELS[String(value)] || String(value)
+}
+
+function GenericRows({ rows, columns: preferredColumns, maxHeight = 520 }: { rows: any[]; columns?: string[]; maxHeight?: number }) {
   if (!rows.length) return <div className="py-8 text-center text-xs text-muted">当前数据集无记录</div>
-  const columns = Array.from(new Set(rows.slice(0, 20).flatMap(row => row && typeof row === 'object' ? Object.keys(row) : []))).slice(0, 12)
+  const columns = preferredColumns || Array.from(new Set(rows.slice(0, 20).flatMap(row => row && typeof row === 'object' ? Object.keys(row) : []))).slice(0, 12)
   if (!columns.length) return <pre className="max-h-96 overflow-auto text-[10px]">{JSON.stringify(rows, null, 2)}</pre>
-  return <div className="max-h-[520px] overflow-auto"><table className="w-max text-[10px]"><thead className="sticky top-0 bg-elevated"><tr>{columns.map(column => <th key={column} className="whitespace-nowrap border-b border-border px-2 py-1.5 text-left text-muted first:pl-0">{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index} className="border-b border-border/50">{columns.map(column => <td key={column} className="max-w-56 truncate whitespace-nowrap px-2 py-1.5 first:pl-0" title={typeof row[column] === 'object' ? JSON.stringify(row[column]) : String(row[column] ?? '')}>{typeof row[column] === 'object' ? JSON.stringify(row[column]) : String(row[column] ?? '--')}</td>)}</tr>)}</tbody></table></div>
+  return <div data-testid="quantx-adaptive-table" className="overflow-auto" style={{ maxHeight }}><table className="w-max min-w-full table-auto text-[10px]"><thead className="sticky top-0 z-[1] bg-elevated"><tr>{columns.map(column => <th key={column} className="whitespace-nowrap border-b border-border px-2 py-1.5 text-left font-medium text-muted first:pl-0">{COLUMN_LABELS[column] || column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index} className="border-b border-border/50 hover:bg-base/40">{columns.map(column => { const value = displayCell(row[column]); return <td key={column} className={cn('max-w-64 truncate whitespace-nowrap px-2 py-1.5 first:pl-0', typeof row[column] === 'number' && 'text-right font-mono tabular-nums')} title={value}>{value}</td> })}</tr>)}</tbody></table></div>
+}
+
+function CongestionOverview({ data }: { data: any }) {
+  const latest = data?.latest || {}
+  const rows = (data?.table || []).map((row: any[]) => ({ date: row[0], close: row[1], top5_amount: row[2], total_amount: row[3], congestion_pct: row[4] }))
+  return <div data-testid="quantx-congestion-combined" className="grid items-center gap-4 xl:grid-cols-[minmax(260px,.72fr)_minmax(0,1.28fr)]">
+    <div className="min-w-0 border-b border-border pb-3 xl:border-b-0 xl:border-r xl:pb-0 xl:pr-4">
+      <CongestionGauge pct={latest.congestion_pct ?? 0} height={230} />
+      <div className="grid grid-cols-3 gap-1.5 text-center text-[10px]"><div className="rounded bg-base/50 p-2"><span className="text-muted">全A收盘</span><b className="mt-0.5 block font-mono">{latest.close?.toFixed?.(2) ?? '--'}</b></div><div className="rounded bg-base/50 p-2"><span className="text-muted">前5%成交额</span><b className="mt-0.5 block font-mono">{latest.top5_amount?.toFixed?.(0) ?? '--'}亿</b></div><div className="rounded bg-base/50 p-2"><span className="text-muted">全市场成交额</span><b className="mt-0.5 block font-mono">{latest.total_amount?.toFixed?.(0) ?? '--'}亿</b></div></div>
+    </div>
+    <div className="min-w-0"><div className="mb-2 flex items-end justify-between"><div><h3 className="text-xs font-semibold">近十日拥挤度历史</h3><p className="text-[10px] text-muted">前 5% 活跃股票成交额占全市场比例</p></div><span className="rounded bg-accent/10 px-2 py-1 font-mono text-xs text-accent">最新 {latest.congestion_pct?.toFixed?.(2) ?? '--'}%</span></div><GenericRows rows={rows} columns={['date', 'close', 'top5_amount', 'total_amount', 'congestion_pct']} maxHeight={340} /></div>
+  </div>
 }
 
 const EBB_LABELS: Record<string, string> = {
@@ -291,7 +330,7 @@ function NewHighPanel({ data }: { data: QuantXReviewData['sections']['s2']['new_
   if (!data) return <div data-testid="quantx-new-high-unavailable" className="rounded border border-orange-500/30 bg-orange-500/5 px-3 py-8 text-center text-xs text-orange-300">本日百日新高事实尚未发布，请刷新数据后重试</div>
   if (data.status !== 'ok') return <div data-testid="quantx-new-high-unavailable" className="rounded border border-orange-500/30 bg-orange-500/5 px-3 py-8 text-center text-xs text-orange-300">百日新高来源暂不可用，未用零值替代</div>
   if (!data.stocks.length) return <div className="py-8 text-center text-xs text-muted">数据已发布，本日无百日新高个股</div>
-  return <GenericRows rows={data.stocks} />
+  return <GenericRows rows={data.stocks} columns={['code', 'name', 'pct_chg', 'concepts']} />
 }
 
 function CompleteDataPanel({ data }: { data: Record<string, any> | undefined }) {
@@ -306,16 +345,16 @@ function CompleteDataPanel({ data }: { data: Record<string, any> | undefined }) 
 
 function QualityPanel({ data }: { data: any }) {
   if (!data) return <div className="py-10 text-center text-xs text-muted">正在加载质量与血缘</div>
-  return <div className="grid gap-3 xl:grid-cols-2"><div><h3 className="mb-2 text-xs font-semibold">数据来源</h3><GenericRows rows={data.sources || []} /></div><div><h3 className="mb-2 text-xs font-semibold">Market Facts</h3><GenericRows rows={data.facts || []} /></div><div className="rounded border border-border p-3 text-xs"><div>发布状态：{data.status}</div><div>标准事实：{data.fact_summary?.present_partition_count ?? '--'}/{data.fact_summary?.expected_partition_count ?? '--'}</div><div>Review：{data.view?.schema_version ?? '--'} · canonical {data.view?.canonical_count ?? '--'} · derived {data.view?.derived_count ?? '--'}</div><div>多日：{data.multiday?.schema_version ?? '--'}</div></div><div className="rounded border border-border p-3 text-xs"><div>对账：{data.reconciliation?.status ?? '--'} · 缺口 {data.reconciliation?.gap_count ?? '--'}</div><div className="mt-1 text-orange-300">{(data.warnings || []).join('；') || '无警告'}</div><div className="mt-1 text-red-300">{(data.errors || []).join('；') || '无错误'}</div></div></div>
+  return <div className="grid gap-4"><div><h3 className="mb-2 text-xs font-semibold">数据来源</h3><GenericRows rows={data.sources || []} /></div><div><h3 className="mb-2 text-xs font-semibold">Market Facts</h3><GenericRows rows={data.facts || []} /></div><div className="grid gap-3 xl:grid-cols-2"><div className="rounded border border-border p-3 text-xs"><div>发布状态：{data.status}</div><div>标准事实：{data.fact_summary?.present_partition_count ?? '--'}/{data.fact_summary?.expected_partition_count ?? '--'}</div><div>Review：{data.view?.schema_version ?? '--'} · canonical {data.view?.canonical_count ?? '--'} · derived {data.view?.derived_count ?? '--'}</div><div>多日：{data.multiday?.schema_version ?? '--'}</div></div><div className="rounded border border-border p-3 text-xs"><div>对账：{data.reconciliation?.status ?? '--'} · 缺口 {data.reconciliation?.gap_count ?? '--'}</div><div className="mt-1 text-orange-300">{(data.warnings || []).join('；') || '无警告'}</div><div className="mt-1 text-red-300">{(data.errors || []).join('；') || '无错误'}</div></div></div></div>
 }
 
 function DeepSection({ tab, review, multiday, tables, quality }: { tab: DeepTab; review: QuantXReviewData; multiday?: QuantXMultidaySnapshot; tables?: Record<string, any>; quality?: any }) {
   const { s1, s2, s3, s4, s5, s6 } = review.sections
-  if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel><Panel title="拥挤度"><CongestionGauge pct={s1.congestion?.latest.congestion_pct ?? 0} /></Panel><Panel title="拥挤度历史"><GenericRows rows={(s1.congestion?.table || []).map(row => ({ date: row[0], close: row[1], top5_amount: row[2], total_amount: row[3], congestion_pct: row[4] }))} /></Panel></div>
-  if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /></>}<Panel title="参与度条件"><GenericRows rows={s2.participation?.conditions || []} /></Panel><Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} /></Panel><Panel title="百日新高" className="xl:col-span-2"><NewHighPanel data={s2.new_high} /></Panel></div>
-  if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel><Panel title="连板详细记录" className="xl:col-span-2"><GenericRows rows={s3.ladder_detail} /></Panel></div>
+  if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel><Panel testId="quantx-congestion-panel" title="市场拥挤度：最新状态与历史" hint="单一口径 · 前 5% 活跃股票成交额占比" className="xl:col-span-2"><CongestionOverview data={s1.congestion} /></Panel></div>
+  if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /></>}<Panel title="参与度条件"><GenericRows rows={s2.participation?.conditions || []} columns={['name', 'value', 'ok', 'available']} /></Panel><Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} columns={['source', 'name', 'count', 'rank']} /></Panel><Panel title="百日新高" className="xl:col-span-2"><NewHighPanel data={s2.new_high} /></Panel></div>
+  if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel><Panel title="连板详细记录" className="xl:col-span-2"><GenericRows rows={s3.ladder_detail} columns={['code', 'name', 'limit_times', 'theme_name', 'turnover_pct', 'amount_yi']} /></Panel></div>
   if (tab === 'flow') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="行业流入 / 流出" className="xl:col-span-2"><SectorFlowChart topIn={s4.sector_flow.top_in} topOut={s4.sector_flow.top_out} /></Panel><Panel title="涨跌幅 × 净流入" className="xl:col-span-2"><SectorScatterChart data={s4.sector_treemap} /></Panel>{multiday && <><div className="xl:col-span-2"><SectorFlowContinuity data={multiday.sector_flow_continuity} /></div><Panel title="机构趋势连续性"><GenericRows rows={multiday.institution_continuity.industries || []} /></Panel><Panel title="机构规则候选"><GenericRows rows={multiday.institution_continuity.rule_candidates || []} /></Panel><Panel title="核心个股" className="xl:col-span-2"><GenericRows rows={[...(multiday.sector_flow_continuity.core_stocks || []), ...(multiday.institution_continuity.core_stocks || [])]} /></Panel></>}</div>
-  if (tab === 'watch') return <div className="grid gap-3 xl:grid-cols-[1.4fr_1fr]"><Panel title="完整关注名单"><GenericRows rows={s5.candidates} /></Panel><Panel title="仓位与次日场景"><div className="rounded bg-base/40 p-3 text-sm"><b>{s6.position?.band || '--'}</b><p className="mt-1 text-xs text-muted">{s6.position?.action || '--'}</p></div><div className="mt-2"><GenericRows rows={s6.scenes} /></div><p className="mt-3 rounded border border-border p-3 text-xs text-muted">{review.emotion.daily_summary}</p></Panel></div>
+  if (tab === 'watch') return <div className="grid gap-3 xl:grid-cols-[1.4fr_1fr]"><Panel title="完整关注名单"><GenericRows rows={s5.candidates} columns={['code', 'name', 'limit_times', 'reason', 'score', 'priority']} /></Panel><Panel title="仓位与次日场景"><div className="rounded bg-base/40 p-3 text-sm"><b>{s6.position?.band || '--'}</b><p className="mt-1 text-xs text-muted">{s6.position?.action || '--'}</p></div><div className="mt-2"><GenericRows rows={s6.scenes} columns={['name', 'condition', 'tone']} /></div><p className="mt-3 rounded border border-border p-3 text-xs text-muted">{review.emotion.daily_summary}</p></Panel></div>
   if (tab === 'data') return <CompleteDataPanel data={tables} />
   return <QualityPanel data={quality} />
 }
@@ -392,13 +431,16 @@ export function QuantXDashboard() {
           {multiday ? <div className="xl:[grid-column:span_7/span_7]"><WindowSignalMatrix data={multiday} active={windowSize} onChange={setWindowSize} /><WindowDetails snapshot={multiday} windowSize={windowSize} /></div> : <Panel title="多日信号矩阵" className="xl:[grid-column:span_7/span_7]"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
           <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="趋势、分数与日期上下文统一展示" icon={<Activity className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
 
-          <div className="xl:[grid-column:span_6/span_6]">{multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}</div>
-          <Panel testId="quantx-watchlist" title="关注池与触发条件" hint={`${s.s5.candidates.length} 个候选`} icon={<AlertTriangle className="h-3.5 w-3.5" />} className="xl:[grid-column:span_4/span_4]"><div className="max-h-[250px] overflow-auto"><Watchlist data={review} /></div></Panel>
-          <Panel testId="quantx-capital-ecosystem" title="资金生态" hint="行业净流入结构" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_6/span_6]"><SectorTreemapChart data={s.s4.sector_treemap} height={292} /></Panel>
+          <div className="xl:[grid-column:span_8/span_8]">{multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}</div>
+          <Panel testId="quantx-watchlist" title="关注池与触发条件" hint={`${s.s5.candidates.length} 个候选`} icon={<AlertTriangle className="h-3.5 w-3.5" />} className="xl:[grid-column:span_8/span_8]"><div className="max-h-[250px] overflow-auto"><Watchlist data={review} /></div></Panel>
 
-          <Panel testId="quantx-sector-breadth" title={`申万${breadthLevel === 1 ? '一级' : '二级'}行业均线宽度`} hint={`${breadth.length} 个行业 · MA5 / MA10 / MA20 / MA60 · 完整列表可滚动`} icon={<Gauge className="h-3.5 w-3.5" />} actions={<SmallTabs values={[[1, '一级'], [2, '二级']]} active={breadthLevel} onChange={setBreadthLevel} label="行业层级" />} className="xl:[grid-column:span_16/span_16]">
-            <div data-testid="quantx-sector-breadth-scroll" className="max-h-[720px] overflow-auto rounded border border-border/50 bg-base/20"><SectorBreadthHeatmap data={breadth} height={Math.max(480, breadth.length * 22 + 72)} /></div>
-          </Panel>
+          <div data-testid="quantx-capital-breadth-row" className="grid gap-2 xl:[grid-column:span_16/span_16] xl:grid-cols-[repeat(16,minmax(0,1fr))]">
+            <Panel testId="quantx-capital-ecosystem" title="资金生态" hint="行业涨跌与净流入的面积、方向和强弱结构" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><SectorTreemapChart data={s.s4.sector_treemap} height={650} /></Panel>
+            <Panel testId="quantx-sector-breadth" title={`申万${breadthLevel === 1 ? '一级' : '二级'}行业均线宽度`} hint={`${breadth.length} 个行业 · 按 MA20 强度排序`} icon={<Gauge className="h-3.5 w-3.5" />} actions={<SmallTabs values={[[1, '一级'], [2, '二级']]} active={breadthLevel} onChange={setBreadthLevel} label="行业层级" />} className="xl:[grid-column:span_7/span_7]">
+              <div data-testid="quantx-sector-breadth-legend" className="mb-2 grid grid-cols-2 gap-1 rounded border border-border/60 bg-base/35 p-2 text-[9px] sm:grid-cols-4"><span><b className="text-foreground">MA5</b><small className="ml-1 text-muted">站上5日均线占比</small></span><span><b className="text-foreground">MA10</b><small className="ml-1 text-muted">站上10日均线占比</small></span><span><b className="text-foreground">MA20</b><small className="ml-1 text-muted">站上20日均线占比</small></span><span><b className="text-foreground">MA60</b><small className="ml-1 text-muted">站上60日均线占比</small></span></div>
+              <div data-testid="quantx-sector-breadth-scroll" className="max-h-[610px] overflow-y-auto overflow-x-hidden rounded border border-border/50 bg-base/20"><SectorBreadthHeatmap data={breadth} height={Math.max(560, breadth.length * 20 + 76)} /></div>
+            </Panel>
+          </div>
           <div className="grid gap-2 xl:[grid-column:span_16/span_16] xl:grid-cols-3">{multiday ? ([5, 10, 20] as WindowSize[]).map(value => <WindowStatistics key={value} data={multiday} active={value} compact />) : <Panel title="窗口统计情报"><div className="py-12 text-center text-xs text-muted">暂无多日窗口统计</div></Panel>}</div>
         </div>
 
@@ -408,7 +450,7 @@ export function QuantXDashboard() {
             <div className="space-y-8">{DEEP_TABS.map(([tab, label]) => {
               const collapsible = tab === 'data' || tab === 'quality'
               const open = collapsible ? utilityOpen[tab] : true
-              return <section key={tab}>
+              return <section key={tab} data-testid={`quantx-deep-${tab}`}>
                 {collapsible ? <button type="button" data-testid={`quantx-collapsible-${tab}`} aria-expanded={open} onClick={() => setUtilityOpen(current => ({ ...current, [tab]: !current[tab] }))} className="mb-3 flex w-full cursor-pointer items-center gap-2 border-b border-border pb-2 text-left text-sm font-semibold transition-colors hover:text-accent"><ShieldCheck className="h-4 w-4 text-accent" /><h2>{label}</h2><span className="ml-auto text-[10px] font-normal text-muted">默认折叠 · 按需加载</span><ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} /></button> : <h2 className="mb-3 flex items-center gap-2 border-b border-border pb-2 text-sm font-semibold"><Database className="h-4 w-4 text-accent" />{label}</h2>}
                 {open && <DeepSection tab={tab} review={review} multiday={multiday} tables={tablesQuery.data as Record<string, any> | undefined} quality={qualityQuery.data} />}
               </section>
