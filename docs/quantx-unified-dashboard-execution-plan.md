@@ -2,7 +2,7 @@
 
 状态：第一阶段已于 2026-08-28 落地。视觉和内容范围见 [`quantx-unified-dashboard-design.md`](quantx-unified-dashboard-design.md)，预览见 [`examples/quantx-unified-dashboard-mockup.html`](examples/quantx-unified-dashboard-mockup.html)。
 
-当前实现已经统一 `/quantx` 与 `/quantx/:date`，落地日期、5/10/20 日窗口矩阵、固定全面展开、16 列桌面栅格、一级/二级行业宽度、去重后的完整富图表、七个深度域、完整数据与质量血缘。基线提交为 `a40c0f5`，可回退标签为 `baseline-quantx-unified-20260828`。
+当前实现已经统一 `/quantx` 与 `/quantx/:date`，落地日期、5/10/20 日窗口矩阵、固定全面展开、16 列桌面栅格、一级/二级行业宽度、去重后的完整富图表、七个深度域、完整数据与质量血缘。行业宽度使用整行和可滚动完整矩阵，题材生灭三视图同屏，退潮/崩塌信号前置；完整数据与质量血缘默认折叠并按需加载。基线提交为 `a40c0f5`，可回退标签为 `baseline-quantx-unified-20260828`。
 
 本轮没有假装完成仍需独立验证的后续项：组件与 view model 进一步拆分、`dimension/selected` 主从钻取、个股弹窗、完整表筛选/排序/虚拟化、历史事实缺口补齐及性能 Profiler 预算。这些继续按批次 4、5、6、7 收口，不影响当前统一入口使用。
 

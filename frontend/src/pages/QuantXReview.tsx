@@ -185,10 +185,10 @@ export function UpCountChart({ history, height = 400 }: { history: any[]; height
 
 export function SectorBreadthHeatmap({ data, maxRows, height }: { data: any[]; maxRows?: number; height?: number }) {
   const ct = useChartTheme()
-  const rows = useMemo(
-    () => [...data].sort((a, b) => Number(b.ma20 || 0) - Number(a.ma20 || 0)).slice(0, maxRows),
-    [data, maxRows],
-  )
+  const rows = useMemo(() => {
+    const sorted = [...data].sort((a, b) => Number(b.ma20 || 0) - Number(a.ma20 || 0))
+    return maxRows == null ? sorted : sorted.slice(0, maxRows)
+  }, [data, maxRows])
   const windows = ['MA5', 'MA10', 'MA20', 'MA60']
   const values = useMemo(
     () => rows.flatMap((row, rowIndex) => windows.map((window, columnIndex) => [

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -15,6 +14,7 @@ OVERVIEW_PANELS = (
     "quantx-market-pulse",
     "quantx-theme-mainline",
     "quantx-decision-rail",
+    "quantx-risk-signals",
     "quantx-emotion-calendar",
     "quantx-sector-breadth",
     "quantx-capital-ecosystem",
@@ -83,6 +83,8 @@ def _verify_page(
         page_errors.append(str(error))
 
     def on_request_failed(request: Request) -> None:
+        if "/api/intraday/stream" in request.url and "ERR_ABORTED" in str(request.failure):
+            return
         failed_requests.append(
             f"{request.method} {request.url}: {request.failure or 'failed'}"
         )
@@ -129,6 +131,18 @@ def _verify_page(
         raise AssertionError("duplicate emotion trend panel is still rendered")
     if page.get_by_role("heading", name="全A K线 + CCI5", exact=True).count():
         raise AssertionError("duplicate full-market K-line panel is still rendered")
+    if page.get_by_role("heading", name="连板梯队网格", exact=True).count():
+        raise AssertionError("removed ladder grid is still rendered")
+
+    lifecycle = page.get_by_test_id("theme-lifecycle-all")
+    for label in ("当日结构", "跨日生灭", "连续性热力图"):
+        lifecycle.get_by_role("heading", name=label, exact=True).wait_for(
+            state="visible", timeout=30_000
+        )
+    for section in ("data", "quality"):
+        disclosure = page.get_by_test_id(f"quantx-collapsible-{section}")
+        if disclosure.get_attribute("aria-expanded") != "false":
+            raise AssertionError(f"{section} must be collapsed by default")
 
     selected_date = page.get_by_label("QuantX交易日", exact=True).input_value()
     if selected_date != trade_date:
@@ -146,7 +160,24 @@ def _verify_page(
     page.get_by_text("申万二级行业均线宽度", exact=True).wait_for(
         state="visible", timeout=30_000
     )
+    breadth_scroll = page.get_by_test_id("quantx-sector-breadth-scroll")
+    dimensions = breadth_scroll.evaluate(
+        "element => ({clientHeight: element.clientHeight, scrollHeight: element.scrollHeight})"
+    )
+    if dimensions["scrollHeight"] <= dimensions["clientHeight"]:
+        raise AssertionError("level-2 breadth must expose its complete scrollable matrix")
+    breadth_screenshot = output_dir / f"quantx-breadth-level2-{trade_date}.png"
+    page.get_by_test_id("quantx-sector-breadth").screenshot(
+        path=str(breadth_screenshot)
+    )
     page.get_by_role("tab", name="一级", exact=True).click()
+
+    risk_screenshot = output_dir / f"quantx-risk-signals-{trade_date}.png"
+    page.get_by_test_id("quantx-risk-signals").screenshot(path=str(risk_screenshot))
+    lifecycle_screenshot = output_dir / f"quantx-theme-lifecycle-{trade_date}.png"
+    page.get_by_test_id("theme-lifecycle").screenshot(
+        path=str(lifecycle_screenshot)
+    )
 
     page.get_by_text("交易日情绪分数", exact=True).wait_for(
         state="visible", timeout=30_000
@@ -183,6 +214,18 @@ def _verify_page(
         )
     if payload.get("emotion", {}).get("daily_summary") in (None, ""):
         raise AssertionError(f"daily summary missing for {trade_date}")
+    new_high = ((payload.get("sections") or {}).get("s2") or {}).get("new_high")
+    if not new_high or new_high.get("status") != "ok":
+        raise AssertionError(f"100-day-high fact is unavailable for {trade_date}")
+
+    page.get_by_test_id("quantx-collapsible-data").click()
+    page.get_by_text("正在加载完整数据表", exact=True).wait_for(
+        state="detached", timeout=60_000
+    )
+    page.get_by_test_id("quantx-collapsible-quality").click()
+    page.get_by_text("数据来源", exact=True).wait_for(
+        state="visible", timeout=60_000
+    )
 
     page.evaluate("window.scrollTo(0, 0)")
     screenshot = output_dir / f"quantx-dashboard-{trade_date}.png"
@@ -208,7 +251,11 @@ def _verify_page(
         "implicit_cache_field_count": len(
             foundation.get("implicit_cache_fields") or []
         ),
+        "new_high_count": len(new_high.get("stocks") or []),
         "screenshot": str(screenshot),
+        "breadth_screenshot": str(breadth_screenshot),
+        "risk_screenshot": str(risk_screenshot),
+        "lifecycle_screenshot": str(lifecycle_screenshot),
     }
 
 
@@ -233,6 +280,8 @@ def _verify_related_pages(page: Page, base_url: str, output_dir: Path) -> list[d
             page_errors.append(str(error))
 
         def on_request_failed(request) -> None:
+            if "/api/intraday/stream" in request.url and "ERR_ABORTED" in str(request.failure):
+                return
             failed_requests.append(
                 f"{request.method} {request.url}: {request.failure}"
             )
@@ -440,7 +489,7 @@ def main() -> int:
             indent=2,
         )
     )
-    return os.EX_OK
+    return 0
 
 
 if __name__ == "__main__":

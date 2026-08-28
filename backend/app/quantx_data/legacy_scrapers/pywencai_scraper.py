@@ -452,7 +452,7 @@ def _compute_new_high_from_tushare() -> dict:
     """
     try:
         from . import tushare_scraper
-        pro = tushare_scraper.pro
+        pro = tushare_scraper.pro or tushare_scraper._client()
     except Exception as exc:
         return {
             "status": "unavailable", "scope": "tushare_fallback",

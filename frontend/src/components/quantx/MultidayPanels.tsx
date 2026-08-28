@@ -83,19 +83,26 @@ export function WindowStatistics({ data, active, compact = false }: { data: Quan
 
 function MiniTable({ columns, rows }: { columns: Array<[string, string]>; rows: any[] }) {
   if (!rows.length) return <div className="py-8 text-center text-xs text-muted">当前覆盖范围暂无数据</div>
-  return <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr>{columns.map(([key, label]) => <th key={key} className="border-b border-border px-2 py-1.5 text-left text-muted">{label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.code || row.name || index}-${index}`} className="border-b border-border/60">{columns.map(([key]) => <td key={key} className="px-2 py-1.5">{row[key] ?? '--'}</td>)}</tr>)}</tbody></table></div>
+  return <div className="overflow-x-auto"><table className="w-max text-[11px]"><thead><tr>{columns.map(([key, label]) => <th key={key} className="whitespace-nowrap border-b border-border px-2 py-1.5 text-left text-muted first:pl-0">{label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.code || row.name || index}-${index}`} className="border-b border-border/60">{columns.map(([key]) => <td key={key} className="max-w-44 truncate whitespace-nowrap px-2 py-1.5 first:pl-0" title={String(row[key] ?? '')}>{row[key] ?? '--'}</td>)}</tr>)}</tbody></table></div>
 }
 
 export function ThemeLifecyclePanel({ data }: { data: QuantXMultidaySnapshot }) {
-  const [tab, setTab] = useState<'current' | 'events' | 'heatmap'>('current')
   const heat = data.theme_lifecycle.heatmap
   return <Panel title="题材生灭与连续性" icon={<Shapes className="h-4 w-4" />} hint="多源排名归一化后计算生命周期" testId="theme-lifecycle">
-    <div className="mb-3 flex gap-1" role="tablist">
-      {[['current', '当日结构'], ['events', '跨日生灭'], ['heatmap', '连续性热力图']].map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key as typeof tab)} className={cn('rounded px-2.5 py-1 text-xs', tab === key ? 'bg-accent/20 text-accent' : 'text-muted hover:bg-elevated')}>{label}</button>)}
+    <div data-testid="theme-lifecycle-all" className="grid items-start gap-3 xl:grid-cols-3">
+      <section className="max-h-[440px] min-w-0 overflow-auto rounded-lg border border-border/70 bg-base/25 p-2.5">
+        <h3 className="mb-2 text-xs font-semibold">当日结构</h3>
+        <MiniTable columns={[["name", "题材"], ["source_count", "来源"], ["rank_strength", "强度"], ["streak", "连续"], ["lifecycle", "状态"]]} rows={data.theme_lifecycle.current.slice(0, 20)} />
+      </section>
+      <section className="max-h-[440px] min-w-0 overflow-auto rounded-lg border border-border/70 bg-base/25 p-2.5">
+        <h3 className="mb-2 text-xs font-semibold">跨日生灭</h3>
+        <MiniTable columns={[["name", "题材"], ["lifecycle", "事件"], ["streak", "连续日"], ["source_count", "来源"]]} rows={[...data.theme_lifecycle.events, ...data.theme_lifecycle.exited]} />
+      </section>
+      <section className="max-h-[440px] min-w-0 overflow-auto rounded-lg border border-border/70 bg-base/25 p-2.5">
+        <h3 className="mb-2 text-xs font-semibold">连续性热力图</h3>
+        <div className="overflow-x-auto"><table className="w-max text-[10px]"><thead><tr><th className="sticky left-0 bg-elevated pr-2 text-left">题材</th>{heat.dates.map(date => <th key={date} className="px-0.5 font-normal text-muted">{date.slice(4)}</th>)}</tr></thead><tbody>{heat.rows.map(row => <tr key={row.name}><td className="sticky left-0 max-w-28 truncate bg-elevated py-1 pr-2 font-medium" title={row.name}>{row.name}</td>{row.values.map((value, index) => <td key={index} title={`${row.name} ${heat.dates[index]} ${value ?? 0}`} className="p-0.5"><span className="block h-5 w-5 rounded-sm" style={{ background: value == null ? 'hsl(var(--border))' : `rgba(248,81,73,${Math.max(.08, value / 110)})` }} /></td>)}</tr>)}</tbody></table></div>
+      </section>
     </div>
-    {tab === 'current' && <MiniTable columns={[["name", "题材"], ["source_count", "来源"], ["rank_strength", "强度"], ["streak", "连续"], ["lifecycle", "状态"]]} rows={data.theme_lifecycle.current.slice(0, 20)} />}
-    {tab === 'events' && <MiniTable columns={[["name", "题材"], ["lifecycle", "事件"], ["streak", "连续日"], ["source_count", "来源"]]} rows={[...data.theme_lifecycle.events, ...data.theme_lifecycle.exited]} />}
-    {tab === 'heatmap' && <div className="overflow-x-auto"><table className="text-[10px]"><thead><tr><th className="sticky left-0 bg-elevated px-2 text-left">题材</th>{heat.dates.map(date => <th key={date} className="px-1 font-normal text-muted">{date.slice(4)}</th>)}</tr></thead><tbody>{heat.rows.map(row => <tr key={row.name}><td className="sticky left-0 bg-elevated px-2 py-1 font-medium">{row.name}</td>{row.values.map((value, index) => <td key={index} title={`${row.name} ${heat.dates[index]} ${value ?? 0}`} className="p-0.5"><span className="block h-5 w-5 rounded-sm" style={{ background: value == null ? 'hsl(var(--border))' : `rgba(248,81,73,${Math.max(.08, value / 110)})` }} /></td>)}</tr>)}</tbody></table></div>}
   </Panel>
 }
 
