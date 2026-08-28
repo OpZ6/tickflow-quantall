@@ -15,7 +15,7 @@
 | [custom-data-source.md](custom-data-source.md) | 自有 HTTP 行情接口的 YAML 配置 | 接入 daily、adj_factor、realtime、minute、financial |
 | [plugin-development.md](plugin-development.md) | Python/Node 行情 Provider 插件 | SDK、复杂鉴权、分页或非 YAML 行情接入 |
 | [analysis-development.md](analysis-development.md) | 新指标、分析、API、页面的端到端开发 | 新增确定性分析或展示功能 |
-| [upstream-sync.md](upstream-sync.md) | 跟踪并合并 TickFlow 上游 | fetch、升级预检、合并上游和发布 |
+| [upstream-sync.md](upstream-sync.md) | 跟踪并合并 TickFlow 上游 | 当前差异快照、稳定性判断、fetch、升级预检、合并和发布 |
 
 这些文档的优先级为：当前源码和测试 > 本索引中的权威文档 > 运维手册 > 实施记录 > 历史规划。
 
@@ -36,6 +36,8 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 
 - [quantx-data-pipeline.md](quantx-data-pipeline.md)：QuantX 运行、重试、重算和故障诊断手册。
 - [quantx-single-day-canonical-view-plan.md](quantx-single-day-canonical-view-plan.md)：QuantX 单日富图表从兼容 JSON 迁移到权威事实与确定性 ViewBuilder 的分批执行计划和验收清单。
+- [quantx-unified-dashboard-design.md](quantx-unified-dashboard-design.md)：QuantX 多日驾驶舱与单日富图表合并为统一高密度看板的内容、排版和零丢失设计。
+- [quantx-unified-dashboard-execution-plan.md](quantx-unified-dashboard-execution-plan.md)：统一看板按可回滚批次实施的文件边界、数据调用链、验证矩阵和完成定义。
 - [secondary-development.md](secondary-development.md)：原项目二次开发、插槽和扩展契约。
 - [configuration.md](configuration.md)、[deployment.md](deployment.md)：配置与部署。
 

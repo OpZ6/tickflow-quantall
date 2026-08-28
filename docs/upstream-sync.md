@@ -2,6 +2,41 @@
 
 状态：权威升级流程。目标是持续跟踪 `shy3130/tick-stock-panel`，同时保留 Quantall 的 QuantX、实验室和自有功能。
 
+## 0. 当前跟踪快照（2026-08-28）
+
+本节是一次可复核的审计快照，不替代合并前的实时预检。真正开始同步时，必须重新执行第 3 节命令。
+
+| 项目 | 当前值 |
+| --- | --- |
+| 本地 `main` | `bbb4608f7b5d349ed401a124a6a9b7a3e9f8605a` |
+| `origin/main` | `bbb4608f7b5d349ed401a124a6a9b7a3e9f8605a` |
+| `upstream/main` | `afbf432eae21e964f9f871ff23b0bfbfaa98f204` |
+| 共同基线 | `55b8e739c3b087b30497185c12e2b83f44815998` |
+| 双方分叉 | 本地独有 20 个提交，上游独有 2 个提交 |
+| 上游最新正式 Tag | `v0.2.1`，尚无更新的稳定 Tag |
+| 文件重叠 | 仅 `README.md`，高冲突热点 0 个，`merge-tree` 文本冲突 0 个 |
+| 审计开始时的合并就绪状态 | 否；当时工作区有 2 项未提交内容，预演不能覆盖它们 |
+
+### 0.1 `upstream/main` 待同步内容
+
+| 提交 | 内容 | 本地状态与判断 |
+| --- | --- | --- |
+| `afbf432` | 修复回测子进程已经送达结果、但退出收尾超过 10 秒时误丢结果的问题；增加强制退出标志和回归测试 | 本地尚无此修复。属于低耦合可靠性修复，建议同步 |
+| `e346e25` | README 徽章文字从“非第三方官方项目”调整为“非 TickFlow 官方项目” | 仅文案变化；合并时需保留 Quantall fork 的准确说明 |
+
+结论：建议同步 `upstream/main`，但尚未执行合并。应先提交并验证当前连板梯队修复、清理或隔离未跟踪生成物，再从干净的 `main` 创建同步分支。
+
+### 0.2 尚未进入稳定主线的上游功能
+
+以下分支仅用于观察，不能因为“代码更新较多”就直接整体合并：
+
+| 上游分支 | 相对 `upstream/main` | 主要能力 | 当前判断 |
+| --- | --- | --- | --- |
+| `feat/minute-strategy` | 23 个提交、76 个文件，约 `+5363/-1229` | 分钟策略与回测、日线/分钟策略池、盘中增量持久化、实时预览轮询、数据源能力路由与设置页改造 | 变更面大且未进入主线/Tag；继续跟踪，待稳定后单独评估 |
+| `feat/volume-delta-alert` | 1 个提交、9 个文件，约 `+763/-18` | 量差监控与告警 | 会修改 `LimitUpLadder.tsx`，与当前本地连板梯队修复直接重叠；暂不合并 |
+
+同步候选默认只取上游正式 Tag 或 `upstream/main` 的明确提交。功能分支必须单独建立评估分支，完成契约、数据迁移和 UI 回归后才能考虑引入。
+
 ## 1. 分支与远端
 
 - `origin`：`OpZ6/tickflow-quantall`，分叉后的稳定仓库。
@@ -37,7 +72,8 @@ python scripts/upgrade_check.py upstream/main
 ```powershell
 git switch main
 git pull --ff-only origin main
-git switch -c sync/upstream-20260828
+$syncDate = Get-Date -Format yyyyMMdd
+git switch -c "sync/upstream-$syncDate"
 git merge --no-ff upstream/main
 ```
 

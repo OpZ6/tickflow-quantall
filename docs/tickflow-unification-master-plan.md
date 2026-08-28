@@ -1,8 +1,8 @@
 # TickFlow 大一统迁移总规划
 
-> 历史状态：本文记录从 Quantall prototype 迁移到独立仓库的阶段计划，不代表当前目录、完成状态或开发契约。当前开发从 [`README.md`](README.md) 进入。
+> 历史状态：本文记录从 Quantall prototype 迁移到独立仓库的阶段计划，不代表当前目录、完成状态或开发契约。文中“与上游脱钩”等判断已经失效；当前项目继续跟踪 TickFlow 上游，升级决策与操作以 [`upstream-sync.md`](upstream-sync.md) 为准。当前开发从 [`README.md`](README.md) 进入。
 
-> 本文档是 quantall 能力迁移到 TickFlow 的权威规划。所有后续迁移工作以此为参照,进度记录在文末。
+> 本文档曾是 quantall 能力迁移到 TickFlow 的阶段规划，仅用于追溯当时的目标、判断和进度，不再指导当前开发。
 >
 > 范围:`prototypes/tickflow`(目标平台)+ `apps/quantx`、`apps/quants`、`apps/quantt`、根目录 `skills/quantr`(能力来源)。
 >
@@ -40,7 +40,9 @@
 | 因子回测 `weight/fees/slippage` 未生效 | UI 错觉,收益偏高 | 修算法或删 UI 参数 |
 | README 称 Docker 内置 stock-sdk 但默认 `INCLUDE_STOCKSDK=0` | 部署预期错 | 统一文档与 Dockerfile |
 
-### 1.3 TickFlow 上游关系
+### 1.3 TickFlow 上游关系（历史判断，已废止）
+
+> 以下内容仅保留用于解释早期决策，不是当前策略。当前策略见 [`upstream-sync.md`](upstream-sync.md)。
 
 TickFlow 是 `github.com/shy3130/tickflow-stock-panel` 的 fork。**本规划执行后跟上游脱钩**:TickFlow 成为你自己的项目,保留 LICENSE 致谢,不再 merge 上游。理由:内置大量 quantall 能力后,核心文件改动过多,merge 冲突成本 > 上游更新收益。
 
