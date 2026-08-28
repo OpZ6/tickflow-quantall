@@ -30,6 +30,8 @@ function componentTone(component: QuantXWindowComponent) {
 
 export function WindowSignalMatrix({ data, active, onChange }: { data: QuantXMultidaySnapshot; active: WindowSize; onChange: (window: WindowSize) => void }) {
   const labels: Record<string, string> = { heat: '热度', breadth: '广度', relay: '接力', risk: '风险' }
+  const activeSignal = data.window_signals[String(active) as '5' | '10' | '20']
+  const themeGroups = [['主线', activeSignal.themes?.mainline || []], ['升温', activeSignal.themes?.warming || []], ['降温', activeSignal.themes?.cooling || []]] as const
   return <Panel title="5 / 10 / 20 日窗口信号矩阵" icon={<TrendingUp className="h-4 w-4" />} hint="按真实交易日计算；风险箭头上行为风险增加" testId="window-signal-matrix">
     <div className="grid gap-3 lg:grid-cols-3">
       {([5, 10, 20] as WindowSize[]).map(window => {
@@ -44,6 +46,10 @@ export function WindowSignalMatrix({ data, active, onChange }: { data: QuantXMul
           </div>
         </button>
       })}
+    </div>
+    <div data-testid="window-theme-structure" className="mt-3 rounded-lg border border-border/70 bg-base/25 p-2.5">
+      <div className="mb-2 flex items-center justify-between"><h3 className="text-xs font-semibold">{active} 日题材结构</h3><span className="text-[10px] text-muted">随所选窗口联动</span></div>
+      <div className="grid gap-2 md:grid-cols-3">{themeGroups.map(([label, rows]) => <section key={label} className="min-w-0 rounded-md border border-border/60 bg-base/40 p-2"><h4 className="mb-1.5 text-[10px] font-semibold text-muted">{label}题材</h4><div className="flex flex-wrap gap-1">{rows.slice(0, 8).map((row: any, index: number) => <span key={`${row.name || row}-${index}`} className="rounded bg-elevated px-1.5 py-0.5 text-[10px]">{row.name || String(row)}</span>)}{!rows.length && <span className="text-[10px] text-muted">暂无</span>}</div></section>)}</div>
     </div>
   </Panel>
 }

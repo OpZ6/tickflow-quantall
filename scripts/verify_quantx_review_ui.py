@@ -13,7 +13,6 @@ from playwright.sync_api import ConsoleMessage, Page, Request, sync_playwright
 OVERVIEW_PANELS = (
     "quantx-market-pulse",
     "quantx-theme-mainline",
-    "quantx-decision-rail",
     "quantx-risk-signals",
     "quantx-emotion-calendar",
     "quantx-sector-breadth",
@@ -22,10 +21,10 @@ OVERVIEW_PANELS = (
 
 DEEP_SECTIONS = (
     "市场趋势",
-    "题材行业",
     "情绪连板",
-    "资金生态",
-    "关注预案",
+    "题材行业",
+    "资金与行业验证",
+    "关注与决断",
     "完整数据",
     "质量血缘",
 )
@@ -137,6 +136,18 @@ def _verify_page(
         raise AssertionError("removed ladder grid is still rendered")
     if page.get_by_test_id("quantx-watchlist").count():
         raise AssertionError("duplicate top-level watchlist is still rendered")
+    if page.get_by_test_id("quantx-decision-rail").count():
+        raise AssertionError("obsolete top-level decision rail is still rendered")
+    decision_zone = page.get_by_test_id("quantx-decision-zone")
+    decision_zone.get_by_text("仓位与动作", exact=True).wait_for(
+        state="visible", timeout=30_000
+    )
+    if "退潮信号" in decision_zone.inner_text() or "崩塌信号" in decision_zone.inner_text():
+        raise AssertionError("decision zone still duplicates the risk lists")
+    if deep_workspace.get_by_role("heading", name="机构趋势连续性", exact=True).count():
+        raise AssertionError("duplicate institution continuity is still rendered")
+    if deep_workspace.get_by_role("heading", name="机构规则候选", exact=True).count():
+        raise AssertionError("duplicate institution rule candidates are still rendered")
 
     date_picker = page.get_by_label("QuantX交易日", exact=True)
     if date_picker.evaluate("element => element.tagName") != "BUTTON":
@@ -147,6 +158,15 @@ def _verify_page(
     )
     if deep_workspace.get_by_role("heading", name="参与度条件", exact=True).count():
         raise AssertionError("participation conditions are duplicated in the themes section")
+
+    window_matrix = page.get_by_test_id("window-signal-matrix")
+    window_matrix.get_by_test_id("window-theme-structure").wait_for(
+        state="visible", timeout=30_000
+    )
+    for label in ("主线题材", "升温题材", "降温题材"):
+        window_matrix.get_by_role("heading", name=label, exact=True).wait_for(
+            state="visible", timeout=30_000
+        )
 
     lifecycle = page.get_by_test_id("theme-lifecycle-all")
     for label in ("当日结构", "跨日生灭", "连续性热力图"):
@@ -174,6 +194,27 @@ def _verify_page(
     flow_rules = page.get_by_test_id("sector-flow-rules").bounding_box()
     if not flow_industries or not flow_rules or abs(flow_industries["y"] - flow_rules["y"]) > 2 or flow_industries["x"] >= flow_rules["x"]:
         raise AssertionError("sector flow continuity tables must render side by side")
+    ordered_ids = (
+        "quantx-risk-signals",
+        "window-signal-matrix",
+        "opportunity-radar",
+        "quantx-deep-market",
+        "quantx-deep-emotion",
+        "quantx-deep-themes",
+        "quantx-deep-flow",
+        "quantx-deep-watch",
+    )
+    ordered_y = []
+    for test_id in ordered_ids:
+        box = page.get_by_test_id(test_id).bounding_box()
+        if not box:
+            raise AssertionError(f"missing ordered QuantX section: {test_id}")
+        ordered_y.append(box["y"])
+    if ordered_y != sorted(ordered_y):
+        raise AssertionError(f"QuantX analysis flow is out of order: {dict(zip(ordered_ids, ordered_y))}")
+    capital_workspace = page.get_by_test_id("quantx-capital-workspace")
+    if capital_workspace.get_by_test_id("quantx-capital-ecosystem").count() != 1 or capital_workspace.get_by_test_id("quantx-sector-breadth").count() != 1:
+        raise AssertionError("capital charts are not consolidated into one workspace")
     for section in ("data", "quality"):
         disclosure = page.get_by_test_id(f"quantx-collapsible-{section}")
         if disclosure.get_attribute("aria-expanded") != "false":
