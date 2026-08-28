@@ -83,7 +83,7 @@ function DateNav({ date, dates }: { date: string; dates: string[] }) {
   )
 }
 
-function ScoreBar({ label, score, zone }: { label: string; score: number; zone: string }) {
+export function ScoreBar({ label, score, zone }: { label: string; score: number; zone: string }) {
   const color = scoreColor(score)
   return (
     <div className="flex items-center gap-3">
@@ -101,7 +101,7 @@ function SectionTitle({ icon: Icon, children }: { icon: typeof Activity; childre
 
 // ═══ 图表组件 ═══
 
-function IndexChart({ indexes }: { indexes: any[] }) {
+export function IndexChart({ indexes, height = 300 }: { indexes: any[]; height?: number }) {
   const ct = useChartTheme()
   const option = useMemo(() => ({
     grid: { left: 50, right: 20, top: 20, bottom: 50 },
@@ -114,10 +114,10 @@ function IndexChart({ indexes }: { indexes: any[] }) {
     }],
   }), [indexes, ct.text, ct.textStrong, ct.border, ct.grid])
   const ref = useEChart(option, [indexes, ct.text])
-  return <div ref={ref} className="w-full" style={{ height: 300 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function KlineChart({ history }: { history: any[] }) {
+export function KlineChart({ history, height = 520 }: { history: any[]; height?: number }) {
   const ct = useChartTheme()
   const option = useMemo(() => {
     const dates = history.map(d => d.date)
@@ -147,16 +147,16 @@ function KlineChart({ history }: { history: any[] }) {
         { name: 'MA10', type: 'line', data: history.map(d => d.ma10), smooth: true, lineStyle: { color: CYAN, width: 1 }, itemStyle: { color: CYAN }, symbol: 'none' },
         { name: 'MA20', type: 'line', data: history.map(d => d.ma20), smooth: true, lineStyle: { color: PURPLE, width: 1 }, itemStyle: { color: PURPLE }, symbol: 'none' },
         { name: 'CCI5', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: history.map(d => d.cci5 || 0), lineStyle: { color: YELLOW, width: 1 }, symbol: 'none',
-          markLine: { silent: true, lineStyle: { type: 'dashed', color: YELLOW }, data: [{ yAxis: 100 }, { yAxis: -100 }, { yAxis: 0, lineStyle: { color: ct.border } }] } },
+          markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { type: 'dashed', color: YELLOW }, data: [{ yAxis: 100 }, { yAxis: -100 }, { yAxis: 0, lineStyle: { color: ct.border } }] } },
       ],
     }
   }, [history, ct.text, ct.border, ct.grid])
   const ref = useEChart(option, [history, ct.text])
   if (!history.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 520 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function UpCountChart({ history }: { history: any[] }) {
+export function UpCountChart({ history, height = 400 }: { history: any[]; height?: number }) {
   const ct = useChartTheme()
   const valid = useMemo(() => history.filter(d => d.date && d.up_count > 0), [history])
   const option = useMemo(() => ({
@@ -180,14 +180,14 @@ function UpCountChart({ history }: { history: any[] }) {
   }), [valid, ct.text, ct.border, ct.grid])
   const ref = useEChart(option, [valid, ct.text])
   if (!valid.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 400 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function SectorBreadthHeatmap({ data }: { data: any[] }) {
+export function SectorBreadthHeatmap({ data, maxRows, height }: { data: any[]; maxRows?: number; height?: number }) {
   const ct = useChartTheme()
   const rows = useMemo(
-    () => [...data].sort((a, b) => Number(b.ma20 || 0) - Number(a.ma20 || 0)),
-    [data],
+    () => [...data].sort((a, b) => Number(b.ma20 || 0) - Number(a.ma20 || 0)).slice(0, maxRows),
+    [data, maxRows],
   )
   const windows = ['MA5', 'MA10', 'MA20', 'MA60']
   const values = useMemo(
@@ -231,10 +231,10 @@ function SectorBreadthHeatmap({ data }: { data: any[] }) {
   }), [rows, values, ct.text, ct.border])
   const ref = useEChart(option, [rows, values, ct.text])
   if (!rows.length) return null
-  return <div ref={ref} className="w-full" style={{ height: Math.max(480, rows.length * 22 + 70) }} />
+  return <div ref={ref} className="w-full" style={{ height: height ?? Math.max(480, rows.length * 22 + 70) }} />
 }
 
-function CongestionGauge({ pct }: { pct: number }) {
+export function CongestionGauge({ pct, height = 200 }: { pct: number; height?: number }) {
   const ct = useChartTheme()
   const option = useMemo(() => ({
     series: [{
@@ -247,10 +247,10 @@ function CongestionGauge({ pct }: { pct: number }) {
     }],
   }), [pct, ct.text, ct.textStrong])
   const ref = useEChart(option, [pct, ct.text])
-  return <div ref={ref} className="w-full" style={{ height: 200 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function MarginChart({ history }: { history: any[] }) {
+export function MarginChart({ history, height = 400 }: { history: any[]; height?: number }) {
   const ct = useChartTheme()
   const rows = useMemo(() => [...history].sort((a, b) => (a.date || '').localeCompare(b.date || '')), [history])
   const option = useMemo(() => ({
@@ -272,10 +272,10 @@ function MarginChart({ history }: { history: any[] }) {
   }), [rows, ct.text, ct.border, ct.grid])
   const ref = useEChart(option, [rows, ct.text])
   if (!rows.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 400 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function HeightChart({ history }: { history: any[] }) {
+export function HeightChart({ history, height = 280 }: { history: any[]; height?: number }) {
   const ct = useChartTheme()
   const rows = useMemo(() => [...history].sort((a, b) => (a.date || '').localeCompare(b.date || '')), [history])
   const option = useMemo(() => ({
@@ -306,10 +306,10 @@ function HeightChart({ history }: { history: any[] }) {
   }), [rows, ct.text, ct.border, ct.grid])
   const ref = useEChart(option, [rows, ct.text])
   if (!rows.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 280 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function AdvanceRateChart({ history }: { history: any[] }) {
+export function AdvanceRateChart({ history, height = 280 }: { history: any[]; height?: number }) {
   const ct = useChartTheme()
   const rows = useMemo(() => [...history].sort((a, b) => (a.date || '').localeCompare(b.date || '')), [history])
   const option = useMemo(() => {
@@ -345,10 +345,10 @@ function AdvanceRateChart({ history }: { history: any[] }) {
   }, [rows, ct.text, ct.border, ct.grid])
   const ref = useEChart(option, [rows, ct.text])
   if (!rows.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 280 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function EmotionTrendChart({ dates, scores }: { dates: string[]; scores: { heat: number[]; short: number[]; trend: number[] } }) {
+export function EmotionTrendChart({ dates, scores, height = 300 }: { dates: string[]; scores: { heat: number[]; short: number[]; trend: number[] }; height?: number }) {
   const ct = useChartTheme()
   const option = useMemo(() => ({
     legend: { data: ['市场热度', '短线情绪', '趋势情绪'], textStyle: { color: ct.text, fontSize: 10 }, top: 0 },
@@ -364,10 +364,10 @@ function EmotionTrendChart({ dates, scores }: { dates: string[]; scores: { heat:
   }), [dates, scores, ct.text, ct.border, ct.grid])
   const ref = useEChart(option, [dates, scores, ct.text])
   if (!dates.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 300 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function SectorFlowChart({ topIn, topOut }: { topIn: any[]; topOut: any[] }) {
+export function SectorFlowChart({ topIn, topOut, height = 400 }: { topIn: any[]; topOut: any[]; height?: number }) {
   const ct = useChartTheme()
   const option = useMemo(() => {
     const all = [
@@ -387,10 +387,10 @@ function SectorFlowChart({ topIn, topOut }: { topIn: any[]; topOut: any[] }) {
   }, [topIn, topOut, ct.text, ct.textStrong, ct.border, ct.grid])
   const ref = useEChart(option, [topIn, topOut, ct.text])
   if (!topIn.length && !topOut.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 400 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function SectorTreemapChart({ data }: { data: any[] }) {
+export function SectorTreemapChart({ data, height = 560 }: { data: any[]; height?: number }) {
   const ct = useChartTheme()
   const inflow = useMemo(() => data.filter(d => d.value >= 0).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)), [data])
   const outflow = useMemo(() => data.filter(d => d.value < 0).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)), [data])
@@ -419,10 +419,10 @@ function SectorTreemapChart({ data }: { data: any[] }) {
   }), [inflow, outflow, ct.border])
   const ref = useEChart(option, [inflow, outflow, ct.border])
   if (!data.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 560 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-function SectorScatterChart({ data }: { data: any[] }) {
+export function SectorScatterChart({ data, height = 480 }: { data: any[]; height?: number }) {
   const ct = useChartTheme()
   const option = useMemo(() => ({
     grid: { left: 54, right: 36, top: 20, bottom: 42 },
@@ -441,7 +441,7 @@ function SectorScatterChart({ data }: { data: any[] }) {
   }), [data, ct.text, ct.textStrong, ct.border, ct.grid])
   const ref = useEChart(option, [data, ct.text])
   if (!data.length) return null
-  return <div ref={ref} className="w-full" style={{ height: 480 }} />
+  return <div ref={ref} className="w-full" style={{ height }} />
 }
 
 // ═══ 主页面 ═══

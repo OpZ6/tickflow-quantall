@@ -36,8 +36,7 @@ const Regime = lazy(() => import('./pages/Regime').then(m => ({ default: m.Regim
 const AbnormalMoves = lazy(() => import('./pages/AbnormalMoves').then(m => ({ default: m.AbnormalMoves })))
 const MarketLab = lazy(() => import('./pages/MarketLab').then(m => ({ default: m.MarketLab })))
 const Dev = lazy(() => import('./pages/Dev').then(m => ({ default: m.Dev })))
-const QuantXCatalog = lazy(() => import('./pages/QuantXCatalog').then(m => ({ default: m.QuantXCatalog })))
-const QuantXReview = lazy(() => import('./pages/QuantXReview').then(m => ({ default: m.QuantXReview })))
+const QuantXDashboard = lazy(() => import('./pages/QuantXDashboard').then(m => ({ default: m.QuantXDashboard })))
 
 const CORE_ROUTE_PATHS = new Set([
   '/',
@@ -140,8 +139,8 @@ export const router = createBrowserRouter([
       { path: 'regime', element: <Regime /> },
       { path: 'abnormal', element: <AbnormalMoves /> },
       { path: 'market-lab', element: <MarketLab /> },
-      { path: 'quantx', element: <QuantXCatalog /> },
-      { path: 'quantx/:date', element: <QuantXReview /> },
+      { path: 'quantx', element: <QuantXDashboard /> },
+      { path: 'quantx/:date', element: <QuantXDashboard /> },
       { path: 'branding', element: <Branding /> },
       { path: 'settings', element: <Settings /> },
       // 隐藏路由：开发者工具（不暴露在菜单，仅供调试）

@@ -1,6 +1,6 @@
 # QuantX 统一看板设计与实施计划
 
-状态：设计提案，尚未实现。用于合并现有 QuantX 多日驾驶舱与单日富图表页。
+状态：第一阶段已实现。`/quantx` 与 `/quantx/:date` 已统一为同一看板；尚未完成的高级钻取和工程收口以执行计划中的当前状态为准。
 
 配套视觉原型：[examples/quantx-unified-dashboard-mockup.html](examples/quantx-unified-dashboard-mockup.html)
 

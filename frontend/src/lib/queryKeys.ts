@@ -30,6 +30,7 @@ export const QK = {
   quantxCatalog:    ['quantx-catalog'] as const,
   quantxMultiday:   (date: string) => ['quantx-multiday', date] as const,
   quantxReview:     (date: string) => ['quantx-review', date] as const,
+  quantxTables:     (date: string) => ['quantx-tables', date] as const,
   quantxObservability: (date: string) => ['quantx-observability', date] as const,
 
   // Watchlist

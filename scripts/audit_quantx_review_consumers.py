@@ -19,12 +19,26 @@ from app.quantx_data.review_contract import (  # noqa: E402
 
 
 def main() -> int:
-    page = REPO_ROOT / "frontend/src/pages/QuantXReview.tsx"
-    paths = extract_frontend_review_paths(page.read_text(encoding="utf-8"))
+    pages = [
+        REPO_ROOT / "frontend/src/pages/QuantXDashboard.tsx",
+        REPO_ROOT / "frontend/src/pages/QuantXReview.tsx",
+    ]
+    paths = sorted(
+        {
+            path
+            for page in pages
+            for path in extract_frontend_review_paths(
+                page.read_text(encoding="utf-8")
+            )
+        }
+    )
     classification = classify_frontend_review_paths(paths)
     report = {
-        "schema_version": "quantx-review-consumer-audit.v1",
-        "consumer": str(page.relative_to(REPO_ROOT)).replace("\\", "/"),
+        "schema_version": "quantx-review-consumer-audit.v2",
+        "consumers": [
+            str(page.relative_to(REPO_ROOT)).replace("\\", "/")
+            for page in pages
+        ],
         "field_count": len(paths),
         "fields": paths,
         **classification,

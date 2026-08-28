@@ -1,6 +1,12 @@
 # QuantX 统一看板改造执行计划
 
-状态：待执行。视觉和内容范围见 [`quantx-unified-dashboard-design.md`](quantx-unified-dashboard-design.md)，预览见 [`examples/quantx-unified-dashboard-mockup.html`](examples/quantx-unified-dashboard-mockup.html)。
+状态：第一阶段已于 2026-08-28 落地。视觉和内容范围见 [`quantx-unified-dashboard-design.md`](quantx-unified-dashboard-design.md)，预览见 [`examples/quantx-unified-dashboard-mockup.html`](examples/quantx-unified-dashboard-mockup.html)。
+
+当前实现已经统一 `/quantx` 与 `/quantx/:date`，落地日期、5/10/20 日窗口、紧凑/全部展开、16 列桌面栅格、一级/二级行业宽度、12 类原富图表、七个深度域、完整数据与质量血缘按需加载。基线提交为 `a40c0f5`，可回退标签为 `baseline-quantx-unified-20260828`。
+
+本轮没有假装完成仍需独立验证的后续项：组件与 view model 进一步拆分、`dimension/selected` 主从钻取、个股弹窗、完整表筛选/排序/虚拟化、历史事实缺口补齐及性能 Profiler 预算。这些继续按批次 4、5、6、7 收口，不影响当前统一入口使用。
+
+本阶段验证证据：前端生产构建通过；36 组单日消费路径审计无缺失和冲突；Microsoft Edge headless 覆盖 20260825、20260826、20260827，紧凑态均为 10 个 canvas，全部展开为 15/16/16 个 canvas；1024px 无横向溢出；empty、404、日期切换、一级/二级行业切换及关联页面通过。
 
 ## 1. 改造原则
 
