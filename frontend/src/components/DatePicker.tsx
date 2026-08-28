@@ -15,6 +15,8 @@ interface DatePickerProps {
   onChange: (v: string) => void
   min?: string
   max?: string
+  allowedDates?: string[]
+  ariaLabel?: string
   placeholder?: string
   className?: string
   buttonClassName?: string
@@ -44,6 +46,8 @@ export function DatePicker({
   onChange,
   min,
   max,
+  allowedDates,
+  ariaLabel,
   placeholder = '选择日期',
   className = '',
   buttonClassName = '',
@@ -154,6 +158,7 @@ export function DatePicker({
 
   const displayLabel = value || placeholder
   const today = todayStr()
+  const allowedDateSet = allowedDates ? new Set(allowedDates) : null
 
   return (
     <div className={`relative inline-flex ${className}`}>
@@ -161,6 +166,7 @@ export function DatePicker({
       <button
         ref={btnRef}
         type="button"
+        aria-label={ariaLabel}
         onClick={handleOpen}
         className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-input border border-border
           bg-elevated hover:border-accent/50 text-xs text-foreground num
@@ -251,13 +257,15 @@ export function DatePicker({
                   {cells.map((c, i) => {
                     const isSelected = c.dateStr === value
                     const isToday = c.dateStr === today
+                    const disabled = c.disabled || Boolean(allowedDateSet && !allowedDateSet.has(c.dateStr))
                     return (
                       <button
                         key={i}
                     type="button"
-                    disabled={c.disabled}
+                    aria-label={`选择日期 ${c.dateStr}`}
+                    disabled={disabled}
                     onClick={() => {
-                      if (!c.disabled) {
+                      if (!disabled) {
                         onChange(c.dateStr)
                         setOpen(false)
                       }
@@ -267,8 +275,8 @@ export function DatePicker({
                       ${c.cur ? 'text-foreground' : 'text-muted/40'}
                       ${isSelected ? 'bg-accent text-white font-bold' : ''}
                       ${isToday && !isSelected ? 'border border-accent/40' : ''}
-                      ${!isSelected && !c.disabled ? 'hover:bg-elevated' : ''}
-                      ${c.disabled ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer'}
+                      ${!isSelected && !disabled ? 'hover:bg-elevated' : ''}
+                      ${disabled ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer'}
                     `}
                   >
                     {c.day}

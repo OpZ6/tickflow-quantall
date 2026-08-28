@@ -50,12 +50,12 @@ export function WindowSignalMatrix({ data, active, onChange }: { data: QuantXMul
 
 export function TradingCalendarGrid({ rows, selectedDate, onSelect, compact = false }: { rows: QuantXMultidaySnapshot['calendar']; selectedDate: string; onSelect: (date: string) => void; compact?: boolean }) {
   return (
-    <div className={cn('grid grid-cols-5 gap-1.5', !compact && 'sm:grid-cols-10')}>
+    <div data-testid="quantx-emotion-calendar-grid" className={cn('grid grid-cols-5 gap-1.5', !compact && 'sm:grid-cols-10')}>
       {rows.slice(-30).map(row => {
         const heat = Number(row.market_heat_score ?? 0)
-        const background = heat >= 70 ? 'bg-red-500/25' : heat >= 50 ? 'bg-orange-500/20' : heat >= 35 ? 'bg-blue-500/20' : 'bg-slate-500/15'
-        return <button key={row.trade_date} aria-label={`选择交易日 ${row.trade_date}`} onClick={() => onSelect(row.trade_date)} className={cn('cursor-pointer rounded border px-1 text-center transition-colors', compact ? 'py-1' : 'py-2', background, selectedDate === row.trade_date ? 'border-accent ring-1 ring-accent' : 'border-border hover:border-muted')}>
-          <div className="font-mono text-[10px] text-muted">{row.trade_date.slice(4, 6)}-{row.trade_date.slice(6)}</div>
+        const background = heat >= 70 ? 'border-red-400/70 bg-red-500/40 text-red-50' : heat >= 50 ? 'border-orange-400/65 bg-orange-500/35 text-orange-50' : heat >= 35 ? 'border-sky-400/60 bg-sky-500/30 text-sky-50' : 'border-slate-400/55 bg-slate-600/45 text-slate-50'
+        return <button key={row.trade_date} aria-label={`选择交易日 ${row.trade_date}`} onClick={() => onSelect(row.trade_date)} className={cn('cursor-pointer rounded border px-1 text-center shadow-sm transition-colors hover:brightness-110', compact ? 'py-1' : 'py-2', background, selectedDate === row.trade_date && 'ring-2 ring-accent ring-offset-1 ring-offset-base')}>
+          <div className="font-mono text-[10px] opacity-80">{row.trade_date.slice(4, 6)}-{row.trade_date.slice(6)}</div>
           <div className="text-base font-bold">{row.market_heat_score ?? '--'}</div>
         </button>
       })}
@@ -90,7 +90,13 @@ const LIFECYCLE_LABELS: Record<string, string> = { new: '新生', strengthening:
 
 function LifecycleEventGrid({ rows }: { rows: any[] }) {
   if (!rows.length) return <div className="py-8 text-center text-xs text-muted">当前窗口无生灭事件</div>
-  return <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2 xl:grid-cols-4">{rows.map((row, index) => <div key={`${row.name}-${row.lifecycle}-${index}`} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border/50 py-1.5 text-[10px]"><span className="truncate font-medium" title={row.name}>{row.name}</span><span className={cn('rounded px-1.5 py-0.5', row.lifecycle === 'exited' || row.lifecycle === 'weakening' ? 'bg-green-500/10 text-green-300' : row.lifecycle === 'new' || row.lifecycle === 'strengthening' ? 'bg-red-500/10 text-red-300' : 'bg-elevated text-muted')}>{LIFECYCLE_LABELS[row.lifecycle] || row.lifecycle || '--'}</span><span className="tabular-nums text-muted">{row.streak ?? '--'}日</span></div>)}</div>
+  const uniqueRows = Array.from(new Map(rows.map(row => [`${row.name}-${row.lifecycle}-${row.streak}`, row])).values())
+  const order = ['new', 'strengthening', 'continuing', 'weakening', 'exited']
+  const groups = order.map(status => ({ status, rows: uniqueRows.filter(row => row.lifecycle === status) })).filter(group => group.rows.length)
+  return <div className="space-y-2">{groups.map(group => <section key={group.status} data-testid={`lifecycle-group-${group.status}`} className="grid gap-2 rounded-md border border-border/60 bg-base/30 p-2 sm:grid-cols-[84px_minmax(0,1fr)]">
+    <div className="flex items-center justify-between gap-2 self-start sm:block"><h4 className={cn('text-[11px] font-semibold', group.status === 'exited' || group.status === 'weakening' ? 'text-green-300' : group.status === 'new' || group.status === 'strengthening' ? 'text-red-300' : 'text-foreground')}>{LIFECYCLE_LABELS[group.status]}</h4><span className="text-[9px] text-muted">{group.rows.length}项</span></div>
+    <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2 xl:grid-cols-4">{group.rows.map((row, index) => <div key={`${row.name}-${index}`} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border/40 py-1 text-[10px]"><span className="truncate font-medium" title={row.name}>{row.name}</span><span className="tabular-nums text-muted">{row.streak ?? '--'}日</span></div>)}</div>
+  </section>)}</div>
 }
 
 function LifecycleHeatmap({ heat }: { heat: QuantXMultidaySnapshot['theme_lifecycle']['heatmap'] }) {
@@ -143,7 +149,9 @@ export function OpportunityRadar({ data }: { data: QuantXMultidaySnapshot['oppor
 export function SectorFlowContinuity({ data }: { data: QuantXMultidaySnapshot['sector_flow_continuity'] }) {
   const industries = useMemo(() => data.industries.map(row => ({ ...row, net_inflow_sum_yi: Number(row.net_inflow_sum_yi ?? 0).toFixed(2) })), [data.industries])
   return <Panel title="行业资金与规则候选连续性" icon={<TrendingUp className="h-4 w-4" />} hint={`${data.direction} · 覆盖 ${(data.coverage * 100).toFixed(0)}% · 不代表机构身份`} testId="sector-flow-continuity">
-    <MiniTable columns={[["name", "行业"], ["active_days", "活跃日"], ["net_inflow_sum_yi", "累计净流入(亿)"], ["last_pct_chg", "最新涨跌"], ["last_seen", "最近"]]} rows={industries} />
-    {data.rule_candidates.length > 0 && <div className="mt-4"><h3 className="mb-2 text-xs font-semibold">连续规则候选</h3><MiniTable columns={[["code", "代码"], ["name", "名称"], ["priority", "层级"], ["active_days", "活跃日"], ["source", "规则类型"]]} rows={data.rule_candidates} /></div>}
+    <div className="grid items-start gap-3 xl:grid-cols-2">
+      <section data-testid="sector-flow-industries" className="min-w-0 rounded-lg border border-border/60 bg-base/25 p-2.5"><h3 className="mb-2 text-xs font-semibold">行业资金连续性</h3><MiniTable columns={[["name", "行业"], ["active_days", "活跃日"], ["net_inflow_sum_yi", "累计净流入(亿)"], ["last_pct_chg", "最新涨跌"], ["last_seen", "最近"]]} rows={industries} /></section>
+      <section data-testid="sector-flow-rules" className="min-w-0 rounded-lg border border-border/60 bg-base/25 p-2.5"><h3 className="mb-2 text-xs font-semibold">连续规则候选</h3><MiniTable columns={[["code", "代码"], ["name", "名称"], ["priority", "层级"], ["active_days", "活跃日"], ["source", "规则类型"]]} rows={data.rule_candidates} /></section>
+    </div>
   </Panel>
 }

@@ -18,7 +18,6 @@ OVERVIEW_PANELS = (
     "quantx-emotion-calendar",
     "quantx-sector-breadth",
     "quantx-capital-ecosystem",
-    "quantx-watchlist",
 )
 
 DEEP_SECTIONS = (
@@ -136,6 +135,18 @@ def _verify_page(
         raise AssertionError("duplicate full-market K-line panel is still rendered")
     if page.get_by_role("heading", name="连板梯队网格", exact=True).count():
         raise AssertionError("removed ladder grid is still rendered")
+    if page.get_by_test_id("quantx-watchlist").count():
+        raise AssertionError("duplicate top-level watchlist is still rendered")
+
+    date_picker = page.get_by_label("QuantX交易日", exact=True)
+    if date_picker.evaluate("element => element.tagName") != "BUTTON":
+        raise AssertionError("QuantX trade date must use the calendar date picker")
+    risk_board = page.get_by_test_id("quantx-risk-signals")
+    risk_board.get_by_text("参与度条件", exact=True).wait_for(
+        state="visible", timeout=30_000
+    )
+    if deep_workspace.get_by_role("heading", name="参与度条件", exact=True).count():
+        raise AssertionError("participation conditions are duplicated in the themes section")
 
     lifecycle = page.get_by_test_id("theme-lifecycle-all")
     for label in ("当日结构", "跨日生灭", "连续性热力图"):
@@ -156,15 +167,23 @@ def _verify_page(
     events_box = page.get_by_test_id("theme-lifecycle-events").bounding_box()
     if not current_box or not events_box or events_box["y"] <= current_box["y"]:
         raise AssertionError("lifecycle events must use the full-width row below the summary")
+    if page.locator('[data-testid^="lifecycle-group-"]').count() < 2:
+        raise AssertionError("lifecycle events must be grouped by status")
+
+    flow_industries = page.get_by_test_id("sector-flow-industries").bounding_box()
+    flow_rules = page.get_by_test_id("sector-flow-rules").bounding_box()
+    if not flow_industries or not flow_rules or abs(flow_industries["y"] - flow_rules["y"]) > 2 or flow_industries["x"] >= flow_rules["x"]:
+        raise AssertionError("sector flow continuity tables must render side by side")
     for section in ("data", "quality"):
         disclosure = page.get_by_test_id(f"quantx-collapsible-{section}")
         if disclosure.get_attribute("aria-expanded") != "false":
             raise AssertionError(f"{section} must be collapsed by default")
 
-    selected_date = page.get_by_label("QuantX交易日", exact=True).input_value()
-    if selected_date != trade_date:
+    selected_date = page.get_by_label("QuantX交易日", exact=True).text_content()
+    expected_picker_date = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+    if selected_date != expected_picker_date:
         raise AssertionError(
-            f"date selector mismatch: expected {trade_date}, got {selected_date}"
+            f"date picker mismatch: expected {expected_picker_date}, got {selected_date}"
         )
     canvas_count = page.locator("canvas").count()
     if canvas_count < minimum_canvas:
@@ -208,6 +227,12 @@ def _verify_page(
 
     risk_screenshot = output_dir / f"quantx-risk-signals-{trade_date}.png"
     page.get_by_test_id("quantx-risk-signals").screenshot(path=str(risk_screenshot))
+    header_screenshot = output_dir / f"quantx-header-{trade_date}.png"
+    page.get_by_test_id("quantx-dashboard-header").screenshot(path=str(header_screenshot))
+    emotion_calendar_screenshot = output_dir / f"quantx-emotion-calendar-{trade_date}.png"
+    page.get_by_test_id("quantx-emotion-calendar").screenshot(
+        path=str(emotion_calendar_screenshot)
+    )
     lifecycle_screenshot = output_dir / f"quantx-theme-lifecycle-{trade_date}.png"
     page.get_by_test_id("theme-lifecycle").screenshot(
         path=str(lifecycle_screenshot)
@@ -280,7 +305,7 @@ def _verify_page(
     if undersized_tables:
         raise AssertionError(f"tables do not fit their cards: {undersized_tables}")
     deep_table_screenshots: dict[str, str] = {}
-    for tab in ("themes", "emotion", "watch", "quality"):
+    for tab in ("themes", "emotion", "flow", "watch", "quality"):
         target = output_dir / f"quantx-deep-{tab}-{trade_date}.png"
         page.get_by_test_id(f"quantx-deep-{tab}").screenshot(path=str(target))
         deep_table_screenshots[tab] = str(target)
@@ -314,6 +339,8 @@ def _verify_page(
         "breadth_screenshot": str(breadth_screenshot),
         "capital_breadth_screenshot": str(capital_breadth_screenshot),
         "risk_screenshot": str(risk_screenshot),
+        "header_screenshot": str(header_screenshot),
+        "emotion_calendar_screenshot": str(emotion_calendar_screenshot),
         "lifecycle_screenshot": str(lifecycle_screenshot),
         "congestion_screenshot": str(congestion_screenshot),
         "adaptive_table_count": len(table_audit),
@@ -399,9 +426,12 @@ def _verify_date_switch(page: Page, base_url: str, start: str, target: str) -> N
         f"{base_url.rstrip('/')}/quantx/{start}",
         wait_until="domcontentloaded",
     )
-    page.get_by_label("QuantX交易日", exact=True).select_option(target)
+    picker = page.get_by_label("QuantX交易日", exact=True)
+    picker.click()
+    picker_target = f"{target[:4]}-{target[4:6]}-{target[6:]}"
+    page.get_by_label(f"选择日期 {picker_target}", exact=True).click()
     page.wait_for_url(f"**/quantx/{target}**", timeout=30_000)
-    if page.get_by_label("QuantX交易日", exact=True).input_value() != target:
+    if page.get_by_label("QuantX交易日", exact=True).text_content() != picker_target:
         raise AssertionError(f"date switch did not render {target}")
 
 
