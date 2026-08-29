@@ -152,6 +152,32 @@ def _verify_page(
         target.wait_for(state="visible", timeout=30_000)
         if target.locator("canvas").count() != 1:
             raise AssertionError(f"advanced card did not render one chart: {card}")
+
+    def card_width(card: str) -> float:
+        box = page.get_by_test_id(f"quantx-advanced-{card}").bounding_box()
+        if box is None:
+            raise AssertionError(f"advanced card has no layout box: {card}")
+        return box["width"]
+
+    layout_pairs = (
+        ("risk_transmission", "state_transition"),
+        ("anomaly_calendar", "return_distribution"),
+        ("advance_decline", "turnover_lorenz"),
+        ("rps_rotation_clock", "theme_ladder_sunburst"),
+        ("promotion_funnel", "turnover_return_density"),
+    )
+    for wide_card, compact_card in layout_pairs:
+        if card_width(wide_card) <= card_width(compact_card):
+            raise AssertionError(
+                f"information-dense card must be wider: {wide_card} <= {compact_card}"
+            )
+    if abs(card_width("industry_correlation") - card_width("mainline_waterfall")) > 3:
+        raise AssertionError("correlation and waterfall cards must share an equal-width row")
+    waterfall_canvas = page.get_by_test_id(
+        "quantx-advanced-mainline_waterfall"
+    ).locator("canvas").bounding_box()
+    if waterfall_canvas is None or waterfall_canvas["width"] < 500:
+        raise AssertionError("mainline waterfall is still horizontally compressed")
     if len(advanced_requests) != 1:
         raise AssertionError(
             f"advanced workspace must use one batch request, got {len(advanced_requests)}"

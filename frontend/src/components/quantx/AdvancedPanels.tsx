@@ -18,20 +18,20 @@ type ChartTheme = ReturnType<typeof useChartTheme>
 const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 'rotation' | 'structure'; span?: string }> = {
   sentiment_phase: { title: '市场情绪状态相图', hint: '趋势情绪 × 短线情绪 · 气泡为涨停家数', group: 'state' },
   liquidity_participation: { title: '流动性—参与度四象限', hint: '全市场成交额 × 上涨家数占比', group: 'state' },
-  risk_transmission: { title: '风险传导链', hint: '集中度、扩散、炸板、梯队与热度的当日传导', group: 'state' },
-  state_transition: { title: '市场状态转移矩阵', hint: '245 日五状态条件转移概率', group: 'state' },
-  anomaly_calendar: { title: '历史异常日历', hint: '收益、广度、涨停、成交额综合异常强度', group: 'state' },
-  return_distribution: { title: '全市场收益分布剖面', hint: '当日全 A 收益横截面与中位数', group: 'state' },
-  advance_decline: { title: 'A/D 累积线与指数背离', hint: '涨跌家数差累积 vs 中证全指', group: 'state' },
-  turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: '交易集中度；虚线为完全均等', group: 'state' },
+  risk_transmission: { title: '风险传导链', hint: '集中度、扩散、炸板、梯队与热度的当日传导', group: 'state', span: 'xl:[grid-column:span_10/span_10]' },
+  state_transition: { title: '市场状态转移矩阵', hint: '245 日五状态条件转移概率', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
+  anomaly_calendar: { title: '历史异常日历', hint: '收益、广度、涨停、成交额综合异常强度', group: 'state', span: 'xl:[grid-column:span_10/span_10]' },
+  return_distribution: { title: '全市场收益分布剖面', hint: '当日全 A 收益横截面与中位数', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
+  advance_decline: { title: 'A/D 累积线与指数背离', hint: '涨跌家数差累积 vs 中证全指', group: 'state', span: 'xl:[grid-column:span_9/span_9]' },
+  turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: '交易集中度；虚线为完全均等', group: 'state', span: 'xl:[grid-column:span_7/span_7]' },
   sector_diffusion: { title: '申万一级行业宽度扩散地图', hint: '近 20 日站上 MA20 成分占比', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   theme_river: { title: '题材排名河流图', hint: '近 20 日多源题材排名强度与持续性', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
-  industry_correlation: { title: '行业收益相关性矩阵', hint: '当前申万一级成分的近 35 日收益相关性', group: 'rotation', span: 'xl:[grid-column:span_10/span_10]' },
-  mainline_waterfall: { title: '主线强度贡献瀑布', hint: '涨停广度、连板高度与梯队完整度综合得分', group: 'rotation', span: 'xl:[grid-column:span_6/span_6]' },
-  theme_ladder_sunburst: { title: '题材—连板层级旭日图', hint: '当日题材 → 连板高度 → 个股', group: 'rotation' },
-  rps_rotation_clock: { title: '行业 RPS 轮动时钟', hint: '近 5 日动量 × 相对前 5 日加速度', group: 'rotation' },
-  promotion_funnel: { title: '连板晋级漏斗', hint: '近 75 日逐层晋级样本与转化率', group: 'structure' },
-  turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度', group: 'structure' },
+  industry_correlation: { title: '行业收益相关性矩阵', hint: '当前申万一级成分的近 35 日收益相关性', group: 'rotation' },
+  mainline_waterfall: { title: '主线强度贡献瀑布', hint: '涨停广度、连板高度与梯队完整度综合得分', group: 'rotation' },
+  theme_ladder_sunburst: { title: '题材—连板层级旭日图', hint: '当日题材 → 连板高度 → 个股', group: 'rotation', span: 'xl:[grid-column:span_7/span_7]' },
+  rps_rotation_clock: { title: '行业 RPS 轮动时钟', hint: '近 5 日动量 × 相对前 5 日加速度', group: 'rotation', span: 'xl:[grid-column:span_9/span_9]' },
+  promotion_funnel: { title: '连板晋级漏斗', hint: '近 75 日逐层晋级样本与转化率', group: 'structure', span: 'xl:[grid-column:span_9/span_9]' },
+  turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度', group: 'structure', span: 'xl:[grid-column:span_7/span_7]' },
 }
 
 function base(ct: ChartTheme) {
@@ -51,63 +51,64 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme): any 
   if (key === 'sentiment_phase' || key === 'liquidity_participation') {
     const points = data.points || []
     const isPhase = key === 'sentiment_phase'
-    return { ...common, grid: { left: 52, right: 18, top: 20, bottom: 40 }, xAxis: { type: 'value', name: isPhase ? '趋势情绪' : '成交额(亿)', nameTextStyle: { color: ct.text }, axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', name: isPhase ? '短线情绪' : '上涨占比%', nameTextStyle: { color: ct.text }, axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'scatter', symbolSize: (value: number[]) => Math.max(7, Math.min(28, 6 + Math.sqrt(value[2] || 0) * 1.7)), data: points.map((row: any, index: number) => ({ value: [row.x, row.y, row.size, row.heat], name: row.date, itemStyle: { color: index === points.length - 1 ? RED : BLUE, opacity: index === points.length - 1 ? 1 : 0.45 } })), tooltip: { formatter: (p: any) => `${p.name}<br/>${isPhase ? '趋势情绪' : '成交额'}：${p.value[0]}<br/>${isPhase ? '短线情绪' : '上涨占比'}：${p.value[1]}<br/>涨停：${p.value[2]}<br/>热度：${p.value[3]}` }, markLine: { silent: true, symbol: 'none', lineStyle: { color: ct.border, type: 'dashed' }, data: isPhase ? [{ xAxis: 50 }, { yAxis: 50 }] : [{ xAxis: data.amount_mid }, { yAxis: 50 }] } }] }
+    return { ...common, grid: { left: 12, right: 12, top: 28, bottom: 18, containLabel: true }, xAxis: { type: 'value', name: isPhase ? '趋势情绪' : '成交额(亿)', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: ct.text }, axisLabel: { color: ct.text, hideOverlap: true, margin: 8 }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', name: isPhase ? '短线情绪' : '上涨占比%', nameLocation: 'middle', nameGap: 34, nameTextStyle: { color: ct.text }, axisLabel: { color: ct.text, hideOverlap: true, margin: 8 }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'scatter', symbolSize: (value: number[]) => Math.max(7, Math.min(28, 6 + Math.sqrt(value[2] || 0) * 1.7)), data: points.map((row: any, index: number) => ({ value: [row.x, row.y, row.size, row.heat], name: row.date, itemStyle: { color: index === points.length - 1 ? RED : BLUE, opacity: index === points.length - 1 ? 1 : 0.45 } })), tooltip: { formatter: (p: any) => `${p.name}<br/>${isPhase ? '趋势情绪' : '成交额'}：${p.value[0]}<br/>${isPhase ? '短线情绪' : '上涨占比'}：${p.value[1]}<br/>涨停：${p.value[2]}<br/>热度：${p.value[3]}` }, markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { color: ct.border, type: 'dashed' }, data: isPhase ? [{ xAxis: 50 }, { yAxis: 50 }] : [{ xAxis: data.amount_mid }, { yAxis: 50 }] } }] }
   }
   if (key === 'risk_transmission') {
     const nodes = data.nodes || []
-    return { ...common, series: [{ type: 'graph', layout: 'none', roam: false, symbolSize: (value: number) => Math.max(44, Math.min(76, 42 + value / 2)), label: { show: true, color: ct.textStrong, formatter: (p: any) => `${p.name}\n${p.value}` }, edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 8, lineStyle: { color: ORANGE, width: 2, curveness: 0.08, opacity: 0.7 }, data: nodes.map((node: any, index: number) => ({ ...node, x: 80 + (index % 3) * 180, y: 70 + Math.floor(index / 3) * 130, itemStyle: { color: [BLUE, PURPLE, ORANGE, GREEN, YELLOW, RED][index] } })), links: data.links || [] }] }
+    const wrappedLabels: Record<string, string> = { 流动性集中: '流动性\n集中', 炸板亏钱效应: '炸板亏钱\n效应' }
+    return { ...common, series: [{ type: 'graph', layout: 'none', roam: false, left: 64, right: 96, top: 28, bottom: 28, symbolSize: (value: number) => Math.max(44, Math.min(76, 42 + value / 2)), label: { show: true, color: ct.textStrong, width: 76, overflow: 'break', lineHeight: 14, align: 'center', formatter: (p: any) => `${wrappedLabels[p.name] || p.name}\n${p.value}` }, edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 8, lineStyle: { color: ORANGE, width: 2, curveness: 0.08, opacity: 0.7 }, data: nodes.map((node: any, index: number) => ({ ...node, x: 80 + (index % 3) * 180, y: 70 + Math.floor(index / 3) * 130, itemStyle: { color: [BLUE, PURPLE, ORANGE, GREEN, YELLOW, RED][index] } })), links: data.links || [] }] }
   }
   if (key === 'state_transition') {
     const matrix = data.matrix || []
     const values = matrix.flatMap((row: number[], y: number) => row.map((value, x) => [x, y, value]))
-    return { ...common, grid: { left: 62, right: 20, top: 15, bottom: 50 }, xAxis: { type: 'category', data: data.labels || [], axisLabel: { color: ct.text } }, yAxis: { type: 'category', data: data.labels || [], axisLabel: { color: ct.text } }, visualMap: { ...heatVisual(100), min: 0, max: 100 }, series: [{ type: 'heatmap', data: values, label: { show: true, color: ct.textStrong, formatter: (p: any) => `${p.value[2]}%` } }] }
+    return { ...common, grid: { left: 10, right: 12, top: 15, bottom: 50, containLabel: true }, xAxis: { type: 'category', data: data.labels || [], axisLabel: { color: ct.text, hideOverlap: true } }, yAxis: { type: 'category', data: data.labels || [], axisLabel: { color: ct.text, hideOverlap: true } }, visualMap: { ...heatVisual(100), min: 0, max: 100 }, series: [{ type: 'heatmap', data: values, label: { show: true, color: ct.textStrong, formatter: (p: any) => `${p.value[2]}%` } }] }
   }
   if (key === 'sector_diffusion') {
     const values = (data.values || []).flatMap((row: Array<number | null>, y: number) => row.map((value, x) => [x, y, value]))
-    return { ...common, grid: { left: 82, right: 18, top: 10, bottom: 50 }, xAxis: { type: 'category', data: data.dates || [], axisLabel: { color: ct.text, rotate: 35, fontSize: 9 } }, yAxis: { type: 'category', data: data.sectors || [], axisLabel: { color: ct.text, width: 68, overflow: 'truncate', fontSize: 9 } }, visualMap: { ...heatVisual(100), min: 0, max: 100 }, series: [{ type: 'heatmap', data: values, progressive: 1000, tooltip: { formatter: (p: any) => `${data.dates[p.value[0]]}<br/>${data.sectors[p.value[1]]}<br/>MA20 宽度：${p.value[2] ?? '--'}%` } }] }
+    return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 50, containLabel: true }, xAxis: { type: 'category', data: data.dates || [], axisLabel: { color: ct.text, rotate: 35, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: data.sectors || [], axisLabel: { color: ct.text, width: 72, overflow: 'truncate', fontSize: 9 } }, visualMap: { ...heatVisual(100), min: 0, max: 100 }, series: [{ type: 'heatmap', data: values, progressive: 1000, tooltip: { formatter: (p: any) => `${data.dates[p.value[0]]}<br/>${data.sectors[p.value[1]]}<br/>MA20 宽度：${p.value[2] ?? '--'}%` } }] }
   }
   if (key === 'theme_river') {
-    return { ...common, color: PALETTE, legend: { type: 'scroll', top: 0, textStyle: { color: ct.text, fontSize: 9 } }, grid: { left: 40, right: 20, top: 45, bottom: 40 }, xAxis: { type: 'category', data: data.dates || [], axisLabel: { color: ct.text, rotate: 30, fontSize: 9 } }, yAxis: { type: 'value', name: '排名强度', axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, series: (data.themes || []).map((name: string, index: number) => ({ name, type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 1.5 }, areaStyle: { opacity: 0.05 }, data: data.values[index] })) }
+    return { ...common, color: PALETTE, legend: { type: 'scroll', top: 0, left: 8, right: 8, textStyle: { color: ct.text, fontSize: 9 } }, grid: { left: 10, right: 12, top: 45, bottom: 20, containLabel: true }, xAxis: { type: 'category', data: data.dates || [], boundaryGap: false, axisLabel: { color: ct.text, rotate: 30, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'value', name: '排名强度', nameGap: 10, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: (data.themes || []).map((name: string, index: number) => ({ name, type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 1.5 }, areaStyle: { opacity: 0.05 }, data: data.values[index] })) }
   }
   if (key === 'promotion_funnel') {
-    return { ...common, series: [{ type: 'funnel', left: '8%', top: 15, bottom: 15, width: '84%', minSize: '30%', maxSize: '100%', sort: 'none', gap: 3, label: { color: ct.textStrong, formatter: (p: any) => `${p.name}  ${p.data.promoted}/${p.data.pool}  ${p.data.rate}%` }, itemStyle: { borderColor: ct.border, borderWidth: 1 }, data: (data.stages || []).map((row: any) => ({ ...row, value: row.pool })) }] }
+    return { ...common, series: [{ type: 'funnel', left: '7%', right: '22%', top: 18, bottom: 18, minSize: '30%', maxSize: '100%', sort: 'none', gap: 3, label: { color: ct.textStrong, width: 118, overflow: 'break', formatter: (p: any) => `${p.name}  ${p.data.promoted}/${p.data.pool}  ${p.data.rate}%` }, labelLine: { length: 10, length2: 8 }, itemStyle: { borderColor: ct.border, borderWidth: 1 }, data: (data.stages || []).map((row: any) => ({ ...row, value: row.pool })) }] }
   }
   if (key === 'anomaly_calendar') {
     const records = data.records || []
     const max = Math.max(1, ...records.map((row: any) => row.value || 0))
     const years = Array.from(new Set(records.map((row: any) => String(row.date).slice(0, 4))))
-    return { ...common, tooltip: { formatter: (p: any) => `${p.value[0]}<br/>异常强度：${p.value[1]}<br/>指数收益：${p.data.return_pct}%<br/>状态：${p.data.state || '--'}` }, visualMap: { ...heatVisual(max), max }, calendar: years.map((year, index) => ({ range: String(year), top: 20 + index * 120, left: 38, right: 15, cellSize: ['auto', 13], splitLine: { show: false }, itemStyle: { color: ct.grid, borderWidth: 2, borderColor: ct.tooltipBg }, dayLabel: { color: ct.text }, monthLabel: { color: ct.text }, yearLabel: { color: ct.textStrong } })), series: years.map((year, index) => ({ type: 'heatmap', coordinateSystem: 'calendar', calendarIndex: index, data: records.filter((row: any) => String(row.date).startsWith(String(year))).map((row: any) => ({ value: [row.date, row.value], return_pct: row.return_pct, state: row.state })) })) }
+    return { ...common, tooltip: { formatter: (p: any) => `${p.value[0]}<br/>异常强度：${p.value[1]}<br/>指数收益：${p.data.return_pct}%<br/>状态：${p.data.state || '--'}` }, visualMap: { ...heatVisual(max), max }, calendar: years.map((year, index) => ({ range: String(year), top: 20 + index * 120, left: 72, right: 18, cellSize: ['auto', 13], splitLine: { show: false }, itemStyle: { color: ct.grid, borderWidth: 2, borderColor: ct.tooltipBg }, dayLabel: { color: ct.text, margin: 5 }, monthLabel: { color: ct.text, margin: 7 }, yearLabel: { color: ct.textStrong, margin: 10, fontSize: 10 } })), series: years.map((year, index) => ({ type: 'heatmap', coordinateSystem: 'calendar', calendarIndex: index, data: records.filter((row: any) => String(row.date).startsWith(String(year))).map((row: any) => ({ value: [row.date, row.value], return_pct: row.return_pct, state: row.state })) })) }
   }
   if (key === 'return_distribution') {
-    return { ...common, grid: { left: 45, right: 18, top: 18, bottom: 48 }, xAxis: { type: 'category', data: data.bins || [], axisLabel: { color: ct.text, rotate: 35, fontSize: 9 } }, yAxis: { type: 'value', axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'bar', data: (data.counts || []).map((value: number, index: number) => ({ value, itemStyle: { color: index < 5 ? GREEN : index > 5 ? RED : ct.text } })), barMaxWidth: 34, label: { show: true, position: 'top', color: ct.text, fontSize: 9 } }] }
+    return { ...common, grid: { left: 10, right: 12, top: 24, bottom: 16, containLabel: true }, xAxis: { type: 'category', data: data.bins || [], axisLabel: { color: ct.text, rotate: 35, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'value', axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'bar', data: (data.counts || []).map((value: number, index: number) => ({ value, itemStyle: { color: index < 5 ? GREEN : index > 5 ? RED : ct.text } })), barMaxWidth: 34, label: { show: true, position: 'top', color: ct.text, fontSize: 9 } }] }
   }
   if (key === 'advance_decline') {
-    return { ...common, legend: { data: ['A/D 累积线', data.index_symbol || '指数'], textStyle: { color: ct.text } }, grid: { left: 55, right: 55, top: 36, bottom: 42 }, xAxis: { type: 'category', data: data.dates || [], axisLabel: { color: ct.text, fontSize: 9 } }, yAxis: [{ type: 'value', axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, { type: 'value', axisLabel: { color: ct.text }, splitLine: { show: false } }], series: [{ name: 'A/D 累积线', type: 'line', symbol: 'none', data: data.ad_line || [], lineStyle: { color: ORANGE, width: 2 } }, { name: data.index_symbol || '指数', type: 'line', yAxisIndex: 1, symbol: 'none', data: data.index_close || [], lineStyle: { color: BLUE, width: 1.5 } }] }
+    return { ...common, legend: { data: ['A/D 累积线', data.index_symbol || '指数'], textStyle: { color: ct.text } }, grid: { left: 10, right: 10, top: 36, bottom: 16, containLabel: true }, xAxis: { type: 'category', data: data.dates || [], boundaryGap: false, axisLabel: { color: ct.text, fontSize: 9, hideOverlap: true } }, yAxis: [{ type: 'value', axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, { type: 'value', axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { show: false } }], series: [{ name: 'A/D 累积线', type: 'line', symbol: 'none', data: data.ad_line || [], lineStyle: { color: ORANGE, width: 2 } }, { name: data.index_symbol || '指数', type: 'line', yAxisIndex: 1, symbol: 'none', data: data.index_close || [], lineStyle: { color: BLUE, width: 1.5 } }] }
   }
   if (key === 'turnover_lorenz') {
     const points = data.points || []
-    return { ...common, grid: { left: 50, right: 20, top: 20, bottom: 42 }, xAxis: { type: 'value', min: 0, max: 100, name: '股票累计占比%', axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', min: 0, max: 100, name: `成交额累计占比% · Gini ${data.gini ?? '--'}`, axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'line', symbol: 'none', data: points.map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: ORANGE, width: 2 }, areaStyle: { color: 'rgba(247,129,102,.12)' } }, { type: 'line', symbol: 'none', data: [[0, 0], [100, 100]], lineStyle: { color: ct.text, type: 'dashed' } }] }
+    return { ...common, title: { text: `Gini ${data.gini ?? '--'}`, left: 'center', top: 2, textStyle: { color: ct.textStrong, fontSize: 11, fontWeight: 500 } }, grid: { left: 10, right: 12, top: 34, bottom: 16, containLabel: true }, xAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'line', symbol: 'none', data: points.map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: ORANGE, width: 2 }, areaStyle: { color: 'rgba(247,129,102,.12)' } }, { type: 'line', symbol: 'none', data: [[0, 0], [100, 100]], lineStyle: { color: ct.text, type: 'dashed' } }] }
   }
   if (key === 'industry_correlation') {
     const matrix = data.matrix || []
     const values = matrix.flatMap((row: Array<number | null>, y: number) => row.map((value, x) => [x, y, value]))
-    return { ...common, grid: { left: 80, right: 20, top: 10, bottom: 78 }, xAxis: { type: 'category', data: data.industries || [], axisLabel: { color: ct.text, rotate: 50, fontSize: 9 } }, yAxis: { type: 'category', data: data.industries || [], axisLabel: { color: ct.text, fontSize: 9 } }, visualMap: { min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inRange: { color: [GREEN, '#172033', RED] }, textStyle: { color: ct.text } }, series: [{ type: 'heatmap', data: values, tooltip: { formatter: (p: any) => `${data.industries[p.value[1]]} × ${data.industries[p.value[0]]}<br/>相关系数：${p.value[2] ?? '--'}` } }] }
+    return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 78, containLabel: true }, xAxis: { type: 'category', data: data.industries || [], axisLabel: { color: ct.text, rotate: 50, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: data.industries || [], axisLabel: { color: ct.text, width: 72, overflow: 'truncate', fontSize: 9 } }, visualMap: { min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inRange: { color: [GREEN, '#172033', RED] }, textStyle: { color: ct.text } }, series: [{ type: 'heatmap', data: values, tooltip: { formatter: (p: any) => `${data.industries[p.value[1]]} × ${data.industries[p.value[0]]}<br/>相关系数：${p.value[2] ?? '--'}` } }] }
   }
   if (key === 'mainline_waterfall') {
     const components = data.components || []
     let cumulative = 0
     const baseValues = components.map((row: any) => { const value = cumulative; cumulative += row.value || 0; return value })
     const labels = [...components.map((row: any) => row.name), '综合得分']
-    return { ...common, title: { text: data.focus || '', subtext: `${data.trade_date || ''} · ${data.score ?? '--'} 分`, left: 'center', textStyle: { color: ct.textStrong, fontSize: 12 }, subtextStyle: { color: ct.text, fontSize: 9 } }, grid: { left: 42, right: 18, top: 58, bottom: 42 }, xAxis: { type: 'category', data: labels, axisLabel: { color: ct.text, fontSize: 9 } }, yAxis: { type: 'value', max: 100, axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ name: '基座', type: 'bar', stack: 'total', itemStyle: { color: 'transparent' }, emphasis: { itemStyle: { color: 'transparent' } }, data: [...baseValues, 0] }, { name: '贡献', type: 'bar', stack: 'total', data: [...components.map((row: any, index: number) => ({ value: row.value, raw: row.raw, itemStyle: { color: PALETTE[index] } })), { value: data.score, itemStyle: { color: RED } }], label: { show: true, position: 'top', color: ct.textStrong, formatter: (p: any) => `${p.value}` }, tooltip: { formatter: (p: any) => p.name === '综合得分' ? `${data.focus}<br/>综合得分：${p.value}` : `${p.name}<br/>得分贡献：${p.value}<br/>原始值：${p.data.raw}` } }] }
+    return { ...common, title: { text: data.focus || '', subtext: `${data.trade_date || ''} · ${data.score ?? '--'} 分`, left: 'center', textStyle: { color: ct.textStrong, fontSize: 12 }, subtextStyle: { color: ct.text, fontSize: 9 } }, grid: { left: 10, right: 12, top: 62, bottom: 16, containLabel: true }, xAxis: { type: 'category', data: labels, axisLabel: { color: ct.text, fontSize: 9, interval: 0, hideOverlap: true } }, yAxis: { type: 'value', max: 100, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ name: '基座', type: 'bar', stack: 'total', itemStyle: { color: 'transparent' }, emphasis: { itemStyle: { color: 'transparent' } }, data: [...baseValues, 0] }, { name: '贡献', type: 'bar', stack: 'total', data: [...components.map((row: any, index: number) => ({ value: row.value, raw: row.raw, itemStyle: { color: PALETTE[index] } })), { value: data.score, itemStyle: { color: RED } }], label: { show: true, position: 'top', color: ct.textStrong, formatter: (p: any) => `${p.value}` }, tooltip: { formatter: (p: any) => p.name === '综合得分' ? `${data.focus}<br/>综合得分：${p.value}` : `${p.name}<br/>得分贡献：${p.value}<br/>原始值：${p.data.raw}` } }] }
   }
   if (key === 'theme_ladder_sunburst') {
     return { ...common, series: [{ type: 'sunburst', radius: ['8%', '92%'], sort: null, emphasis: { focus: 'ancestor' }, label: { color: ct.textStrong, rotate: 'radial', minAngle: 8 }, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 }, data: data.children || [], levels: [{}, { r0: '8%', r: '38%', label: { rotate: 0, fontSize: 10 } }, { r0: '38%', r: '66%', label: { fontSize: 9 } }, { r0: '66%', r: '92%', label: { show: false } }] }] }
   }
   if (key === 'rps_rotation_clock') {
-    return { ...common, grid: { left: 48, right: 18, top: 18, bottom: 42 }, xAxis: { type: 'value', name: '近5日动量%', axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', name: '加速度%', axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'scatter', symbolSize: 14, data: (data.points || []).map((row: any, index: number) => ({ name: row.name, value: [row.momentum, row.acceleration], itemStyle: { color: PALETTE[index % PALETTE.length] } })), label: { show: true, position: 'right', color: ct.text, fontSize: 9, formatter: '{b}' }, markLine: { silent: true, symbol: 'none', lineStyle: { color: ct.border, type: 'dashed' }, data: [{ xAxis: 0 }, { yAxis: 0 }] } }] }
+    return { ...common, grid: { left: 12, right: 18, top: 20, bottom: 14, containLabel: true }, xAxis: { type: 'value', axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'scatter', symbolSize: 14, data: (data.points || []).map((row: any, index: number) => ({ name: row.name, value: [row.momentum, row.acceleration], itemStyle: { color: PALETTE[index % PALETTE.length] }, label: { show: index < 10, position: row.momentum > 0.9 ? 'left' : 'right' } })), label: { color: ct.text, fontSize: 9, formatter: '{b}' }, labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' }, markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { color: ct.border, type: 'dashed' }, data: [{ xAxis: 0 }, { yAxis: 0 }] } }] }
   }
   const values = data.values || []
-  return { ...common, grid: { left: 72, right: 15, top: 12, bottom: 55 }, xAxis: { type: 'category', data: data.x_bins || [], axisLabel: { color: ct.text, rotate: 40, fontSize: 9 } }, yAxis: { type: 'category', data: data.y_bins || [], axisLabel: { color: ct.text, fontSize: 9 } }, visualMap: heatVisual(Math.max(1, ...values.map((row: number[]) => row[2]))), series: [{ type: 'heatmap', data: values, label: { show: true, color: ct.textStrong, fontSize: 9, formatter: (p: any) => p.value[2] || '' } }] }
+  return { ...common, grid: { left: 10, right: 12, top: 12, bottom: 55, containLabel: true }, xAxis: { type: 'category', data: data.x_bins || [], axisLabel: { color: ct.text, rotate: 40, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: data.y_bins || [], axisLabel: { color: ct.text, width: 72, overflow: 'truncate', fontSize: 9 } }, visualMap: heatVisual(Math.max(1, ...values.map((row: number[]) => row[2]))), series: [{ type: 'heatmap', data: values, label: { show: true, color: ct.textStrong, fontSize: 9, formatter: (p: any) => p.value[2] || '' } }] }
 }
 
 function EChart({ chartKey, card, height = 320 }: { chartKey: string; card: QuantXAdvancedCard; height?: number }) {
@@ -133,7 +134,25 @@ function EChart({ chartKey, card, height = 320 }: { chartKey: string; card: Quan
 
 function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvancedCard }) {
   const meta = CARD_META[chartKey]
-  const height = chartKey === 'sector_diffusion' ? 610 : chartKey === 'theme_river' ? 390 : chartKey === 'anomaly_calendar' ? 390 : chartKey === 'industry_correlation' ? 460 : 320
+  const heightByKey: Record<string, number> = {
+    sentiment_phase: 340,
+    liquidity_participation: 340,
+    risk_transmission: 360,
+    state_transition: 360,
+    anomaly_calendar: 390,
+    return_distribution: 390,
+    advance_decline: 340,
+    turnover_lorenz: 340,
+    sector_diffusion: 610,
+    theme_river: 390,
+    industry_correlation: 440,
+    mainline_waterfall: 440,
+    theme_ladder_sunburst: 380,
+    rps_rotation_clock: 380,
+    promotion_funnel: 350,
+    turnover_return_density: 350,
+  }
+  const height = heightByKey[chartKey] ?? 320
   return (
     <section data-testid={`quantx-advanced-${chartKey}`} className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-elevated/25 xl:[grid-column:span_8/span_8]', meta.span)}>
       <header className="flex min-h-11 items-center gap-2 border-b border-border/70 px-3 py-1.5">
