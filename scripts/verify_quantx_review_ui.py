@@ -163,7 +163,6 @@ def _verify_page(
         ("risk_transmission", "state_transition"),
         ("anomaly_calendar", "return_distribution"),
         ("advance_decline", "turnover_lorenz"),
-        ("rps_rotation_clock", "theme_ladder_sunburst"),
         ("promotion_funnel", "turnover_return_density"),
     )
     for wide_card, compact_card in layout_pairs:
@@ -173,11 +172,30 @@ def _verify_page(
             )
     if abs(card_width("industry_correlation") - card_width("mainline_waterfall")) > 3:
         raise AssertionError("correlation and waterfall cards must share an equal-width row")
+    if card_width("theme_ladder_sunburst") < card_width("rps_rotation_clock") - 3:
+        raise AssertionError("sunburst must not be narrower than the RPS clock")
     waterfall_canvas = page.get_by_test_id(
         "quantx-advanced-mainline_waterfall"
     ).locator("canvas").bounding_box()
     if waterfall_canvas is None or waterfall_canvas["width"] < 500:
         raise AssertionError("mainline waterfall is still horizontally compressed")
+    sector_controls = page.get_by_test_id("quantx-sector-diffusion-controls")
+    if not sector_controls.is_visible():
+        raise AssertionError("sector diffusion level/window controls are missing")
+    page.get_by_test_id("quantx-sector-dimension-sw_level2").click()
+    page.get_by_test_id("quantx-sector-window-5").click()
+    if page.get_by_test_id("quantx-sector-dimension-sw_level2").get_attribute(
+        "aria-pressed"
+    ) != "true":
+        raise AssertionError("sector diffusion did not switch to SW level 2")
+    if page.get_by_test_id("quantx-sector-window-5").get_attribute(
+        "aria-pressed"
+    ) != "true":
+        raise AssertionError("sector diffusion did not switch to MA5")
+    if not page.get_by_test_id("quantx-lorenz-guide").is_visible():
+        raise AssertionError("Lorenz usage guide is missing")
+    if not page.get_by_test_id("quantx-ad-divergence-guide").is_visible():
+        raise AssertionError("A/D divergence guide is missing")
     if len(advanced_requests) != 1:
         raise AssertionError(
             f"advanced workspace must use one batch request, got {len(advanced_requests)}"

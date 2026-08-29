@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter, defaultdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -98,7 +98,15 @@ def _state_transition(frame: pl.DataFrame) -> dict[str, Any]:
     for row in counts:
         total = sum(row)
         matrix.append([round(value * 100 / total, 1) if total else 0.0 for value in row])
-    return {"states": states, "labels": labels, "matrix": matrix, "counts": counts}
+    observed = [value for row in matrix for value in row if value > 0]
+    visual_max = max(5.0, math.ceil(max(observed, default=5.0) / 5) * 5)
+    return {
+        "states": states,
+        "labels": labels,
+        "matrix": matrix,
+        "counts": counts,
+        "visual_max": visual_max,
+    }
 
 
 def _gini_lorenz(values: list[float]) -> dict[str, Any]:
@@ -202,16 +210,50 @@ def _risk_transmission(state: pl.DataFrame, liquidity: pl.DataFrame, events: pl.
 def _sector_diffusion(frame: pl.DataFrame) -> dict[str, Any]:
     if frame.is_empty():
         return {}
-    frame = frame.filter(pl.col("dimension") == "sw_level1")
-    if frame.is_empty():
+    views: dict[str, Any] = {}
+    for dimension, label, limit in (
+        ("sw_level1", "申万一级", 31),
+        ("sw_level2", "申万二级", 48),
+    ):
+        scoped = frame.filter(pl.col("dimension") == dimension)
+        if scoped.is_empty():
+            continue
+        dates = sorted(scoped["trade_date"].unique().to_list())[-20:]
+        scoped = scoped.filter(pl.col("trade_date").is_in(dates))
+        latest = scoped.filter(pl.col("trade_date") == dates[-1]).sort(
+            "above_ma20_pct", descending=True
+        )
+        sectors = latest["sector_name"].head(limit).to_list()
+        metrics: dict[str, list[list[float | None]]] = {}
+        for window in (5, 10, 20):
+            column = f"above_ma{window}_pct"
+            lookup = {
+                (str(row["trade_date"]), row["sector_name"]): _round(row[column])
+                for row in scoped.select(["trade_date", "sector_name", column]).to_dicts()
+            }
+            metrics[str(window)] = [
+                [lookup.get((str(day), sector)) for day in dates]
+                for sector in sectors
+            ]
+        views[dimension] = {
+            "label": label,
+            "dates": [str(day) for day in dates],
+            "sectors": sectors,
+            "metrics": metrics,
+        }
+    if not views:
         return {}
-    dates = sorted(frame["trade_date"].unique().to_list())[-20:]
-    recent = frame.filter(pl.col("trade_date").is_in(dates))
-    latest = recent.filter(pl.col("trade_date") == dates[-1]).sort("above_ma20_pct", descending=True)
-    sectors = latest["sector_name"].head(31).to_list()
-    lookup = {(str(row["trade_date"]), row["sector_name"]): _round(row["above_ma20_pct"]) for row in recent.to_dicts()}
-    values = [[lookup.get((str(day), sector)) for day in dates] for sector in sectors]
-    return {"dates": [str(day) for day in dates], "sectors": sectors, "values": values, "metric": "above_ma20_pct"}
+    default = views.get("sw_level1") or next(iter(views.values()))
+    return {
+        "dates": default["dates"],
+        "views": views,
+        "default_dimension": "sw_level1" if "sw_level1" in views else next(iter(views)),
+        "default_window": 20,
+        # Additive compatibility fields for existing v1 consumers.
+        "sectors": default["sectors"],
+        "values": default["metrics"]["20"],
+        "metric": "above_ma20_pct",
+    }
 
 
 def _theme_river(frame: pl.DataFrame) -> dict[str, Any]:
@@ -228,14 +270,19 @@ def _theme_river(frame: pl.DataFrame) -> dict[str, Any]:
         daily.group_by("theme_name")
         .agg(pl.col("rank").mean().alias("avg_rank"), pl.len().alias("days"))
         .sort(["days", "avg_rank"], descending=[True, False])
-        .head(12)["theme_name"].to_list()
+        .head(10)["theme_name"].to_list()
     )
     daily = daily.filter(pl.col("theme_name").is_in(top))
-    lookup = {(str(row["trade_date"]), row["theme_name"]): max(0.0, 101 - float(row["rank"])) for row in daily.to_dicts()}
+    lookup = {
+        (str(row["trade_date"]), row["theme_name"]): _round(row["rank"], 0)
+        for row in daily.to_dicts()
+    }
     return {
         "dates": [str(day) for day in dates],
         "themes": top,
-        "values": [[lookup.get((str(day), theme), 0.0) for day in dates] for theme in top],
+        "values": [[lookup.get((str(day), theme)) for day in dates] for theme in top],
+        "metric": "rank",
+        "rank_max": max((value for value in lookup.values() if value is not None), default=1),
     }
 
 
@@ -272,11 +319,14 @@ def _anomaly_calendar(regime: pl.DataFrame) -> dict[str, Any]:
         z_columns.append(alias)
         scored = scored.with_columns(((pl.col(name) - mean) / std if std else pl.lit(0.0)).alias(alias))
     scored = scored.with_columns(pl.max_horizontal([pl.col(name).abs() for name in z_columns]).alias("anomaly"))
+    latest_day = scored["date"].max()
+    recent = scored.filter(pl.col("date") >= latest_day - timedelta(days=183))
     rows = [
         {"date": str(row["date"]), "value": _round(row["anomaly"]), "return_pct": _round(float(row.get("index_pct") or 0) * 100), "state": row.get("state")}
-        for row in scored.tail(180).to_dicts()
+        for row in recent.to_dicts()
+        if row["date"].weekday() < 5
     ]
-    return {"records": rows}
+    return {"records": rows, "start_date": str(latest_day - timedelta(days=183)), "end_date": str(latest_day)}
 
 
 def _return_distribution(returns: pl.DataFrame, end: date) -> dict[str, Any]:
@@ -312,12 +362,58 @@ def _advance_decline(root: Path, breadth: pl.DataFrame, end: date) -> dict[str, 
                 index_rows = candidate
                 break
     closes = {str(row["date"]): _round(row["close"]) for row in index_rows.to_dicts()}
+    dates = [str(value) for value in rows["trade_date"].to_list()]
+    ad_line = [_round(value) for value in rows["ad_line"].to_list()]
+    index_close = [closes.get(value) for value in dates]
     return {
-        "dates": [str(value) for value in rows["trade_date"].to_list()],
-        "ad_line": [_round(value) for value in rows["ad_line"].to_list()],
-        "index_close": [closes.get(str(value)) for value in rows["trade_date"].to_list()],
+        "dates": dates,
+        "ad_line": ad_line,
+        "index_close": index_close,
         "index_symbol": index_rows["symbol"][0] if not index_rows.is_empty() else None,
+        "divergences": _detect_ad_divergences(dates, ad_line, index_close),
+        "divergence_window": 5,
     }
+
+
+def _detect_ad_divergences(
+    dates: list[str],
+    ad_line: list[float | None],
+    index_close: list[float | None],
+    *,
+    window: int = 5,
+) -> list[dict[str, Any]]:
+    """Find sustained five-session direction disagreements between breadth and index."""
+    signals: list[tuple[int, str]] = []
+    for index in range(window, min(len(dates), len(ad_line), len(index_close))):
+        current_ad, previous_ad = ad_line[index], ad_line[index - window]
+        current_close, previous_close = index_close[index], index_close[index - window]
+        if None in (current_ad, previous_ad, current_close, previous_close) or not previous_close:
+            continue
+        ad_change = float(current_ad) - float(previous_ad)
+        index_change_pct = (float(current_close) / float(previous_close) - 1) * 100
+        if index_change_pct >= 0.5 and ad_change < 0:
+            signals.append((index, "bearish"))
+        elif index_change_pct <= -0.5 and ad_change > 0:
+            signals.append((index, "bullish"))
+
+    periods: list[dict[str, Any]] = []
+    for index, kind in signals:
+        if periods and periods[-1]["type"] == kind and index <= periods[-1]["_last_index"] + 1:
+            periods[-1]["end_date"] = dates[index]
+            periods[-1]["_last_index"] = index
+            continue
+        periods.append(
+            {
+                "start_date": dates[max(0, index - window)],
+                "end_date": dates[index],
+                "type": kind,
+                "label": "指数强、广度弱" if kind == "bearish" else "指数弱、广度强",
+                "_last_index": index,
+            }
+        )
+    for period in periods:
+        period.pop("_last_index", None)
+    return periods
 
 
 def _industry_daily_returns(returns: pl.DataFrame, repo: Any) -> pl.DataFrame:
@@ -410,10 +506,20 @@ def _sunburst(ladder: pl.DataFrame, end: date) -> dict[str, Any]:
     for row in latest.to_dicts():
         theme = str(row.get("theme_name") or "其他")
         themes[theme][int(row.get("board_height") or 1)].append(str(row.get("name") or row.get("symbol")))
-    ranked = sorted(themes.items(), key=lambda item: -sum(len(values) for values in item[1].values()))[:14]
+    ranked = sorted(themes.items(), key=lambda item: -sum(len(values) for values in item[1].values()))[:8]
     children = []
     for theme, levels in ranked:
-        children.append({"name": theme, "children": [{"name": f"{height}板", "children": [{"name": stock, "value": 1} for stock in stocks[:12]]} for height, stocks in sorted(levels.items(), reverse=True)]})
+        level_nodes = []
+        for height, stocks in sorted(levels.items(), reverse=True):
+            level_nodes.append(
+                {
+                    "name": f"{height}板 · {len(stocks)}股",
+                    "value": len(stocks),
+                    "height": height,
+                    "stocks": stocks,
+                }
+            )
+        children.append({"name": theme, "children": level_nodes})
     return {"children": children, "stock_count": latest.height}
 
 
@@ -446,7 +552,11 @@ def _density(returns: pl.DataFrame, end: date) -> dict[str, Any]:
         yi = next((idx for idx, (left, right) in enumerate(pairwise(y_edges)) if left <= y < right), None)
         if xi is not None and yi is not None:
             bins[(xi, yi)] += 1
-    values = [[x, y, count] for (x, y), count in bins.items()]
+    values = [
+        [x, y, bins.get((x, y), 0)]
+        for y in range(len(y_edges) - 1)
+        for x in range(len(x_edges) - 1)
+    ]
     return {"x_bins": [f"{left}-{right}%" for left, right in pairwise(x_edges)], "y_bins": [f"{left}~{right}%" for left, right in pairwise(y_edges)], "values": values, "sample": latest.height}
 
 
