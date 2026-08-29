@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter, defaultdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -98,14 +98,12 @@ def _state_transition(frame: pl.DataFrame) -> dict[str, Any]:
     for row in counts:
         total = sum(row)
         matrix.append([round(value * 100 / total, 1) if total else 0.0 for value in row])
-    observed = [value for row in matrix for value in row if value > 0]
-    visual_max = max(5.0, math.ceil(max(observed, default=5.0) / 5) * 5)
     return {
         "states": states,
         "labels": labels,
         "matrix": matrix,
         "counts": counts,
-        "visual_max": visual_max,
+        "visual_max": 50.0,
     }
 
 
@@ -211,19 +209,19 @@ def _sector_diffusion(frame: pl.DataFrame) -> dict[str, Any]:
     if frame.is_empty():
         return {}
     views: dict[str, Any] = {}
-    for dimension, label, limit in (
-        ("sw_level1", "申万一级", 31),
-        ("sw_level2", "申万二级", 48),
+    for dimension, label in (
+        ("sw_level1", "申万一级"),
+        ("sw_level2", "申万二级"),
     ):
         scoped = frame.filter(pl.col("dimension") == dimension)
         if scoped.is_empty():
             continue
-        dates = sorted(scoped["trade_date"].unique().to_list())[-20:]
+        dates = sorted(scoped["trade_date"].unique().to_list())[-30:]
         scoped = scoped.filter(pl.col("trade_date").is_in(dates))
         latest = scoped.filter(pl.col("trade_date") == dates[-1]).sort(
             "above_ma20_pct", descending=True
         )
-        sectors = latest["sector_name"].head(limit).to_list()
+        sectors = latest["sector_name"].to_list()
         metrics: dict[str, list[list[float | None]]] = {}
         for window in (5, 10, 20):
             column = f"above_ma{window}_pct"
@@ -320,13 +318,14 @@ def _anomaly_calendar(regime: pl.DataFrame) -> dict[str, Any]:
         scored = scored.with_columns(((pl.col(name) - mean) / std if std else pl.lit(0.0)).alias(alias))
     scored = scored.with_columns(pl.max_horizontal([pl.col(name).abs() for name in z_columns]).alias("anomaly"))
     latest_day = scored["date"].max()
-    recent = scored.filter(pl.col("date") >= latest_day - timedelta(days=183))
+    year_start = date(latest_day.year, 1, 1)
+    recent = scored.filter(pl.col("date") >= year_start)
     rows = [
         {"date": str(row["date"]), "value": _round(row["anomaly"]), "return_pct": _round(float(row.get("index_pct") or 0) * 100), "state": row.get("state")}
         for row in recent.to_dicts()
         if row["date"].weekday() < 5
     ]
-    return {"records": rows, "start_date": str(latest_day - timedelta(days=183)), "end_date": str(latest_day)}
+    return {"records": rows, "start_date": str(year_start), "end_date": str(latest_day)}
 
 
 def _return_distribution(returns: pl.DataFrame, end: date) -> dict[str, Any]:
@@ -431,32 +430,80 @@ def _industry_daily_returns(returns: pl.DataFrame, repo: Any) -> pl.DataFrame:
     joined = returns.drop_nulls("return").with_columns(pl.col("symbol").str.to_uppercase().alias("_sym_up")).join(mapping, on="_sym_up", how="inner")
     if joined.is_empty():
         return pl.DataFrame()
+    parts = pl.col("industry").str.split("-")
+    level1 = joined.with_columns(
+        pl.lit("industry_level1").alias("dimension"),
+        parts.list.first().alias("industry"),
+    )
+    level2 = (
+        joined.with_columns(
+            pl.lit("industry_level2").alias("dimension"),
+            parts.list.get(1, null_on_oob=True).alias("industry"),
+        )
+        .filter(pl.col("industry").is_not_null() & (pl.col("industry") != ""))
+    )
     return (
-        joined.with_columns(pl.col("industry").str.split("-").list.first().alias("industry"))
-        .group_by(["date", "industry"])
+        pl.concat([level1, level2], how="diagonal_relaxed")
+        .group_by(["date", "dimension", "industry"])
         .agg(pl.col("return").mean().alias("return"))
-        .sort(["date", "industry"])
+        .sort(["date", "dimension", "industry"])
     )
 
 
 def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
     if daily.is_empty():
         return {}
-    counts = daily.group_by("industry").len().sort("len", descending=True).head(16)
-    names = counts["industry"].to_list()
-    pivot = daily.filter(pl.col("industry").is_in(names)).pivot(on="industry", index="date", values="return").sort("date")
-    matrix = []
-    for left in names:
-        row = []
-        for right in names:
-            if left == right:
-                row.append(1.0)
-                continue
-            pair = pivot.select(pl.col(left).alias("left"), pl.col(right).alias("right")).drop_nulls()
-            corr = pair.select(pl.corr("left", "right")).item() if pair.height >= 3 else None
-            row.append(_round(corr, 3))
-        matrix.append(row)
-    return {"industries": names, "matrix": matrix, "sample_days": pivot.height}
+    views: dict[str, Any] = {}
+    scopes = (
+        ("industry_level1", "同花顺一级", 32),
+        ("industry_level2", "同花顺二级", 50),
+    )
+    for dimension, label, limit in scopes:
+        scoped = daily.filter(pl.col("dimension") == dimension)
+        if scoped.is_empty():
+            continue
+        counts = scoped.group_by("industry").len().sort("len", descending=True).head(limit)
+        names = counts["industry"].to_list()
+        pivot = (
+            scoped.filter(pl.col("industry").is_in(names))
+            .pivot(on="industry", index="date", values="return")
+            .sort("date")
+        )
+        matrix = []
+        for left in names:
+            row = []
+            for right in names:
+                if left == right:
+                    row.append(1.0)
+                    continue
+                pair = pivot.select(
+                    pl.col(left).alias("left"), pl.col(right).alias("right")
+                ).drop_nulls()
+                corr = (
+                    pair.select(pl.corr("left", "right")).item()
+                    if pair.height >= 3
+                    else None
+                )
+                row.append(_round(corr, 3))
+            matrix.append(row)
+        views[dimension] = {
+            "label": label,
+            "industries": names,
+            "matrix": matrix,
+            "sample_days": pivot.height,
+        }
+    if not views:
+        return {}
+    default_dimension = (
+        "industry_level1" if "industry_level1" in views else next(iter(views))
+    )
+    default = views[default_dimension]
+    return {
+        "views": views,
+        "default_dimension": default_dimension,
+        # Additive compatibility fields for existing v1 consumers.
+        **default,
+    }
 
 
 def _mainline_waterfall(root: Path, end: date) -> dict[str, Any]:
@@ -526,6 +573,10 @@ def _sunburst(ladder: pl.DataFrame, end: date) -> dict[str, Any]:
 def _rotation_clock(daily: pl.DataFrame) -> dict[str, Any]:
     if daily.is_empty():
         return {}
+    if "dimension" in daily.columns:
+        daily = daily.filter(pl.col("dimension") == "industry_level1")
+    if daily.is_empty():
+        return {}
     dates = sorted(daily["date"].unique().to_list())
     if len(dates) < 6:
         return {}
@@ -533,9 +584,30 @@ def _rotation_clock(daily: pl.DataFrame) -> dict[str, Any]:
     previous_dates = dates[-10:-5] or dates[:-5]
     recent = daily.filter(pl.col("date").is_in(recent_dates)).group_by("industry").agg(pl.col("return").mean().alias("recent"))
     previous = daily.filter(pl.col("date").is_in(previous_dates)).group_by("industry").agg(pl.col("return").mean().alias("previous"))
-    joined = recent.join(previous, on="industry", how="inner").with_columns((pl.col("recent") - pl.col("previous")).alias("acceleration"))
-    rows = [{"name": row["industry"], "momentum": _round(float(row["recent"]) * 100), "acceleration": _round(float(row["acceleration"]) * 100)} for row in joined.sort("recent", descending=True).head(24).to_dicts()]
-    return {"points": rows, "recent_days": len(recent_dates), "previous_days": len(previous_dates)}
+    joined = recent.join(previous, on="industry", how="inner")
+    joined = joined.with_columns(
+        (pl.col("recent").rank(method="average") / pl.len() * 100).alias("recent_rps"),
+        (pl.col("previous").rank(method="average") / pl.len() * 100).alias("previous_rps"),
+    ).with_columns(
+        (pl.col("recent_rps") - 50).alias("momentum"),
+        (pl.col("recent_rps") - pl.col("previous_rps")).alias("acceleration"),
+    )
+    rows = [
+        {
+            "name": row["industry"],
+            "momentum": _round(row["momentum"]),
+            "acceleration": _round(row["acceleration"]),
+            "recent_rps": _round(row["recent_rps"]),
+            "recent_return_pct": _round(float(row["recent"]) * 100),
+        }
+        for row in joined.sort("recent_rps", descending=True).to_dicts()
+    ]
+    return {
+        "points": rows,
+        "recent_days": len(recent_dates),
+        "previous_days": len(previous_dates),
+        "metric": "cross_sectional_rps",
+    }
 
 
 def _density(returns: pl.DataFrame, end: date) -> dict[str, Any]:

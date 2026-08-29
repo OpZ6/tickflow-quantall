@@ -32,6 +32,8 @@
 12. `market_signal_daily`
 13. `screening_candidate_daily`
 
+`sector_breadth_daily` 同时保存 `sw_level1` 与 `sw_level2`。乐咕乐股宽度响应包含滚动历史时，日流水线必须将最近 30 个交易日展开为独立事实分区，而不是只落目标日；每个分区仍按 `(trade_date, dimension, sector_id)` 唯一。历史修复使用 `scripts/backfill_sector_breadth_history.py`：默认仅预检，`--apply` 前备份被替换分区到 `data/.fact_backups/`，再通过 `FactPublication` 原子发布。
+
 以 `backend/app/market_facts/registry.py` 为唯一机器可读权威。文档列表仅用于导航。
 
 ## 3. DatasetSpec 必备内容

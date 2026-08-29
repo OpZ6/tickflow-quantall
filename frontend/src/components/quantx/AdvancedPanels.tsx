@@ -14,23 +14,23 @@ const YELLOW = '#d29922'
 const PALETTE = [RED, BLUE, ORANGE, PURPLE, GREEN, YELLOW, '#39c5cf', '#ff9f43', '#7f8cff', '#e56b9f', '#5dd39e', '#b8a1ff']
 
 type ChartTheme = ReturnType<typeof useChartTheme>
-type ChartSelection = { sectorDimension?: string; sectorWindow?: number }
+type ChartSelection = { sectorDimension?: string; sectorWindow?: number; correlationDimension?: string }
 
 const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 'rotation' | 'structure'; span?: string }> = {
   sentiment_phase: { title: '市场情绪状态相图', hint: '趋势情绪 × 短线情绪 · 气泡为涨停家数', group: 'state' },
   liquidity_participation: { title: '流动性—参与度四象限', hint: '全市场成交额 × 上涨家数占比', group: 'state' },
   risk_transmission: { title: '风险传导链', hint: '集中度、扩散、炸板、梯队与热度的当日传导', group: 'state', span: 'xl:[grid-column:span_10/span_10]' },
-  state_transition: { title: '市场状态转移矩阵', hint: '245 日五状态条件转移概率', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
-  anomaly_calendar: { title: '近半年异常交易日', hint: '仅保留周一至周五 · 综合收益、广度、涨停与成交额', group: 'state', span: 'xl:[grid-column:span_10/span_10]' },
+  state_transition: { title: '市场状态转移矩阵', hint: '五状态的下一交易日条件转移概率 · 色阶上限 50%', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
+  anomaly_calendar: { title: '2026 年异常交易日', hint: '年初至今 · 仅显示交易日 · 综合收益、广度、涨停与成交额', group: 'state', span: 'xl:[grid-column:span_10/span_10]' },
   return_distribution: { title: '全市场收益分布剖面', hint: '当日全 A 收益横截面与中位数', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
   advance_decline: { title: 'A/D 累积线与指数背离', hint: '涨跌家数差累积 vs 中证全指 · 阴影标出背离区间', group: 'state', span: 'xl:[grid-column:span_9/span_9]' },
   turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: '交易集中度；虚线为完全均等', group: 'state', span: 'xl:[grid-column:span_7/span_7]' },
   sector_diffusion: { title: '申万行业宽度扩散地图', hint: '切换一级/二级行业及 MA5 / MA10 / MA20', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
-  theme_river: { title: '题材排名河流图', hint: '近 20 日真实排名轨迹 · 第 1 名位于上方', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
-  industry_correlation: { title: '行业收益相关性矩阵', hint: '当前申万一级成分的近 35 日收益相关性', group: 'rotation' },
+  theme_river: { title: '题材排名演进热图', hint: '近 20 日逐日真实排名 · 数字越小、颜色越热，排名越靠前', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
+  industry_correlation: { title: '行业收益相关性矩阵', hint: '切换同花顺一级/二级行业 · 近 35 日收益相关性', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   mainline_waterfall: { title: '主线强度贡献瀑布', hint: '涨停广度、连板高度与梯队完整度综合得分', group: 'rotation' },
   theme_ladder_sunburst: { title: '题材—连板层级旭日图', hint: '当日题材 → 连板高度（悬停查看合并个股）', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]' },
-  rps_rotation_clock: { title: '行业 RPS 轮动时钟', hint: '近 5 日动量 × 相对前 5 日加速度', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]' },
+  rps_rotation_clock: { title: '行业 RPS 轮动时钟', hint: '行业横截面相对强度 × 排名加速度 · 中心为行业中位数', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]' },
   promotion_funnel: { title: '连板晋级漏斗', hint: '近 75 日逐层晋级样本与转化率', group: 'structure', span: 'xl:[grid-column:span_9/span_9]' },
   turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度', group: 'structure', span: 'xl:[grid-column:span_7/span_7]' },
 }
@@ -57,7 +57,7 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
   if (key === 'risk_transmission') {
     const nodes = data.nodes || []
     const wrappedLabels: Record<string, string> = { 流动性集中: '流动性\n集中', 炸板亏钱效应: '炸板亏钱\n效应' }
-    return { ...common, series: [{ type: 'graph', layout: 'none', roam: false, left: 64, right: 96, top: 28, bottom: 28, symbol: 'roundRect', symbolKeepAspect: true, symbolSize: [92, 54], label: { show: true, color: ct.textStrong, width: 82, overflow: 'break', lineHeight: 14, align: 'center', formatter: (p: any) => `${wrappedLabels[p.name] || p.name}\n${p.value}` }, edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 8, lineStyle: { color: ORANGE, width: 2, curveness: 0.08, opacity: 0.7 }, data: nodes.map((node: any, index: number) => ({ ...node, x: 80 + (index % 3) * 180, y: 70 + Math.floor(index / 3) * 130, itemStyle: { color: [BLUE, PURPLE, ORANGE, GREEN, YELLOW, RED][index] } })), links: data.links || [] }] }
+    return { ...common, series: [{ type: 'graph', layout: 'none', roam: false, left: 112, right: 128, top: 72, bottom: 72, symbol: 'roundRect', symbolKeepAspect: true, symbolSize: [96, 56], label: { show: true, color: ct.textStrong, width: 84, overflow: 'break', lineHeight: 14, align: 'center', formatter: (p: any) => `${wrappedLabels[p.name] || p.name}\n${p.value}` }, edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 8, lineStyle: { color: ORANGE, width: 2, curveness: 0.08, opacity: 0.7 }, data: nodes.map((node: any, index: number) => ({ ...node, x: 80 + (index % 3) * 180, y: 70 + Math.floor(index / 3) * 130, itemStyle: { color: [BLUE, PURPLE, ORANGE, GREEN, YELLOW, RED][index] } })), links: data.links || [] }] }
   }
   if (key === 'state_transition') {
     const matrix = data.matrix || []
@@ -72,10 +72,15 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     const dates = view.dates || data.dates || []
     const matrix = view.metrics?.[String(window)] || []
     const values = matrix.flatMap((row: Array<number | null>, y: number) => row.map((value, x) => [x, y, value]))
-    return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 50, containLabel: true }, xAxis: { type: 'category', data: dates, axisLabel: { color: ct.text, rotate: 35, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: view.sectors || [], axisLabel: { color: ct.text, width: dimension === 'sw_level2' ? 92 : 72, overflow: 'truncate', fontSize: 9 } }, visualMap: { ...heatVisual(100), min: 0, max: 100 }, series: [{ type: 'heatmap', data: values, progressive: 1000, tooltip: { formatter: (p: any) => `${dates[p.value[0]]}<br/>${view.sectors[p.value[1]]}<br/>MA${window} 宽度：${p.value[2] ?? '--'}%` } }] }
+    const sectors = view.sectors || []
+    const zoom = sectors.length > 48 ? [{ type: 'inside', yAxisIndex: 0, startValue: 0, endValue: 47 }, { type: 'slider', yAxisIndex: 0, right: 2, width: 10, startValue: 0, endValue: 47, textStyle: { color: ct.text }, borderColor: ct.border }] : []
+    return { ...common, grid: { left: 10, right: sectors.length > 48 ? 34 : 12, top: 10, bottom: 50, containLabel: true }, dataZoom: zoom, xAxis: { type: 'category', data: dates, axisLabel: { color: ct.text, rotate: 35, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: sectors, axisLabel: { color: ct.text, width: dimension === 'sw_level2' ? 104 : 76, overflow: 'truncate', fontSize: 9 } }, visualMap: { ...heatVisual(100), min: 0, max: 100 }, series: [{ type: 'heatmap', data: values, progressive: 1000, tooltip: { formatter: (p: any) => `${dates[p.value[0]]}<br/>${sectors[p.value[1]]}<br/>MA${window} 宽度：${p.value[2] ?? '--'}%` } }] }
   }
   if (key === 'theme_river') {
-    return { ...common, color: PALETTE, legend: { type: 'scroll', top: 0, left: 8, right: 8, textStyle: { color: ct.text, fontSize: 9 } }, grid: { left: 10, right: 12, top: 45, bottom: 20, containLabel: true }, xAxis: { type: 'category', data: data.dates || [], boundaryGap: false, axisLabel: { color: ct.text, rotate: 30, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'value', inverse: true, min: 1, max: Math.max(10, data.rank_max || 10), axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: (data.themes || []).map((name: string, index: number) => ({ name, type: 'line', connectNulls: false, symbol: 'circle', symbolSize: 3, lineStyle: { width: 1.8 }, emphasis: { focus: 'series', lineStyle: { width: 3 } }, data: data.values[index] })) }
+    const themes = data.themes || []
+    const dates = data.dates || []
+    const values = (data.values || []).flatMap((row: Array<number | null>, y: number) => row.flatMap((value, x) => value == null ? [] : [[x, y, value]]))
+    return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 52, containLabel: true }, xAxis: { type: 'category', data: dates, axisLabel: { color: ct.text, rotate: 30, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', inverse: true, data: themes, axisLabel: { color: ct.textStrong, width: 112, overflow: 'truncate', fontSize: 10 } }, visualMap: { min: 1, max: Math.max(10, data.rank_max || 10), calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inverse: true, text: ['靠后', '第1名'], inRange: { color: [RED, ORANGE, '#244b75', '#101a2d'] }, textStyle: { color: ct.text, fontSize: 9 } }, series: [{ type: 'heatmap', data: values, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 }, label: { show: true, color: ct.textStrong, fontSize: 8, textBorderColor: 'rgba(0,0,0,.8)', textBorderWidth: 2, formatter: (p: any) => String(p.value[2]) }, tooltip: { formatter: (p: any) => `${themes[p.value[1]]}<br/>${dates[p.value[0]]}<br/>真实排名：第 ${p.value[2]} 名` } }] }
   }
   if (key === 'promotion_funnel') {
     return { ...common, series: [{ type: 'funnel', left: '7%', right: '22%', top: 18, bottom: 18, minSize: '30%', maxSize: '100%', sort: 'none', gap: 3, label: { color: ct.textStrong, width: 118, overflow: 'break', formatter: (p: any) => `${p.name}  ${p.data.promoted}/${p.data.pool}  ${p.data.rate}%` }, labelLine: { length: 10, length2: 8 }, itemStyle: { borderColor: ct.border, borderWidth: 1 }, data: (data.stages || []).map((row: any) => ({ ...row, value: row.pool })) }] }
@@ -92,7 +97,7 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
       return { ...row, value: [week, (day.getDay() + 6) % 7, row.value] }
     })
     const weekCount = Math.max(1, ...positioned.map((row: any) => row.value[0] + 1))
-    const weekLabels = Array.from({ length: weekCount }, (_, index) => { const day = new Date(firstMonday); day.setDate(day.getDate() + index * 7); return day.toISOString().slice(5, 10) })
+    const weekLabels = Array.from({ length: weekCount }, (_, index) => { if (index === 0 && data.start_date) return String(data.start_date).slice(5); const day = new Date(firstMonday); day.setDate(day.getDate() + index * 7); return day.toISOString().slice(5, 10) })
     return { ...common, tooltip: { formatter: (p: any) => `${p.data.date}<br/>异常强度：${p.value[2]}<br/>指数收益：${p.data.return_pct}%<br/>状态：${p.data.state || '--'}` }, grid: { left: 12, right: 12, top: 18, bottom: 54, containLabel: true }, xAxis: { type: 'category', data: weekLabels, axisLabel: { color: ct.text, fontSize: 9, interval: 3 }, splitArea: { show: true, areaStyle: { color: [ct.tooltipBg, ct.tooltipBg] } } }, yAxis: { type: 'category', inverse: true, data: ['周一', '周二', '周三', '周四', '周五'], axisLabel: { color: ct.text, fontSize: 9 }, splitArea: { show: true, areaStyle: { color: [ct.tooltipBg, ct.tooltipBg] } } }, visualMap: { ...heatVisual(max), max }, series: [{ type: 'heatmap', data: positioned, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 2 } }] }
   }
   if (key === 'return_distribution') {
@@ -109,9 +114,12 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     return { ...common, title: { text: `Gini ${data.gini ?? '--'}`, left: 'center', top: 2, textStyle: { color: ct.textStrong, fontSize: 11, fontWeight: 500 } }, grid: { left: 10, right: 12, top: 34, bottom: 16, containLabel: true }, xAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'line', symbol: 'none', data: points.map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: ORANGE, width: 2 }, areaStyle: { color: 'rgba(247,129,102,.12)' } }, { type: 'line', symbol: 'none', data: [[0, 0], [100, 100]], lineStyle: { color: ct.text, type: 'dashed' } }] }
   }
   if (key === 'industry_correlation') {
-    const matrix = data.matrix || []
+    const dimension = selection.correlationDimension || data.default_dimension || 'industry_level1'
+    const view = data.views?.[dimension] || data
+    const industries = view.industries || []
+    const matrix = view.matrix || []
     const values = matrix.flatMap((row: Array<number | null>, y: number) => row.map((value, x) => [x, y, value]))
-    return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 78, containLabel: true }, xAxis: { type: 'category', data: data.industries || [], axisLabel: { color: ct.text, rotate: 50, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: data.industries || [], axisLabel: { color: ct.text, width: 72, overflow: 'truncate', fontSize: 9 } }, visualMap: { min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inRange: { color: [GREEN, '#172033', RED] }, textStyle: { color: ct.text } }, series: [{ type: 'heatmap', data: values, tooltip: { formatter: (p: any) => `${data.industries[p.value[1]]} × ${data.industries[p.value[0]]}<br/>相关系数：${p.value[2] ?? '--'}` } }] }
+    return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 78, containLabel: true }, xAxis: { type: 'category', data: industries, axisLabel: { color: ct.text, rotate: 50, fontSize: 8, hideOverlap: true } }, yAxis: { type: 'category', data: industries, axisLabel: { color: ct.text, width: 92, overflow: 'truncate', fontSize: 8 } }, visualMap: { min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inRange: { color: [GREEN, '#172033', RED] }, textStyle: { color: ct.text } }, series: [{ type: 'heatmap', data: values, progressive: 3000, tooltip: { formatter: (p: any) => `${industries[p.value[1]]} × ${industries[p.value[0]]}<br/>相关系数：${p.value[2] ?? '--'}<br/>样本：${view.sample_days || 0} 日` } }] }
   }
   if (key === 'mainline_waterfall') {
     const components = data.components || []
@@ -127,10 +135,10 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     const points = data.points || []
     const xExtent = Math.max(0.5, ...points.map((row: any) => Math.abs(row.momentum || 0))) * 1.18
     const yExtent = Math.max(0.5, ...points.map((row: any) => Math.abs(row.acceleration || 0))) * 1.18
-    return { ...common, graphic: [{ type: 'text', left: '12%', top: 25, silent: true, style: { text: '弱势修复 ↖', fill: 'rgba(63,185,80,.75)', fontSize: 10 } }, { type: 'text', right: '8%', top: 25, silent: true, style: { text: '强势加速 ↗', fill: 'rgba(248,81,73,.8)', fontSize: 10 } }, { type: 'text', left: '12%', bottom: 24, silent: true, style: { text: '弱势恶化 ↙', fill: 'rgba(248,81,73,.65)', fontSize: 10 } }, { type: 'text', right: '8%', bottom: 24, silent: true, style: { text: '强势减速 ↘', fill: 'rgba(210,153,34,.8)', fontSize: 10 } }], grid: { left: 12, right: 18, top: 20, bottom: 14, containLabel: true }, xAxis: { type: 'value', min: -xExtent, max: xExtent, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', min: -yExtent, max: yExtent, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'scatter', symbolSize: 14, data: points.map((row: any, index: number) => ({ name: row.name, value: [row.momentum, row.acceleration], itemStyle: { color: PALETTE[index % PALETTE.length] }, label: { show: index < 10, position: row.momentum > 0 ? 'left' : 'right' } })), label: { color: ct.text, fontSize: 9, formatter: '{b}' }, labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' }, markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { color: ct.border, type: 'dashed', width: 1.5 }, data: [{ xAxis: 0 }, { yAxis: 0 }] } }] }
+    return { ...common, graphic: [{ type: 'text', left: '12%', top: 25, silent: true, style: { text: '弱势修复 ↖', fill: 'rgba(63,185,80,.8)', fontSize: 10 } }, { type: 'text', right: '8%', top: 25, silent: true, style: { text: '强势加速 ↗', fill: 'rgba(248,81,73,.9)', fontSize: 10 } }, { type: 'text', left: '12%', bottom: 28, silent: true, style: { text: '弱势恶化 ↙', fill: 'rgba(248,81,73,.75)', fontSize: 10 } }, { type: 'text', right: '8%', bottom: 28, silent: true, style: { text: '强势减速 ↘', fill: 'rgba(210,153,34,.9)', fontSize: 10 } }], grid: { left: 12, right: 18, top: 20, bottom: 18, containLabel: true }, xAxis: { type: 'value', name: '相对强度', nameTextStyle: { color: ct.text, fontSize: 9 }, min: -xExtent, max: xExtent, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', name: '排名加速度', nameTextStyle: { color: ct.text, fontSize: 9 }, min: -yExtent, max: yExtent, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'scatter', symbolSize: 13, data: points.map((row: any, index: number) => ({ name: row.name, value: [row.momentum, row.acceleration, row.recent_rps, row.recent_return_pct], itemStyle: { color: PALETTE[index % PALETTE.length] }, label: { show: Math.abs(row.momentum || 0) + Math.abs(row.acceleration || 0) >= 48, position: row.momentum > 0 ? 'left' : 'right' } })), label: { color: ct.textStrong, fontSize: 9, formatter: '{b}' }, labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' }, tooltip: { formatter: (p: any) => `${p.name}<br/>当前 RPS：${p.value[2]}<br/>排名加速度：${p.value[1]}<br/>近 5 日收益：${p.value[3]}%` }, markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { color: ct.border, type: 'dashed', width: 1.5 }, data: [{ xAxis: 0 }, { yAxis: 0 }] } }] }
   }
   const values = data.values || []
-  return { ...common, grid: { left: 10, right: 12, top: 12, bottom: 55, containLabel: true }, xAxis: { type: 'category', data: data.x_bins || [], axisLabel: { color: ct.text, rotate: 40, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: data.y_bins || [], axisLabel: { color: ct.text, width: 72, overflow: 'truncate', fontSize: 9 } }, visualMap: heatVisual(Math.max(1, ...values.map((row: number[]) => row[2]))), series: [{ type: 'heatmap', data: values, label: { show: true, color: (p: any) => p.value[2] === 0 ? ct.text : ct.textStrong, fontSize: 8, formatter: (p: any) => String(p.value[2]) } }] }
+  return { ...common, grid: { left: 10, right: 12, top: 12, bottom: 55, containLabel: true }, xAxis: { type: 'category', data: data.x_bins || [], axisLabel: { color: ct.text, rotate: 40, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: data.y_bins || [], axisLabel: { color: ct.text, width: 72, overflow: 'truncate', fontSize: 9 } }, visualMap: heatVisual(Math.max(1, ...values.map((row: number[]) => row[2]))), series: [{ type: 'heatmap', data: values, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 }, label: { show: true, color: '#ffffff', backgroundColor: 'rgba(0,0,0,.66)', borderRadius: 2, padding: [1, 3], fontSize: 8, formatter: (p: any) => String(p.value[2]) }, tooltip: { formatter: (p: any) => `${data.x_bins[p.value[0]]} 换手<br/>${data.y_bins[p.value[1]]} 收益<br/>股票数：${p.value[2]}` } }] }
 }
 
 function EChart({ chartKey, card, height = 320, selection }: { chartKey: string; card: QuantXAdvancedCard; height?: number; selection?: ChartSelection }) {
@@ -158,7 +166,8 @@ function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvanc
   const meta = CARD_META[chartKey]
   const [sectorDimension, setSectorDimension] = useState('sw_level1')
   const [sectorWindow, setSectorWindow] = useState(20)
-  const selection = useMemo(() => ({ sectorDimension, sectorWindow }), [sectorDimension, sectorWindow])
+  const [correlationDimension, setCorrelationDimension] = useState('industry_level1')
+  const selection = useMemo(() => ({ sectorDimension, sectorWindow, correlationDimension }), [correlationDimension, sectorDimension, sectorWindow])
   const heightByKey: Record<string, number> = {
     sentiment_phase: 340,
     liquidity_participation: 340,
@@ -168,9 +177,9 @@ function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvanc
     return_distribution: 390,
     advance_decline: 340,
     turnover_lorenz: 340,
-    sector_diffusion: 610,
+    sector_diffusion: 690,
     theme_river: 390,
-    industry_correlation: 440,
+    industry_correlation: 620,
     mainline_waterfall: 440,
     theme_ladder_sunburst: 380,
     rps_rotation_clock: 380,
@@ -186,9 +195,11 @@ function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvanc
         {card.status === 'ok' && <span className="ml-auto shrink-0 rounded bg-accent/10 px-1.5 py-0.5 font-mono text-[9px] text-accent">{card.rows ?? 0} 行</span>}
       </header>
       <div className="p-2">
-        {chartKey === 'sector_diffusion' && card.status === 'ok' && <div data-testid="quantx-sector-diffusion-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5 border-b border-border/60 pb-1.5"><div className="flex gap-1" role="group" aria-label="行业层级">{Object.entries(card.data.views || {}).map(([value, view]: [string, any]) => <button key={value} type="button" data-testid={`quantx-sector-dimension-${value}`} aria-pressed={sectorDimension === value} onClick={() => setSectorDimension(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', sectorDimension === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value}</button>)}</div><div className="flex gap-1" role="group" aria-label="均线窗口">{[5, 10, 20].map(value => <button key={value} type="button" data-testid={`quantx-sector-window-${value}`} aria-pressed={sectorWindow === value} onClick={() => setSectorWindow(value)} className={cn('cursor-pointer rounded border px-2 py-1 font-mono text-[9px] transition-colors', sectorWindow === value ? 'border-orange-400/60 bg-orange-400/10 text-orange-300' : 'border-border bg-base text-muted hover:text-foreground')}>MA{value}</button>)}</div></div>}
+        {chartKey === 'sector_diffusion' && card.status === 'ok' && <div data-testid="quantx-sector-diffusion-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5 border-b border-border/60 pb-1.5"><div className="flex gap-1" role="group" aria-label="行业层级">{Object.entries(card.data.views || {}).map(([value, view]: [string, any]) => <button key={value} type="button" data-testid={`quantx-sector-dimension-${value}`} aria-pressed={sectorDimension === value} onClick={() => setSectorDimension(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', sectorDimension === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value} · {view.sectors?.length || 0} 行业 / {view.dates?.length || 0} 日</button>)}</div><div className="flex gap-1" role="group" aria-label="均线窗口">{[5, 10, 20].map(value => <button key={value} type="button" data-testid={`quantx-sector-window-${value}`} aria-pressed={sectorWindow === value} onClick={() => setSectorWindow(value)} className={cn('cursor-pointer rounded border px-2 py-1 font-mono text-[9px] transition-colors', sectorWindow === value ? 'border-orange-400/60 bg-orange-400/10 text-orange-300' : 'border-border bg-base text-muted hover:text-foreground')}>MA{value}</button>)}</div></div>}
+        {chartKey === 'industry_correlation' && card.status === 'ok' && <div data-testid="quantx-correlation-controls" className="mb-1.5 flex gap-1 border-b border-border/60 pb-1.5" role="group" aria-label="相关性行业层级">{Object.entries(card.data.views || {}).map(([value, view]: [string, any]) => <button key={value} type="button" data-testid={`quantx-correlation-dimension-${value}`} aria-pressed={correlationDimension === value} onClick={() => setCorrelationDimension(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', correlationDimension === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value} · {view.industries?.length || 0} 行业</button>)}</div>}
         {card.status === 'ok' ? <EChart chartKey={chartKey} card={card} height={height} selection={selection} /> : <div className="flex items-center justify-center text-xs text-muted" style={{ height }}><span>{card.reason || '暂无足够数据'}</span></div>}
-        {chartKey === 'turnover_lorenz' && card.status === 'ok' && <p data-testid="quantx-lorenz-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">看法：曲线越向右下弯、Gini 越高，成交越集中于少数个股；越接近虚线，市场成交越均衡。</p>}
+        {chartKey === 'state_transition' && card.status === 'ok' && <p data-testid="quantx-state-transition-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">读法：从左侧“当前状态”沿行读取到上方“下一交易日状态”，每行合计 100%。例如“震荡 → 偏强 20%”表示处于震荡后，次日转为偏强的历史概率为 20%。</p>}
+        {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>横轴是按成交额从小到大排列的股票累计占比，纵轴是这些股票贡献的累计成交额；橙线越向右下弯，成交越集中在少数头部股票。</p><p><span className="text-foreground">有什么用：</span>判断资金是广泛扩散还是抱团。Gini 接近 0 表示均匀，接近 1 表示极端集中；它描述资金结构，不判断市场涨跌方向。</p></div>}
         {chartKey === 'advance_decline' && card.status === 'ok' && <p data-testid="quantx-ad-divergence-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">红色区间：指数走强但市场广度转弱；绿色区间：指数走弱但广度修复。图钉标记背离确认点。</p>}
         {card.note && <p className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-orange-300">口径提示：{card.note}</p>}
       </div>

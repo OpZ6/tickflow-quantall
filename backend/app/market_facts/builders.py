@@ -811,6 +811,48 @@ def _build_sector_breadth(
     )
 
 
+def build_sector_breadth_history_batches(
+    trade_date: str,
+    sources: dict[str, dict[str, Any]],
+    run_id: str,
+    *,
+    limit: int = 30,
+) -> list[FactBatch]:
+    """Expand a rolling Legulegu width payload into canonical per-date partitions."""
+    payload = sources.get("legulegu") or {}
+    width_api = payload.get("width_api")
+    if not isinstance(width_api, dict):
+        return []
+    target = _trade_date(trade_date)
+    available: set[str] = set()
+    for key in (
+        "ma_market_width_primary",
+        "ma_market_width",
+        "ma_market_width_sec_level",
+    ):
+        width = width_api.get(key)
+        if not isinstance(width, dict):
+            continue
+        available.update(
+            str(value)
+            for value in width.get("dates", [])
+            if isinstance(value, str)
+        )
+    selected = sorted(
+        value
+        for value in available
+        if date.fromisoformat(value) <= target
+    )[-max(1, limit):]
+    ingested_at = datetime.now(UTC).isoformat(timespec="seconds")
+    batches = [
+        _build_sector_breadth(
+            value.replace("-", ""), sources, run_id, ingested_at
+        )
+        for value in selected
+    ]
+    return [batch for batch in batches if not batch.frame.is_empty()]
+
+
 def _build_limit_ladder(
     trade_date: str,
     sources: dict[str, dict[str, Any]],

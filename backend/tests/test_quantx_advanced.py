@@ -10,6 +10,8 @@ from app.quantx_data.advanced import (
     _density,
     _detect_ad_divergences,
     _gini_lorenz,
+    _industry_correlation,
+    _rotation_clock,
     _sector_diffusion,
     _state_transition,
     _sunburst,
@@ -40,7 +42,7 @@ def test_state_transition_normalizes_each_non_empty_row() -> None:
 
     assert sum(weak_row) == 100.0
     assert sum(range_row) == 100.0
-    assert result["visual_max"] == 100.0
+    assert result["visual_max"] == 50.0
 
 
 def test_sector_diffusion_exposes_level_and_ma_views() -> None:
@@ -93,7 +95,10 @@ def test_anomaly_calendar_keeps_recent_weekdays_only() -> None:
 
     result = _anomaly_calendar(frame)
 
-    assert [row["date"] for row in result["records"]] == ["2026-08-28"]
+    assert [row["date"] for row in result["records"]] == [
+        "2026-01-01",
+        "2026-08-28",
+    ]
 
 
 def test_ad_divergence_marks_sustained_direction_disagreement() -> None:
@@ -147,6 +152,43 @@ def test_density_includes_zero_count_cells() -> None:
 
     assert len(result["values"]) == len(result["x_bins"]) * len(result["y_bins"])
     assert any(row[2] == 0 for row in result["values"])
+
+
+def test_industry_correlation_exposes_level_views() -> None:
+    days = [date(2026, 8, value) for value in range(24, 29)]
+    frame = pl.DataFrame(
+        {
+            "date": days * 4,
+            "dimension": ["industry_level1"] * 10 + ["industry_level2"] * 10,
+            "industry": (["一级甲"] * 5 + ["一级乙"] * 5 + ["二级甲"] * 5 + ["二级乙"] * 5),
+            "return": [0.01, 0.02, 0.0, 0.03, 0.01] * 4,
+        }
+    )
+
+    result = _industry_correlation(frame)
+
+    assert set(result["views"]) == {"industry_level1", "industry_level2"}
+    assert set(result["views"]["industry_level2"]["industries"]) == {"二级甲", "二级乙"}
+
+
+def test_rotation_clock_uses_cross_sectional_rps() -> None:
+    days = [date(2026, 8, value) for value in range(19, 29)]
+    rows = []
+    for index, name in enumerate(("行业甲", "行业乙", "行业丙")):
+        for day_index, day in enumerate(days):
+            rows.append(
+                {
+                    "date": day,
+                    "dimension": "industry_level1",
+                    "industry": name,
+                    "return": (index - 1) * 0.01 + day_index * index * 0.001,
+                }
+            )
+    result = _rotation_clock(pl.DataFrame(rows))
+
+    assert result["metric"] == "cross_sectional_rps"
+    assert min(row["momentum"] for row in result["points"]) < 0
+    assert max(row["momentum"] for row in result["points"]) > 0
 
 
 def test_snapshot_has_exactly_the_sixteen_supported_cards(tmp_path) -> None:

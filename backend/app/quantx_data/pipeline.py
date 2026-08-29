@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from app.market_facts.adapters import load_tickflow_market_aggregate
-from app.market_facts.builders import build_initial_fact_batches
+from app.market_facts.builders import (
+    build_initial_fact_batches,
+    build_sector_breadth_history_batches,
+)
 from app.market_facts.registry import datasets_for_source
 from app.market_facts.snapshots import SourceSnapshotStore
 from app.market_facts.storage import FactPublication
@@ -228,6 +231,13 @@ def run_pipeline(
         )
         errors.extend(dataset_errors)
         warnings.extend(dataset_warnings)
+        sector_history = build_sector_breadth_history_batches(
+            trade_date, source_payloads, run_id
+        )
+        current_fact_date = datetime.strptime(trade_date, "%Y%m%d").date()
+        fact_batches.extend(
+            batch for batch in sector_history if batch.trade_date != current_fact_date
+        )
         if dataset_status == RunStatus.FAILED:
             status = RunStatus.FAILED
         elif dataset_status == RunStatus.DEGRADED and status == RunStatus.COMPLETE:

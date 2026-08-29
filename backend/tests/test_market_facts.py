@@ -12,7 +12,10 @@ from fastapi.testclient import TestClient
 
 from app.api.data_sources import router as data_sources_router
 from app.market_facts.adapters import load_tickflow_market_aggregate
-from app.market_facts.builders import build_initial_fact_batches
+from app.market_facts.builders import (
+    build_initial_fact_batches,
+    build_sector_breadth_history_batches,
+)
 from app.market_facts.registry import DatasetId, get_dataset, get_route
 from app.market_facts.repository import MarketFactRepository
 from app.market_facts.snapshots import (
@@ -495,6 +498,18 @@ def test_sector_breadth_includes_sw_level2_payload() -> None:
             "above_ma20_pct": 40.0,
         }
     ]
+
+
+def test_sector_breadth_history_expands_rolling_payload() -> None:
+    batches = build_sector_breadth_history_batches(
+        "20260825", _sources(), "history-run"
+    )
+
+    assert [batch.trade_date for batch in batches] == [
+        date(2026, 8, 24),
+        date(2026, 8, 25),
+    ]
+    assert all(not batch.frame.is_empty() for batch in batches)
 
 
 def test_tickflow_adapter_derives_returns_from_previous_partition(tmp_path) -> None:

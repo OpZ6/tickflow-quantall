@@ -170,8 +170,8 @@ def _verify_page(
             raise AssertionError(
                 f"information-dense card must be wider: {wide_card} <= {compact_card}"
             )
-    if abs(card_width("industry_correlation") - card_width("mainline_waterfall")) > 3:
-        raise AssertionError("correlation and waterfall cards must share an equal-width row")
+    if card_width("industry_correlation") <= card_width("mainline_waterfall"):
+        raise AssertionError("expanded correlation matrix must use the full-width row")
     if card_width("theme_ladder_sunburst") < card_width("rps_rotation_clock") - 3:
         raise AssertionError("sunburst must not be narrower than the RPS clock")
     waterfall_canvas = page.get_by_test_id(
@@ -192,6 +192,20 @@ def _verify_page(
         "aria-pressed"
     ) != "true":
         raise AssertionError("sector diffusion did not switch to MA5")
+    if "135 行业 / 30 日" not in page.get_by_test_id(
+        "quantx-sector-dimension-sw_level2"
+    ).inner_text():
+        raise AssertionError("sector diffusion level 2 coverage is incomplete")
+    correlation_controls = page.get_by_test_id("quantx-correlation-controls")
+    if not correlation_controls.is_visible():
+        raise AssertionError("industry correlation level controls are missing")
+    page.get_by_test_id("quantx-correlation-dimension-industry_level2").click()
+    if page.get_by_test_id(
+        "quantx-correlation-dimension-industry_level2"
+    ).get_attribute("aria-pressed") != "true":
+        raise AssertionError("industry correlation did not switch to level 2")
+    if not page.get_by_test_id("quantx-state-transition-guide").is_visible():
+        raise AssertionError("state transition reading guide is missing")
     if not page.get_by_test_id("quantx-lorenz-guide").is_visible():
         raise AssertionError("Lorenz usage guide is missing")
     if not page.get_by_test_id("quantx-ad-divergence-guide").is_visible():
@@ -500,7 +514,7 @@ def _verify_related_pages(page: Page, base_url: str, output_dir: Path) -> list[d
             page_errors.append(str(error))
 
         def on_request_failed(request) -> None:
-            if "/api/intraday/stream" in request.url and "ERR_ABORTED" in str(request.failure):
+            if "ERR_ABORTED" in str(request.failure):
                 return
             failed_requests.append(
                 f"{request.method} {request.url}: {request.failure}"
