@@ -62,6 +62,8 @@ API handler 保持薄层：校验参数、调用 Service、映射响应。新增
 
 单日 QuantX V2 必须额外区分字段来源：可复用数值来自 Repository，页面专用摘要进入版本化 ViewBuilder，标题和布局进入前端常量。V2 从 `QuantXReviewResponseV2.empty(trade_date)` 构建，禁止深拷贝展示缓存；新增前端消费字段必须通过 `scripts/audit_quantx_review_consumers.py`，并在 schema endpoint `GET /api/quantx/review/schema/v2` 中声明来源、单位、空值和排序。默认响应的 fallback 和 implicit cache 必须始终为空。
 
+QuantX 高级图谱由 `app.quantx_data.advanced.build_advanced_snapshot()` 在服务层一次性构建，前端只通过 `GET /api/quantx-data/advanced/{date}` 发起一个共享查询。当前契约固定包含 16 张数据卡片；每张卡必须返回 `status`、`rows`、`data`，缺数据时显式返回 `unavailable`，不得生成模拟值。行业相关性和 RPS 轮动使用当前行业成分回看历史，响应必须携带口径提示。跨日队列存活 Sankey 和龙头交接时间轴不属于当前契约。
+
 ## 3. 新分析示例路径
 
 假设需要“行业 20 日连续性”：

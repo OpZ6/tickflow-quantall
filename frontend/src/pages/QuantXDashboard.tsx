@@ -32,6 +32,7 @@ import {
   WindowStatistics,
   type WindowSize,
 } from '@/components/quantx/MultidayPanels'
+import { AdvancedPanels } from '@/components/quantx/AdvancedPanels'
 import { quantxApi, type QuantXMultidaySnapshot, type QuantXReviewData } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { QK } from '@/lib/queryKeys'
@@ -385,6 +386,7 @@ export function QuantXDashboard() {
 
   const reviewQuery = useQuery({ queryKey: QK.quantxReview(date), queryFn: () => quantxApi.getReviewData(date), enabled: Boolean(date), retry: false, staleTime: 0 })
   const multidayQuery = useQuery({ queryKey: QK.quantxMultiday(date), queryFn: () => quantxApi.getMultiday(date), enabled: Boolean(date), retry: false, staleTime: 30_000 })
+  const advancedQuery = useQuery({ queryKey: QK.quantxAdvanced(date), queryFn: () => quantxApi.getAdvanced(date), enabled: Boolean(date), retry: false, staleTime: 30_000 })
   const tablesQuery = useQuery({ queryKey: QK.quantxTables(date), queryFn: () => quantxApi.getTables(date), enabled: Boolean(date) && utilityOpen.data, retry: false, staleTime: 30_000 })
   const qualityQuery = useQuery({ queryKey: QK.quantxObservability(date), queryFn: () => quantxApi.getObservability(date), enabled: Boolean(date) && utilityOpen.quality, retry: false, staleTime: 30_000 })
   const refresh = useMutation({
@@ -394,6 +396,7 @@ export function QuantXDashboard() {
         queryClient.invalidateQueries({ queryKey: QK.quantxCatalog }),
         queryClient.invalidateQueries({ queryKey: QK.quantxReview(date) }),
         queryClient.invalidateQueries({ queryKey: QK.quantxMultiday(date) }),
+        queryClient.invalidateQueries({ queryKey: QK.quantxAdvanced(date) }),
         queryClient.invalidateQueries({ queryKey: QK.quantxTables(date) }),
         queryClient.invalidateQueries({ queryKey: QK.quantxObservability(date) }),
       ])
@@ -440,6 +443,8 @@ export function QuantXDashboard() {
 
           <div className="xl:[grid-column:span_16/span_16]">{multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}</div>
         </div>
+
+        <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} />
 
         <section data-testid="quantx-deep-workspace" className="rounded-lg border border-border bg-elevated/20">
           <header className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs font-semibold"><Database className="h-3.5 w-3.5 text-accent" />深度图表与完整数据</header>

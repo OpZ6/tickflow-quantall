@@ -19,6 +19,25 @@ OVERVIEW_PANELS = (
     "quantx-capital-ecosystem",
 )
 
+ADVANCED_CARDS = (
+    "sentiment_phase",
+    "liquidity_participation",
+    "risk_transmission",
+    "state_transition",
+    "sector_diffusion",
+    "theme_river",
+    "promotion_funnel",
+    "anomaly_calendar",
+    "return_distribution",
+    "advance_decline",
+    "turnover_lorenz",
+    "industry_correlation",
+    "mainline_waterfall",
+    "theme_ladder_sunburst",
+    "rps_rotation_clock",
+    "turnover_return_density",
+)
+
 DEEP_SECTIONS = (
     "市场趋势",
     "情绪连板",
@@ -42,9 +61,9 @@ def _args() -> argparse.Namespace:
     parser.add_argument(
         "--dates",
         nargs="+",
-        default=["20260825", "20260826", "20260827"],
+        default=["20260828"],
     )
-    parser.add_argument("--minimum-canvas", type=int, default=10)
+    parser.add_argument("--minimum-canvas", type=int, default=26)
     parser.add_argument("--output-dir", type=Path)
     return parser.parse_args()
 
@@ -75,6 +94,7 @@ def _verify_page(
     console_errors: list[str] = []
     page_errors: list[str] = []
     failed_requests: list[str] = []
+    advanced_requests: list[str] = []
 
     def on_console(message: ConsoleMessage) -> None:
         if message.type == "error":
@@ -90,9 +110,14 @@ def _verify_page(
             f"{request.method} {request.url}: {request.failure or 'failed'}"
         )
 
+    def on_request(request: Request) -> None:
+        if f"/api/quantx-data/advanced/{trade_date}" in request.url:
+            advanced_requests.append(request.url)
+
     page.on("console", on_console)
     page.on("pageerror", on_page_error)
     page.on("requestfailed", on_request_failed)
+    page.on("request", on_request)
     response = page.goto(
         f"{base_url.rstrip('/')}/quantx/{trade_date}",
         wait_until="domcontentloaded",
@@ -118,6 +143,23 @@ def _verify_page(
         raise AssertionError(f"metric ribbon missing for {trade_date}")
     if not page.get_by_test_id("quantx-deep-workspace").is_visible():
         raise AssertionError(f"deep workspace missing for {trade_date}")
+    advanced = page.get_by_test_id("quantx-advanced-workspace")
+    advanced.wait_for(state="visible", timeout=60_000)
+    if "16/16" not in advanced.inner_text():
+        raise AssertionError(f"advanced coverage is incomplete for {trade_date}")
+    for card in ADVANCED_CARDS:
+        target = page.get_by_test_id(f"quantx-advanced-{card}")
+        target.wait_for(state="visible", timeout=30_000)
+        if target.locator("canvas").count() != 1:
+            raise AssertionError(f"advanced card did not render one chart: {card}")
+    if len(advanced_requests) != 1:
+        raise AssertionError(
+            f"advanced workspace must use one batch request, got {len(advanced_requests)}"
+        )
+    if page.get_by_test_id("quantx-advanced-cross_day_survival_sankey").count():
+        raise AssertionError("excluded cross-day survival Sankey is rendered")
+    if page.get_by_test_id("quantx-advanced-leader_handoff_timeline").count():
+        raise AssertionError("excluded leader handoff timeline is rendered")
     deep_workspace = page.get_by_test_id("quantx-deep-workspace")
     for label in DEEP_SECTIONS:
         if not deep_workspace.get_by_role(
@@ -288,6 +330,8 @@ def _verify_page(
         raise AssertionError("standalone congestion history is still rendered")
     congestion_screenshot = output_dir / f"quantx-congestion-{trade_date}.png"
     congestion.screenshot(path=str(congestion_screenshot))
+    advanced_screenshot = output_dir / f"quantx-advanced-{trade_date}.png"
+    advanced.screenshot(path=str(advanced_screenshot))
 
     page.get_by_text("交易日情绪分数", exact=True).wait_for(
         state="visible", timeout=30_000
@@ -357,6 +401,7 @@ def _verify_page(
     page.remove_listener("console", on_console)
     page.remove_listener("pageerror", on_page_error)
     page.remove_listener("requestfailed", on_request_failed)
+    page.remove_listener("request", on_request)
     if console_errors:
         raise AssertionError(
             f"console errors for {trade_date}: {console_errors}; "
@@ -384,6 +429,7 @@ def _verify_page(
         "emotion_calendar_screenshot": str(emotion_calendar_screenshot),
         "lifecycle_screenshot": str(lifecycle_screenshot),
         "congestion_screenshot": str(congestion_screenshot),
+        "advanced_screenshot": str(advanced_screenshot),
         "adaptive_table_count": len(table_audit),
         "deep_table_screenshots": deep_table_screenshots,
     }

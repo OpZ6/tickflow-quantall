@@ -3797,6 +3797,22 @@ export interface QuantXMultidaySnapshot {
   data_coverage: { theme_days: number; sector_flow_days: number; institution_days: number; window_days: number }
 }
 
+export interface QuantXAdvancedCard {
+  status: 'ok' | 'unavailable'
+  rows?: number
+  reason?: string
+  note?: string
+  data: Record<string, any>
+}
+
+export interface QuantXAdvancedSnapshot {
+  schema_version: 'tickflow-quantx-advanced-v1'
+  trade_date: string
+  generated_at: string
+  coverage: { available: number; total: number; history_start?: string; history_end?: string }
+  cards: Record<string, QuantXAdvancedCard>
+}
+
 export interface QuantXObservability {
   trade_date: string
   pipeline_job_id: string | null
@@ -3846,6 +3862,9 @@ export const quantxApi = {
 
   getMultiday: (date: string) =>
     request<QuantXMultidaySnapshot>(`/api/quantx-data/multiday/${encodeURIComponent(date)}`),
+
+  getAdvanced: (date: string) =>
+    request<QuantXAdvancedSnapshot>(`/api/quantx-data/advanced/${encodeURIComponent(date)}`),
 
   getReviewData: (date: string) =>
     request<QuantXReviewData>(`/api/quantx/review/${encodeURIComponent(date)}/data`),

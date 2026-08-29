@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from app.quantx_data.advanced import build_advanced_snapshot
 from app.quantx_data.catalog import build_catalog, load_artifact
 from app.quantx_data.io import read_json
 from app.quantx_data.multiday import (
@@ -238,6 +239,20 @@ def multiday(trade_date: str, request: Request) -> dict:
         raise HTTPException(status_code=404, detail=f"no multiday data for {trade_date}") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/advanced/{trade_date}")
+def advanced(trade_date: str, request: Request) -> dict:
+    """Return all data-backed advanced QuantX charts in one batch."""
+    try:
+        day = datetime.strptime(trade_date, "%Y%m%d").date()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="trade_date must use YYYYMMDD") from exc
+    return build_advanced_snapshot(
+        _root(request).parent,
+        day,
+        request.app.state.repo,
+    )
 
 
 @router.get("/{trade_date}/tables")

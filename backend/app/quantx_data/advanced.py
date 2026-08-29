@@ -1,0 +1,501 @@
+"""Real-data advanced chart snapshot for the QuantX review dashboard."""
+from __future__ import annotations
+
+import math
+from collections import Counter, defaultdict
+from datetime import UTC, date, datetime
+from itertools import pairwise
+from pathlib import Path
+from typing import Any
+
+import polars as pl
+
+SCHEMA_VERSION = "tickflow-quantx-advanced-v1"
+CARD_KEYS = (
+    "sentiment_phase",
+    "liquidity_participation",
+    "risk_transmission",
+    "state_transition",
+    "sector_diffusion",
+    "theme_river",
+    "promotion_funnel",
+    "anomaly_calendar",
+    "return_distribution",
+    "advance_decline",
+    "turnover_lorenz",
+    "industry_correlation",
+    "mainline_waterfall",
+    "theme_ladder_sunburst",
+    "rps_rotation_clock",
+    "turnover_return_density",
+)
+
+
+def _round(value: Any, digits: int = 2) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round(number, digits) if math.isfinite(number) else None
+
+
+def _empty_card(reason: str = "该日期没有足够的标准事实") -> dict[str, Any]:
+    return {"status": "unavailable", "reason": reason, "data": {}}
+
+
+def _card(data: dict[str, Any], *, rows: int, note: str | None = None) -> dict[str, Any]:
+    if not data or rows <= 0:
+        return _empty_card()
+    result: dict[str, Any] = {"status": "ok", "rows": rows, "data": data}
+    if note:
+        result["note"] = note
+    return result
+
+
+def _read_range(root: Path, dataset: str, start: date, end: date) -> pl.DataFrame:
+    paths = [
+        path
+        for path in (root / dataset).glob("date=*/part.parquet")
+        if start.isoformat() <= path.parent.name.removeprefix("date=") <= end.isoformat()
+    ]
+    if not paths:
+        return pl.DataFrame()
+    frames = [pl.read_parquet(path) for path in sorted(paths)]
+    return pl.concat(frames, how="diagonal_relaxed")
+
+
+def _history_dates(root: Path, dataset: str, end: date, limit: int) -> list[date]:
+    values: list[date] = []
+    for path in (root / dataset).glob("date=*/part.parquet"):
+        try:
+            day = date.fromisoformat(path.parent.name.removeprefix("date="))
+        except ValueError:
+            continue
+        if day <= end:
+            values.append(day)
+    return sorted(set(values))[-limit:]
+
+
+def _regime_history(root: Path, end: date) -> pl.DataFrame:
+    path = root / "regime_history" / "part.parquet"
+    if not path.is_file():
+        return pl.DataFrame()
+    frame = pl.read_parquet(path)
+    return frame.filter(pl.col("date") <= end).sort("date")
+
+
+def _state_transition(frame: pl.DataFrame) -> dict[str, Any]:
+    states = ["weak", "lean_weak", "range", "lean_strong", "strong"]
+    labels = ["弱势", "偏弱", "震荡", "偏强", "强势"]
+    counts = [[0 for _ in states] for _ in states]
+    if not frame.is_empty() and "state" in frame.columns:
+        sequence = [str(value) for value in frame.sort("date")["state"].to_list()]
+        index = {value: idx for idx, value in enumerate(states)}
+        for previous, current in pairwise(sequence):
+            if previous in index and current in index:
+                counts[index[previous]][index[current]] += 1
+    matrix = []
+    for row in counts:
+        total = sum(row)
+        matrix.append([round(value * 100 / total, 1) if total else 0.0 for value in row])
+    return {"states": states, "labels": labels, "matrix": matrix, "counts": counts}
+
+
+def _gini_lorenz(values: list[float]) -> dict[str, Any]:
+    positive = sorted(value for value in values if math.isfinite(value) and value >= 0)
+    if not positive or sum(positive) <= 0:
+        return {"gini": None, "points": []}
+    total = sum(positive)
+    cumulative = 0.0
+    points = [{"population_pct": 0.0, "amount_pct": 0.0}]
+    area = 0.0
+    previous_x = previous_y = 0.0
+    for index, value in enumerate(positive, start=1):
+        cumulative += value
+        x = index / len(positive)
+        y = cumulative / total
+        area += (y + previous_y) * (x - previous_x) / 2
+        points.append({"population_pct": round(x * 100, 2), "amount_pct": round(y * 100, 2)})
+        previous_x, previous_y = x, y
+    return {"gini": round(1 - 2 * area, 4), "points": points}
+
+
+def _stock_returns(root: Path, end: date, days: int = 35) -> pl.DataFrame:
+    dates = _history_dates(root, "kline_daily_enriched", end, days + 1)
+    if len(dates) < 2:
+        return pl.DataFrame()
+    frame = _read_range(root, "kline_daily_enriched", dates[0], dates[-1])
+    required = {"symbol", "date", "close", "amount", "turnover_rate"}
+    if frame.is_empty() or not required.issubset(frame.columns):
+        return pl.DataFrame()
+    return (
+        frame.select(sorted(required))
+        .sort(["symbol", "date"])
+        .with_columns((pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("return"))
+    )
+
+
+def _sentiment_phase(state: pl.DataFrame) -> dict[str, Any]:
+    points = []
+    for row in state.to_dicts():
+        points.append(
+            {
+                "date": str(row.get("trade_date")),
+                "x": _round(row.get("trend_sentiment_score")),
+                "y": _round(row.get("short_term_sentiment_score")),
+                "size": row.get("limit_up_count"),
+                "heat": _round(row.get("market_heat_score")),
+                "zone": row.get("market_heat_zone"),
+            }
+        )
+    return {"points": points}
+
+
+def _liquidity_participation(state: pl.DataFrame, liquidity: pl.DataFrame) -> dict[str, Any]:
+    if state.is_empty() or liquidity.is_empty():
+        return {}
+    joined = state.join(liquidity, on="trade_date", how="inner", suffix="_liq")
+    amounts = joined["total_amount_yi_liq"].drop_nulls().to_list()
+    amount_mid = float(pl.Series(amounts).median()) if amounts else None
+    points = [
+        {
+            "date": str(row["trade_date"]),
+            "x": _round(row.get("total_amount_yi_liq")),
+            "y": _round(row.get("up_ratio_pct")),
+            "size": row.get("limit_up_count"),
+            "heat": _round(row.get("market_heat_score")),
+        }
+        for row in joined.to_dicts()
+    ]
+    return {"points": points, "amount_mid": _round(amount_mid), "participation_mid": 50.0}
+
+
+def _risk_transmission(state: pl.DataFrame, liquidity: pl.DataFrame, events: pl.DataFrame) -> dict[str, Any]:
+    if state.is_empty():
+        return {}
+    latest = state.sort("trade_date").tail(1).row(0, named=True)
+    liq = liquidity.sort("trade_date").tail(1).row(0, named=True) if not liquidity.is_empty() else {}
+    broken = 0
+    if not events.is_empty() and "event_type" in events.columns:
+        last_day = events["trade_date"].max()
+        broken = events.filter((pl.col("trade_date") == last_day) & (pl.col("event_type") == "broken_board")).height
+    limit_up = int(latest.get("limit_up_count") or 0)
+    limit_down = int(latest.get("limit_down_count") or 0)
+    nodes = [
+        {"name": "流动性集中", "value": _round(liq.get("top5pct_amount_ratio_pct")) or 0},
+        {"name": "下跌扩散", "value": _round(100 - float(latest.get("up_ratio_pct") or 0)) or 0},
+        {"name": "炸板亏钱效应", "value": round(100 * broken / max(limit_up + broken, 1), 1)},
+        {"name": "跌停压力", "value": limit_down},
+        {"name": "梯队承接", "value": _round(latest.get("advance_rate_pct")) or 0},
+        {"name": "市场热度", "value": _round(latest.get("market_heat_score")) or 0},
+    ]
+    links = [
+        {"source": "流动性集中", "target": "下跌扩散"},
+        {"source": "下跌扩散", "target": "炸板亏钱效应"},
+        {"source": "跌停压力", "target": "炸板亏钱效应"},
+        {"source": "炸板亏钱效应", "target": "梯队承接"},
+        {"source": "梯队承接", "target": "市场热度"},
+    ]
+    return {"nodes": nodes, "links": links, "trade_date": str(latest["trade_date"])}
+
+
+def _sector_diffusion(frame: pl.DataFrame) -> dict[str, Any]:
+    if frame.is_empty():
+        return {}
+    frame = frame.filter(pl.col("dimension") == "sw_level1")
+    if frame.is_empty():
+        return {}
+    dates = sorted(frame["trade_date"].unique().to_list())[-20:]
+    recent = frame.filter(pl.col("trade_date").is_in(dates))
+    latest = recent.filter(pl.col("trade_date") == dates[-1]).sort("above_ma20_pct", descending=True)
+    sectors = latest["sector_name"].head(31).to_list()
+    lookup = {(str(row["trade_date"]), row["sector_name"]): _round(row["above_ma20_pct"]) for row in recent.to_dicts()}
+    values = [[lookup.get((str(day), sector)) for day in dates] for sector in sectors]
+    return {"dates": [str(day) for day in dates], "sectors": sectors, "values": values, "metric": "above_ma20_pct"}
+
+
+def _theme_river(frame: pl.DataFrame) -> dict[str, Any]:
+    if frame.is_empty():
+        return {}
+    dates = sorted(frame["trade_date"].unique().to_list())[-20:]
+    recent = frame.filter(pl.col("trade_date").is_in(dates))
+    daily = (
+        recent.with_columns(pl.col("rank").cast(pl.Float64, strict=False))
+        .group_by(["trade_date", "theme_name"])
+        .agg(pl.col("rank").min().alias("rank"))
+    )
+    top = (
+        daily.group_by("theme_name")
+        .agg(pl.col("rank").mean().alias("avg_rank"), pl.len().alias("days"))
+        .sort(["days", "avg_rank"], descending=[True, False])
+        .head(12)["theme_name"].to_list()
+    )
+    daily = daily.filter(pl.col("theme_name").is_in(top))
+    lookup = {(str(row["trade_date"]), row["theme_name"]): max(0.0, 101 - float(row["rank"])) for row in daily.to_dicts()}
+    return {
+        "dates": [str(day) for day in dates],
+        "themes": top,
+        "values": [[lookup.get((str(day), theme), 0.0) for day in dates] for theme in top],
+    }
+
+
+def _promotion_funnel(frame: pl.DataFrame) -> dict[str, Any]:
+    if frame.is_empty():
+        return {}
+    dates = sorted(frame["trade_date"].unique().to_list())
+    by_day = {
+        day: {str(row["symbol"]).split(".")[0]: int(row["board_height"]) for row in frame.filter(pl.col("trade_date") == day).to_dicts()}
+        for day in dates
+    }
+    stages = []
+    labels = ["首板→二板", "二板→三板", "三板→四板", "四板→五板+"]
+    for height, label in enumerate(labels, start=1):
+        pool = promoted = 0
+        for current, following in pairwise(dates):
+            candidates = {symbol for symbol, value in by_day[current].items() if value == height}
+            pool += len(candidates)
+            promoted += sum(1 for symbol in candidates if by_day[following].get(symbol, 0) >= height + 1)
+        stages.append({"name": label, "pool": pool, "promoted": promoted, "rate": round(promoted * 100 / pool, 1) if pool else 0.0})
+    return {"stages": stages, "sample_days": len(dates)}
+
+
+def _anomaly_calendar(regime: pl.DataFrame) -> dict[str, Any]:
+    if regime.is_empty():
+        return {}
+    columns = [name for name in ("index_pct", "up_count", "limit_up", "total_amount") if name in regime.columns]
+    scored = regime
+    z_columns = []
+    for name in columns:
+        std = float(regime[name].std() or 0)
+        mean = float(regime[name].mean() or 0)
+        alias = f"_{name}_z"
+        z_columns.append(alias)
+        scored = scored.with_columns(((pl.col(name) - mean) / std if std else pl.lit(0.0)).alias(alias))
+    scored = scored.with_columns(pl.max_horizontal([pl.col(name).abs() for name in z_columns]).alias("anomaly"))
+    rows = [
+        {"date": str(row["date"]), "value": _round(row["anomaly"]), "return_pct": _round(float(row.get("index_pct") or 0) * 100), "state": row.get("state")}
+        for row in scored.tail(180).to_dicts()
+    ]
+    return {"records": rows}
+
+
+def _return_distribution(returns: pl.DataFrame, end: date) -> dict[str, Any]:
+    if returns.is_empty():
+        return {}
+    latest = returns.filter(pl.col("date") == end).drop_nulls("return")
+    if latest.is_empty():
+        return {}
+    values = (latest["return"] * 100).clip(-11, 21).to_list()
+    edges = [-11, -8, -5, -3, -1, 0, 1, 3, 5, 8, 11, 21]
+    edge_pairs = list(pairwise(edges))
+    counts = [sum(1 for value in values if left <= value < right) for left, right in edge_pairs]
+    return {
+        "bins": [f"{left}~{right}%" for left, right in edge_pairs],
+        "counts": counts,
+        "median": _round(pl.Series(values).median()),
+        "positive_pct": _round(sum(value > 0 for value in values) * 100 / len(values)),
+        "sample": len(values),
+    }
+
+
+def _advance_decline(root: Path, breadth: pl.DataFrame, end: date) -> dict[str, Any]:
+    if breadth.is_empty():
+        return {}
+    rows = breadth.sort("trade_date").with_columns(pl.col("advance_decline").cum_sum().alias("ad_line"))
+    start = rows["trade_date"].min()
+    indexes = _read_range(root, "kline_index_daily", start, end)
+    index_rows = pl.DataFrame()
+    if not indexes.is_empty():
+        for symbol in ("000985.SH", "000001.SH"):
+            candidate = indexes.filter(pl.col("symbol") == symbol).sort("date")
+            if not candidate.is_empty():
+                index_rows = candidate
+                break
+    closes = {str(row["date"]): _round(row["close"]) for row in index_rows.to_dicts()}
+    return {
+        "dates": [str(value) for value in rows["trade_date"].to_list()],
+        "ad_line": [_round(value) for value in rows["ad_line"].to_list()],
+        "index_close": [closes.get(str(value)) for value in rows["trade_date"].to_list()],
+        "index_symbol": index_rows["symbol"][0] if not index_rows.is_empty() else None,
+    }
+
+
+def _industry_daily_returns(returns: pl.DataFrame, repo: Any) -> pl.DataFrame:
+    if returns.is_empty() or repo is None:
+        return pl.DataFrame()
+    try:
+        from app.services.rps_rotation import _load_concept_map_df
+
+        loaded = _load_concept_map_df(repo, "industry")
+        mapping = loaded[0] if isinstance(loaded, tuple) else loaded
+    except (ImportError, OSError, ValueError):
+        return pl.DataFrame()
+    if mapping.is_empty() or "industry" not in mapping.columns:
+        return pl.DataFrame()
+    joined = returns.drop_nulls("return").with_columns(pl.col("symbol").str.to_uppercase().alias("_sym_up")).join(mapping, on="_sym_up", how="inner")
+    if joined.is_empty():
+        return pl.DataFrame()
+    return (
+        joined.with_columns(pl.col("industry").str.split("-").list.first().alias("industry"))
+        .group_by(["date", "industry"])
+        .agg(pl.col("return").mean().alias("return"))
+        .sort(["date", "industry"])
+    )
+
+
+def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
+    if daily.is_empty():
+        return {}
+    counts = daily.group_by("industry").len().sort("len", descending=True).head(16)
+    names = counts["industry"].to_list()
+    pivot = daily.filter(pl.col("industry").is_in(names)).pivot(on="industry", index="date", values="return").sort("date")
+    matrix = []
+    for left in names:
+        row = []
+        for right in names:
+            if left == right:
+                row.append(1.0)
+                continue
+            pair = pivot.select(pl.col(left).alias("left"), pl.col(right).alias("right")).drop_nulls()
+            corr = pair.select(pl.corr("left", "right")).item() if pair.height >= 3 else None
+            row.append(_round(corr, 3))
+        matrix.append(row)
+    return {"industries": names, "matrix": matrix, "sample_days": pivot.height}
+
+
+def _mainline_waterfall(root: Path, end: date) -> dict[str, Any]:
+    path = root / "mainline_history" / "part.parquet"
+    if not path.is_file():
+        return {}
+    frame = pl.read_parquet(path).filter((pl.col("date") <= end) & (pl.col("kind") == "concept"))
+    if frame.is_empty():
+        return {}
+    latest_day = frame["date"].max()
+    latest = frame.filter(pl.col("date") == latest_day)
+    weights = {
+        "limit_up_count": ("涨停广度", 0.35),
+        "max_boards": ("连板高度", 0.25),
+        "rungs_filled": ("梯队完整", 0.25),
+        "ge2_count": ("二板以上", 0.15),
+    }
+    denominator = max(latest.height - 1, 1)
+    latest = latest.with_columns(
+        [
+            ((pl.col(column).rank(method="average") - 1) / denominator).alias(f"_{column}_norm")
+            for column in weights
+        ]
+    )
+    leader = latest.sort("rank").row(0, named=True)
+    components = [
+        {
+            "name": label,
+            "value": _round(100 * weight * float(leader[f"_{column}_norm"] or 0)),
+            "raw": leader[column],
+        }
+        for column, (label, weight) in weights.items()
+    ]
+    return {
+        "trade_date": str(latest_day),
+        "focus": leader["member"],
+        "score": _round(leader["score"]),
+        "components": components,
+    }
+
+
+def _sunburst(ladder: pl.DataFrame, end: date) -> dict[str, Any]:
+    latest = ladder.filter(pl.col("trade_date") == end)
+    if latest.is_empty():
+        return {}
+    themes: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for row in latest.to_dicts():
+        theme = str(row.get("theme_name") or "其他")
+        themes[theme][int(row.get("board_height") or 1)].append(str(row.get("name") or row.get("symbol")))
+    ranked = sorted(themes.items(), key=lambda item: -sum(len(values) for values in item[1].values()))[:14]
+    children = []
+    for theme, levels in ranked:
+        children.append({"name": theme, "children": [{"name": f"{height}板", "children": [{"name": stock, "value": 1} for stock in stocks[:12]]} for height, stocks in sorted(levels.items(), reverse=True)]})
+    return {"children": children, "stock_count": latest.height}
+
+
+def _rotation_clock(daily: pl.DataFrame) -> dict[str, Any]:
+    if daily.is_empty():
+        return {}
+    dates = sorted(daily["date"].unique().to_list())
+    if len(dates) < 6:
+        return {}
+    recent_dates = dates[-5:]
+    previous_dates = dates[-10:-5] or dates[:-5]
+    recent = daily.filter(pl.col("date").is_in(recent_dates)).group_by("industry").agg(pl.col("return").mean().alias("recent"))
+    previous = daily.filter(pl.col("date").is_in(previous_dates)).group_by("industry").agg(pl.col("return").mean().alias("previous"))
+    joined = recent.join(previous, on="industry", how="inner").with_columns((pl.col("recent") - pl.col("previous")).alias("acceleration"))
+    rows = [{"name": row["industry"], "momentum": _round(float(row["recent"]) * 100), "acceleration": _round(float(row["acceleration"]) * 100)} for row in joined.sort("recent", descending=True).head(24).to_dicts()]
+    return {"points": rows, "recent_days": len(recent_dates), "previous_days": len(previous_dates)}
+
+
+def _density(returns: pl.DataFrame, end: date) -> dict[str, Any]:
+    latest = returns.filter(pl.col("date") == end).drop_nulls(["return", "turnover_rate"])
+    if latest.is_empty():
+        return {}
+    x_edges = [0, 1, 2, 3, 5, 8, 12, 20, 35, 60, 100]
+    y_edges = [-11, -7, -4, -2, 0, 2, 4, 7, 11, 21]
+    bins: Counter[tuple[int, int]] = Counter()
+    for row in latest.select(["turnover_rate", "return"]).to_dicts():
+        x = float(row["turnover_rate"])
+        y = float(row["return"]) * 100
+        xi = next((idx for idx, (left, right) in enumerate(pairwise(x_edges)) if left <= x < right), None)
+        yi = next((idx for idx, (left, right) in enumerate(pairwise(y_edges)) if left <= y < right), None)
+        if xi is not None and yi is not None:
+            bins[(xi, yi)] += 1
+    values = [[x, y, count] for (x, y), count in bins.items()]
+    return {"x_bins": [f"{left}-{right}%" for left, right in pairwise(x_edges)], "y_bins": [f"{left}~{right}%" for left, right in pairwise(y_edges)], "values": values, "sample": latest.height}
+
+
+def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> dict[str, Any]:
+    """Build all supported advanced cards from Tickflow-owned data only."""
+    root = Path(root)
+    cards = {key: _empty_card() for key in CARD_KEYS}
+    history = _history_dates(root, "market_state_daily", trade_date, 75)
+    if not history:
+        return {"schema_version": SCHEMA_VERSION, "trade_date": trade_date.strftime("%Y%m%d"), "generated_at": datetime.now(UTC).isoformat(), "cards": cards, "coverage": {"available": 0, "total": len(CARD_KEYS)}}
+    start = history[0]
+    state = _read_range(root, "market_state_daily", start, trade_date)
+    breadth = _read_range(root, "market_breadth_daily", start, trade_date)
+    liquidity = _read_range(root, "market_liquidity_daily", start, trade_date)
+    events = _read_range(root, "limit_event_daily", start, trade_date)
+    ladder = _read_range(root, "limit_ladder_daily", start, trade_date)
+    themes = _read_range(root, "theme_observation_daily", start, trade_date)
+    sectors = _read_range(root, "sector_breadth_daily", start, trade_date)
+    regime = _regime_history(root, trade_date)
+    returns = _stock_returns(root, trade_date)
+    industry_daily = _industry_daily_returns(returns, repo)
+
+    builders = {
+        "sentiment_phase": (_sentiment_phase(state), state.height),
+        "liquidity_participation": (_liquidity_participation(state, liquidity), min(state.height, liquidity.height)),
+        "risk_transmission": (_risk_transmission(state, liquidity, events), 1 if not state.is_empty() else 0),
+        "state_transition": (_state_transition(regime), regime.height),
+        "sector_diffusion": (_sector_diffusion(sectors), sectors.height),
+        "theme_river": (_theme_river(themes), themes.height),
+        "promotion_funnel": (_promotion_funnel(ladder), ladder.height),
+        "anomaly_calendar": (_anomaly_calendar(regime), regime.height),
+        "return_distribution": (_return_distribution(returns, trade_date), returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
+        "advance_decline": (_advance_decline(root, breadth, trade_date), breadth.height),
+        "turnover_lorenz": (_gini_lorenz(returns.filter(pl.col("date") == trade_date)["amount"].drop_nulls().to_list()) if not returns.is_empty() else {}, returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
+        "industry_correlation": (_industry_correlation(industry_daily), industry_daily.height),
+        "mainline_waterfall": (_mainline_waterfall(root, trade_date), 1),
+        "theme_ladder_sunburst": (_sunburst(ladder, trade_date), ladder.filter(pl.col("trade_date") == trade_date).height if not ladder.is_empty() else 0),
+        "rps_rotation_clock": (_rotation_clock(industry_daily), industry_daily.height),
+        "turnover_return_density": (_density(returns, trade_date), returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
+    }
+    membership_note = "行业收益按当前行业成分回看历史计算。越接近当前日期越可靠"
+    for key, (data, rows) in builders.items():
+        note = membership_note if key in {"industry_correlation", "rps_rotation_clock"} else None
+        cards[key] = _card(data, rows=rows, note=note)
+    available = sum(card["status"] == "ok" for card in cards.values())
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "trade_date": trade_date.strftime("%Y%m%d"),
+        "generated_at": datetime.now(UTC).isoformat(),
+        "cards": cards,
+        "coverage": {"available": available, "total": len(CARD_KEYS), "history_start": str(start), "history_end": str(history[-1])},
+    }
