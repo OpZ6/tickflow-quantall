@@ -10,6 +10,34 @@ from playwright.sync_api import sync_playwright
 RESULTS = Path(__file__).resolve().parent / "results"
 
 
+def assert_balanced_pair(page, left_test_id: str, right_test_id: str) -> None:
+    """Ensure a desktop card pair fills one grid row without an orphan gap."""
+    left = page.get_by_test_id(left_test_id)
+    right = page.get_by_test_id(right_test_id)
+    left_box = left.bounding_box()
+    right_box = right.bounding_box()
+    grid_box = left.locator("xpath=..").bounding_box()
+    assert left_box and right_box and grid_box
+    assert abs(left_box["y"] - right_box["y"]) <= 3
+    assert abs(left_box["height"] - right_box["height"]) <= 3
+    assert abs(left_box["x"] - grid_box["x"]) <= 3
+    assert abs(
+        right_box["x"] + right_box["width"] - grid_box["x"] - grid_box["width"]
+    ) <= 3
+    gap = right_box["x"] - left_box["x"] - left_box["width"]
+    assert 0 <= gap <= 12
+
+
+def assert_full_width_card(page, test_id: str) -> None:
+    """Ensure a standalone desktop chart consumes its entire analysis row."""
+    card = page.get_by_test_id(test_id)
+    card_box = card.bounding_box()
+    grid_box = card.locator("xpath=..").bounding_box()
+    assert card_box and grid_box
+    assert abs(card_box["x"] - grid_box["x"]) <= 3
+    assert abs(card_box["width"] - grid_box["width"]) <= 3
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:3011")
@@ -134,6 +162,25 @@ def main() -> None:
         page.get_by_test_id("quantx-advanced-workspace").wait_for(timeout=30_000)
         for key in cards:
             assert page.get_by_test_id(f"quantx-advanced-{key}").count() == 1
+        for left_key, right_key in (
+            ("sentiment_phase", "state_transition"),
+            ("anomaly_calendar", "advance_decline"),
+            ("theme_river", "mainline_waterfall"),
+            ("promotion_funnel", "theme_ladder_sunburst"),
+            ("liquidity_participation", "return_distribution"),
+            ("turnover_return_density", "turnover_lorenz"),
+        ):
+            assert_balanced_pair(
+                page,
+                f"quantx-advanced-{left_key}",
+                f"quantx-advanced-{right_key}",
+            )
+        for key in (
+            "sector_diffusion",
+            "industry_correlation",
+            "rps_rotation_clock",
+        ):
+            assert_full_width_card(page, f"quantx-advanced-{key}")
         assert page.get_by_test_id("quantx-domain-industry").get_by_test_id(
             "quantx-capital-workspace"
         ).count() == 1
@@ -203,6 +250,29 @@ def main() -> None:
         page.get_by_test_id("quantx-advanced-industry_correlation").screenshot(
             path=str(RESULTS / "quantx-industry-correlation.png")
         )
+        for width, height in ((1440, 1000), (768, 900), (375, 812)):
+            page.set_viewport_size({"width": width, "height": height})
+            main_scroller = page.locator("main").first
+            main_scroller.evaluate("element => { element.scrollTop = 0 }")
+            dimensions = page.evaluate(
+                "() => ({ clientWidth: document.documentElement.clientWidth, "
+                "scrollWidth: document.documentElement.scrollWidth })"
+            )
+            assert dimensions["scrollWidth"] <= dimensions["clientWidth"] + 1, (
+                width,
+                dimensions,
+            )
+            main_dimensions = main_scroller.evaluate(
+                "element => ({ clientWidth: element.clientWidth, "
+                "scrollWidth: element.scrollWidth })"
+            )
+            assert main_dimensions["scrollWidth"] <= main_dimensions["clientWidth"] + 1, (
+                width,
+                main_dimensions,
+            )
+            page.screenshot(
+                path=str(RESULTS / f"quantx-responsive-{width}.png")
+            )
         assert not errors, errors
         assert not failed_responses, failed_responses
         browser.close()

@@ -15,6 +15,16 @@ const PALETTE = [RED, BLUE, ORANGE, PURPLE, GREEN, YELLOW, '#39c5cf', '#ff9f43',
 
 type ChartTheme = ReturnType<typeof useChartTheme>
 type ChartSelection = { sectorDimension?: string; sectorWindow?: number; correlationDimension?: string; mainlineFocus?: string; promotionWindow?: string }
+export type AdvancedCardLayout = { span?: 6 | 7 | 8 | 9 | 10 | 16; height?: number }
+
+const SPAN_CLASSES: Record<NonNullable<AdvancedCardLayout['span']>, string> = {
+  6: 'xl:[grid-column:span_6/span_6]',
+  7: 'xl:[grid-column:span_7/span_7]',
+  8: 'xl:[grid-column:span_8/span_8]',
+  9: 'xl:[grid-column:span_9/span_9]',
+  10: 'xl:[grid-column:span_10/span_10]',
+  16: 'xl:[grid-column:span_16/span_16]',
+}
 
 const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 'rotation' | 'structure'; span?: string; caveat?: string }> = {
   sentiment_phase: { title: '市场情绪状态相图', hint: '趋势情绪 × 短线情绪 · 气泡为涨停家数', group: 'state' },
@@ -200,7 +210,7 @@ function CorrelationPairRankings({ view }: { view: Record<string, any> }) {
   </section>
 }
 
-function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvancedCard }) {
+function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: QuantXAdvancedCard; layout?: AdvancedCardLayout }) {
   const meta = CARD_META[chartKey]
   const [sectorDimension, setSectorDimension] = useState('sw_level1')
   const [sectorWindow, setSectorWindow] = useState(20)
@@ -230,13 +240,14 @@ function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvanc
     promotion_funnel: 350,
     turnover_return_density: 350,
   }
-  const height = chartKey === 'promotion_funnel'
+  const height = layout?.height ?? (chartKey === 'promotion_funnel'
     ? Math.max(350, ((card.data.stages || []).length * 32) + 88)
-    : heightByKey[chartKey] ?? 320
+    : heightByKey[chartKey] ?? 320)
   const caveat = card.note || meta.caveat
   const correlationView = card.data.views?.[correlationDimension] || card.data
+  const spanClass = layout?.span ? SPAN_CLASSES[layout.span] : meta.span || SPAN_CLASSES[8]
   return (
-    <section data-testid={`quantx-advanced-${chartKey}`} className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-elevated/25 xl:[grid-column:span_8/span_8]', meta.span)}>
+    <section data-testid={`quantx-advanced-${chartKey}`} className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-elevated/25', spanClass)}>
       <header className="flex min-h-11 items-center gap-2 border-b border-border/70 px-3 py-1.5">
         <Activity className="h-3.5 w-3.5 shrink-0 text-accent" />
         <div className="min-w-0"><h3 className="truncate text-xs font-semibold">{meta.title}</h3><p className="truncate text-[9px] text-muted">{meta.hint}</p></div>
@@ -266,7 +277,7 @@ const GROUPS = [
   { key: 'structure', title: '接力效率与拥挤结构', hint: '最后检查晋级质量和交易拥挤', icon: GitBranch },
 ] as const
 
-export function AdvancedPanels({ snapshot, loading, error, cardKeys, flat = false, showSummary = true, testId = 'quantx-advanced-workspace' }: { snapshot?: QuantXAdvancedSnapshot; loading: boolean; error?: Error | null; cardKeys?: string[]; flat?: boolean; showSummary?: boolean; testId?: string }) {
+export function AdvancedPanels({ snapshot, loading, error, cardKeys, cardLayout, flat = false, showSummary = true, testId = 'quantx-advanced-workspace' }: { snapshot?: QuantXAdvancedSnapshot; loading: boolean; error?: Error | null; cardKeys?: string[]; cardLayout?: Record<string, AdvancedCardLayout>; flat?: boolean; showSummary?: boolean; testId?: string }) {
   const loadingId = testId === 'quantx-advanced-workspace' ? 'quantx-advanced-loading' : `${testId}-loading`
   const errorId = testId === 'quantx-advanced-workspace' ? 'quantx-advanced-error' : `${testId}-error`
   if (loading) return <section data-testid={loadingId} className="flex items-center justify-center rounded-lg border border-border bg-elevated/20 py-20 text-xs text-muted"><Loader2 className="mr-2 h-4 w-4 animate-spin" />正在构建高级市场图谱</section>
@@ -275,11 +286,11 @@ export function AdvancedPanels({ snapshot, loading, error, cardKeys, flat = fals
   return (
     <section data-testid={testId} className={cn('space-y-5', showSummary && 'rounded-lg border border-border bg-elevated/20 p-3')}>
       {showSummary && <header className="flex flex-wrap items-center gap-2 border-b border-border pb-2"><Boxes className="h-4 w-4 text-accent" /><div><h2 className="text-sm font-semibold">高级图谱数据覆盖</h2><p className="text-[10px] text-muted">15 张真实数据卡片已按分析域重组 · 单一批量快照 · {snapshot.coverage.history_start} 至 {snapshot.coverage.history_end}</p></div><span className="ml-auto rounded border border-border bg-base px-2 py-1 font-mono text-[10px] text-accent">{snapshot.coverage.available}/{snapshot.coverage.total} 可用</span></header>}
-      {flat ? <div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">{visibleKeys.map(key => <AdvancedCard key={key} chartKey={key} card={snapshot.cards[key]} />)}</div> : GROUPS.map(group => {
+      {flat ? <div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">{visibleKeys.map(key => <AdvancedCard key={key} chartKey={key} card={snapshot.cards[key]} layout={cardLayout?.[key]} />)}</div> : GROUPS.map(group => {
         const Icon = group.icon
         const keys = visibleKeys.filter(key => CARD_META[key]?.group === group.key)
         if (!keys.length) return null
-        return <section key={group.key} data-testid={`quantx-advanced-group-${group.key}`}><div className="mb-2 flex items-center gap-2"><Icon className="h-3.5 w-3.5 text-accent" /><h3 className="text-xs font-semibold">{group.title}</h3><span className="text-[9px] text-muted">{group.hint}</span></div><div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">{keys.map(key => <AdvancedCard key={key} chartKey={key} card={snapshot.cards[key]} />)}</div></section>
+        return <section key={group.key} data-testid={`quantx-advanced-group-${group.key}`}><div className="mb-2 flex items-center gap-2"><Icon className="h-3.5 w-3.5 text-accent" /><h3 className="text-xs font-semibold">{group.title}</h3><span className="text-[9px] text-muted">{group.hint}</span></div><div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">{keys.map(key => <AdvancedCard key={key} chartKey={key} card={snapshot.cards[key]} layout={cardLayout?.[key]} />)}</div></section>
       })}
     </section>
   )

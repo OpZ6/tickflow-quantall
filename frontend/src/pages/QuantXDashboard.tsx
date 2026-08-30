@@ -31,7 +31,7 @@ import {
   WindowSignalMatrix,
   type WindowSize,
 } from '@/components/quantx/MultidayPanels'
-import { AdvancedPanels } from '@/components/quantx/AdvancedPanels'
+import { AdvancedPanels, type AdvancedCardLayout } from '@/components/quantx/AdvancedPanels'
 import { quantxApi, type QuantXMultidaySnapshot, type QuantXReviewData } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { QK } from '@/lib/queryKeys'
@@ -51,6 +51,34 @@ import {
 } from './QuantXReview'
 
 type DeepTab = 'market' | 'themes' | 'emotion' | 'flow' | 'watch' | 'data' | 'quality'
+
+const DOMAIN_ADVANCED_LAYOUTS: Record<string, Record<string, AdvancedCardLayout>> = {
+  market: {
+    sentiment_phase: { span: 8, height: 400 },
+    state_transition: { span: 8, height: 320 },
+    anomaly_calendar: { span: 8, height: 390 },
+    advance_decline: { span: 8, height: 365 },
+  },
+  industry: {
+    sector_diffusion: { span: 16, height: 620 },
+    industry_correlation: { span: 16, height: 580 },
+    rps_rotation_clock: { span: 16, height: 420 },
+  },
+  themes: {
+    theme_river: { span: 10, height: 430 },
+    mainline_waterfall: { span: 6, height: 310 },
+  },
+  limitBoard: {
+    promotion_funnel: { span: 9 },
+    theme_ladder_sunburst: { span: 7, height: 500 },
+  },
+  liquidity: {
+    liquidity_participation: { span: 8, height: 390 },
+    return_distribution: { span: 8, height: 390 },
+    turnover_return_density: { span: 8, height: 380 },
+    turnover_lorenz: { span: 8, height: 340 },
+  },
+}
 
 function Panel({ title, hint, icon, actions, className, children, testId }: {
   title: string
@@ -486,7 +514,7 @@ export function QuantXDashboard() {
   const coverage = multiday ? `覆盖 ${multiday.data_coverage.window_days}/20日` : '多日数据降级'
 
   return (
-    <div className="mx-auto max-w-[1720px] px-3 pb-16 md:px-4" data-testid="quantx-unified-dashboard">
+    <div className="mx-auto max-w-[1720px] overflow-x-clip px-3 pb-16 md:px-4" data-testid="quantx-unified-dashboard">
       <DashboardHeader date={date} dates={dates} refreshing={refresh.isPending} coverage={coverage} onDate={goDate} onRefresh={() => refresh.mutate()} />
       <div className="mt-2 space-y-3">
         <MetricRibbon data={review} />
@@ -501,29 +529,29 @@ export function QuantXDashboard() {
         <section data-testid="quantx-deep-workspace" className="space-y-3">
           <AnalysisDomainSection testId="quantx-domain-market" title="市场状态与历史环境" hint="识别当前情绪阶段、历史异常与市场广度变化" sequence="当前状态 → 历史趋势 → 结构解释" icon={<Activity className="h-4 w-4" />}>
             <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="QuantX market_state_daily 情绪分 · 不等同于 Regime 状态矩阵" icon={<Activity className="h-3.5 w-3.5" />}><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
-            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['sentiment_phase', 'state_transition', 'anomaly_calendar', 'advance_decline']} flat />
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['sentiment_phase', 'state_transition', 'anomaly_calendar', 'advance_decline']} cardLayout={DOMAIN_ADVANCED_LAYOUTS.market} flat />
             <div data-testid="quantx-deep-market"><DeepSection tab="market" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
           </AnalysisDomainSection>
 
           <AnalysisDomainSection testId="quantx-domain-industry" title="行业轮动与资金生态" hint="把行业资金、宽度、相关性与轮动证据集中阅读" sequence="当前资金 → 历史连续性 → 结构解释 → 候选证据" icon={<Gauge className="h-4 w-4" />}>
             <div data-testid="quantx-deep-flow"><DeepSection tab="flow" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
-            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['sector_diffusion', 'industry_correlation', 'rps_rotation_clock']} flat showSummary={false} testId="quantx-advanced-industry" />
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['sector_diffusion', 'industry_correlation', 'rps_rotation_clock']} cardLayout={DOMAIN_ADVANCED_LAYOUTS.industry} flat showSummary={false} testId="quantx-advanced-industry" />
           </AnalysisDomainSection>
 
           <AnalysisDomainSection testId="quantx-domain-themes" title="题材生命周期与主线" hint="从多日信号进入题材生灭、排名演进与主线结构" sequence="当前主线 → 历史趋势 → 结构解释 → 股票证据" icon={<Layers3 className="h-4 w-4" />}>
             {multiday ? <WindowSignalMatrix data={multiday} active={windowSize} onChange={setWindowSize} /> : <Panel title="多日信号矩阵"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
             <div data-testid="quantx-deep-themes"><DeepSection tab="themes" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
-            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['theme_river', 'mainline_waterfall']} flat showSummary={false} testId="quantx-advanced-themes" />
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['theme_river', 'mainline_waterfall']} cardLayout={DOMAIN_ADVANCED_LAYOUTS.themes} flat showSummary={false} testId="quantx-advanced-themes" />
           </AnalysisDomainSection>
 
           <AnalysisDomainSection testId="quantx-domain-limit-board" title="连板与接力生态" hint="集中查看连板高度、晋级效率、层级结构与个股记录" sequence="当前梯队 → 历史趋势 → 晋级结构 → 个股证据" icon={<TrendingUp className="h-4 w-4" />}>
             <div data-testid="quantx-deep-emotion"><DeepSection tab="emotion" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
-            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['promotion_funnel', 'theme_ladder_sunburst']} flat showSummary={false} testId="quantx-advanced-limit-board" />
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['promotion_funnel', 'theme_ladder_sunburst']} cardLayout={DOMAIN_ADVANCED_LAYOUTS.limitBoard} flat showSummary={false} testId="quantx-advanced-limit-board" />
           </AnalysisDomainSection>
 
           <AnalysisDomainSection testId="quantx-domain-liquidity" title="收益结构、拥挤与流动性" hint="解释赚钱效应、交易拥挤与成交集中程度" sequence="当前分布 → 历史拥挤 → 结构解释" icon={<Sparkles className="h-4 w-4" />}>
             <Panel testId="quantx-congestion-panel" title="市场拥挤度：最新状态与历史" hint="单一口径 · 前 5% 活跃股票成交额占比"><CongestionOverview data={s.s1.congestion} /></Panel>
-            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['liquidity_participation', 'return_distribution', 'turnover_return_density', 'turnover_lorenz']} flat showSummary={false} testId="quantx-advanced-liquidity" />
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['liquidity_participation', 'return_distribution', 'turnover_return_density', 'turnover_lorenz']} cardLayout={DOMAIN_ADVANCED_LAYOUTS.liquidity} flat showSummary={false} testId="quantx-advanced-liquidity" />
           </AnalysisDomainSection>
 
           <AnalysisDomainSection testId="quantx-domain-decision" title="机会、关注池与最终决断" hint="把市场判断收束到机会、候选、仓位和次日动作" sequence="机会雷达 → 股票证据 → 仓位与场景" icon={<ShieldAlert className="h-4 w-4" />}>
