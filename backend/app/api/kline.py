@@ -5,7 +5,7 @@ import logging
 import math
 from datetime import date, timedelta
 from functools import lru_cache
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -18,6 +18,41 @@ from app.services import kline_sync
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/kline", tags=["kline"])
+
+
+@router.get("/chart")
+def get_chart_data(
+    request: Request,
+    symbol: Annotated[str, Query(min_length=1, max_length=32)],
+    asset_type: Annotated[str | None, Query(pattern="^(stock|etf|index)$")] = None,
+    interval: Annotated[str, Query(pattern="^(1m|5m|15m|30m|60m|1d|1w|1mo)$")] = "1d",
+    adjustment: Annotated[str, Query(pattern="^(none|qfq|hfq)$")] = "qfq",
+    range_name: Annotated[str, Query(alias="range", pattern="^(1m|3m|6m|1y|3y|5y|all|custom)$")] = "1y",
+    start_date: date | None = None,
+    end_date: date | None = None,
+):
+    """统一图表行情: 显式周期、复权、范围以及真实覆盖元数据。"""
+    from app.services.chart_data import ChartQuery, build_chart_response
+
+    repo = request.app.state.repo
+    resolved_asset_type = asset_type or repo.resolve_asset_type(symbol)
+    if asset_type is not None and asset_type != repo.resolve_asset_type(symbol):
+        raise HTTPException(status_code=422, detail="asset_type 与本地标的类型不一致")
+    try:
+        return build_chart_response(
+            repo,
+            ChartQuery(
+                symbol=symbol,
+                asset_type=resolved_asset_type,
+                interval=interval,
+                adjustment=adjustment,
+                range_name=range_name,
+                start_date=start_date,
+                end_date=end_date or cn_today(),
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _minute_allowed(capset) -> bool:
@@ -1029,8 +1064,8 @@ async def sync_minute_single(request: Request, body: dict):
     if requested_days is not None:
         if isinstance(requested_days, bool) or not isinstance(requested_days, int):
             raise HTTPException(status_code=400, detail="days 必须是整数")
-        if requested_days < 1 or requested_days > 30:
-            raise HTTPException(status_code=400, detail="days 必须在 1 到 30 之间")
+        if requested_days < 1 or requested_days > 1095:
+            raise HTTPException(status_code=400, detail="days 必须在 1 到 1095 之间")
 
     repo = request.app.state.repo
     capset = request.app.state.capabilities

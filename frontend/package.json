@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --force",
     "build": "tsc -b && vite build",
+    "test:indicators": "node scripts/run-indicator-verification.mjs",
     "preview": "vite preview",
     "lint": "eslint ."
   },

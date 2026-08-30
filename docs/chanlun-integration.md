@@ -8,11 +8,8 @@ TickFlow 内置缠论结构分析（包含处理 / 分型 / 笔 / 线段 / 中�
 - **后端** `backend/app/chanlun/`：merge_klines、fractal、bi（czsc 引擎）、segment、
   zhongshu、macd、bsp 七层流水线；`pipeline.analyze(candles)` 一次输出全部图层。
 - **API** `POST /api/chanlun/analyze`：body 为 `{"candles": [{time, open, high, low, close, volume}, ...]}`，
-  返回 `{merged_klines, fenxing, bi, segments, zhongshu, macd, bsp}`。
-- **前端渲染**：ECharts 原生能力——笔/线段用 custom series，中枢用 markArea 半透明矩形，
-  买卖点用 markPoint 三角标记。入口两处：
-  - 个股分析页「缠论」视图（`ChanlunKlineWorkbench`）；
-  - 行情浏览日 K 的「缠论」开关按钮（`StockDailyKChart`，开启时按需请求）。
+  返回全部结构层以及算法版本、数据指纹和末笔确认状态。
+- **前端渲染**：个股分析页由 `UnifiedStockChart` 在唯一 ECharts 中叠加包含处理、分型、笔、段、中枢和买卖点；旧 `ChanlunKlineWorkbench` 暂留兼容，不再是页面入口。
 
 ## 扩展技术指标
 
@@ -24,17 +21,18 @@ TickFlow 内置缠论结构分析（包含处理 / 分型 / 笔 / 线段 / 中�
   Stoch/StochRSI/PPO/DMA/UO/Vortex/PSY/Chop/AO/Aroon/PVT/DPO/ForceIndex/EMV/ADL/
   ChaikinOsc/ElderRay/TTMSqueeze/STC/CR/BRAR 副图）。
 - `frontend/src/lib/indicator-params.ts`：各指标可调参数与默认值（localStorage 持久化）。
-- 在 `EChartsCandlestick` 中通过副图按钮 / 主图叠加按钮切换。
+- 在统一个股图表的指标抽屉中多选、配置、排序、折叠和调整高度。
 
 ## 官方对比（ZenChart 直连）
 
-「个股分析 → 缠论视图」提供**官方对比**开关：
+统一工作台的缠论层提供**官方对比**开关：
 
 - 后端 `GET /api/chanlun/official` 直连 ZenChart 公开接口
   （free 端点：笔/线段/中枢；配置 `TICKFLOW_ZENCHART_TOKEN`
   环境变量后走 Pro 端点，额外含官方买卖点）。
 - 前端以红色系叠加渲染：红虚线=官方笔、红实线=官方线段、红框=官方中枢，
   与本地青色/橙色图层并排比对。
+- 官方时间戳必须全部映射到当前本地 candles；存在任何无法对齐端点时拒绝整层叠加并显示原因。官方响应绝不替换本地 K 线底座。
 - tickflow 是独立服务，不依赖任何本地 openclarr 进程。
 
 ## K 线窗口补全

@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from datetime import date, timedelta
 
@@ -31,7 +33,20 @@ def chanlun_analyze_post(body: dict):
     candles = body.get("candles", [])
     if not candles or len(candles) < 10:
         return {"error": "need >= 10 candles"}
-    return analyze(candles)
+    result = analyze(candles)
+    fingerprint_payload = [
+        [item.get("time"), item.get("open"), item.get("high"), item.get("low"), item.get("close"), item.get("volume")]
+        for item in candles
+    ]
+    result["_meta"] = {
+        "algorithm": "tickflow-local-chanlun",
+        "version": "v5",
+        "data_fingerprint": hashlib.sha256(
+            json.dumps(fingerprint_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:16],
+        "final_confirmed": bool(result["bi"] and result["bi"][-1].get("is_sure", False)),
+    }
+    return result
 
 
 @router.get("/candles")
@@ -104,8 +119,7 @@ def chanlun_official(
             "available": True,
             "source": data["source"],
             "name": data.get("name"),
-            # ZenChart 自带 K 线窗口 —— 官方/叠加模式下前端以此为图表底座,
-            # 与原型行为完全一致 (同 K 线同窗口, 层层严格对齐)
+            # K 线只用于时间对齐审计; 前端始终保留本地统一图表数据底座。
             "candles": off.get("candles", []),
             "counts": {
                 "bi": len(off.get("bi", [])),

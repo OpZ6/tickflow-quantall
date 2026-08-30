@@ -6,6 +6,7 @@ export type IndicatorParams = Record<string, Record<string, number>>
 /** 各指标可调参数及默认值 (key 与 SUB_CHARTS/OVERLAY_INDICATORS 的 key 一致) */
 export const PARAM_DEFS: Record<string, Record<string, number>> = {
   // 主图叠加
+  boll: { p: 20, sd: 2 },
   ema: { p: 20 },
   sma: { p: 20 },
   bbi: { p1: 3, p2: 6, p3: 12, p4: 24 },

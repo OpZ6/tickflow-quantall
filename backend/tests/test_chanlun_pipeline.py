@@ -85,3 +85,7 @@ def test_api_analyze_returns_layers(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert "bi" in body and "segments" in body and "zhongshu" in body and "bsp" in body
+    assert body["_meta"]["algorithm"] == "tickflow-local-chanlun"
+    assert body["_meta"]["version"] == "v5"
+    assert len(body["_meta"]["data_fingerprint"]) == 16
+    assert isinstance(body["_meta"]["final_confirmed"], bool)

@@ -1,18 +1,14 @@
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Sparkles, LineChart, History as HistoryIcon, Loader2, ExternalLink, Bell, AlertTriangle } from 'lucide-react'
+import { Sparkles, LineChart, History as HistoryIcon, Loader2, ExternalLink, Bell } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StockFinancialSearch } from '@/components/financials/StockFinancialSearch'
 import { StockPreviewDialog } from '@/components/StockPreviewDialog'
 import { LastStockChip } from '@/components/LastStockChip'
-import { AnalysisKChart, type PriceLevel, type LevelType } from '@/components/stock-analysis/AnalysisKChart'
-import { ChanlunKlineWorkbench } from '@/components/stock-analysis/ChanlunKlineWorkbench'
+import { UnifiedStockChart } from '@/features/stock-chart/UnifiedStockChart'
 import { PriceAlertDialog } from '@/components/stock-analysis/PriceAlertDialog'
-import { api } from '@/lib/api'
 import { useLastStock } from '@/lib/useLastStock'
-import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import {
   startAnalysis, findTodayReport, useHistoryReports,
@@ -102,7 +98,7 @@ export function StockAnalysis() {
         {/* 搜索栏 */}
         <div className="flex items-center gap-3">
           <div className="w-72">
-            <StockFinancialSearch onSelect={onSelect} assetTypes="stock,index" />
+            <StockFinancialSearch onSelect={onSelect} assetTypes="stock,etf,index" />
           </div>
           {symbol && (
             <>
@@ -182,9 +178,6 @@ export function StockAnalysis() {
 
 // ===== 分析看板:日 K + 关键价位 =====
 function StockAnalysisBoard({ symbol }: { symbol: string }) {
-  const [chartView, setChartView] = useState<'levels' | 'chanlun'>(() => (
-    new URLSearchParams(window.location.search).get('view') === 'chanlun' ? 'chanlun' : 'levels'
-  ))
   // 图表高度自适应视口:撑满首屏(减去页头/搜索栏等固定开销),最小不低于 560
   const [vh, setVh] = useState(() => window.innerHeight)
   useEffect(() => {
@@ -194,55 +187,6 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
   }, [])
   const chartHeight = Math.max(560, vh - 340)
 
-  const kline = useQuery({
-    queryKey: ['kline', symbol, ''],
-    queryFn: () => api.klineDaily(symbol, 500),
-    enabled: !!symbol,
-    staleTime: 60_000,
-  })
-
-  const levelsQ = useQuery({
-    queryKey: QK.stockLevels(symbol),
-    queryFn: () => api.stockAnalysisLevels(symbol, 250),
-    enabled: !!symbol,
-    staleTime: 60_000,
-  })
-
-  const rows = kline.data?.rows ?? []
-  const levels = (levelsQ.data?.levels ?? {}) as Record<LevelType, PriceLevel[]>
-
-  // 涨跌色:最后一根 K 线收 vs 前一根收(无前日则按开收判断)
-  const last = rows[rows.length - 1]
-  const prev = rows[rows.length - 2]
-  const curClose = levelsQ.data?.close ?? last?.close
-  const isUp = last ? (prev ? (last.close >= prev.close) : (last.close >= last.open)) : true
-
-  let levelChart: React.ReactNode
-  if (kline.isLoading) {
-    levelChart = <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted" /></div>
-  } else if (kline.isError) {
-    levelChart = (
-      <EmptyState
-        icon={AlertTriangle}
-        title="日 K 数据加载失败"
-        hint="请检查网络或数据源配置后重试。"
-      />
-    )
-  } else if (rows.length === 0) {
-    levelChart = <EmptyState icon={LineChart} title="暂无日 K 数据" hint="该标的尚未同步日 K,请先在数据页或自选页同步。" />
-  } else {
-    levelChart = (
-      <AnalysisKChart
-        rows={rows}
-        levels={levels}
-        series={levelsQ.data?.series}
-        seriesDates={levelsQ.data?.dates}
-        defaultLevelTypes={['sr', 'pivot', 'keltner_s']}
-        height={chartHeight}
-      />
-    )
-  }
-
   return (
     <div className="rounded-card border border-border/60 bg-surface/40 overflow-hidden">
       <div className="px-4 py-3 border-b border-border/40">
@@ -250,36 +194,12 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
           <div className="flex items-center gap-2 min-w-0">
             <LineChart className="h-4 w-4 text-sky-400 shrink-0" />
             <span className="text-sm font-medium text-foreground">K 线图</span>
-            <div className="ml-2 inline-flex items-center rounded-md border border-border/50 bg-base/30 p-0.5">
-              <button
-                type="button"
-                onClick={() => setChartView('levels')}
-                className={`rounded px-2 py-1 text-[10px] transition-colors ${chartView === 'levels' ? 'bg-elevated text-foreground' : 'text-muted hover:text-secondary'}`}
-              >
-                关键价位
-              </button>
-              <button
-                type="button"
-                onClick={() => setChartView('chanlun')}
-                className={`rounded px-2 py-1 text-[10px] transition-colors ${chartView === 'chanlun' ? 'bg-cyan-400/10 text-cyan-300' : 'text-muted hover:text-secondary'}`}
-              >
-                缠论 · 全指标
-              </button>
-            </div>
+            <span className="ml-2 rounded border border-sky-400/20 bg-sky-400/[0.06] px-2 py-1 text-[10px] text-sky-300">唯一实例 · 全指标 · 价位 · 缠论</span>
           </div>
-          <div className="flex items-baseline gap-2 shrink-0">
-            <span className="text-[10px] text-muted">{rows.length > 0 ? `${rows.length} 个交易日` : '扩展 K 线能力'}</span>
-            <span className="text-[10px] text-muted/60">·</span>
-            <span className="text-[10px] text-muted">当前价</span>
-            <span className={`text-base font-mono font-bold ${isUp ? 'text-bull' : 'text-bear'}`}>
-              {curClose?.toFixed(2) ?? '—'}
-            </span>
-          </div>
+          <span className="text-[10px] text-muted">周期、复权、范围和布局均可保存</span>
         </div>
       </div>
-      <div className="p-3">
-        {chartView === 'chanlun' ? <ChanlunKlineWorkbench symbol={symbol} /> : levelChart}
-      </div>
+      <UnifiedStockChart symbol={symbol} height={chartHeight} />
     </div>
   )
 }

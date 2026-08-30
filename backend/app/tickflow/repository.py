@@ -391,8 +391,13 @@ class KlineRepository:
 
         # parquet glob 路径
         self._enriched_glob = str(store.data_dir / "kline_daily_enriched" / "**" / "*.parquet")
+        self._daily_glob = str(store.data_dir / "kline_daily" / "**" / "*.parquet")
         self._index_enriched_glob = str(store.data_dir / "kline_index_enriched" / "**" / "*.parquet")
+        self._index_daily_glob = str(store.data_dir / "kline_index_daily" / "**" / "*.parquet")
         self._etf_enriched_glob = str(store.data_dir / "kline_etf_enriched" / "**" / "*.parquet")
+        self._etf_daily_glob = str(store.data_dir / "kline_etf_daily" / "**" / "*.parquet")
+        self._adj_factor_glob = str(store.data_dir / "adj_factor" / "**" / "*.parquet")
+        self._etf_adj_factor_glob = str(store.data_dir / "adj_factor_etf" / "**" / "*.parquet")
         self._minute_glob = str(store.data_dir / "kline_minute" / "**" / "*.parquet")
         self._etf_minute_glob = str(store.data_dir / "kline_etf_minute" / "**" / "*.parquet")
         self._inst_glob = str(store.data_dir / "instruments" / "**" / "*.parquet")
@@ -1576,6 +1581,58 @@ class KlineRepository:
         if asset_type == "etf":
             return self.get_etf_daily(symbol, start, end, columns)
         return pl.DataFrame()
+
+    def get_raw_daily_asset(
+        self,
+        asset_type: str,
+        symbol: str,
+        start: date,
+        end: date,
+    ) -> pl.DataFrame:
+        """读取权威原始日 K, 供显式复权和跨周期聚合使用。"""
+        glob = {
+            "stock": self._daily_glob,
+            "index": self._index_daily_glob,
+            "etf": self._etf_daily_glob,
+        }.get(asset_type)
+        if glob is None:
+            return pl.DataFrame()
+        try:
+            lazy = pl.scan_parquet(glob).filter(
+                (pl.col("symbol") == symbol)
+                & (pl.col("date") >= start)
+                & (pl.col("date") <= end)
+            )
+            available = set(lazy.collect_schema().names())
+            columns = [
+                column
+                for column in ("symbol", "date", "open", "high", "low", "close", "volume", "amount")
+                if column in available
+            ]
+            return lazy.select(columns).sort("date").collect()
+        except Exception as exc:
+            logger.warning("原始日K查询失败: %s", exc)
+            return pl.DataFrame()
+
+    def get_adjustment_factors(self, asset_type: str, symbol: str) -> pl.DataFrame:
+        """返回单标的全历史事件型复权因子, 指数没有复权因子。"""
+        glob = {
+            "stock": self._adj_factor_glob,
+            "etf": self._etf_adj_factor_glob,
+        }.get(asset_type)
+        if glob is None:
+            return pl.DataFrame()
+        try:
+            return (
+                pl.scan_parquet(glob)
+                .filter(pl.col("symbol") == symbol)
+                .select("symbol", "trade_date", "ex_factor")
+                .sort("trade_date")
+                .collect()
+            )
+        except Exception as exc:
+            logger.debug("复权因子查询跳过 %s: %s", symbol, exc)
+            return pl.DataFrame()
 
     def _minute_glob_for(self, asset_type: str) -> str:
         """按资产类型选择分钟K parquet glob。ETF 分钟数据独立存储于 kline_etf_minute。"""

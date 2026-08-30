@@ -41,6 +41,11 @@ export const storage = {
   /** 技术指标自定义参数 (key: 指标名, value: { 参数名: 值 }) */
   indicatorParams:      kv<Record<string, Record<string, number>>>('indicator_params_v1'),
 
+  /** 统一个股 K 线工作台布局；只保存配置，不保存行情。 */
+  stockChartLayout:     kv<unknown>('stock_chart_layout_v1'),
+  /** 用户画线，按股票/周期/复权隔离；不保存行情。 */
+  stockChartDrawings:   kv<Record<string, unknown>>('stock_chart_drawings_v1'),
+
   /** 策略结果列表列配置 */
   screenerResultColumns: kv<unknown[]>('screener_result_columns'),
 
@@ -145,4 +150,5 @@ export const storage = {
   dataCardVisible: kv<Record<string, boolean>>('data-card-visible'),
   /** 数据页画像卡片顺序 (卡片key 数组, 长度=卡片总数) */
   dataCardOrder: kv<string[]>('data-card-order'),
+
 } as const

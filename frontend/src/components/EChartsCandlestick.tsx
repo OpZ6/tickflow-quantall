@@ -58,6 +58,7 @@ export interface ChartRange {
 
 export interface ChartPriceLine {
   value: number
+  endValue?: number
   label?: string
   color?: string
   start?: string
@@ -86,6 +87,10 @@ export interface ChanlunLayerConfig {
   showSegments: boolean
   showZhongshu: boolean
   showBsp: boolean
+  /** 展示包含关系处理后的合并 K 线区间。 */
+  showMerged?: boolean
+  /** 展示顶/底分型。 */
+  showFenxing?: boolean
   /** 叠加 ZenChart 官方图层 (红色系, 需传入 chanlunOfficial) */
   showOfficial: boolean
 }
@@ -97,6 +102,8 @@ export const DEFAULT_CHANLUN_CONFIG: ChanlunLayerConfig = {
 
 /** 已映射到本图 K 线索引的缠论数据 (index 与 data 数组一一对应) */
 export interface ChanlunMappedLayer {
+  merged: { startIdx: number | null; endIdx: number | null; low: number; high: number; direction: string }[]
+  fenxing: { idx: number | null; type: 'bottom' | 'top'; value: number }[]
   bi: {
     startIdx: number | null; endIdx: number | null
     startPrice: number; endPrice: number
@@ -123,6 +130,13 @@ export function mapChanlunData(
   const idx = (t: number | undefined | null): number | null =>
     t == null ? null : (timeToIndex.get(t) ?? null)
   return {
+    merged: (chanlun.merged_klines ?? []).map(item => ({
+      startIdx: idx(item.start_time), endIdx: idx(item.end_time),
+      low: item.low, high: item.high, direction: item.dir,
+    })),
+    fenxing: (chanlun.fenxing ?? []).map(item => ({
+      idx: idx(item.time), type: item.type, value: item.value,
+    })),
     bi: (chanlun.bi ?? []).map(b => ({
       startIdx: idx(b.start_time), endIdx: idx(b.end_time),
       startPrice: b.start_price, endPrice: b.end_price,
@@ -145,7 +159,7 @@ export function mapChanlunData(
 
 /** 日期字符串 → 当日本地午夜 unix 秒 (与后端 candle.time 约定一致) */
 export function candleTimeOf(date: string): number {
-  return Math.floor(new Date(`${date}T00:00:00`).getTime() / 1000)
+  return Math.floor(new Date(date.includes('T') ? date : `${date}T00:00:00`).getTime() / 1000)
 }
 
 /** 由图表 rows 构建时间→索引映射 (配合 mapChanlunData 使用) */
@@ -666,6 +680,13 @@ export const OVERLAY_INDICATORS: { key: string; label: string }[] = [
 
 const OVERLAY_KEYS = new Set(OVERLAY_INDICATORS.map(o => o.key))
 
+function reportIndicatorError(key: string, error: unknown): void {
+  console.error(`[stock-chart] 指标 ${key} 计算失败`, error)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('stock-chart-indicator-error', { detail: { key } }))
+  }
+}
+
 /** 主图叠加指标的 line series 快捷构造 */
 function ovLine(name: string, color: string, values: (number | null)[], dashed = false) {
   return {
@@ -760,11 +781,16 @@ interface Props {
   symbol?: string
   linkedPrice?: number | null
   onDateClick?: (date: string) => void
+  onChartPointClick?: (date: string, price: number) => void
   onPriceDoubleClick?: (price: number, currentPrice: number) => void
   /** 默认可见蜡烛根数, 默认 60 */
   visibleBars?: number
   /** 已激活的子图 key 列表 (含 vol, 按点击顺序) */
   activeIndicators?: string[]
+  /** 用户为各副图保存的高度。 */
+  paneHeights?: Record<string, number>
+  /** 独立浏览器验收时用于定位唯一图表实例。 */
+  testId?: string
   /** 成交量柱相对前 N 个交易日均量的显示设置 */
   volumeCompare?: VolumeCompareConfig
   /** 缠论图层 (笔/线段/中枢/买卖点), 已映射到本图索引 */
@@ -805,6 +831,7 @@ function buildSubInfoGraphics(
   activeIndicators: string[],
   subStartTop: number,
   volumeCompare: VolumeCompareConfig,
+  paneHeights: Record<string, number> = {},
 ): any[] {
   const d = infoIdx >= 0 && infoIdx < data.length ? data[infoIdx] : null
   const graphics: any[] = []
@@ -887,7 +914,7 @@ function buildSubInfoGraphics(
       silent: true, z: 10,
     })
 
-    curTop += INFO_BAR_H + def.height + SUB_GAP_PX
+    curTop += INFO_BAR_H + (paneHeights[key] ?? def.height) + SUB_GAP_PX
   })
 
   return graphics
@@ -910,6 +937,7 @@ function buildOption(
   chanlunData?: ChanlunMappedLayer | null,
   chanlunCfg?: ChanlunLayerConfig,
   chanlunOff?: ChanlunMappedLayer | null,
+  paneHeights: Record<string, number> = {},
 ): EChartsOption {
   const candleData = data.map(d => [d.open, d.close, d.low, d.high])
 
@@ -976,8 +1004,9 @@ function buildOption(
   activeIndicators.forEach(key => {
     const def = SUB_CHARTS.find(s => s.key === key)
     if (!def) return
-    activeSubDefs.push(def)
-    subTotalH += INFO_BAR_H + def.height
+    const configured = { ...def, height: paneHeights[key] ?? def.height }
+    activeSubDefs.push(configured)
+    subTotalH += INFO_BAR_H + configured.height
   })
   if (activeSubDefs.length > 0) subTotalH += activeSubDefs.length * SUB_GAP_PX
 
@@ -1053,6 +1082,23 @@ function buildOption(
       { xAxis: r.end },
     ]))
 
+  // 包含处理后的合并 K 线以极淡竖区间显示；它是结构层，不替换原始蜡烛。
+  if (chanlunData && chanlunCfg?.visible && chanlunCfg.showMerged) {
+    for (const item of chanlunData.merged) {
+      if (item.startIdx == null || item.endIdx == null) continue
+      if (item.startIdx === item.endIdx || item.startIdx >= data.length || item.endIdx < 0) continue
+      markAreaData.push([
+        {
+          xAxis: dates[Math.max(0, item.startIdx)],
+          yAxis: item.high,
+          itemStyle: { color: item.direction === 'up' ? 'rgba(43,201,131,0.045)' : 'rgba(242,54,69,0.045)' },
+          label: { show: false },
+        },
+        { xAxis: dates[Math.min(data.length - 1, item.endIdx)], yAxis: item.low },
+      ])
+    }
+  }
+
   // 缠论中枢 → 半透明矩形 (叠加到 K 系列 markArea; 本地紫 / 官方红)
   if (chanlunCfg?.visible && chanlunCfg.showZhongshu !== false) {
     const zsLayers: { data: ChanlunMappedLayer['zhongshu']; fill: string; border: string }[] = []
@@ -1099,7 +1145,7 @@ function buildOption(
       if (line.start && line.end && dateIndexMap.has(line.start) && dateIndexMap.has(line.end)) {
         return [
           { xAxis: line.start, yAxis: line.value },
-          { xAxis: line.end, yAxis: line.value, lineStyle, label, symbol: 'none' },
+          { xAxis: line.end, yAxis: line.endValue ?? line.value, lineStyle, label, symbol: 'none' },
         ]
       }
       return { yAxis: line.value, lineStyle, label, symbol: 'none' }
@@ -1149,6 +1195,23 @@ function buildOption(
           fontFamily: 'JetBrains Mono, monospace',
         },
         z: 100, zlevel: 10,
+      })
+    }
+  }
+
+  if (chanlunData && chanlunCfg?.visible && chanlunCfg.showFenxing) {
+    for (const point of chanlunData.fenxing) {
+      if (point.idx == null || point.idx < 0 || point.idx >= data.length) continue
+      const row = data[point.idx]
+      const isTop = point.type === 'top'
+      markPointData.push({
+        name: row.date,
+        coord: [row.date, point.value],
+        symbol: 'diamond', symbolSize: 7,
+        symbolOffset: isTop ? [0, '-45%'] : [0, '45%'],
+        itemStyle: { color: isTop ? '#fb7185' : '#34d399', borderColor: '#0b0c0f', borderWidth: 1 },
+        label: { show: false },
+        z: 98,
       })
     }
   }
@@ -1207,7 +1270,10 @@ function buildOption(
     if (!OVERLAY_KEYS.has(ov)) continue
     try {
       series.push(...buildOverlaySeries(ov, data))
-    } catch { /* 参数未就绪等异常静默跳过 */ }
+    } catch (error) {
+      // 公式错误必须可观察，不能让某个指标在图上无声消失。
+      reportIndicatorError(ov, error)
+    }
   }
 
   // ===== 缠论笔 / 线段 (line series 折线) =====
@@ -1332,7 +1398,12 @@ function buildOption(
 
     xAxisIndices.push(xAxisIdx)
 
-    const subSeries = def.buildSeries(data, { compact, volumeCompare, params: {} })
+    let subSeries: any[] = []
+    try {
+      subSeries = def.buildSeries(data, { compact, volumeCompare, params: {} })
+    } catch (error) {
+      reportIndicatorError(def.key, error)
+    }
     subSeries.forEach((s: any) => {
       series.push({ ...s, xAxisIndex: xAxisIdx, yAxisIndex: yAxisIdx })
     })
@@ -1342,7 +1413,7 @@ function buildOption(
 
   // 子图信息栏 graphic
   const subStartTop = topPad + candleAvail + candleBottomPad
-  const infoGraphics = buildSubInfoGraphics(data, infoIdx, activeIndicators, subStartTop, volumeCompare)
+  const infoGraphics = buildSubInfoGraphics(data, infoIdx, activeIndicators, subStartTop, volumeCompare, paneHeights)
 
   return {
     animation: false,
@@ -1396,9 +1467,12 @@ export function EChartsCandlestick({
   symbol: _symbol,
   linkedPrice,
   onDateClick,
+  onChartPointClick,
   onPriceDoubleClick,
   visibleBars = 60,
   activeIndicators = [],
+  paneHeights = {},
+  testId,
   volumeCompare = { enabled: true, days: 1 },
   chanlunData = null,
   chanlunConfig,
@@ -1410,6 +1484,8 @@ export function EChartsCandlestick({
   dataRef.current = data
   const onDateClickRef = useRef(onDateClick)
   onDateClickRef.current = onDateClick
+  const onChartPointClickRef = useRef(onChartPointClick)
+  onChartPointClickRef.current = onChartPointClick
   const onPriceDoubleClickRef = useRef(onPriceDoubleClick)
   onPriceDoubleClickRef.current = onPriceDoubleClick
   // 主题: buildOption/信息栏内部通过 CT() 动态取调色板, 这里只负责切换时触发重建
@@ -1445,6 +1521,7 @@ export function EChartsCandlestick({
       activeIndicatorsRef.current,
       subStartTop,
       volumeCompareRef.current,
+      paneHeights,
     )
     if (infoGraphics.length > 0) {
       chart.setOption({ graphic: infoGraphics }, { lazyUpdate: true })
@@ -1453,7 +1530,10 @@ export function EChartsCandlestick({
 
   // 计算子图总高度
   const activeSubDefs = activeIndicators
-    .map(key => SUB_CHARTS.find(s => s.key === key))
+    .map(key => {
+      const def = SUB_CHARTS.find(s => s.key === key)
+      return def ? { ...def, height: paneHeights[key] ?? def.height } : undefined
+    })
     .filter((d): d is SubChartDef => !!d)
 
   let subTotalH = 0
@@ -1590,6 +1670,7 @@ export function EChartsCandlestick({
       const idx = params.dataIndex
       if (idx >= 0 && idx < d.length) {
         onDateClickRef.current?.(d[idx].date)
+        onChartPointClickRef.current?.(d[idx].date, d[idx].close)
       }
     })
 
@@ -1723,6 +1804,7 @@ export function EChartsCandlestick({
       chanlunData,
       chanlunConfig,
       chanlunOfficial,
+      paneHeights,
     )
 
     chart.setOption(option, true)
@@ -1740,7 +1822,7 @@ export function EChartsCandlestick({
     if (infoEl) {
       infoEl.innerHTML = getInfoBarHTML()
     }
-  }, [data, markers, ranges, priceLines, linkedPrice, showMA, showMarkersProp, activeIndicators, volumeCompare, chartHeight, dates, dateIndexMap, initialZoom, getInfoBarHTML, theme, chanlunData, chanlunConfig, chanlunOfficial])
+  }, [data, markers, ranges, priceLines, linkedPrice, showMA, showMarkersProp, activeIndicators, volumeCompare, chartHeight, dates, dateIndexMap, initialZoom, getInfoBarHTML, theme, chanlunData, chanlunConfig, chanlunOfficial, paneHeights])
 
   // 渲染信息栏容器 (内容由 JS 直接写入)
   const initialHTML = useMemo(() => {
@@ -1795,7 +1877,7 @@ export function EChartsCandlestick({
       )}
 
       {/* ECharts canvas */}
-      <div ref={containerRef} className="w-full" style={{ height: chartHeight }} />
+      <div ref={containerRef} data-testid={testId} className="w-full" style={{ height: chartHeight }} />
     </div>
   )
 }

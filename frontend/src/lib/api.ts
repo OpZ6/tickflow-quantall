@@ -1434,6 +1434,45 @@ export interface DataSourcesResponse {
   config_dir: string
 }
 
+export type ChartInterval = '1m' | '5m' | '15m' | '30m' | '60m' | '1d' | '1w' | '1mo'
+export type ChartAdjustment = 'none' | 'qfq' | 'hfq'
+export type ChartRangeName = '1m' | '3m' | '6m' | '1y' | '3y' | '5y' | 'all' | 'custom'
+
+export interface ChartDataMeta {
+  requested_interval: ChartInterval
+  effective_interval: ChartInterval
+  requested_adjustment: ChartAdjustment
+  adjustment: ChartAdjustment
+  requested_start: string
+  requested_end: string
+  source: string
+  coverage_start: string | null
+  coverage_end: string | null
+  complete: boolean
+  warmup_bars: number
+  warmup_complete: boolean
+  warnings: string[]
+}
+
+export interface ChartDataResponse {
+  symbol: string
+  asset_type: 'stock' | 'etf' | 'index'
+  rows: KlineRow[]
+  /** 与 rows 同周期、同复权、同裁剪窗口计算的 11 组关键价位。 */
+  levels: Record<LevelType, PriceLevel[]>
+  meta: ChartDataMeta
+}
+
+export interface ChartDataQuery {
+  symbol: string
+  assetType?: 'stock' | 'etf' | 'index'
+  interval: ChartInterval
+  adjustment: ChartAdjustment
+  range: ChartRangeName
+  startDate?: string
+  endDate?: string
+}
+
 export interface MarketDatasetContract {
   dataset_id: string
   description: string
@@ -1677,6 +1716,12 @@ export interface ChanlunAnalysis {
   zhongshu: ChanlunZhongshu[]
   macd: { time: number; dif: number; dea: number; histogram: number }[]
   bsp: ChanlunBsp[]
+  _meta?: {
+    algorithm: string
+    version: string
+    data_fingerprint: string
+    final_confirmed: boolean
+  }
 }
 
 export interface ChanlunCandle {
@@ -1702,7 +1747,7 @@ export interface ChanlunOfficialResponse {
   detail?: string
   source?: 'pro' | 'free'
   name?: string | null
-  /** ZenChart 自带 K 线窗口 (官方/叠加模式的图表底座) */
+  /** ZenChart 窗口只用于时间戳严格对齐审计，不替换本地 K 线。 */
   candles?: ChanlunCandle[]
   counts?: { bi: number; segments: number; zhongshu: number; bsp: number }
   official?: {
@@ -2971,6 +3016,18 @@ export const api = {
     request<{ status: string; synced: { started: boolean; reason?: string } }>(
       `/api/financials/sync/${table}`, { method: 'POST' },
     ),
+  klineChart: (query: ChartDataQuery) => {
+    const params = new URLSearchParams({
+      symbol: query.symbol,
+      interval: query.interval,
+      adjustment: query.adjustment,
+      range: query.range,
+    })
+    if (query.assetType) params.set('asset_type', query.assetType)
+    if (query.startDate) params.set('start_date', query.startDate)
+    if (query.endDate) params.set('end_date', query.endDate)
+    return request<ChartDataResponse>(`/api/kline/chart?${params.toString()}`)
+  },
 
   financialSyncScope: (
     scope: 'market_overview' | 'market_history' | 'stock' | 'market_detail',

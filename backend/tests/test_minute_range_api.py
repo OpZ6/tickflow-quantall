@@ -106,7 +106,7 @@ def test_sync_minute_single_uses_requested_days(monkeypatch):
 
 
 def test_sync_minute_single_rejects_invalid_days():
-    with pytest.raises(HTTPException, match="days 必须在 1 到 30 之间"):
+    with pytest.raises(HTTPException, match="days 必须在 1 到 1095 之间"):
         asyncio.run(kline_api.sync_minute_single(
             _request(),
             {"symbol": "600000.SH", "days": 0},

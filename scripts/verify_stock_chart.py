@@ -1,0 +1,117 @@
+"""Standalone Playwright acceptance check for the unified stock chart."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+
+BASE_URL = "http://127.0.0.1:3011"
+OUTPUT_DIR = Path(__file__).resolve().parents[1] / "docs" / "evidence" / "stock-chart"
+
+
+def main() -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    console_errors: list[str] = []
+    failed_requests: list[str] = []
+    chart_requests: list[str] = []
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="msedge", headless=True)
+        context = browser.new_context(viewport={"width": 1600, "height": 1000})
+        context.route(
+            "**/*",
+            lambda route: route.abort()
+            if any(host in route.request.url for host in ("google-analytics", "googletagmanager", "sentry.io"))
+            else route.continue_(),
+        )
+        page = context.new_page()
+        page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+        def record_failed_request(request) -> None:
+            detail = f"{request.method} {request.url}: {request.failure}"
+            # React Query 在 reload 时会主动取消上一页的 SSE；这不是网络故障。
+            if "/api/intraday/stream" in request.url and "ERR_ABORTED" in str(request.failure):
+                return
+            failed_requests.append(detail)
+
+        page.on("requestfailed", record_failed_request)
+        page.on("request", lambda request: chart_requests.append(request.url) if "/api/kline/chart" in request.url else None)
+
+        page.goto(f"{BASE_URL}/stock-analysis?symbol=600000.SH&name=浦发银行", wait_until="domcontentloaded")
+        chart = page.get_by_test_id("unified-stock-chart")
+        chart.wait_for(state="visible", timeout=30_000)
+        page.get_by_test_id("unified-stock-chart-instance").wait_for(state="visible", timeout=30_000)
+        page.wait_for_function("document.querySelectorAll('[data-testid=unified-stock-chart-instance] canvas').length === 1")
+
+        initial_request_count = len(chart_requests)
+        page.get_by_role("button", name="指标管理").click()
+        drawer = page.get_by_role("complementary", name="指标管理器")
+        drawer.wait_for(state="visible")
+        drawer.locator("button").filter(has_text="RSI").first.click()
+        drawer.get_by_role("button", name="关闭指标管理器").click()
+        page.get_by_text("RSI", exact=True).first.wait_for(state="visible")
+        page.wait_for_timeout(300)
+        assert len(chart_requests) == initial_request_count, "切换指标不应重新请求 K 线"
+
+        # 关键结构图层与同一个 canvas 同时存在。
+        page.get_by_text("支撑阻力", exact=True).wait_for(state="visible")
+
+        chart.get_by_role("button", name="缠论", exact=True).first.click()
+        page.get_by_text("默认本地算法", exact=False).wait_for(state="visible")
+        page.get_by_text("包含处理", exact=True).wait_for(state="visible")
+        page.get_by_text("分型", exact=True).wait_for(state="visible")
+        assert page.locator("[data-testid=unified-stock-chart-instance]").count() == 1
+        assert page.locator("[data-testid=unified-stock-chart-instance] canvas").count() == 1
+
+        # 回放只截断当前内存序列，不重新请求行情。
+        requests_before_replay = len(chart_requests)
+        chart.get_by_role("button", name="回放", exact=True).click()
+        page.get_by_role("slider", name="逐根回放").wait_for(state="visible")
+        page.get_by_role("button", name="下一根", exact=True).click()
+        assert len(chart_requests) == requests_before_replay
+        page.get_by_role("button", name="退出", exact=True).click()
+
+        # 周期变化才应产生新行情请求，并仍保留唯一图表实例。
+        chart.get_by_role("combobox", name="周期").select_option("1w")
+        page.wait_for_function("document.querySelectorAll('[data-testid=unified-stock-chart-instance] canvas').length === 1")
+        assert len(chart_requests) > requests_before_replay
+        chart.get_by_role("combobox", name="周期").select_option("1d")
+
+        # 双击主图建立水平线，验证按股票/周期持久化以及单项删除入口。
+        canvas = page.locator("[data-testid=unified-stock-chart-instance] canvas")
+        box = canvas.bounding_box()
+        assert box is not None
+        canvas.dblclick(position={"x": box["width"] * 0.55, "y": box["height"] * 0.25})
+        page.get_by_text("画线：", exact=True).wait_for(state="visible")
+        page.get_by_role("button", name="删除画线 1").wait_for(state="visible")
+
+        page.screenshot(path=OUTPUT_DIR / "desktop.png", full_page=True)
+        chart.screenshot(path=OUTPUT_DIR / "chart.png")
+
+        page.reload(wait_until="domcontentloaded")
+        chart.wait_for(state="visible", timeout=30_000)
+        page.get_by_text("RSI", exact=True).first.wait_for(state="visible")
+        page.get_by_text("画线：", exact=True).wait_for(state="visible")
+        assert page.locator("[data-testid=unified-stock-chart-instance]").count() == 1
+        assert chart.get_by_role("combobox", name="周期").input_value() == "1d"
+
+        overflow = page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth")
+        result = {
+            "chart_requests": len(chart_requests),
+            "console_errors": console_errors,
+            "failed_requests": failed_requests,
+            "single_chart_instance": True,
+            "indicator_persisted": True,
+            "horizontal_overflow": overflow,
+        }
+        (OUTPUT_DIR / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        browser.close()
+
+    if console_errors or failed_requests or overflow:
+        raise SystemExit(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
