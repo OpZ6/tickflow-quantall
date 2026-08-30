@@ -144,6 +144,13 @@ def main() -> None:
         assert page.get_by_role("heading", name="连板详细记录", exact=True).count() == 0
         assert page.get_by_test_id("quantx-advanced-risk_transmission").count() == 0
         assert page.get_by_role("heading", name="同花顺热点题材覆盖", exact=True).count() == 1
+        assert page.get_by_role("heading", name="高级图谱数据覆盖", exact=True).count() == 0
+        theme_scores = [
+            float(page.get_by_test_id("quantx-theme-mainline-row").nth(index).get_attribute("data-score") or 0)
+            for index in range(page.get_by_test_id("quantx-theme-mainline-row").count())
+        ]
+        assert len(theme_scores) == 8
+        assert theme_scores == sorted(theme_scores, reverse=True)
         expected_domains = [
             "quantx-domain-conclusion",
             "quantx-domain-market",
@@ -191,9 +198,12 @@ def main() -> None:
         assert page.get_by_test_id("quantx-domain-liquidity").get_by_test_id(
             "quantx-congestion-panel"
         ).count() == 1
-        assert "15 张真实数据卡片" in page.get_by_test_id(
-            "quantx-advanced-workspace"
-        ).locator("header").first.inner_text()
+        market_domain = page.get_by_test_id("quantx-domain-market")
+        market_overview_box = market_domain.get_by_test_id("quantx-deep-market").bounding_box()
+        emotion_calendar_box = market_domain.get_by_test_id("quantx-emotion-calendar").bounding_box()
+        advanced_market_box = market_domain.get_by_test_id("quantx-advanced-workspace").bounding_box()
+        assert market_overview_box and emotion_calendar_box and advanced_market_box
+        assert market_overview_box["y"] < emotion_calendar_box["y"] < advanced_market_box["y"]
         assert "两套分值与状态不可直接互换" in page.get_by_test_id(
             "quantx-state-transition-guide"
         ).inner_text()
@@ -238,8 +248,29 @@ def main() -> None:
             "quantx-correlation-pair-rankings"
         )
         correlation_rankings.wait_for()
-        assert page.get_by_test_id("quantx-correlation-pair-highest").count() == 8
-        assert page.get_by_test_id("quantx-correlation-pair-lowest").count() == 8
+        highest_pairs = page.get_by_test_id("quantx-correlation-pair-highest")
+        lowest_pairs = page.get_by_test_id("quantx-correlation-pair-lowest")
+        assert highest_pairs.count() == 10
+        assert lowest_pairs.count() == 10
+        industry_select = page.get_by_test_id("quantx-correlation-industry-select")
+        focused_industry = correlation["industries"][0]
+        industry_select.select_option(focused_industry)
+        ranking_context = page.get_by_test_id("quantx-correlation-ranking-context")
+        assert focused_industry in ranking_context.inner_text()
+        assert all(
+            focused_industry in highest_pairs.nth(index).inner_text()
+            for index in range(highest_pairs.count())
+        )
+        assert all(
+            focused_industry in lowest_pairs.nth(index).inner_text()
+            for index in range(lowest_pairs.count())
+        )
+        page.get_by_test_id("quantx-correlation-clear-industry").click()
+        assert "全部行业组合总排名" in ranking_context.inner_text()
+        clickable_industry = highest_pairs.first.locator("button[data-industry]").last
+        clicked_industry = clickable_industry.get_attribute("data-industry")
+        clickable_industry.click()
+        assert clicked_industry in ranking_context.inner_text()
         mainline_selector = page.get_by_test_id("quantx-mainline-selector")
         mainline_selector.wait_for()
         assert mainline_selector.get_by_role("button").count() == len(mainlines)

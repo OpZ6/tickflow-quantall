@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
-import { Activity, Boxes, GitBranch, Loader2, Orbit, Radar } from 'lucide-react'
+import { Activity, GitBranch, Loader2, Orbit, Radar } from 'lucide-react'
 import type { QuantXAdvancedCard, QuantXAdvancedSnapshot } from '@/lib/api'
 import { useChartTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
@@ -154,7 +154,7 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     const values = matrix.flatMap((row: Array<number | null>, y: number) => row.map((value, x) => [x, y, value]))
     const zoomed = industries.length > 50
     const dataZoom = zoomed ? [{ type: 'inside', xAxisIndex: 0, startValue: 0, endValue: 49 }, { type: 'slider', xAxisIndex: 0, bottom: 30, height: 10, startValue: 0, endValue: 49, textStyle: { color: ct.text }, borderColor: ct.border }, { type: 'inside', yAxisIndex: 0, startValue: 0, endValue: 49 }, { type: 'slider', yAxisIndex: 0, right: 2, width: 10, startValue: 0, endValue: 49, textStyle: { color: ct.text }, borderColor: ct.border }] : []
-    return { ...common, grid: { left: 10, right: zoomed ? 34 : 12, top: 10, bottom: zoomed ? 96 : 78, containLabel: true }, dataZoom, xAxis: { type: 'category', data: industries, axisLabel: { color: ct.text, rotate: 50, fontSize: 8, hideOverlap: true } }, yAxis: { type: 'category', data: industries, axisLabel: { color: ct.text, width: 92, overflow: 'truncate', fontSize: 8 } }, visualMap: { min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inRange: { color: [GREEN, '#172033', RED] }, textStyle: { color: ct.text } }, series: [{ type: 'heatmap', data: values, progressive: 10000, tooltip: { formatter: (p: any) => `${industries[p.value[1]]} × ${industries[p.value[0]]}<br/>相关系数：${p.value[2] ?? '--'}<br/>样本：${view.sample_days || 0} 日` } }] }
+    return { ...common, grid: { left: 10, right: zoomed ? 34 : 12, top: 10, bottom: zoomed ? 96 : 78, containLabel: true }, dataZoom, xAxis: { type: 'category', data: industries, triggerEvent: true, axisLabel: { color: ct.text, rotate: 50, fontSize: 8, hideOverlap: true } }, yAxis: { type: 'category', data: industries, triggerEvent: true, axisLabel: { color: ct.text, width: 92, overflow: 'truncate', fontSize: 8 } }, visualMap: { min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inRange: { color: [GREEN, '#172033', RED] }, textStyle: { color: ct.text } }, series: [{ type: 'heatmap', data: values, progressive: 10000, tooltip: { formatter: (p: any) => `${industries[p.value[1]]} × ${industries[p.value[0]]}<br/>相关系数：${p.value[2] ?? '--'}<br/>样本：${view.sample_days || 0} 日<br/>点击聚焦：${industries[p.value[1]]}` } }] }
   }
   if (key === 'mainline_waterfall') {
     const selected = (data.mainlines || []).find((row: any) => row.focus === selection.mainlineFocus) || (data.mainlines || [])[0] || data
@@ -177,7 +177,7 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
   return { ...common, grid: { left: 10, right: 12, top: 12, bottom: 55, containLabel: true }, xAxis: { type: 'category', data: data.x_bins || [], axisLabel: { color: ct.text, rotate: 40, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: data.y_bins || [], axisLabel: { color: ct.text, width: 72, overflow: 'truncate', fontSize: 9 } }, visualMap: heatVisual(Math.max(1, ...values.map((row: number[]) => row[2]))), series: [{ type: 'heatmap', data: values, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 }, label: { show: true, color: '#ffffff', backgroundColor: 'rgba(0,0,0,.66)', borderRadius: 2, padding: [1, 3], fontSize: 8, formatter: (p: any) => String(p.value[2]) }, tooltip: { formatter: (p: any) => `${data.x_bins[p.value[0]]} 换手<br/>${data.y_bins[p.value[1]]} 收益<br/>股票数：${p.value[2]}` } }] }
 }
 
-function EChart({ chartKey, card, height = 320, selection }: { chartKey: string; card: QuantXAdvancedCard; height?: number; selection?: ChartSelection }) {
+function EChart({ chartKey, card, height = 320, selection, onClick }: { chartKey: string; card: QuantXAdvancedCard; height?: number; selection?: ChartSelection; onClick?: (params: any) => void }) {
   const container = useRef<HTMLDivElement>(null)
   const instance = useRef<echarts.ECharts | null>(null)
   const theme = useChartTheme()
@@ -190,6 +190,14 @@ function EChart({ chartKey, card, height = 320, selection }: { chartKey: string;
   }, [option])
 
   useEffect(() => {
+    const chart = instance.current
+    if (!chart) return
+    chart.off('click')
+    if (onClick) chart.on('click', onClick)
+    return () => { chart.off('click') }
+  }, [onClick])
+
+  useEffect(() => {
     const observer = new ResizeObserver(() => instance.current?.resize())
     if (container.current) observer.observe(container.current)
     return () => { observer.disconnect(); instance.current?.dispose(); instance.current = null }
@@ -198,14 +206,45 @@ function EChart({ chartKey, card, height = 320, selection }: { chartKey: string;
   return <div ref={container} role="img" aria-label={CARD_META[chartKey].title} className="w-full" style={{ height }} />
 }
 
-function CorrelationPairRankings({ view }: { view: Record<string, any> }) {
+type CorrelationPair = { left: string; right: string; correlation: number }
+
+function correlationRankings(view: Record<string, any>, selectedIndustry: string): { highest: CorrelationPair[]; lowest: CorrelationPair[] } {
+  const industries: string[] = view.industries || []
+  const matrix: Array<Array<number | null>> = view.matrix || []
+  const pairs: CorrelationPair[] = []
+  if (selectedIndustry) {
+    const selectedIndex = industries.indexOf(selectedIndustry)
+    if (selectedIndex >= 0) industries.forEach((industry, index) => {
+      if (index === selectedIndex) return
+      const value = matrix[selectedIndex]?.[index] ?? matrix[index]?.[selectedIndex]
+      if (typeof value === 'number' && Number.isFinite(value)) pairs.push({ left: selectedIndustry, right: industry, correlation: value })
+    })
+  } else {
+    industries.forEach((left, leftIndex) => industries.slice(leftIndex + 1).forEach((right, offset) => {
+      const rightIndex = leftIndex + offset + 1
+      const value = matrix[leftIndex]?.[rightIndex] ?? matrix[rightIndex]?.[leftIndex]
+      if (typeof value === 'number' && Number.isFinite(value)) pairs.push({ left, right, correlation: value })
+    }))
+  }
+  if (!pairs.length && !selectedIndustry) {
+    pairs.push(...(view.pair_rankings?.highest || []), ...(view.pair_rankings?.lowest || []))
+  }
+  return {
+    highest: [...pairs].sort((left, right) => right.correlation - left.correlation).slice(0, 10),
+    lowest: [...pairs].sort((left, right) => left.correlation - right.correlation).slice(0, 10),
+  }
+}
+
+function CorrelationPairRankings({ view, selectedIndustry, onSelectIndustry }: { view: Record<string, any>; selectedIndustry: string; onSelectIndustry: (industry: string) => void }) {
+  const rankings = useMemo(() => correlationRankings(view, selectedIndustry), [selectedIndustry, view])
   const groups: Array<[string, string, any[]]> = [
-    ['highest', '近期相关度最高', view.pair_rankings?.highest || []],
-    ['lowest', '近期相关度最低', view.pair_rankings?.lowest || []],
+    ['highest', selectedIndustry ? `与${selectedIndustry}相关度前 10` : '全市场相关度前 10', rankings.highest],
+    ['lowest', selectedIndustry ? `与${selectedIndustry}相关度后 10` : '全市场相关度后 10', rankings.lowest],
   ]
   return <section data-testid="quantx-correlation-pair-rankings" className="mt-2 border-t border-border/60 pt-2">
-    <div className="mb-1.5 flex items-center justify-between gap-2"><h4 className="text-[10px] font-semibold">行业组合相关度排行</h4><span className="text-[9px] text-muted">近 {view.sample_days || 0} 日 Pearson 相关系数</span></div>
-    <div className="grid gap-2 md:grid-cols-2">{groups.map(([key, title, rows]) => <div key={key} className="rounded border border-border/60 bg-base/25 p-2"><h5 className="mb-1 text-[10px] font-semibold text-muted">{title}</h5><div className="space-y-1">{rows.slice(0, 8).map((row, index) => <div key={`${row.left}-${row.right}`} data-testid={`quantx-correlation-pair-${key}`} className="grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-1.5 text-[9px]"><span className="font-mono text-muted">{index + 1}</span><span className="truncate" title={`${row.left} × ${row.right}`}>{row.left} × {row.right}</span><span className={cn('font-mono tabular-nums', row.correlation < 0 ? 'text-green-300' : 'text-red-300')}>{row.correlation > 0 ? '+' : ''}{row.correlation.toFixed(3)}</span></div>)}{!rows.length && <div className="py-3 text-center text-[9px] text-muted">暂无足够样本</div>}</div></div>)}</div>
+    <div className="mb-1.5 flex flex-wrap items-center gap-2"><div className="mr-auto"><h4 className="text-[10px] font-semibold">行业组合相关度排行</h4><p className="text-[9px] text-muted">近 {view.sample_days || 0} 日 Pearson 系数 · 点击矩阵、行业名或下拉框聚焦</p></div><label className="flex items-center gap-1.5 text-[9px] text-muted">聚焦行业<select data-testid="quantx-correlation-industry-select" aria-label="选择行业查看相关度排行" value={selectedIndustry} onChange={event => onSelectIndustry(event.target.value)} className="max-w-48 cursor-pointer rounded border border-border bg-base px-2 py-1 text-[10px] text-foreground"><option value="">全部行业（总排名）</option>{(view.industries || []).map((industry: string) => <option key={industry} value={industry}>{industry}</option>)}</select></label>{selectedIndustry && <button type="button" data-testid="quantx-correlation-clear-industry" onClick={() => onSelectIndustry('')} className="cursor-pointer rounded border border-border bg-base px-2 py-1 text-[9px] text-muted transition-colors hover:text-foreground">恢复总排名</button>}</div>
+    <div data-testid="quantx-correlation-ranking-context" aria-live="polite" className="mb-1.5 rounded border border-border/60 bg-base/25 px-2 py-1 text-[9px] text-muted">{selectedIndustry ? <>当前聚焦 <b className="text-accent">{selectedIndustry}</b>，共对比 {rankings.highest.length || rankings.lowest.length ? Math.max(0, (view.industries?.length || 1) - 1) : 0} 个其他行业</> : <>当前显示全部行业组合总排名，共 {Math.max(0, ((view.industries?.length || 0) * ((view.industries?.length || 0) - 1)) / 2)} 组</>}</div>
+    <div className="grid gap-2 md:grid-cols-2">{groups.map(([key, title, rows]) => <div key={key} className="rounded border border-border/60 bg-base/25 p-2"><h5 className="mb-1 text-[10px] font-semibold text-muted">{title}</h5><div className="space-y-1">{rows.map((row, index) => <div key={`${row.left}-${row.right}`} data-testid={`quantx-correlation-pair-${key}`} className="grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-1.5 text-[9px]"><span className="font-mono text-muted">{index + 1}</span><span className="flex min-w-0 items-center gap-1"><button type="button" data-industry={row.left} onClick={() => onSelectIndustry(row.left)} className={cn('min-w-0 flex-1 cursor-pointer truncate transition-colors hover:text-accent', selectedIndustry === row.left && 'text-accent')} title={`聚焦 ${row.left}`}>{row.left}</button><span className="shrink-0 text-muted">×</span><button type="button" data-industry={row.right} onClick={() => onSelectIndustry(row.right)} className={cn('min-w-0 flex-1 cursor-pointer truncate transition-colors hover:text-accent', selectedIndustry === row.right && 'text-accent')} title={`聚焦 ${row.right}`}>{row.right}</button></span><span className={cn('font-mono tabular-nums', row.correlation < 0 ? 'text-green-300' : 'text-red-300')}>{row.correlation > 0 ? '+' : ''}{row.correlation.toFixed(3)}</span></div>)}{!rows.length && <div className="py-3 text-center text-[9px] text-muted">暂无足够样本</div>}</div></div>)}</div>
     <p className="mt-1.5 text-[9px] leading-4 text-muted">高正相关表示近期走势更同步；低值或负相关表示分化更明显。相关性描述共同波动，不代表因果关系或未来收益。</p>
   </section>
 }
@@ -215,9 +254,11 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
   const [sectorDimension, setSectorDimension] = useState('sw_level1')
   const [sectorWindow, setSectorWindow] = useState(20)
   const [correlationDimension, setCorrelationDimension] = useState('industry_level1')
+  const [correlationIndustry, setCorrelationIndustry] = useState('')
   const [mainlineFocus, setMainlineFocus] = useState('')
   const [promotionWindow, setPromotionWindow] = useState('current')
   const selection = useMemo(() => ({ sectorDimension, sectorWindow, correlationDimension, mainlineFocus, promotionWindow }), [correlationDimension, mainlineFocus, promotionWindow, sectorDimension, sectorWindow])
+  useEffect(() => setCorrelationIndustry(''), [correlationDimension])
   useEffect(() => {
     if (chartKey !== 'mainline_waterfall') return
     const mainlines = card.data.mainlines || []
@@ -245,6 +286,14 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
     : heightByKey[chartKey] ?? 320)
   const caveat = card.note || meta.caveat
   const correlationView = card.data.views?.[correlationDimension] || card.data
+  const handleChartClick = useCallback((params: any) => {
+    if (chartKey !== 'industry_correlation') return
+    const industries: string[] = correlationView.industries || []
+    const industry = params.componentType === 'xAxis' || params.componentType === 'yAxis'
+      ? String(params.value ?? params.name ?? '')
+      : params.seriesType === 'heatmap' ? industries[Number(params.value?.[1])] : ''
+    if (industries.includes(industry)) setCorrelationIndustry(industry)
+  }, [chartKey, correlationView])
   const spanClass = layout?.span ? SPAN_CLASSES[layout.span] : meta.span || SPAN_CLASSES[8]
   return (
     <section data-testid={`quantx-advanced-${chartKey}`} className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-elevated/25', spanClass)}>
@@ -259,8 +308,8 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
         {chartKey === 'industry_correlation' && card.status === 'ok' && <div data-testid="quantx-correlation-controls" className="mb-1.5 flex gap-1 border-b border-border/60 pb-1.5" role="group" aria-label="相关性行业层级">{Object.entries(card.data.views || {}).map(([value, view]: [string, any]) => <button key={value} type="button" data-testid={`quantx-correlation-dimension-${value}`} aria-pressed={correlationDimension === value} onClick={() => setCorrelationDimension(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', correlationDimension === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value} · {view.industries?.length || 0} 行业</button>)}</div>}
         {chartKey === 'promotion_funnel' && card.status === 'ok' && <div data-testid="quantx-promotion-window-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-1.5"><div className="flex gap-1" role="group" aria-label="连板晋级统计窗口">{['current', '5', '20'].map(value => { const view = card.data.views?.[value] || {}; return <button key={value} type="button" data-testid={`quantx-promotion-window-${value}`} aria-pressed={promotionWindow === value} onClick={() => setPromotionWindow(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', promotionWindow === value ? 'border-orange-400/60 bg-orange-400/10 text-orange-300' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value}<span className="ml-1 font-mono text-muted">{view.sample_days || 0}日</span></button> })}</div><span data-testid="quantx-promotion-baseline-label" className="text-[9px] text-blue-300">◆ 全样本基线 · {card.data.baseline?.sample_days || 0} 日</span></div>}
         {chartKey === 'mainline_waterfall' && card.status === 'ok' && <div data-testid="quantx-mainline-selector" className="mb-1.5 max-h-24 overflow-y-auto border-b border-border/60 pb-1.5"><div className="flex flex-wrap gap-1" role="group" aria-label="选择主线查看贡献细分">{(card.data.mainlines || []).map((row: any, index: number) => <button key={row.focus} type="button" data-testid={`quantx-mainline-option-${index}`} aria-pressed={mainlineFocus === row.focus} onClick={() => setMainlineFocus(row.focus)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', mainlineFocus === row.focus ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}><span className="font-mono">{row.rank}</span> · {row.focus} <span className="font-mono">{row.score}</span></button>)}</div></div>}
-        {card.status === 'ok' ? <EChart chartKey={chartKey} card={card} height={height} selection={selection} /> : <div className="flex items-center justify-center text-xs text-muted" style={{ height }}><span>{card.reason || '暂无足够数据'}</span></div>}
-        {chartKey === 'industry_correlation' && card.status === 'ok' && <CorrelationPairRankings view={correlationView} />}
+        {card.status === 'ok' ? <EChart chartKey={chartKey} card={card} height={height} selection={selection} onClick={chartKey === 'industry_correlation' ? handleChartClick : undefined} /> : <div className="flex items-center justify-center text-xs text-muted" style={{ height }}><span>{card.reason || '暂无足够数据'}</span></div>}
+        {chartKey === 'industry_correlation' && card.status === 'ok' && <CorrelationPairRankings view={correlationView} selectedIndustry={correlationIndustry} onSelectIndustry={setCorrelationIndustry} />}
         {chartKey === 'state_transition' && card.status === 'ok' && <div data-testid="quantx-state-transition-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p>读法：从左侧“当前状态”沿行读取到上方“下一交易日状态”，每行合计 100%。例如“震荡 → 偏强 20%”表示处于震荡后，次日转为偏强的历史概率为 20%。</p><p className="text-orange-300">模型边界：本矩阵来自 TickFlow Regime 四维模型；顶部市场热度、短线情绪和趋势情绪来自 QuantX market_state_daily，两套分值与状态不可直接互换。</p></div>}
         {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>横轴是按成交额从小到大排列的股票累计占比，纵轴是这些股票贡献的累计成交额；橙线越向右下弯，成交越集中在少数头部股票。</p><p><span className="text-foreground">有什么用：</span>判断资金是广泛扩散还是抱团。Gini 接近 0 表示均匀，接近 1 表示极端集中；它描述资金结构，不判断市场涨跌方向。</p></div>}
         {chartKey === 'advance_decline' && card.status === 'ok' && <p data-testid="quantx-ad-divergence-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">红色区间：指数走强但市场广度转弱；绿色区间：指数走弱但广度修复。图钉标记背离确认点。</p>}
@@ -277,15 +326,14 @@ const GROUPS = [
   { key: 'structure', title: '接力效率与拥挤结构', hint: '最后检查晋级质量和交易拥挤', icon: GitBranch },
 ] as const
 
-export function AdvancedPanels({ snapshot, loading, error, cardKeys, cardLayout, flat = false, showSummary = true, testId = 'quantx-advanced-workspace' }: { snapshot?: QuantXAdvancedSnapshot; loading: boolean; error?: Error | null; cardKeys?: string[]; cardLayout?: Record<string, AdvancedCardLayout>; flat?: boolean; showSummary?: boolean; testId?: string }) {
+export function AdvancedPanels({ snapshot, loading, error, cardKeys, cardLayout, flat = false, testId = 'quantx-advanced-workspace' }: { snapshot?: QuantXAdvancedSnapshot; loading: boolean; error?: Error | null; cardKeys?: string[]; cardLayout?: Record<string, AdvancedCardLayout>; flat?: boolean; testId?: string }) {
   const loadingId = testId === 'quantx-advanced-workspace' ? 'quantx-advanced-loading' : `${testId}-loading`
   const errorId = testId === 'quantx-advanced-workspace' ? 'quantx-advanced-error' : `${testId}-error`
   if (loading) return <section data-testid={loadingId} className="flex items-center justify-center rounded-lg border border-border bg-elevated/20 py-20 text-xs text-muted"><Loader2 className="mr-2 h-4 w-4 animate-spin" />正在构建高级市场图谱</section>
   if (error || !snapshot) return <section data-testid={errorId} className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-12 text-center text-xs text-orange-300">高级图谱暂不可用：{error?.message || '没有快照'}</section>
   const visibleKeys = cardKeys || Object.keys(CARD_META)
   return (
-    <section data-testid={testId} className={cn('space-y-5', showSummary && 'rounded-lg border border-border bg-elevated/20 p-3')}>
-      {showSummary && <header className="flex flex-wrap items-center gap-2 border-b border-border pb-2"><Boxes className="h-4 w-4 text-accent" /><div><h2 className="text-sm font-semibold">高级图谱数据覆盖</h2><p className="text-[10px] text-muted">15 张真实数据卡片已按分析域重组 · 单一批量快照 · {snapshot.coverage.history_start} 至 {snapshot.coverage.history_end}</p></div><span className="ml-auto rounded border border-border bg-base px-2 py-1 font-mono text-[10px] text-accent">{snapshot.coverage.available}/{snapshot.coverage.total} 可用</span></header>}
+    <section data-testid={testId} className="space-y-5">
       {flat ? <div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">{visibleKeys.map(key => <AdvancedCard key={key} chartKey={key} card={snapshot.cards[key]} layout={cardLayout?.[key]} />)}</div> : GROUPS.map(group => {
         const Icon = group.icon
         const keys = visibleKeys.filter(key => CARD_META[key]?.group === group.key)
