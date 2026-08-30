@@ -1796,6 +1796,26 @@ export interface SectorRadarResponse {
   universe_size?: number
   unit?: 'CNY'
   rows: SectorRadarRow[]
+  rank_history?: Record<string, { date: string; swing_rank: number; ratio_rank: number; amount_rank: number; swing_rank_pct: number; ratio_rank_pct: number; amount_rank_pct: number }[]>
+}
+
+export interface SectorMemberRow {
+  symbol: string
+  name: string
+  return_pct: number | null
+  main_net_amount: number | null
+  active_buy_net_amount: number | null
+}
+
+export interface SectorMembersResponse {
+  available: boolean
+  detail?: string
+  as_of?: string
+  sector?: string
+  member_count?: number
+  flow_quality?: 'observed' | 'proxy' | 'unavailable'
+  active_quality?: 'observed' | 'unavailable'
+  metrics: Record<'return_pct' | 'main_net_amount' | 'active_buy_net_amount', { top: SectorMemberRow[]; bottom: SectorMemberRow[] }>
 }
 
 export interface MacroContributionRow {
@@ -1824,6 +1844,7 @@ export interface MacroDispersionResponse {
   change_5d: number
   zone: string
   industry_count: number
+  industry_level?: number
   history: { date: string; dispersion: number; ma3: number; mean_pct?: number; industry_count?: number }[]
   indices: { symbol: string; label: string; name: string; points: { date: string; normalized: number }[] }[]
   contributions: MacroContributionRow[]
@@ -1842,6 +1863,12 @@ export interface PositionResult {
   breakeven_price: number
   breakeven_r: number
   projected_profit: number
+  actual_risk_pct: number
+  stop_pct: number
+  target_upside_pct: number
+  risk_level: string
+  cash_limited: boolean
+  warnings: string[]
 }
 
 export interface PitResult { target: number; depth_pct: number; upside_pct: number }
@@ -1864,6 +1891,17 @@ export interface SimulationResult {
   p95_max_drawdown_pct: number
   loss_probability_pct: number
   sample_paths: number[][]
+  reverse: {
+    recommended_risk_pct: number; test_risk_pct: number; target_required_risk_pct: number | null
+    drawdown_risk_pct: number; limiting_factor: string; target_reachable: boolean; target_return_pct: number
+  }
+  strategies: {
+    id: string; name: string; basis: 'decision' | 'theory'; risk_pct: number
+    p10_final: number; p50_final: number; p90_final: number; p80_drawdown_pct: number
+    p50_drawdown_pct: number; p95_drawdown_pct: number; ruin_probability_pct: number
+    halve_probability_pct: number; p10_path: number[]; median_path: number[]; p90_path: number[]; sample_paths: number[][]
+  }[]
+  distribution: { bins: { from: number; to: number; count: number; density: number }[] }
 }
 
 // ===== API surface =====
@@ -1893,6 +1931,8 @@ export const api = {
     request<SectorFlowResponse>(`/api/market-lab/sector-flow?dimension=${dimension}`),
   marketLabSectorRadar: (dimension: 'industry' | 'concept' = 'industry', asOf?: string) =>
     request<SectorRadarResponse>(`/api/market-lab/sector-radar?dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`),
+  marketLabSectorMembers: (sector: string, dimension: 'industry' | 'concept' = 'industry', asOf?: string) =>
+    request<SectorMembersResponse>(`/api/market-lab/sector-members?sector=${encodeURIComponent(sector)}&dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`),
   marketLabMacroDispersion: () =>
     request<MacroDispersionResponse>('/api/market-lab/macro-dispersion'),
   marketLabPosition: (payload: { balance: number; risk_pct: number; entry: number; stop: number; target?: number; mode: 'brave' | 'sensitive'; trade_type: 'B1' | 'B2' }) =>
@@ -1904,6 +1944,7 @@ export const api = {
   marketLabSimulate: (payload: {
     balance: number; win_rate: number; win_r: number; loss_r: number
     risk_pct: number; trades: number; paths: number; seed?: number
+    target_return_pct?: number; max_drawdown_pct?: number; annual_trades?: number
   }) => request<SimulationResult>('/api/market-lab/simulate', { method: 'POST', body: JSON.stringify(payload) }),
 
   // ===== Auth (访问认证) =====

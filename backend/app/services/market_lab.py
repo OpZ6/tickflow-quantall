@@ -122,7 +122,7 @@ def compute_dispersion(returns_pct: dict[str, float]) -> dict[str, Any]:
 def calculate_position(
     *, balance: float, risk_pct: float, entry: float, stop: float,
     target: float | None = None, mode: str = "brave", trade_type: str = "B1",
-) -> dict[str, float | int]:
+) -> dict[str, Any]:
     ratios = {
         "B1": {"brave": (10.0, 4.0), "sensitive": (6.0, 2.5)},
         "B2": {"brave": (5.0, 1.0), "sensitive": (3.0, 2.0)},
@@ -142,18 +142,51 @@ def calculate_position(
     if target_price <= entry:
         raise ValueError("target must be above entry for a long position")
     breakeven_price = entry + per_share * breakeven_r
+    risk_percent_value = risk_pct * 100
+    if mode == "brave":
+        risk_level = (
+            "保守" if risk_percent_value <= 1 else
+            "稳健" if risk_percent_value <= 2 else
+            "积极" if risk_percent_value <= 3 else
+            "重仓" if risk_percent_value <= 4 else "激进"
+        )
+    else:
+        risk_level = (
+            "敏感" if risk_percent_value <= 0.5 else
+            "保守" if risk_percent_value <= 1 else
+            "稳健" if risk_percent_value <= 1.5 else
+            "适中" if risk_percent_value <= 1.95 else "积极"
+        )
+    capital_usage_pct = shares * entry / balance * 100
+    stop_pct = per_share / entry * 100
+    target_upside_pct = (target_price / entry - 1) * 100
+    warnings: list[str] = []
+    if mode == "sensitive" and capital_usage_pct > 25:
+        warnings.append("敏感模式下资金利用率超过 25%, 仓位偏重")
+    if capital_usage_pct > 50:
+        warnings.append("资金利用率超过 50%, 注意风险敞口")
+    if stop_pct > 10:
+        warnings.append("止损幅度超过 10%, 请重新核对止损位置")
+    if target_upside_pct > 50:
+        warnings.append("目标涨幅超过 50%, 请核对预期是否合理")
     return {
         "shares": shares,
         "market_value": shares * entry,
         "risk_budget": risk_budget,
         "planned_loss": planned_loss,
-        "capital_usage_pct": shares * entry / balance * 100,
+        "capital_usage_pct": capital_usage_pct,
         "reward_risk": (target_price - entry) / per_share,
         "target_price": target_price,
         "target_r": target_r,
         "breakeven_price": breakeven_price,
         "breakeven_r": breakeven_r,
         "projected_profit": (target_price - entry) * shares,
+        "actual_risk_pct": planned_loss / balance * 100,
+        "stop_pct": stop_pct,
+        "target_upside_pct": target_upside_pct,
+        "risk_level": risk_level,
+        "cash_limited": cash_shares < risk_shares,
+        "warnings": warnings,
     }
 
 
@@ -199,36 +232,204 @@ def _quantile(values: list[float], q: float) -> float:
     return ordered[lo] if lo == hi else ordered[lo] + (ordered[hi] - ordered[lo]) * (idx - lo)
 
 
+def _minimum_risk_for_target(
+    win_rate: float, reward_ratio: float, annual_trades: int,
+    target_return_pct: float, full_kelly: float,
+) -> float | None:
+    if full_kelly <= 0 or annual_trades <= 0:
+        return None
+    target_growth = math.log1p(target_return_pct / 100) / annual_trades
+    max_growth = (
+        win_rate * math.log1p(reward_ratio * full_kelly)
+        + (1 - win_rate) * math.log1p(-full_kelly)
+    )
+    if max_growth < target_growth:
+        return None
+    low, high = 0.0, full_kelly
+    for _ in range(24):
+        mid = (low + high) / 2
+        growth = (
+            win_rate * math.log1p(reward_ratio * mid)
+            + (1 - win_rate) * math.log1p(-mid)
+        )
+        if growth < target_growth:
+            low = mid
+        else:
+            high = mid
+    return high
+
+
+def _drawdown_p80(
+    *, win_rate: float, reward_ratio: float, trades: int,
+    fraction: float, rng: random.Random, runs: int = 300,
+) -> float:
+    values: list[float] = []
+    for _ in range(runs):
+        equity = peak = 1.0
+        max_drawdown = 0.0
+        for _ in range(trades):
+            equity *= 1 + reward_ratio * fraction if rng.random() < win_rate else 1 - fraction
+            peak = max(peak, equity)
+            max_drawdown = max(max_drawdown, (peak - equity) / peak if peak else 1.0)
+        values.append(max_drawdown)
+    return _quantile(values, 0.8)
+
+
+def _risk_reverse(
+    *, win_rate: float, reward_ratio: float, trades: int,
+    full_kelly: float, target_return_pct: float, max_drawdown_pct: float,
+    annual_trades: int, seed: int,
+) -> dict[str, Any]:
+    expectancy = win_rate * reward_ratio - (1 - win_rate)
+    if expectancy <= 0 or full_kelly <= 0:
+        return {
+            "recommended_risk_pct": 0.0, "test_risk_pct": 0.0,
+            "target_required_risk_pct": None, "drawdown_risk_pct": 0.0,
+            "limiting_factor": "negative_expectancy", "target_reachable": False,
+            "target_return_pct": target_return_pct,
+        }
+    target_required = _minimum_risk_for_target(
+        win_rate, reward_ratio, annual_trades, target_return_pct, full_kelly
+    )
+    rng = random.Random(seed ^ 0x5EED5EED)
+    low, high = 0.0, full_kelly
+    drawdown_risk = 0.0
+    for _ in range(8):
+        mid = (low + high) / 2
+        if _drawdown_p80(
+            win_rate=win_rate, reward_ratio=reward_ratio, trades=trades,
+            fraction=mid, rng=rng,
+        ) > max_drawdown_pct / 100:
+            high = mid
+        else:
+            low = drawdown_risk = mid
+    recommended = min(full_kelly, drawdown_risk)
+    return {
+        "recommended_risk_pct": recommended * 100,
+        "test_risk_pct": recommended * 50,
+        "target_required_risk_pct": target_required * 100 if target_required is not None else None,
+        "drawdown_risk_pct": drawdown_risk * 100,
+        "limiting_factor": "drawdown" if drawdown_risk < full_kelly else "kelly",
+        "target_reachable": target_required is not None and recommended >= target_required,
+        "target_return_pct": target_return_pct,
+    }
+
+
+def _distribution_bins(values: list[float], count: int = 36) -> list[dict[str, float]]:
+    if not values:
+        return []
+    low, high = min(values), max(values)
+    if math.isclose(low, high):
+        return [{"from": low, "to": high, "count": float(len(values)), "density": 1.0}]
+    width = (high - low) / count
+    counts = [0] * count
+    for value in values:
+        index = min(count - 1, int((value - low) / width))
+        counts[index] += 1
+    return [
+        {
+            "from": low + index * width,
+            "to": low + (index + 1) * width,
+            "count": float(value),
+            "density": value / len(values),
+        }
+        for index, value in enumerate(counts)
+    ]
+
+
+def _simulate_strategy(
+    *, outcomes: list[list[bool]], balance: float, reward_ratio: float,
+    fraction: float, strategy_id: str, name: str, basis: str,
+) -> dict[str, Any]:
+    paths: list[list[float]] = []
+    finals: list[float] = []
+    drawdowns: list[float] = []
+    ruin_count = halve_count = 0
+    for outcomes_path in outcomes:
+        equity = peak = balance
+        values = [equity]
+        max_drawdown = 0.0
+        for won in outcomes_path:
+            equity = max(0.001, equity * (1 + reward_ratio * fraction if won else 1 - fraction))
+            peak = max(peak, equity)
+            max_drawdown = max(max_drawdown, (peak - equity) / peak if peak else 1.0)
+            values.append(equity)
+        paths.append(values)
+        finals.append(equity)
+        drawdowns.append(max_drawdown * 100)
+        ruin_count += equity < balance * 0.1
+        halve_count += equity < balance * 0.5
+    path_length = len(outcomes[0]) + 1 if outcomes else 0
+    p10_path: list[float] = []
+    median_path: list[float] = []
+    p90_path: list[float] = []
+    for index in range(path_length):
+        column = [path[index] for path in paths]
+        p10_path.append(_quantile(column, 0.1))
+        median_path.append(_quantile(column, 0.5))
+        p90_path.append(_quantile(column, 0.9))
+    return {
+        "id": strategy_id, "name": name, "basis": basis,
+        "risk_pct": fraction * 100,
+        "p10_final": _quantile(finals, 0.1), "p50_final": _quantile(finals, 0.5),
+        "p90_final": _quantile(finals, 0.9), "p80_drawdown_pct": _quantile(drawdowns, 0.8),
+        "p50_drawdown_pct": _quantile(drawdowns, 0.5),
+        "p95_drawdown_pct": _quantile(drawdowns, 0.95),
+        "ruin_probability_pct": ruin_count / len(finals) * 100 if finals else 0.0,
+        "halve_probability_pct": halve_count / len(finals) * 100 if finals else 0.0,
+        "p10_path": p10_path, "median_path": median_path, "p90_path": p90_path,
+        "sample_paths": paths[:8], "final_values": finals,
+    }
+
+
 def monte_carlo(
     *, balance: float, win_rate: float, win_r: float, loss_r: float,
     risk_pct: float, trades: int, paths: int, seed: int = 42,
+    target_return_pct: float = 50, max_drawdown_pct: float = 20,
+    annual_trades: int = 50,
 ) -> dict[str, Any]:
     if balance <= 0 or win_r <= 0 or loss_r <= 0:
         raise ValueError("balance, win_r and loss_r must be positive")
     if not 0 <= win_rate <= 1 or not 0 < risk_pct <= 1:
         raise ValueError("win_rate must be in [0, 1] and risk_pct in (0, 1]")
-    if not 1 <= trades <= 2000 or not 10 <= paths <= 20_000:
+    if not 1 <= trades <= 500 or not 10 <= paths <= 2_000:
         raise ValueError("trades/paths outside supported range")
     rng = random.Random(seed)
-    finals: list[float] = []
-    drawdowns: list[float] = []
-    samples: list[list[float]] = []
-    for path_idx in range(paths):
-        equity, peak, max_dd = balance, balance, 0.0
-        path = [equity]
-        for _ in range(trades):
-            r_mult = win_r if rng.random() < win_rate else -loss_r
-            equity = max(0.0, equity * (1 + risk_pct * r_mult))
-            peak = max(peak, equity)
-            max_dd = max(max_dd, (peak - equity) / peak if peak else 1.0)
-            if path_idx < 12:
-                path.append(equity)
-        finals.append(equity)
-        drawdowns.append(max_dd * 100)
-        if path_idx < 12:
-            samples.append(path)
     b = win_r / loss_r
     kelly = max(0.0, win_rate - (1 - win_rate) / b)
+    outcomes = [[rng.random() < win_rate for _ in range(trades)] for _ in range(paths)]
+    reverse = _risk_reverse(
+        win_rate=win_rate, reward_ratio=b, trades=trades, full_kelly=kelly,
+        target_return_pct=target_return_pct, max_drawdown_pct=max_drawdown_pct,
+        annual_trades=annual_trades, seed=seed,
+    )
+    decision_base = reverse["recommended_risk_pct"] / 100
+    definitions = [
+        ("decision-quarter", "保守 1/4", "decision", min(0.99, decision_base * 0.25)),
+        ("decision-half", "稳健半额", "decision", min(0.99, decision_base * 0.5)),
+        ("decision-full", "满额风险", "decision", min(0.99, decision_base)),
+        ("decision-150", "激进 1.5x", "decision", min(0.99, decision_base * 1.5)),
+        ("decision-200", "极限 2x", "decision", min(0.99, decision_base * 2)),
+        ("kelly-1-12", "1/12 Kelly", "theory", kelly / 12),
+        ("kelly-1-8", "1/8 Kelly", "theory", kelly / 8),
+        ("kelly-1-6", "1/6 Kelly", "theory", kelly / 6),
+        ("kelly-1-4", "1/4 Kelly", "theory", kelly / 4),
+        ("kelly-half", "半 Kelly", "theory", kelly / 2),
+        ("kelly-full", "满 Kelly", "theory", kelly),
+        ("kelly-150", "1.5x Kelly", "theory", min(0.99, kelly * 1.5)),
+        ("kelly-210", "2.1x Kelly", "theory", min(0.99, kelly * 2.1)),
+    ]
+    strategies = [
+        _simulate_strategy(
+            outcomes=outcomes, balance=balance, reward_ratio=b, fraction=fraction,
+            strategy_id=strategy_id, name=name, basis=basis,
+        )
+        for strategy_id, name, basis, fraction in definitions
+    ]
+    manual = _simulate_strategy(
+        outcomes=outcomes, balance=balance, reward_ratio=b, fraction=risk_pct,
+        strategy_id="manual", name="当前输入", basis="manual",
+    )
     return {
         "paths": paths,
         "trades": trades,
@@ -236,13 +437,16 @@ def monte_carlo(
         "half_kelly_pct": kelly * 50,
         "expectancy_r": win_rate * win_r - (1 - win_rate) * loss_r,
         "break_even_pct": 100 / (1 + b),
-        "p10_final": _quantile(finals, 0.1),
-        "p50_final": _quantile(finals, 0.5),
-        "p90_final": _quantile(finals, 0.9),
-        "p50_max_drawdown_pct": _quantile(drawdowns, 0.5),
-        "p95_max_drawdown_pct": _quantile(drawdowns, 0.95),
-        "loss_probability_pct": sum(v < balance for v in finals) / paths * 100,
-        "sample_paths": samples,
+        "p10_final": manual["p10_final"],
+        "p50_final": manual["p50_final"],
+        "p90_final": manual["p90_final"],
+        "p50_max_drawdown_pct": manual["p50_drawdown_pct"],
+        "p95_max_drawdown_pct": manual["p95_drawdown_pct"],
+        "loss_probability_pct": sum(v < balance for v in manual["final_values"]) / paths * 100,
+        "sample_paths": manual["sample_paths"][:12],
+        "reverse": reverse,
+        "strategies": [{key: value for key, value in row.items() if key != "final_values"} for row in strategies],
+        "distribution": {"bins": _distribution_bins(manual["final_values"])},
     }
 
 
@@ -429,13 +633,17 @@ def _aggregate_sector_returns(data: pl.DataFrame, dimension: str) -> pl.DataFram
         ((pl.col("close") / pl.col("close").shift(1).over("symbol") - 1) * 100)
         .alias("daily_return_pct")
     ).filter(pl.col("daily_return_pct").is_not_null())
-    if "float_market_cap" not in data.columns:
+    weight_column = next(
+        (name for name in ("market_cap", "float_market_cap") if name in data.columns),
+        None,
+    )
+    if weight_column is None:
         return data.group_by([dimension, "date"]).agg(
             pl.col("daily_return_pct").mean().alias("return_pct")
         )
 
     data = data.with_columns(
-        pl.col("float_market_cap").cast(pl.Float64, strict=False).fill_null(0).clip(lower_bound=0).alias("_weight")
+        pl.col(weight_column).cast(pl.Float64, strict=False).fill_null(0).clip(lower_bound=0).alias("_weight")
     ).with_columns((pl.col("daily_return_pct") * pl.col("_weight")).alias("_weighted_return"))
     grouped = data.group_by([dimension, "date"]).agg(
         pl.col("_weighted_return").sum().alias("_weighted_sum"),
@@ -515,6 +723,24 @@ def _rank_sector_snapshots(daily: pl.DataFrame, dimension: str) -> dict[str, lis
     return snapshots
 
 
+def _rank_history_payload(
+    snapshots: dict[str, list[dict[str, Any]]], limit: int = 60
+) -> dict[str, list[dict[str, Any]]]:
+    history: dict[str, list[dict[str, Any]]] = {}
+    for date_text in sorted(snapshots)[-limit:]:
+        for row in snapshots[date_text]:
+            history.setdefault(row["sector"], []).append({
+                "date": date_text,
+                "swing_rank": row["swing_rank"],
+                "ratio_rank": row["ratio_rank"],
+                "amount_rank": row["amount_rank"],
+                "swing_rank_pct": row["swing_rank_pct"],
+                "ratio_rank_pct": row["ratio_rank_pct"],
+                "amount_rank_pct": row["amount_rank_pct"],
+            })
+    return history
+
+
 def _sector_radar_from_facts(fact_repo, dimension: str, as_of: date | None) -> dict[str, Any] | None:
     available = fact_repo.available_dates(DatasetId.SECTOR_FLOW_DAILY)
     if as_of is not None:
@@ -572,6 +798,7 @@ def _sector_radar_from_facts(fact_repo, dimension: str, as_of: date | None) -> d
             "amount": "11.11 x RankPct - 28.26",
         },
         "rows": snapshots[selected_date],
+        "rank_history": _rank_history_payload(snapshots),
     }
 
 
@@ -647,6 +874,97 @@ def sector_radar_from_repo(
             "amount": "11.11 x RankPct - 28.26",
         },
         "rows": rows,
+        "rank_history": _rank_history_payload(snapshots),
+    }
+
+
+def sector_members_from_repo(
+    repo, *, dimension: str, sector: str, as_of: date | None = None, limit: int = 10
+) -> dict[str, Any]:
+    """Return stock-level evidence for one radar sector from the local repository."""
+    latest, latest_date = repo.get_enriched_latest()
+    if latest_date is None or latest.is_empty():
+        return {"available": False, "detail": "本地暂无股票日线", "metrics": {}}
+    target_date = min(as_of, latest_date) if as_of is not None else latest_date
+    history = repo.get_enriched_range(target_date - timedelta(days=12), target_date)
+    if history is None or history.is_empty():
+        return {"available": False, "detail": "个股历史不足", "metrics": {}}
+    history = _attach_dimension(repo, history, dimension)
+    required = {"symbol", "date", "close", dimension}
+    if not required.issubset(history.columns):
+        return {"available": False, "detail": "缺少板块成分映射或收盘价", "metrics": {}}
+    dimension_text = pl.col(dimension).cast(pl.Utf8)
+    member_filter = dimension_text == sector
+    if dimension == "industry":
+        # 统一事实中的行业名可能是一级/二级简称, 而 ext_hy_ths 保存的是
+        # “一级-二级-三级”全路径。点击雷达行时两种口径都应能下钻到成分股。
+        member_filter = member_filter | dimension_text.str.split("-").list.contains(sector)
+    data = history.filter(member_filter).sort(["symbol", "date"])
+    if data.is_empty():
+        return {"available": False, "detail": f"未找到 {sector} 的本地成分股", "metrics": {}}
+    data = data.with_columns(
+        ((pl.col("close") / pl.col("close").shift(1).over("symbol") - 1) * 100).alias("return_pct")
+    )
+    current = data.filter(pl.col("date") == target_date)
+    if current.is_empty():
+        actual_date = data["date"].max()
+        current = data.filter(pl.col("date") == actual_date)
+    else:
+        actual_date = target_date
+    flow_column = next(
+        (name for name in ("main_net_inflow", "main_net", "net_inflow") if name in current.columns),
+        None,
+    )
+    if flow_column:
+        current = current.with_columns(
+            pl.col(flow_column).cast(pl.Float64, strict=False).alias("main_net_amount")
+        )
+        flow_quality = "observed"
+    elif {"high", "low", "amount"}.issubset(current.columns):
+        spread = pl.col("high") - pl.col("low")
+        current = current.with_columns(
+            pl.when(spread.abs() > 1e-12)
+            .then(((2 * pl.col("close") - pl.col("high") - pl.col("low")) / spread) * pl.col("amount"))
+            .otherwise(None)
+            .alias("main_net_amount")
+        )
+        flow_quality = "proxy"
+    else:
+        current = current.with_columns(pl.lit(None, dtype=pl.Float64).alias("main_net_amount"))
+        flow_quality = "unavailable"
+    active_columns = {"buy_elg_amount", "sell_elg_amount", "buy_lg_amount", "sell_lg_amount"}
+    if active_columns.issubset(current.columns):
+        current = current.with_columns(
+            (
+                pl.col("buy_elg_amount") - pl.col("sell_elg_amount")
+                + pl.col("buy_lg_amount") - pl.col("sell_lg_amount")
+            ).cast(pl.Float64, strict=False).alias("active_buy_net_amount")
+        )
+        active_quality = "observed"
+    else:
+        current = current.with_columns(pl.lit(None, dtype=pl.Float64).alias("active_buy_net_amount"))
+        active_quality = "unavailable"
+    names = pl.col("name").cast(pl.Utf8) if "name" in current.columns else pl.col("symbol").cast(pl.Utf8)
+    rows = current.with_columns(names.alias("name")).select(
+        ["symbol", "name", "return_pct", "main_net_amount", "active_buy_net_amount"]
+    ).to_dicts()
+
+    def ranked(field: str) -> dict[str, list[dict[str, Any]]]:
+        available_rows = [row for row in rows if row.get(field) is not None]
+        return {
+            "top": sorted(available_rows, key=lambda row: row[field], reverse=True)[:limit],
+            "bottom": sorted(available_rows, key=lambda row: row[field])[:limit],
+        }
+
+    return {
+        "available": bool(rows), "as_of": str(actual_date)[:10], "dimension": dimension,
+        "sector": sector, "member_count": len(rows), "flow_quality": flow_quality,
+        "active_quality": active_quality,
+        "metrics": {
+            "return_pct": ranked("return_pct"),
+            "main_net_amount": ranked("main_net_amount"),
+            "active_buy_net_amount": ranked("active_buy_net_amount"),
+        },
     }
 
 
@@ -697,6 +1015,15 @@ def macro_dispersion_from_repo(repo) -> dict[str, Any]:
     required = {"industry", "symbol", "date", "close"}
     if not required.issubset(history.columns):
         return {"available": False, "detail": "缺少本地行业映射或收盘价历史", "history": [], "indices": []}
+
+    # OneChart 宏观离散度以二级行业为横截面。本地 ext_hy_ths 映射保存为
+    # “一级-二级-三级”全路径, 必须在计算 D 前收敛到第二级, 否则行业数量
+    # 会改变未标准化离散度的绝对尺度。注意本地分类是同花顺, 不冒充申万。
+    history = history.with_columns(
+        pl.col("industry").cast(pl.Utf8).str.split("-").list.get(1, null_on_oob=True)
+        .fill_null(pl.col("industry").cast(pl.Utf8).str.split("-").list.first())
+        .alias("industry")
+    )
 
     daily = _aggregate_sector_returns(
         history.filter(pl.col("industry").is_not_null()), "industry"
@@ -778,8 +1105,9 @@ def macro_dispersion_from_repo(repo) -> dict[str, Any]:
         "available": True,
         "as_of": latest_point["date"],
         "window": "daily industry cross-section",
+        "industry_level": 2,
         "unit": "percent",
-        "basis": "本地行业映射的成分股日收益横截面 (非申万二级官方指数)",
+        "basis": "本地同花顺二级行业当前成分快照回看历史的成分股市值加权日收益横截面",
         "mean_pct": latest_point["mean_pct"],
         "dispersion": latest_point["dispersion"],
         "ma3": latest_point["ma3"],

@@ -27,6 +27,11 @@ const compactSector = (name: string) => {
   const tail = parts.slice(-2).join('-')
   return tail.length <= 16 ? tail : `${tail.slice(0, 15)}…`
 }
+const csvCell = (value: unknown) => {
+  let text = String(value ?? '')
+  if (/^[=+\-@]/.test(text)) text = `'${text}`
+  return `"${text.replaceAll('"', '""')}"`
+}
 
 function Empty({ text }: { text: string }) {
   return <div className="grid min-h-64 place-items-center rounded-lg border border-dashed border-border text-sm text-muted">{text}</div>
@@ -87,8 +92,15 @@ function SectorPanel() {
   const [rankWindow, setRankWindow] = useState<RankWindow>(1)
   const [asOf, setAsOf] = useState<string>()
   const [selectedSector, setSelectedSector] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [memberMetric, setMemberMetric] = useState<'return_pct' | 'main_net_amount' | 'active_buy_net_amount'>('return_pct')
   const radar = useQuery({ queryKey: QK.marketLabRadar(dimension, asOf), queryFn: () => api.marketLabSectorRadar(dimension, asOf) })
   const flow = useQuery({ queryKey: QK.marketLabSector(dimension), queryFn: () => api.marketLabSectorFlow(dimension) })
+  const members = useQuery({
+    queryKey: QK.marketLabMembers(dimension, selectedSector ?? '', asOf),
+    queryFn: () => api.marketLabSectorMembers(selectedSector!, dimension, asOf),
+    enabled: Boolean(selectedSector),
+  })
   const rows = radar.data?.rows ?? []
   const flowRows = flow.data?.rows ?? []
   useEffect(() => {
@@ -104,7 +116,7 @@ function SectorPanel() {
     }
   }, [flowRows, rows, selectedSector])
 
-  const ordered = useMemo(() => [...rows].sort((a, b) => radarValue(b, metric, rankWindow) - radarValue(a, metric, rankWindow)), [metric, rankWindow, rows])
+  const ordered = useMemo(() => rows.filter(row => row.sector.toLowerCase().includes(search.trim().toLowerCase())).sort((a, b) => radarValue(b, metric, rankWindow) - radarValue(a, metric, rankWindow)), [metric, rankWindow, rows, search])
   const rankChangeCount = Math.max(1, Math.ceil(ordered.length * 0.1))
   const attackers = metric === 'change' ? ordered.slice(0, rankChangeCount) : ordered.filter(row => radarRankPct(row, metric) >= 90)
   const retreaters = metric === 'change' ? ordered.slice(-rankChangeCount).reverse() : ordered.filter(row => radarRankPct(row, metric) <= 10).reverse()
@@ -124,6 +136,30 @@ function SectorPanel() {
     yAxis: { type: 'value', name: '亿元', nameTextStyle: { color: ct.text }, axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } },
     series: [{ type: 'bar', barMaxWidth: 38, data: (selectedFlow?.points ?? []).map(point => ({ value: point.flow_yuan / 1e8, itemStyle: { color: point.flow_yuan >= 0 ? '#F04438' : '#12B76A', borderRadius: 3 } })) }],
   }), [ct, selectedFlow])
+  const selectedHistory = selectedSector ? radar.data?.rank_history?.[selectedSector] ?? [] : []
+  const calendarOption = useMemo(() => ({
+    tooltip: { trigger: 'axis' }, grid: { left: 44, right: 16, top: 18, bottom: 30 },
+    xAxis: { type: 'category', data: selectedHistory.map(point => point.date.slice(5)), axisLabel: { color: ct.text, interval: Math.max(0, Math.floor(selectedHistory.length / 8)) }, axisLine: { lineStyle: { color: ct.border } } },
+    yAxis: { type: 'value', inverse: true, min: 1, max: radar.data?.universe_size, axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } },
+    series: [{ name: '排名', type: 'line', showSymbol: false, data: selectedHistory.map(point => metric === 'ratio' ? point.ratio_rank : metric === 'amount' ? point.amount_rank : point.swing_rank), lineStyle: { color: '#3B82F6', width: 2 }, areaStyle: { color: 'rgba(59,130,246,.12)' } }],
+  }), [ct, metric, radar.data?.universe_size, selectedHistory])
+  const memberRows = members.data?.metrics?.[memberMetric]
+  const exportMembers = () => {
+    if (!memberRows || !selectedSector) return
+    const rowsToExport = [...memberRows.top, ...memberRows.bottom]
+    const csv = [
+      ['方向', '代码', '名称', '数值'].map(csvCell).join(','),
+      ...rowsToExport.map((row, index) => [
+        index < memberRows.top.length ? 'TOP' : 'BOTTOM', row.symbol, row.name,
+        row[memberMetric],
+      ].map(csvCell).join(',')),
+    ].join('\n')
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
+    link.download = `${selectedSector}-${memberMetric}-${asOf ?? 'latest'}.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
   const renderSide = (sideRows: SectorRadarRow[], high: boolean) => <div className="min-w-0">
     <div className={`mb-2 flex items-center justify-between text-xs font-semibold ${high ? 'text-bull' : 'text-bear'}`}><span>{high ? '进攻方 · 流入' : '流出 · 撤退方'}</span><span className="text-muted">{high ? 'TOP 10%' : 'BOTTOM 10%'}</span></div>
     <div className="space-y-1.5">{sideRows.map(row => {
@@ -141,6 +177,7 @@ function SectorPanel() {
     <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
       <div><h2 className="text-base font-semibold">板块资金雷达</h2><p className="text-xs text-muted">按资金流入强弱识别进攻与撤退板块；评分和排名沿用 OneChart 口径。</p></div>
       <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
+        <input aria-label="搜索板块" className={input} style={{ width: 170 }} placeholder="搜索板块" value={search} onChange={event => setSearch(event.target.value)} />
         <div className="flex overflow-hidden rounded border border-border">{([['swing', '波段流入率'], ['ratio', '单日流入率'], ['amount', '单日净额'], ['change', '排名变化']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setMetric(key)} className={`px-3 py-2 text-xs ${metric === key ? 'bg-accent text-white' : 'bg-surface text-secondary hover:bg-elevated'}`}>{label}</button>)}</div>
         {metric === 'change' && <select aria-label="排名变化窗口" className={input} style={{ width: 88 }} value={rankWindow} onChange={event => setRankWindow(Number(event.target.value) as RankWindow)}><option value={1}>1 日</option><option value={3}>3 日</option><option value={5}>5 日</option></select>}
         <select aria-label="板块维度" className={input} style={{ width: 116 }} value={dimension} onChange={event => { setDimension(event.target.value as typeof dimension); setAsOf(undefined) }}><option value="industry">行业板块</option><option value="concept">概念板块</option></select>
@@ -155,6 +192,14 @@ function SectorPanel() {
     <div className={`${card} grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]`}>
       <div><h3 className="text-sm font-semibold">板块明细 · {selectedSector ?? '--'}</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[680px] text-right text-xs"><thead className="text-muted"><tr><th className="pb-2 text-left">指标</th><th>数值</th><th>排名</th><th>评分</th><th>1日变化</th><th>3日变化</th><th>5日变化</th></tr></thead><tbody>{rows.filter(row => row.sector === selectedSector).map(row => ([['波段流入率', row.swing_ratio_pct, row.swing_rank, row.swing_score, row.swing_rank_change_1d, row.swing_rank_change_3d, row.swing_rank_change_5d], ['单日流入率', row.flow_ratio_pct, row.ratio_rank, row.ratio_score, row.ratio_rank_change_1d, row.ratio_rank_change_3d, row.ratio_rank_change_5d], ['单日净额(亿)', row.flow_yuan / 1e8, row.amount_rank, row.amount_score, row.amount_rank_change_1d, row.amount_rank_change_3d, row.amount_rank_change_5d]] as const).map(values => <tr key={values[0]} className="border-t border-border/60"><td className="py-2 text-left">{values[0]}</td>{values.slice(1).map((value, index) => <td key={index} className="font-mono">{fmt(value as number)}</td>)}</tr>))}</tbody></table></div></div>
       <div className="min-w-0 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"><h3 className="text-sm font-semibold">近 3 日资金趋势</h3>{flow.data?.available && selectedFlow ? <div data-testid="sector-flow-trend-chart"><ReactECharts option={trendOption} style={{ height: 220 }} /></div> : <p className="mt-8 text-center text-xs text-muted">暂无逐日资金数据</p>}</div>
+    </div>
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,1.35fr)]">
+      <div className={card} data-testid="sector-rank-calendar"><div className="mb-2"><h3 className="text-sm font-semibold">排名日历 · {selectedSector ?? '--'}</h3><p className="text-xs text-muted">纵轴越靠上排名越强；使用当前指标近 {selectedHistory.length} 个交易日。</p></div>{selectedHistory.length ? <ReactECharts option={calendarOption} style={{ height: 280 }} /> : <Empty text="暂无排名历史" />}</div>
+      <div className={card} data-testid="sector-member-evidence">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-semibold">成分股强度 · {selectedSector ?? '--'}</h3><p className="text-xs text-muted">{members.data?.member_count ?? 0} 只本地成分 · 资金质量 {members.data?.flow_quality ?? '--'} · 主动买入 {members.data?.active_quality ?? '--'}</p></div><button type="button" className="rounded border border-border px-2.5 py-1.5 text-xs hover:bg-elevated" onClick={exportMembers} disabled={!memberRows}>导出 CSV</button></div>
+        <div className="mb-3 flex overflow-hidden rounded border border-border">{([['return_pct', '涨跌幅'], ['main_net_amount', '主力净额'], ['active_buy_net_amount', '主动买入净额']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setMemberMetric(key)} className={`flex-1 px-2 py-1.5 text-xs ${memberMetric === key ? 'bg-accent text-white' : 'hover:bg-elevated'}`}>{label}</button>)}</div>
+        {members.isLoading ? <Empty text="正在加载成分股证据…" /> : !members.data?.available ? <Empty text={members.data?.detail ?? '暂无成分股证据'} /> : memberRows && (memberRows.top.length || memberRows.bottom.length) ? <div className="grid gap-4 md:grid-cols-2">{([['TOP', memberRows.top], ['BOTTOM', memberRows.bottom]] as const).map(([title, evidenceRows]) => <div key={title}><div className="mb-1 text-xs font-semibold text-muted">{title}</div>{evidenceRows.map(row => <div key={`${title}-${row.symbol}`} className="grid grid-cols-[64px_minmax(0,1fr)_86px] gap-2 border-t border-border/60 py-1.5 text-xs"><span className="font-mono text-muted">{row.symbol}</span><span className="truncate" title={row.name}>{row.name}</span><span className={`text-right font-mono ${(row[memberMetric] ?? 0) >= 0 ? 'text-bull' : 'text-bear'}`}>{memberMetric === 'return_pct' ? `${fmt(row[memberMetric])}%` : billion(row[memberMetric] ?? 0)}</span></div>)}</div>)}</div> : <Empty text={memberMetric === 'active_buy_net_amount' ? '当前数据源不提供主动买入净额' : '当前指标暂无可用成分数据'} />}
+      </div>
     </div>
   </div>
 }
@@ -219,46 +264,74 @@ type PositionInput = {
   balance: number; risk_pct: number; entry: number; stop: number
   mode: 'brave' | 'sensitive'; trade_type: 'B1' | 'B2'
 }
-type SimulationInput = { balance: number; win_rate: number; win_r: number; loss_r: number; risk_pct: number; trades: number; paths: number; seed: number }
+type SimulationInput = { balance: number; win_rate: number; win_r: number; loss_r: number; risk_pct: number; trades: number; paths: number; seed: number; target_return_pct: number; max_drawdown_pct: number; annual_trades: number }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
   return <label className="text-xs text-muted">{label}<input aria-label={label} className={`${input} mt-1`} type="number" step="any" value={value} onChange={e => onChange(Number(e.target.value))} /></label>
 }
 
 function RiskPanel() {
+  const ct = useChartTheme()
   const [position, setPosition] = useState<PositionInput>({ balance: 100000, risk_pct: 0.01, entry: 10, stop: 9, mode: 'brave', trade_type: 'B1' })
+  const [stopMode, setStopMode] = useState<'price' | 'percent'>('price')
+  const [stopPercent, setStopPercent] = useState(10)
   const [pitInput, setPitInput] = useState({ top: 10, bottom: 8, current: 9 })
   const [drawInput, setDrawInput] = useState({ entry: 10, stop: 9, high: 20, target_r: 10, drawdown_pct: 0.1 })
-  const [simulation, setSimulation] = useState<SimulationInput>({ balance: 100000, win_rate: 0.55, win_r: 1.5, loss_r: 1, risk_pct: 0.01, trades: 100, paths: 1000, seed: 42 })
-  const pos = useMutation({ mutationFn: api.marketLabPosition })
+  const [simulation, setSimulation] = useState<SimulationInput>({ balance: 100000, win_rate: 0.55, win_r: 1.5, loss_r: 1, risk_pct: 0.01, trades: 100, paths: 1000, seed: 42, target_return_pct: 50, max_drawdown_pct: 20, annual_trades: 50 })
+  const [basis, setBasis] = useState<'decision' | 'theory'>('decision')
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string>()
+  const [history, setHistory] = useState<{ entry: number; stop: number; shares: number; at: string }[]>(() => { try { return JSON.parse(localStorage.getItem('market-lab-position-history') ?? '[]') } catch { return [] } })
+  const effectiveStop = stopMode === 'percent' ? position.entry * (1 - stopPercent / 100) : position.stop
+  const pos = useMutation({ mutationFn: api.marketLabPosition, onSuccess: result => {
+    const next = [{ entry: position.entry, stop: effectiveStop, shares: result.shares, at: new Date().toLocaleString('zh-CN') }, ...history].slice(0, 10)
+    setHistory(next); localStorage.setItem('market-lab-position-history', JSON.stringify(next))
+  } })
   const pit = useMutation({ mutationFn: api.marketLabPit })
   const draw = useMutation({ mutationFn: api.marketLabDrawdown })
   const sim = useMutation({ mutationFn: api.marketLabSimulate })
+  const visibleStrategies = (sim.data?.strategies ?? []).filter(row => row.basis === basis)
+  const selectedStrategy = visibleStrategies.find(row => row.id === selectedStrategyId) ?? visibleStrategies[0]
   const simulationOption = useMemo(() => ({
-    tooltip: { trigger: 'axis' }, grid: { left: 65, right: 25, top: 25, bottom: 35 },
-    xAxis: { type: 'category', name: '交易', data: sim.data?.sample_paths[0]?.map((_, index) => index) ?? [] },
-    yAxis: { type: 'value', name: '权益', scale: true },
-    series: (sim.data?.sample_paths ?? []).map((path, index) => ({ name: `路径${index + 1}`, type: 'line', showSymbol: false, data: path, lineStyle: { width: 1, opacity: 0.55 } })),
-  }), [sim.data])
-  return <div className="grid gap-4 xl:grid-cols-2">
+    tooltip: { trigger: 'axis', backgroundColor: ct.tooltipBg, borderColor: ct.tooltipBorder, textStyle: { color: ct.tooltipText } }, grid: { left: 70, right: 25, top: 28, bottom: 42 },
+    xAxis: { type: 'category', name: '交易', data: selectedStrategy?.median_path.map((_, index) => index) ?? [], axisLabel: { color: ct.text }, axisLine: { lineStyle: { color: ct.border } } },
+    yAxis: { type: 'value', name: '权益', scale: true, axisLabel: { color: ct.text }, splitLine: { lineStyle: { color: ct.grid } } },
+    series: selectedStrategy ? [
+      { name: 'P90', type: 'line', showSymbol: false, data: selectedStrategy.p90_path, lineStyle: { color: '#12B76A', width: 1 } },
+      { name: '中位数', type: 'line', showSymbol: false, data: selectedStrategy.median_path, lineStyle: { color: '#3B82F6', width: 2.5 } },
+      { name: 'P10', type: 'line', showSymbol: false, data: selectedStrategy.p10_path, lineStyle: { color: '#F04438', width: 1 } },
+      ...selectedStrategy.sample_paths.slice(0, 5).map((path, index) => ({ name: `样本${index + 1}`, type: 'line', showSymbol: false, data: path, lineStyle: { color: '#94A3B8', width: 0.7, opacity: 0.35 } })),
+    ] : [],
+  }), [ct, selectedStrategy])
+  const distributionOption = useMemo(() => ({
+    tooltip: { trigger: 'axis' }, grid: { left: 54, right: 16, top: 20, bottom: 42 },
+    xAxis: { type: 'category', data: (sim.data?.distribution.bins ?? []).map(bin => money((bin.from + bin.to) / 2)), axisLabel: { color: ct.text, interval: 5, rotate: 25 } },
+    yAxis: { type: 'value', name: '概率', axisLabel: { color: ct.text, formatter: (value: number) => `${fmt(value * 100, 0)}%` }, splitLine: { lineStyle: { color: ct.grid } } },
+    series: [{ type: 'bar', data: (sim.data?.distribution.bins ?? []).map(bin => bin.density), itemStyle: { color: '#8B5CF6' } }],
+  }), [ct, sim.data])
+  const runPosition = () => pos.mutate({ ...position, stop: effectiveStop })
+  return <div className="space-y-4">
+    <div className="grid gap-4 xl:grid-cols-2">
     <div className={card}>
       <h2 className="mb-4 flex items-center gap-2 font-semibold"><Calculator className="h-4 w-4 text-accent" />风险仓位计算</h2>
       <div className="grid grid-cols-2 gap-3">
         <NumberField label="账户资金" value={position.balance} onChange={balance => setPosition(old => ({ ...old, balance }))} />
         <NumberField label="单笔风险(小数)" value={position.risk_pct} onChange={risk_pct => setPosition(old => ({ ...old, risk_pct }))} />
         <NumberField label="入场价" value={position.entry} onChange={entry => setPosition(old => ({ ...old, entry }))} />
-        <NumberField label="止损价" value={position.stop} onChange={stop => setPosition(old => ({ ...old, stop }))} />
+        {stopMode === 'price' ? <NumberField label="止损价" value={position.stop} onChange={stop => setPosition(old => ({ ...old, stop }))} /> : <NumberField label="止损幅度(%)" value={stopPercent} onChange={setStopPercent} />}
+        <label className="text-xs text-muted">止损模式<select aria-label="止损模式" className={`${input} mt-1`} value={stopMode} onChange={e => setStopMode(e.target.value as typeof stopMode)}><option value="price">固定价格</option><option value="percent">固定幅度</option></select></label>
         <label className="text-xs text-muted">性格模式<select aria-label="性格模式" className={`${input} mt-1`} value={position.mode} onChange={e => setPosition(old => ({ ...old, mode: e.target.value as PositionInput['mode'] }))}><option value="brave">勇气模式</option><option value="sensitive">敏感模式</option></select></label>
         <label className="text-xs text-muted">交易类型<select aria-label="交易类型" className={`${input} mt-1`} value={position.trade_type} onChange={e => setPosition(old => ({ ...old, trade_type: e.target.value as PositionInput['trade_type'] }))}><option value="B1">回调企稳 B1</option><option value="B2">启动突破 B2</option></select></label>
       </div>
-      <button className={`${button} mt-4`} onClick={() => pos.mutate(position)} disabled={pos.isPending}>计算仓位</button>
-      {pos.data && <div className="mt-4 grid grid-cols-2 gap-2 text-sm"><span>股数 <b>{pos.data.shares}</b></span><span>资金占用 <b>{fmt(pos.data.capital_usage_pct)}%</b></span><span>计划亏损 <b>{money(pos.data.planned_loss)}</b></span><span>保本位 <b>{fmt(pos.data.breakeven_price)} ({fmt(pos.data.breakeven_r)}R)</b></span><span>目标位 <b>{fmt(pos.data.target_price)} ({fmt(pos.data.target_r)}R)</b></span><span>预期利润 <b>{money(pos.data.projected_profit)}</b></span></div>}
+      <div className="mt-3 text-xs text-muted">当前止损价：{fmt(effectiveStop)} · 风险参数可由下方模拟器回填</div>
+      <button className={`${button} mt-3`} onClick={runPosition} disabled={pos.isPending}>计算仓位</button>
+      {pos.data && <><div className="mt-4 grid grid-cols-2 gap-2 text-sm"><span>风险等级 <b>{pos.data.risk_level}</b></span><span>股数 <b>{pos.data.shares}</b></span><span>资金占用 <b>{fmt(pos.data.capital_usage_pct)}%</b></span><span>实际风险 <b>{fmt(pos.data.actual_risk_pct)}%</b></span><span>计划亏损 <b>{money(pos.data.planned_loss)}</b></span><span>保本位 <b>{fmt(pos.data.breakeven_price)} ({fmt(pos.data.breakeven_r)}R)</b></span><span>目标位 <b>{fmt(pos.data.target_price)} ({fmt(pos.data.target_r)}R)</b></span><span>预期利润 <b>{money(pos.data.projected_profit)}</b></span></div>{pos.data.warnings.length > 0 && <div className="mt-3 rounded border border-warning/30 bg-warning/5 p-2 text-xs text-warning">{pos.data.warnings.map(item => <div key={item}>• {item}</div>)}</div>}</>}
+      {history.length > 0 && <details className="mt-4 text-xs"><summary className="cursor-pointer text-muted">最近 {history.length} 次计算</summary><div className="mt-2 space-y-1">{history.map((row, index) => <div key={`${row.at}-${index}`} className="flex justify-between border-t border-border/60 py-1"><span>{row.entry} / {row.stop}</span><span>{row.shares}股 · {row.at}</span></div>)}</div></details>}
     </div>
     <div className={card}>
       <h2 className="mb-4 flex items-center gap-2 font-semibold"><FlaskConical className="h-4 w-4 text-accent" />Kelly + 蒙特卡洛</h2>
-      <div className="grid grid-cols-2 gap-3">{Object.entries(simulation).map(([key, value]) => <NumberField key={key} label={{ balance: '初始资金', win_rate: '胜率(小数)', win_r: '盈利R', loss_r: '亏损R', risk_pct: '每笔风险(小数)', trades: '交易次数', paths: '路径数', seed: '随机种子' }[key]!} value={value} onChange={v => setSimulation(old => ({ ...old, [key]: v }))} />)}</div>
-      <button className={`${button} mt-4`} onClick={() => sim.mutate(simulation)} disabled={sim.isPending}>运行模拟</button>
-      {sim.data && <><div className="mt-4 grid grid-cols-2 gap-2 text-sm"><span>Kelly <b>{fmt(sim.data.kelly_pct)}%</b></span><span>半 Kelly <b>{fmt(sim.data.half_kelly_pct)}%</b></span><span>期望 <b>{fmt(sim.data.expectancy_r)}R</b></span><span>盈亏平衡胜率 <b>{fmt(sim.data.break_even_pct)}%</b></span><span>P50 终值 <b>{money(sim.data.p50_final)}</b></span><span>P95 最大回撤 <b>{fmt(sim.data.p95_max_drawdown_pct)}%</b></span><span>亏损概率 <b>{fmt(sim.data.loss_probability_pct)}%</b></span></div>{sim.data.sample_paths.length > 0 && <ReactECharts option={simulationOption} style={{ height: 260 }} />}</>}
+      <div className="grid grid-cols-2 gap-3">{Object.entries(simulation).map(([key, value]) => <NumberField key={key} label={{ balance: '初始资金', win_rate: '胜率(小数)', win_r: '盈利R', loss_r: '亏损R', risk_pct: '手工风险(小数)', trades: '观察交易数', paths: '模拟路径数', seed: '随机种子', target_return_pct: '目标年化(%)', max_drawdown_pct: '可承受回撤(%)', annual_trades: '年均交易数' }[key]!} value={value} onChange={v => setSimulation(old => ({ ...old, [key]: v }))} />)}</div>
+      <div className="mt-4 flex gap-2"><button className={button} onClick={() => sim.mutate(simulation)} disabled={sim.isPending}>{sim.isPending ? '正在模拟…' : '运行模拟'}</button><button className="rounded border border-border px-3 py-2 text-sm hover:bg-elevated" onClick={() => { setSimulation(old => ({ ...old, seed: old.seed + 1 })); sim.mutate({ ...simulation, seed: simulation.seed + 1 }) }} disabled={sim.isPending}>重新抽样</button></div>
+      {sim.data && <><div className="mt-4 grid grid-cols-2 gap-2 text-sm"><span>单笔期望 <b>{fmt(sim.data.expectancy_r)}R</b></span><span>盈亏平衡 <b>{fmt(sim.data.break_even_pct)}%</b></span><span>Kelly上限 <b>{fmt(sim.data.kelly_pct)}%</b></span><span>建议风险 <b>{fmt(sim.data.reverse.recommended_risk_pct)}%</b></span><span>半额测试 <b>{fmt(sim.data.reverse.test_risk_pct)}%</b></span><span>主要约束 <b>{sim.data.reverse.limiting_factor === 'drawdown' ? '最大回撤' : sim.data.reverse.limiting_factor === 'kelly' ? 'Kelly上限' : '负期望'}</b></span><span>收益目标 <b className={sim.data.reverse.target_reachable ? 'text-bull' : 'text-warning'}>{sim.data.reverse.target_reachable ? '风险边界内可达' : '当前参数不可达'}</b></span></div><div className="mt-3 flex gap-2"><button className="rounded border border-border px-2 py-1 text-xs hover:bg-elevated" onClick={() => setPosition(old => ({ ...old, risk_pct: sim.data!.reverse.recommended_risk_pct / 100 }))}>应用满额到仓位</button><button className="rounded border border-border px-2 py-1 text-xs hover:bg-elevated" onClick={() => setPosition(old => ({ ...old, risk_pct: sim.data!.reverse.test_risk_pct / 100 }))}>应用半额到仓位</button></div></>}
     </div>
     <div className={card}>
       <h2 className="mb-4 font-semibold">出坑计算</h2>
@@ -272,6 +345,13 @@ function RiskPanel() {
       <button className={`${button} mt-4`} onClick={() => draw.mutate(drawInput)}>计算保护位</button>
       {draw.data && <div className="mt-4 grid grid-cols-3 gap-2 text-sm"><span>实际 <b>{fmt(draw.data.actual_r)}R</b></span><span>退出价 <b>{fmt(draw.data.exit_price)}</b></span><span>锁定收益 <b>{fmt(draw.data.locked_profit_pct)}%</b></span><span>目标状态 <b className={draw.data.target_achieved ? 'text-bull' : 'text-warning'}>{draw.data.target_achieved ? '已达到' : '未达到'}</b></span></div>}
     </div>
+    </div>
+    {sim.data && <div className={card} data-testid="simulation-evidence">
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">风险档位与结果证据</h2><p className="text-xs text-muted">所有档位使用同一组随机胜负序列，差异只来自风险敞口。</p></div><div className="flex overflow-hidden rounded border border-border">{([['decision', '风险敞口'], ['theory', 'Kelly 理论档']] as const).map(([key, label]) => <button key={key} onClick={() => { setBasis(key); setSelectedStrategyId(undefined) }} className={`px-3 py-1.5 text-xs ${basis === key ? 'bg-accent text-white' : 'hover:bg-elevated'}`}>{label}</button>)}</div></div>
+      <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-5">{visibleStrategies.map(row => <button key={row.id} onClick={() => setSelectedStrategyId(row.id)} className={`rounded border p-3 text-left ${selectedStrategy?.id === row.id ? 'border-accent bg-accent/5' : 'border-border'}`}><div className="text-xs font-semibold">{row.name}</div><div className="mt-1 text-lg font-mono">{fmt(row.risk_pct)}%</div><div className="mt-1 text-[10px] text-muted">P50 {money(row.p50_final)} · P80回撤 {fmt(row.p80_drawdown_pct)}%</div><div className="text-[10px] text-muted">减半 {fmt(row.halve_probability_pct)}% · 破产 {fmt(row.ruin_probability_pct)}%</div></button>)}</div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-2"><div><h3 className="mb-2 text-sm font-semibold">资金路径分位带 · {selectedStrategy?.name}</h3><ReactECharts option={simulationOption} style={{ height: 360 }} /></div><div><h3 className="mb-2 text-sm font-semibold">手工风险最终资金分布</h3><ReactECharts option={distributionOption} style={{ height: 360 }} /></div></div>
+      {selectedStrategy && <div className="mt-3 grid grid-cols-3 gap-3 rounded bg-base p-3 text-xs"><span>最低分位 <b>{money(selectedStrategy.p10_final)}</b></span><span>中位结果 <b>{money(selectedStrategy.p50_final)}</b></span><span>最高分位 <b>{money(selectedStrategy.p90_final)}</b></span></div>}
+    </div>}
   </div>
 }
 

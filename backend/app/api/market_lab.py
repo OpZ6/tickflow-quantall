@@ -15,6 +15,7 @@ from app.services.market_lab import (
     macro_dispersion_from_repo,
     monte_carlo,
     sector_flow_from_repo,
+    sector_members_from_repo,
     sector_radar_from_repo,
 )
 
@@ -51,9 +52,12 @@ class SimulationIn(BaseModel):
     win_r: float = Field(gt=0)
     loss_r: float = Field(gt=0)
     risk_pct: float = Field(gt=0, le=1)
-    trades: int = Field(ge=1, le=2000)
-    paths: int = Field(ge=10, le=20_000)
+    trades: int = Field(ge=1, le=500)
+    paths: int = Field(ge=10, le=2_000)
     seed: int = 42
+    target_return_pct: float = Field(default=50, ge=0, le=1000)
+    max_drawdown_pct: float = Field(default=20, gt=0, lt=100)
+    annual_trades: int = Field(default=50, ge=1, le=1000)
 
 
 @router.get("/etf-momentum")
@@ -81,6 +85,20 @@ def sector_radar(
         dimension=dimension,
         as_of=as_of,
         fact_repo=getattr(request.app.state, "market_facts", None),
+    )
+
+
+@router.get("/sector-members")
+def sector_members(
+    request: Request,
+    sector: str = Query(min_length=1, max_length=120),
+    dimension: str = Query("industry", pattern="^(industry|concept)$"),
+    as_of: date | None = None,
+    limit: int = Query(10, ge=1, le=30),
+) -> dict:
+    return sector_members_from_repo(
+        request.app.state.repo, dimension=dimension, sector=sector,
+        as_of=as_of, limit=limit,
     )
 
 

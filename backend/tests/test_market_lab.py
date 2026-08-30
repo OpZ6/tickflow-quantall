@@ -19,6 +19,7 @@ from app.services.market_lab import (
     macro_dispersion_from_repo,
     monte_carlo,
     sector_flow_from_repo,
+    sector_members_from_repo,
     sector_radar_from_repo,
 )
 
@@ -72,6 +73,9 @@ def test_position_calculator_uses_board_lots_and_risk_cap() -> None:
     assert result["planned_loss"] == 1000
     assert result["capital_usage_pct"] == 10
     assert result["reward_risk"] == 2
+    assert result["risk_level"] == "保守"
+    assert result["stop_pct"] == 10
+    assert result["warnings"] == []
 
 
 def test_position_presets_match_onechart_b1_b2_modes() -> None:
@@ -108,6 +112,22 @@ def test_monte_carlo_is_seeded_and_reports_drawdown() -> None:
     assert a["p50_final"] > 0
     assert 0 <= a["p95_max_drawdown_pct"] <= 100
     assert len(a["sample_paths"]) <= 12
+    assert a["reverse"]["recommended_risk_pct"] > 0
+    assert len(a["strategies"]) == 13
+    assert {row["basis"] for row in a["strategies"]} == {"decision", "theory"}
+    assert all(len(row["median_path"]) == args["trades"] + 1 for row in a["strategies"])
+    assert a["distribution"]["bins"]
+
+
+def test_monte_carlo_recommends_zero_risk_for_negative_expectancy() -> None:
+    result = monte_carlo(
+        balance=100_000, win_rate=0.3, win_r=1, loss_r=1,
+        risk_pct=0.01, trades=30, paths=100, seed=3,
+        target_return_pct=50, max_drawdown_pct=20, annual_trades=50,
+    )
+    assert result["expectancy_r"] < 0
+    assert result["reverse"]["recommended_risk_pct"] == 0
+    assert result["reverse"]["limiting_factor"] == "negative_expectancy"
 
 
 def test_sector_radar_marks_ohlcv_flow_as_proxy() -> None:
@@ -186,14 +206,15 @@ def test_sector_radar_matches_onechart_money_flow_ema_and_scores() -> None:
     assert "swing_rank_change_1d" in semiconductor
     assert "swing_top_30d" in semiconductor
     assert result["rows"][-1]["swing_rank"] == 4
+    assert result["rank_history"]["半导体"][-1]["swing_rank"] == 1
 
 
 def test_macro_dispersion_uses_daily_industry_cross_section_and_seven_indices() -> None:
     start = date(2026, 2, 1)
     sector_returns = {
-        "成长": [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
-        "价值": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        "周期": [-1.0, -1.5, -2.0, -2.5, -3.0, -3.5, -4.0],
+        "成长-电子-半导体": [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
+        "价值-银行-股份制": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "周期-煤炭-焦煤": [-1.0, -1.5, -2.0, -2.5, -3.0, -3.5, -4.0],
     }
     records = []
     for index, (industry, returns) in enumerate(sector_returns.items()):
@@ -230,6 +251,7 @@ def test_macro_dispersion_uses_daily_industry_cross_section_and_seven_indices() 
 
     assert result["available"] is True
     assert result["window"] == "daily industry cross-section"
+    assert result["industry_level"] == 2
     assert result["industry_count"] == 3
     assert result["dispersion"] == pytest.approx(math.sqrt(32), rel=1e-6)
     assert result["ma3"] == pytest.approx(
@@ -239,8 +261,9 @@ def test_macro_dispersion_uses_daily_industry_cross_section_and_seven_indices() 
     assert len(result["indices"]) == 7
     assert all(series["points"][0]["normalized"] == 0 for series in result["indices"])
     assert set(result["contribution_windows"]) == {"1", "3", "5", "10"}
-    assert result["contribution_windows"]["1"]["high"][0]["name"] in {"成长", "周期"}
-    assert result["basis"].startswith("本地行业映射")
+    assert result["contribution_windows"]["1"]["high"][0]["name"] in {"电子", "煤炭"}
+    assert "同花顺二级" in result["basis"]
+    assert "当前成分快照回看历史" in result["basis"]
 
 
 def test_sector_flow_keeps_strongest_inflow_and_outflow_sides() -> None:
@@ -273,6 +296,57 @@ def test_sector_flow_keeps_strongest_inflow_and_outflow_sides() -> None:
     assert totals["板块39"] == -12_000_000.0
     assert any(value > 0 for value in totals.values())
     assert any(value < 0 for value in totals.values())
+
+
+def test_sector_members_exposes_stock_level_evidence() -> None:
+    latest = date(2026, 8, 21)
+    frame = pl.DataFrame({
+        "symbol": ["A", "A", "B", "B"],
+        "name": ["甲", "甲", "乙", "乙"],
+        "industry": ["电子", "电子", "电子", "电子"],
+        "date": [latest - timedelta(days=1), latest] * 2,
+        "close": [10.0, 11.0, 10.0, 9.0],
+        "amount": [100.0, 120.0, 100.0, 80.0],
+        "main_net_inflow": [0.0, 50.0, 0.0, -30.0],
+    })
+
+    class Repo:
+        def get_enriched_latest(self):
+            return frame.filter(pl.col("date") == latest), latest
+
+        def get_enriched_range(self, start_date, end_date, symbols=None, columns=None):
+            return frame.filter((pl.col("date") >= start_date) & (pl.col("date") <= end_date))
+
+    result = sector_members_from_repo(Repo(), dimension="industry", sector="电子", as_of=latest)
+    assert result["available"] is True
+    assert result["member_count"] == 2
+    assert result["metrics"]["return_pct"]["top"][0]["symbol"] == "A"
+    assert result["metrics"]["main_net_amount"]["bottom"][0]["symbol"] == "B"
+
+
+def test_sector_members_matches_industry_path_component() -> None:
+    latest = date(2026, 8, 21)
+    frame = pl.DataFrame({
+        "symbol": ["A", "A", "B", "B"],
+        "industry": ["信息技术-电子-半导体"] * 2 + ["金融-银行-股份制银行"] * 2,
+        "date": [latest - timedelta(days=1), latest] * 2,
+        "close": [10.0, 11.0, 10.0, 10.5],
+    })
+
+    class Repo:
+        def get_enriched_latest(self):
+            return frame.filter(pl.col("date") == latest), latest
+
+        def get_enriched_range(self, start_date, end_date, symbols=None, columns=None):
+            return frame.filter((pl.col("date") >= start_date) & (pl.col("date") <= end_date))
+
+    result = sector_members_from_repo(
+        Repo(), dimension="industry", sector="电子", as_of=latest,
+    )
+
+    assert result["available"] is True
+    assert result["member_count"] == 1
+    assert result["metrics"]["return_pct"]["top"][0]["symbol"] == "A"
 
 
 def test_sector_flow_prefers_canonical_observed_facts() -> None:
@@ -383,6 +457,14 @@ def test_market_lab_api_success_and_empty_states() -> None:
     assert sectors["quality"] == "unavailable"
     radar = client.get("/api/market-lab/sector-radar").json()
     assert radar["available"] is False
+    members = client.get("/api/market-lab/sector-members", params={"sector": "电子"}).json()
+    assert members["available"] is False
+    assert client.get(
+        "/api/market-lab/sector-members", params={"sector": "A" * 121}
+    ).status_code == 422
+    assert client.get(
+        "/api/market-lab/sector-members", params={"sector": "电子", "dimension": "invalid"}
+    ).status_code == 422
 
     sim = client.post("/api/market-lab/simulate", json={
         "balance": 100_000, "win_rate": 0.55, "win_r": 1.5,
@@ -390,5 +472,10 @@ def test_market_lab_api_success_and_empty_states() -> None:
     })
     assert sim.status_code == 200
     assert sim.json()["paths"] == 100
+    invalid_sim = client.post("/api/market-lab/simulate", json={
+        "balance": 100_000, "win_rate": 0.55, "win_r": 1.5,
+        "loss_r": 1, "risk_pct": 0.01, "trades": 30, "paths": 2_001,
+    })
+    assert invalid_sim.status_code == 422
     assert client.post("/api/market-lab/pit", json={"top": 10, "bottom": 8, "current": 9}).json()["target"] == 12
     assert client.post("/api/market-lab/drawdown", json={"entry": 10, "stop": 9, "high": 20}).json()["target_achieved"] is True
