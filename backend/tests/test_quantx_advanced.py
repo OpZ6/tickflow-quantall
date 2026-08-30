@@ -137,6 +137,25 @@ def test_promotion_ladder_includes_first_board_seal_and_all_observed_heights() -
     assert next(row for row in result["stages"] if row["name"] == "1→2")['rate'] == 50.0
     assert next(row for row in result["stages"] if row["name"] == "7→8")['rate'] == 100.0
     assert result["max_observed_board"] == 8
+    assert result["default_view"] == "current"
+    assert result["baseline"]["sample_days"] == 2
+    assert result["baseline"]["stages"] == result["stages"]
+
+    current = result["views"]["current"]
+    assert current["label"] == "当天"
+    assert current["start_date"] == "2026-08-28"
+    assert current["end_date"] == "2026-08-28"
+    assert current["sample_days"] == 1
+    current_first = next(row for row in current["stages"] if row["name"] == "0→1 首板封板")
+    current_second = next(row for row in current["stages"] if row["name"] == "1→2")
+    assert (current_first["pool"], current_first["promoted"], current_first["rate"]) == (2, 1, 50.0)
+    assert (current_second["pool"], current_second["promoted"], current_second["rate"]) == (1, 0, 0.0)
+
+    five_day = result["views"]["5"]
+    assert five_day["label"] == "5日均值"
+    assert five_day["sample_days"] == 2
+    assert next(row for row in five_day["stages"] if row["name"] == "1→2")["rate"] == 50.0
+    assert result["views"]["20"]["sample_days"] == 2
 
 
 def test_anomaly_calendar_keeps_recent_weekdays_only() -> None:

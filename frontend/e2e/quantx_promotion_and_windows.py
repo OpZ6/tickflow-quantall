@@ -66,6 +66,11 @@ def main() -> None:
         assert all(len(row["components"]) == 4 for row in mainlines)
         promotion = cards["promotion_funnel"]["data"]
         stages = promotion["stages"]
+        assert promotion["default_view"] == "current"
+        assert set(promotion["views"]) == {"current", "5", "20"}
+        assert promotion["baseline"]["stages"] == stages
+        assert promotion["baseline"]["sample_days"] >= promotion["views"]["20"]["sample_days"]
+        assert promotion["views"]["current"]["sample_days"] == 1
         assert stages[0]["name"] == "0→1 首板封板"
         assert stages[0]["basis"] == "same_day_seal"
         assert stages[0]["pool"] == stages[0]["promoted"] + stages[0]["failed"]
@@ -148,6 +153,19 @@ def main() -> None:
         promotion_card = page.get_by_test_id("quantx-advanced-promotion_funnel")
         promotion_card.locator("canvas").wait_for(timeout=30_000)
         page.get_by_test_id("quantx-promotion-guide").wait_for()
+        promotion_controls = page.get_by_test_id("quantx-promotion-window-controls")
+        promotion_controls.wait_for()
+        current_window = page.get_by_test_id("quantx-promotion-window-current")
+        five_day_window = page.get_by_test_id("quantx-promotion-window-5")
+        twenty_day_window = page.get_by_test_id("quantx-promotion-window-20")
+        assert current_window.get_attribute("aria-pressed") == "true"
+        five_day_window.click()
+        assert five_day_window.get_attribute("aria-pressed") == "true"
+        twenty_day_window.click()
+        assert twenty_day_window.get_attribute("aria-pressed") == "true"
+        assert "全样本基线" in page.get_by_test_id(
+            "quantx-promotion-baseline-label"
+        ).inner_text()
         assert "ths_hot" in page.get_by_test_id(
             "quantx-advanced-theme_river"
         ).locator("header").inner_text()

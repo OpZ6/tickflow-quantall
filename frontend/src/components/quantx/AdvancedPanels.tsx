@@ -14,7 +14,7 @@ const YELLOW = '#d29922'
 const PALETTE = [RED, BLUE, ORANGE, PURPLE, GREEN, YELLOW, '#39c5cf', '#ff9f43', '#7f8cff', '#e56b9f', '#5dd39e', '#b8a1ff']
 
 type ChartTheme = ReturnType<typeof useChartTheme>
-type ChartSelection = { sectorDimension?: string; sectorWindow?: number; correlationDimension?: string; mainlineFocus?: string }
+type ChartSelection = { sectorDimension?: string; sectorWindow?: number; correlationDimension?: string; mainlineFocus?: string; promotionWindow?: string }
 
 const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 'rotation' | 'structure'; span?: string; caveat?: string }> = {
   sentiment_phase: { title: '市场情绪状态相图', hint: '趋势情绪 × 短线情绪 · 气泡为涨停家数', group: 'state' },
@@ -30,7 +30,7 @@ const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 
   mainline_waterfall: { title: '主线强度贡献瀑布', hint: '切换各条主线，细分涨停广度、连板高度与梯队完整度', group: 'rotation', caveat: '主线历史按当前概念成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
   theme_ladder_sunburst: { title: '题材—连板层级旭日图', hint: '当日题材 → 连板高度（悬停查看合并个股）', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]' },
   rps_rotation_clock: { title: '行业 RPS 轮动时钟', hint: '行业横截面相对强度 × 排名加速度 · 中心为行业中位数', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]', caveat: '行业收益按当前行业成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
-  promotion_funnel: { title: '连板晋级阶梯', hint: '0→1 为当日首板封板率；1→2 以上为下一交易日晋级率，并展示全部可评估高位板', group: 'structure', span: 'xl:[grid-column:span_9/span_9]' },
+  promotion_funnel: { title: '连板晋级阶梯', hint: '当天 / 5日 / 20日晋级效率 · 全样本基线始终对照', group: 'structure', span: 'xl:[grid-column:span_9/span_9]' },
   turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度', group: 'structure', span: 'xl:[grid-column:span_7/span_7]' },
 }
 
@@ -77,8 +77,36 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 52, containLabel: true }, xAxis: { type: 'category', data: dates, axisLabel: { color: ct.text, rotate: 30, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', inverse: true, data: themes, axisLabel: { color: ct.textStrong, width: 112, overflow: 'truncate', fontSize: 10 } }, visualMap: { min: 1, max: Math.max(10, data.rank_max || 10), calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inverse: true, text: ['靠后', '第1名'], inRange: { color: [RED, ORANGE, '#244b75', '#101a2d'] }, textStyle: { color: ct.text, fontSize: 9 } }, series: [{ type: 'heatmap', data: values, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 }, label: { show: true, color: ct.textStrong, fontSize: 8, textBorderColor: 'rgba(0,0,0,.8)', textBorderWidth: 2, formatter: (p: any) => String(p.value[2]) }, tooltip: { formatter: (p: any) => `${themes[p.value[1]]}<br/>${dates[p.value[0]]}<br/>${data.source || '单一来源'}排名：第 ${p.value[2]} 名` } }] }
   }
   if (key === 'promotion_funnel') {
-    const stages = data.stages || []
-    return { ...common, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: any[]) => { const row = stages[params[0]?.dataIndex] || {}; return `${row.name}<br/>${row.basis === 'same_day_seal' ? '当日首板尝试' : '前一交易日该高度样本'}：${row.pool}<br/>晋级/封板：${row.promoted}<br/>${row.basis === 'same_day_seal' ? '首板炸板' : '未晋级（含炸板）'}：${row.failed}<br/>转化率：${row.rate}%` } }, legend: { top: 0, data: ['晋级 / 封板', '未晋级（含炸板）'], textStyle: { color: ct.text, fontSize: 9 } }, grid: { left: 12, right: 86, top: 32, bottom: 12, containLabel: true }, xAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, formatter: '{value}%' }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'category', inverse: true, data: stages.map((row: any) => row.name), axisLabel: { color: ct.textStrong, fontSize: 10 } }, series: [{ name: '晋级 / 封板', type: 'bar', stack: 'conversion', barWidth: 18, itemStyle: { color: RED }, data: stages.map((row: any, index: number) => ({ value: row.rate, itemStyle: { color: index === 0 ? ORANGE : RED, borderRadius: [3, 0, 0, 3] } })) }, { name: '未晋级（含炸板）', type: 'bar', stack: 'conversion', barWidth: 18, itemStyle: { color: ct.grid }, data: stages.map((row: any) => ({ value: Math.max(0, 100 - row.rate), itemStyle: { color: ct.grid, borderRadius: [0, 3, 3, 0] } })), label: { show: true, position: 'right', color: ct.textStrong, fontSize: 9, formatter: (p: any) => { const row = stages[p.dataIndex]; return `${row.promoted}/${row.pool} · ${row.rate}%` } } }] }
+    const windowKey = selection.promotionWindow || data.default_view || 'current'
+    const view = data.views?.[windowKey] || { label: '全样本', stages: data.stages || [], sample_days: data.sample_days }
+    const stages = view.stages || []
+    const baseline = data.baseline?.stages || data.stages || []
+    const baselineByName = new Map<string, any>(baseline.map((row: any): [string, any] => [row.name, row]))
+    const selectedLabel = `${view.label || windowKey}晋级率`
+    return {
+      ...common,
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params: any[]) => {
+          const index = params.find(param => param.dataIndex != null)?.dataIndex ?? 0
+          const row = stages[index] || {}
+          const baseRow: any = baselineByName.get(row.name) || {}
+          const selectedRate = row.rate == null ? '无样本' : `${row.rate}%`
+          const baselineRate = baseRow.rate == null ? '无样本' : `${baseRow.rate}%`
+          return `${row.name}<br/>${row.basis === 'same_day_seal' ? '当日首板尝试' : '前一交易日该高度样本'}：${row.pool || 0}<br/>晋级/封板：${row.promoted || 0}<br/>${selectedLabel}：${selectedRate}<br/>全样本基线：${baselineRate}`
+        },
+      },
+      legend: { top: 0, data: [selectedLabel, '未晋级（含炸板）', '全样本基线'], textStyle: { color: ct.text, fontSize: 9 } },
+      grid: { left: 12, right: 92, top: 32, bottom: 12, containLabel: true },
+      xAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, formatter: '{value}%' }, splitLine: { lineStyle: { color: ct.grid } } },
+      yAxis: { type: 'category', inverse: true, data: stages.map((row: any) => row.name), axisLabel: { color: ct.textStrong, fontSize: 10 } },
+      series: [
+        { name: selectedLabel, type: 'bar', stack: 'conversion', barWidth: 18, data: stages.map((row: any, index: number) => ({ value: row.rate, itemStyle: { color: index === 0 ? ORANGE : RED, borderRadius: [3, 0, 0, 3] } })) },
+        { name: '未晋级（含炸板）', type: 'bar', stack: 'conversion', barWidth: 18, data: stages.map((row: any) => ({ value: row.rate == null ? null : Math.max(0, 100 - row.rate), itemStyle: { color: ct.grid, borderRadius: [0, 3, 3, 0] } })), label: { show: true, position: 'right', color: ct.textStrong, fontSize: 9, formatter: (p: any) => { const row = stages[p.dataIndex]; return row.rate == null ? '-- · 无样本' : `${row.promoted}/${row.pool} · ${row.rate}%` } } },
+        { name: '全样本基线', type: 'line', symbol: 'diamond', symbolSize: 9, data: stages.map((row: any) => [baselineByName.get(row.name)?.rate ?? null, row.name]), lineStyle: { color: BLUE, width: 1.5, type: 'dashed' }, itemStyle: { color: BLUE }, z: 5 },
+      ],
+    }
   }
   if (key === 'anomaly_calendar') {
     const records = data.records || []
@@ -178,7 +206,8 @@ function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvanc
   const [sectorWindow, setSectorWindow] = useState(20)
   const [correlationDimension, setCorrelationDimension] = useState('industry_level1')
   const [mainlineFocus, setMainlineFocus] = useState('')
-  const selection = useMemo(() => ({ sectorDimension, sectorWindow, correlationDimension, mainlineFocus }), [correlationDimension, mainlineFocus, sectorDimension, sectorWindow])
+  const [promotionWindow, setPromotionWindow] = useState('current')
+  const selection = useMemo(() => ({ sectorDimension, sectorWindow, correlationDimension, mainlineFocus, promotionWindow }), [correlationDimension, mainlineFocus, promotionWindow, sectorDimension, sectorWindow])
   useEffect(() => {
     if (chartKey !== 'mainline_waterfall') return
     const mainlines = card.data.mainlines || []
@@ -217,13 +246,14 @@ function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvanc
       <div className="p-2">
         {chartKey === 'sector_diffusion' && card.status === 'ok' && <div data-testid="quantx-sector-diffusion-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5 border-b border-border/60 pb-1.5"><div className="flex gap-1" role="group" aria-label="行业层级">{Object.entries(card.data.views || {}).map(([value, view]: [string, any]) => <button key={value} type="button" data-testid={`quantx-sector-dimension-${value}`} aria-pressed={sectorDimension === value} onClick={() => setSectorDimension(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', sectorDimension === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value} · {view.sectors?.length || 0} 行业 / {view.dates?.length || 0} 日</button>)}</div><div className="flex gap-1" role="group" aria-label="均线窗口">{[5, 10, 20].map(value => <button key={value} type="button" data-testid={`quantx-sector-window-${value}`} aria-pressed={sectorWindow === value} onClick={() => setSectorWindow(value)} className={cn('cursor-pointer rounded border px-2 py-1 font-mono text-[9px] transition-colors', sectorWindow === value ? 'border-orange-400/60 bg-orange-400/10 text-orange-300' : 'border-border bg-base text-muted hover:text-foreground')}>MA{value}</button>)}</div></div>}
         {chartKey === 'industry_correlation' && card.status === 'ok' && <div data-testid="quantx-correlation-controls" className="mb-1.5 flex gap-1 border-b border-border/60 pb-1.5" role="group" aria-label="相关性行业层级">{Object.entries(card.data.views || {}).map(([value, view]: [string, any]) => <button key={value} type="button" data-testid={`quantx-correlation-dimension-${value}`} aria-pressed={correlationDimension === value} onClick={() => setCorrelationDimension(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', correlationDimension === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value} · {view.industries?.length || 0} 行业</button>)}</div>}
+        {chartKey === 'promotion_funnel' && card.status === 'ok' && <div data-testid="quantx-promotion-window-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-1.5"><div className="flex gap-1" role="group" aria-label="连板晋级统计窗口">{['current', '5', '20'].map(value => { const view = card.data.views?.[value] || {}; return <button key={value} type="button" data-testid={`quantx-promotion-window-${value}`} aria-pressed={promotionWindow === value} onClick={() => setPromotionWindow(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', promotionWindow === value ? 'border-orange-400/60 bg-orange-400/10 text-orange-300' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value}<span className="ml-1 font-mono text-muted">{view.sample_days || 0}日</span></button> })}</div><span data-testid="quantx-promotion-baseline-label" className="text-[9px] text-blue-300">◆ 全样本基线 · {card.data.baseline?.sample_days || 0} 日</span></div>}
         {chartKey === 'mainline_waterfall' && card.status === 'ok' && <div data-testid="quantx-mainline-selector" className="mb-1.5 max-h-24 overflow-y-auto border-b border-border/60 pb-1.5"><div className="flex flex-wrap gap-1" role="group" aria-label="选择主线查看贡献细分">{(card.data.mainlines || []).map((row: any, index: number) => <button key={row.focus} type="button" data-testid={`quantx-mainline-option-${index}`} aria-pressed={mainlineFocus === row.focus} onClick={() => setMainlineFocus(row.focus)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', mainlineFocus === row.focus ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}><span className="font-mono">{row.rank}</span> · {row.focus} <span className="font-mono">{row.score}</span></button>)}</div></div>}
         {card.status === 'ok' ? <EChart chartKey={chartKey} card={card} height={height} selection={selection} /> : <div className="flex items-center justify-center text-xs text-muted" style={{ height }}><span>{card.reason || '暂无足够数据'}</span></div>}
         {chartKey === 'industry_correlation' && card.status === 'ok' && <CorrelationPairRankings view={correlationView} />}
         {chartKey === 'state_transition' && card.status === 'ok' && <div data-testid="quantx-state-transition-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p>读法：从左侧“当前状态”沿行读取到上方“下一交易日状态”，每行合计 100%。例如“震荡 → 偏强 20%”表示处于震荡后，次日转为偏强的历史概率为 20%。</p><p className="text-orange-300">模型边界：本矩阵来自 TickFlow Regime 四维模型；顶部市场热度、短线情绪和趋势情绪来自 QuantX market_state_daily，两套分值与状态不可直接互换。</p></div>}
         {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>横轴是按成交额从小到大排列的股票累计占比，纵轴是这些股票贡献的累计成交额；橙线越向右下弯，成交越集中在少数头部股票。</p><p><span className="text-foreground">有什么用：</span>判断资金是广泛扩散还是抱团。Gini 接近 0 表示均匀，接近 1 表示极端集中；它描述资金结构，不判断市场涨跌方向。</p></div>}
         {chartKey === 'advance_decline' && card.status === 'ok' && <p data-testid="quantx-ad-divergence-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">红色区间：指数走强但市场广度转弱；绿色区间：指数走弱但广度修复。图钉标记背离确认点。</p>}
-        {chartKey === 'promotion_funnel' && card.status === 'ok' && <p data-testid="quantx-promotion-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">第一行用“首板封板 ÷（首板封板 + 首板炸板）”；其余行用“次日晋级数 ÷ 前一交易日该板高度股票数”。横条统一为 100%，只比较转化率，右侧同时给出成功数/样本数，避免传统漏斗面积失真。</p>}
+        {chartKey === 'promotion_funnel' && card.status === 'ok' && <p data-testid="quantx-promotion-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">当天显示目标交易日实际结果；5日、20日按窗口内成功数 ÷ 样本数计算加权均值。蓝色菱形虚线为当前快照全部历史样本基线，切换窗口时始终保留。0→1 使用首板封板率，其余层级使用次日晋级率。</p>}
         {caveat && <p data-testid={`quantx-advanced-caveat-${chartKey}`} className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-orange-300">口径提示：{caveat}</p>}
       </div>
     </section>

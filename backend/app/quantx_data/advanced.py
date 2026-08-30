@@ -287,7 +287,8 @@ def _promotion_funnel(frame: pl.DataFrame, events: pl.DataFrame | None = None) -
         day: events.filter(pl.col("trade_date") == day).to_dicts()
         for day in dates
     } if not events.is_empty() else {}
-    first_pool = first_promoted = 0
+    max_height = int(frame["board_height"].max() or 0) if not frame.is_empty() else 0
+    observations: dict[date, dict[str, tuple[int, int]]] = {}
     for previous, current in pairwise(dates):
         previous_symbols = set(by_day.get(previous, {}))
         current_rows = event_by_day.get(current, [])
@@ -308,41 +309,82 @@ def _promotion_funnel(frame: pl.DataFrame, events: pl.DataFrame | None = None) -
                 else str(row["symbol"]).split(".")[0] not in previous_symbols
             )
         }
-        first_promoted += len(sealed)
-        first_pool += len(sealed | broken_first_attempts)
-
-    stages = []
-    if first_pool:
-        stages.append(
-            {
-                "name": "0→1 首板封板",
-                "pool": first_pool,
-                "promoted": first_promoted,
-                "failed": first_pool - first_promoted,
-                "rate": round(first_promoted * 100 / first_pool, 1),
-                "basis": "same_day_seal",
+        daily = {
+            "first": (len(sealed | broken_first_attempts), len(sealed)),
+        }
+        for height in range(1, max_height + 1):
+            candidates = {
+                symbol
+                for symbol, value in by_day.get(previous, {}).items()
+                if value == height
             }
-        )
+            daily[str(height)] = (
+                len(candidates),
+                sum(
+                    1
+                    for symbol in candidates
+                    if by_day.get(current, {}).get(symbol, 0) >= height + 1
+                ),
+            )
+        observations[current] = daily
 
-    max_height = int(frame["board_height"].max() or 0) if not frame.is_empty() else 0
-    for height in range(1, max_height + 1):
-        pool = promoted = 0
-        for current, following in pairwise(dates):
-            candidates = {symbol for symbol, value in by_day.get(current, {}).items() if value == height}
-            pool += len(candidates)
-            promoted += sum(1 for symbol in candidates if by_day.get(following, {}).get(symbol, 0) >= height + 1)
-        if pool:
+    evaluation_dates = sorted(observations)
+    stage_specs = [
+        ("first", "0→1 首板封板", "same_day_seal"),
+        *[
+            (str(height), f"{height}→{height + 1}", "next_trade_day_promotion")
+            for height in range(1, max_height + 1)
+        ],
+    ]
+
+    def aggregate(selected_dates: list[date], *, keep_empty: bool = False) -> dict[str, Any]:
+        stages = []
+        for key, name, basis in stage_specs:
+            pool = sum(observations[day][key][0] for day in selected_dates)
+            promoted = sum(observations[day][key][1] for day in selected_dates)
+            if not pool and not keep_empty:
+                continue
             stages.append(
                 {
-                    "name": f"{height}→{height + 1}",
+                    "name": name,
                     "pool": pool,
                     "promoted": promoted,
                     "failed": pool - promoted,
-                    "rate": round(promoted * 100 / pool, 1),
-                    "basis": "next_trade_day_promotion",
+                    "rate": round(promoted * 100 / pool, 1) if pool else None,
+                    "basis": basis,
                 }
             )
-    return {"stages": stages, "sample_days": len(dates), "max_observed_board": max_height}
+        return {
+            "stages": stages,
+            "sample_days": len(selected_dates),
+            "start_date": str(selected_dates[0]) if selected_dates else None,
+            "end_date": str(selected_dates[-1]) if selected_dates else None,
+        }
+
+    global_view = aggregate(evaluation_dates)
+    visible_names = {row["name"] for row in global_view["stages"]}
+    stage_specs = [spec for spec in stage_specs if spec[1] in visible_names]
+
+    def window_view(size: int, label: str) -> dict[str, Any]:
+        selected = evaluation_dates[-size:]
+        return {"label": label, **aggregate(selected, keep_empty=True)}
+
+    current_dates = evaluation_dates[-1:] if evaluation_dates else []
+    views = {
+        "current": {"label": "当天", **aggregate(current_dates, keep_empty=True)},
+        "5": window_view(5, "5日均值"),
+        "20": window_view(20, "20日均值"),
+    }
+    return {
+        # Compatibility fields keep existing consumers on the full-sample result.
+        "stages": global_view["stages"],
+        "sample_days": len(dates),
+        "max_observed_board": max_height,
+        "default_view": "current",
+        "views": views,
+        "baseline": {"label": "全样本基线", **global_view},
+        "aggregation": "sample_weighted_rate",
+    }
 
 
 def _anomaly_calendar(regime: pl.DataFrame) -> dict[str, Any]:
