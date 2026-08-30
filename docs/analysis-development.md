@@ -60,6 +60,8 @@ API handler 保持薄层：校验参数、调用 Service、映射响应。新增
 - 明确 loading、empty、error、disabled、stale 和 degraded。
 - A 股颜色和单位必须与现有页面一致。
 
+QuantX 页面静态分享统一调用 `frontend/src/lib/exportStaticHtml.ts`：导出当前页面状态，把 Canvas 固化为内嵌 PNG，把图片与 CSS 资源转为数据 URI，并移除脚本、本地链接和交互。页面按钮与 `scripts/export_quantx_static.py` 必须复用这一实现；命令行脚本还需使用 Edge 在断网上下文重新加载文件，验证图表数量、本地地址残留、控制台错误和页面级横向溢出。静态导出不是另一套报告生成流水线，不得从兼容 JSON 或目录外报告重新拼装页面。操作说明见 `docs/quantx-static-export.md`。
+
 单日 QuantX V2 必须额外区分字段来源：可复用数值来自 Repository，页面专用摘要进入版本化 ViewBuilder，标题和布局进入前端常量。V2 从 `QuantXReviewResponseV2.empty(trade_date)` 构建，禁止深拷贝展示缓存；新增前端消费字段必须通过 `scripts/audit_quantx_review_consumers.py`，并在 schema endpoint `GET /api/quantx/review/schema/v2` 中声明来源、单位、空值和排序。默认响应的 fallback 和 implicit cache 必须始终为空。
 
 QuantX 高级图谱由 `app.quantx_data.advanced.build_advanced_snapshot()` 在服务层一次性构建，前端只通过 `GET /api/quantx-data/advanced/{date}` 发起一个共享查询。当前契约固定包含 15 张数据卡片；每张卡必须返回 `status`、`rows`、`data`，缺数据时显式返回 `unavailable`，不得生成模拟值。固定连线但没有统计因果依据的“风险传导链”不属于当前契约。行业相关性和 RPS 轮动使用当前行业成分回看历史，主线强度历史使用当前概念成分回看历史；响应和页面必须持续展示“不是历史时点成分、越接近当前日期越可靠”的口径提示。市场状态转移矩阵来自 TickFlow Regime 四维模型，顶部市场热度、短线情绪和趋势情绪来自 QuantX `market_state_daily`，两套分值与状态不得直接互换。跨日队列存活 Sankey 和龙头交接时间轴不属于当前契约。
