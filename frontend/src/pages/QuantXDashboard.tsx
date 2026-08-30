@@ -52,16 +52,6 @@ import {
 
 type DeepTab = 'market' | 'themes' | 'emotion' | 'flow' | 'watch' | 'data' | 'quality'
 
-const DEEP_TABS: Array<[DeepTab, string]> = [
-  ['market', '市场趋势'],
-  ['emotion', '情绪连板'],
-  ['themes', '题材行业'],
-  ['flow', '资金与行业验证'],
-  ['watch', '关注与决断'],
-  ['data', '完整数据'],
-  ['quality', '质量血缘'],
-]
-
 function Panel({ title, hint, icon, actions, className, children, testId }: {
   title: string
   hint?: string
@@ -82,6 +72,24 @@ function Panel({ title, hint, icon, actions, className, children, testId }: {
       <div className="p-2.5">{children}</div>
     </section>
   )
+}
+
+function AnalysisDomainSection({ title, hint, sequence, icon, children, testId }: {
+  title: string
+  hint: string
+  sequence: string
+  icon: ReactNode
+  children: ReactNode
+  testId: string
+}) {
+  return <section data-testid={testId} className="space-y-3 rounded-lg border border-border bg-elevated/20 p-3">
+    <header className="flex flex-wrap items-center gap-2 border-b border-border pb-2">
+      <span className="text-accent">{icon}</span>
+      <div><h2 className="text-sm font-semibold">{title}</h2><p className="text-[10px] text-muted">{hint}</p></div>
+      <span className="ml-auto rounded border border-border bg-base px-2 py-1 text-[9px] text-muted">{sequence}</span>
+    </header>
+    {children}
+  </section>
 }
 
 function SmallTabs<T extends string | number>({ values, active, onChange, label }: {
@@ -398,7 +406,7 @@ function QualityPanel({ data }: { data: any }) {
 
 function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthLevel, onBreadthLevel }: { tab: DeepTab; review: QuantXReviewData; multiday?: QuantXMultidaySnapshot; tables?: Record<string, any>; quality?: any; breadth: any[]; breadthLevel: 1 | 2; onBreadthLevel: (level: 1 | 2) => void }) {
   const { s1, s2, s3, s4, s5 } = review.sections
-  if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel><Panel testId="quantx-congestion-panel" title="市场拥挤度：最新状态与历史" hint="单一口径 · 前 5% 活跃股票成交额占比" className="xl:col-span-2"><CongestionOverview data={s1.congestion} /></Panel></div>
+  if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel></div>
   if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /></>}<Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} columns={['source', 'name', 'count', 'rank']} /></Panel><Panel title="百日新高扩散聚类" hint="看哪些板块正批量创出阶段新高" className="xl:col-span-2"><NewHighPanel date={review.trade_date} data={s2.new_high} /></Panel></div>
   if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel><Panel title="连板详细记录" className="xl:col-span-2"><GenericRows rows={s3.ladder_detail} columns={['code', 'name', 'limit_times', 'theme_name', 'turnover_pct', 'amount_yi']} /></Panel></div>
   if (tab === 'flow') return <div data-testid="quantx-capital-workspace" className="grid gap-3">
@@ -480,33 +488,58 @@ export function QuantXDashboard() {
   return (
     <div className="mx-auto max-w-[1720px] px-3 pb-16 md:px-4" data-testid="quantx-unified-dashboard">
       <DashboardHeader date={date} dates={dates} refreshing={refresh.isPending} coverage={coverage} onDate={goDate} onRefresh={() => refresh.mutate()} />
-      <div className="mt-2 space-y-2">
+      <div className="mt-2 space-y-3">
         <MetricRibbon data={review} />
-        <div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
-          <Panel testId="quantx-market-pulse" title="市场脉搏" hint="全A趋势 · MA · CCI5" icon={<TrendingUp className="h-3.5 w-3.5" />} className="xl:[grid-column:span_8/span_8]"><KlineChart history={s.s1.kline_history} height={236} /></Panel>
-          <Panel testId="quantx-theme-mainline" title="题材主线" hint="强度 · 连续性 · 生命周期" icon={<Layers3 className="h-3.5 w-3.5" />} className="xl:[grid-column:span_8/span_8]"><ThemeMainline review={review} multiday={multiday} /></Panel>
-          <RiskSignalBoard ebb={s.s3.ebb_signals} crash={s.s3.crash_signals} participation={s.s2.participation?.conditions || []} />
-
-          {multiday ? <div className="xl:[grid-column:span_16/span_16]"><WindowSignalMatrix data={multiday} active={windowSize} onChange={setWindowSize} /></div> : <Panel title="多日信号矩阵" className="xl:[grid-column:span_16/span_16]"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
-          <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="QuantX market_state_daily 情绪分 · 不等同于下方 Regime 状态矩阵" icon={<Activity className="h-3.5 w-3.5" />} className="xl:[grid-column:span_16/span_16]"><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
-
-          <div className="xl:[grid-column:span_16/span_16]">{multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}</div>
-        </div>
-
-        <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} />
-
-        <section data-testid="quantx-deep-workspace" className="rounded-lg border border-border bg-elevated/20">
-          <header className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs font-semibold"><Database className="h-3.5 w-3.5 text-accent" />深度图表与完整数据</header>
-          <div className="p-3">
-            <div className="space-y-8">{DEEP_TABS.map(([tab, label]) => {
-              const collapsible = tab === 'data' || tab === 'quality'
-              const open = collapsible ? utilityOpen[tab] : true
-              return <section key={tab} data-testid={`quantx-deep-${tab}`}>
-                {collapsible ? <button type="button" data-testid={`quantx-collapsible-${tab}`} aria-expanded={open} onClick={() => setUtilityOpen(current => ({ ...current, [tab]: !current[tab] }))} className="mb-3 flex w-full cursor-pointer items-center gap-2 border-b border-border pb-2 text-left text-sm font-semibold transition-colors hover:text-accent"><ShieldCheck className="h-4 w-4 text-accent" /><h2>{label}</h2><span className="ml-auto text-[10px] font-normal text-muted">默认折叠 · 按需加载</span><ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} /></button> : <h2 className="mb-3 flex items-center gap-2 border-b border-border pb-2 text-sm font-semibold"><Database className="h-4 w-4 text-accent" />{label}</h2>}
-                {open && <DeepSection tab={tab} review={review} multiday={multiday} tables={tablesQuery.data as Record<string, any> | undefined} quality={qualityQuery.data} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} />}
-              </section>
-            })}</div>
+        <AnalysisDomainSection testId="quantx-domain-conclusion" title="今日市场结论" hint="先看市场方向、主线与风险，再进入各分析域验证" sequence="当前结论 → 今日行动" icon={<Zap className="h-4 w-4" />}>
+          <div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
+            <Panel testId="quantx-market-pulse" title="市场脉搏" hint="全A趋势 · MA · CCI5" icon={<TrendingUp className="h-3.5 w-3.5" />} className="xl:[grid-column:span_8/span_8]"><KlineChart history={s.s1.kline_history} height={236} /></Panel>
+            <Panel testId="quantx-theme-mainline" title="题材主线" hint="强度 · 连续性 · 生命周期" icon={<Layers3 className="h-3.5 w-3.5" />} className="xl:[grid-column:span_8/span_8]"><ThemeMainline review={review} multiday={multiday} /></Panel>
+            <RiskSignalBoard ebb={s.s3.ebb_signals} crash={s.s3.crash_signals} participation={s.s2.participation?.conditions || []} />
           </div>
+        </AnalysisDomainSection>
+
+        <section data-testid="quantx-deep-workspace" className="space-y-3">
+          <AnalysisDomainSection testId="quantx-domain-market" title="市场状态与历史环境" hint="识别当前情绪阶段、历史异常与市场广度变化" sequence="当前状态 → 历史趋势 → 结构解释" icon={<Activity className="h-4 w-4" />}>
+            <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="QuantX market_state_daily 情绪分 · 不等同于 Regime 状态矩阵" icon={<Activity className="h-3.5 w-3.5" />}><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['sentiment_phase', 'state_transition', 'anomaly_calendar', 'advance_decline']} flat />
+            <div data-testid="quantx-deep-market"><DeepSection tab="market" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
+          </AnalysisDomainSection>
+
+          <AnalysisDomainSection testId="quantx-domain-industry" title="行业轮动与资金生态" hint="把行业资金、宽度、相关性与轮动证据集中阅读" sequence="当前资金 → 历史连续性 → 结构解释 → 候选证据" icon={<Gauge className="h-4 w-4" />}>
+            <div data-testid="quantx-deep-flow"><DeepSection tab="flow" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['sector_diffusion', 'industry_correlation', 'rps_rotation_clock']} flat showSummary={false} testId="quantx-advanced-industry" />
+          </AnalysisDomainSection>
+
+          <AnalysisDomainSection testId="quantx-domain-themes" title="题材生命周期与主线" hint="从多日信号进入题材生灭、排名演进与主线结构" sequence="当前主线 → 历史趋势 → 结构解释 → 股票证据" icon={<Layers3 className="h-4 w-4" />}>
+            {multiday ? <WindowSignalMatrix data={multiday} active={windowSize} onChange={setWindowSize} /> : <Panel title="多日信号矩阵"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
+            <div data-testid="quantx-deep-themes"><DeepSection tab="themes" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['theme_river', 'mainline_waterfall']} flat showSummary={false} testId="quantx-advanced-themes" />
+          </AnalysisDomainSection>
+
+          <AnalysisDomainSection testId="quantx-domain-limit-board" title="连板与接力生态" hint="集中查看连板高度、晋级效率、层级结构与个股记录" sequence="当前梯队 → 历史趋势 → 晋级结构 → 个股证据" icon={<TrendingUp className="h-4 w-4" />}>
+            <div data-testid="quantx-deep-emotion"><DeepSection tab="emotion" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['promotion_funnel', 'theme_ladder_sunburst']} flat showSummary={false} testId="quantx-advanced-limit-board" />
+          </AnalysisDomainSection>
+
+          <AnalysisDomainSection testId="quantx-domain-liquidity" title="收益结构、拥挤与流动性" hint="解释赚钱效应、交易拥挤与成交集中程度" sequence="当前分布 → 历史拥挤 → 结构解释" icon={<Sparkles className="h-4 w-4" />}>
+            <Panel testId="quantx-congestion-panel" title="市场拥挤度：最新状态与历史" hint="单一口径 · 前 5% 活跃股票成交额占比"><CongestionOverview data={s.s1.congestion} /></Panel>
+            <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['liquidity_participation', 'return_distribution', 'turnover_return_density', 'turnover_lorenz']} flat showSummary={false} testId="quantx-advanced-liquidity" />
+          </AnalysisDomainSection>
+
+          <AnalysisDomainSection testId="quantx-domain-decision" title="机会、关注池与最终决断" hint="把市场判断收束到机会、候选、仓位和次日动作" sequence="机会雷达 → 股票证据 → 仓位与场景" icon={<ShieldAlert className="h-4 w-4" />}>
+            {multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}
+            <div data-testid="quantx-deep-watch"><DeepSection tab="watch" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
+          </AnalysisDomainSection>
+
+          <AnalysisDomainSection testId="quantx-domain-data" title="数据与质量" hint="完整数据和质量血缘默认折叠，按需加载" sequence="数据覆盖 → 质量检查 → 来源血缘" icon={<Database className="h-4 w-4" />}>
+            {([['data', '完整数据'], ['quality', '质量血缘']] as Array<[Extract<DeepTab, 'data' | 'quality'>, string]>).map(([tab, label]) => {
+              const open = utilityOpen[tab]
+              return <section key={tab} data-testid={`quantx-deep-${tab}`}>
+                <button type="button" data-testid={`quantx-collapsible-${tab}`} aria-expanded={open} onClick={() => setUtilityOpen(current => ({ ...current, [tab]: !current[tab] }))} className="flex w-full cursor-pointer items-center gap-2 border-b border-border pb-2 text-left text-sm font-semibold transition-colors hover:text-accent"><ShieldCheck className="h-4 w-4 text-accent" /><h2>{label}</h2><span className="ml-auto text-[10px] font-normal text-muted">默认折叠 · 按需加载</span><ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} /></button>
+                {open && <div className="pt-3"><DeepSection tab={tab} review={review} multiday={multiday} tables={tablesQuery.data as Record<string, any> | undefined} quality={qualityQuery.data} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>}
+              </section>
+            })}
+          </AnalysisDomainSection>
         </section>
       </div>
     </div>

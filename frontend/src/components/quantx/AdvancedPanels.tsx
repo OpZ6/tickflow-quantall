@@ -266,15 +266,19 @@ const GROUPS = [
   { key: 'structure', title: '接力效率与拥挤结构', hint: '最后检查晋级质量和交易拥挤', icon: GitBranch },
 ] as const
 
-export function AdvancedPanels({ snapshot, loading, error }: { snapshot?: QuantXAdvancedSnapshot; loading: boolean; error?: Error | null }) {
-  if (loading) return <section data-testid="quantx-advanced-loading" className="flex items-center justify-center rounded-lg border border-border bg-elevated/20 py-20 text-xs text-muted"><Loader2 className="mr-2 h-4 w-4 animate-spin" />正在构建高级市场图谱</section>
-  if (error || !snapshot) return <section data-testid="quantx-advanced-error" className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-12 text-center text-xs text-orange-300">高级图谱暂不可用：{error?.message || '没有快照'}</section>
+export function AdvancedPanels({ snapshot, loading, error, cardKeys, flat = false, showSummary = true, testId = 'quantx-advanced-workspace' }: { snapshot?: QuantXAdvancedSnapshot; loading: boolean; error?: Error | null; cardKeys?: string[]; flat?: boolean; showSummary?: boolean; testId?: string }) {
+  const loadingId = testId === 'quantx-advanced-workspace' ? 'quantx-advanced-loading' : `${testId}-loading`
+  const errorId = testId === 'quantx-advanced-workspace' ? 'quantx-advanced-error' : `${testId}-error`
+  if (loading) return <section data-testid={loadingId} className="flex items-center justify-center rounded-lg border border-border bg-elevated/20 py-20 text-xs text-muted"><Loader2 className="mr-2 h-4 w-4 animate-spin" />正在构建高级市场图谱</section>
+  if (error || !snapshot) return <section data-testid={errorId} className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-12 text-center text-xs text-orange-300">高级图谱暂不可用：{error?.message || '没有快照'}</section>
+  const visibleKeys = cardKeys || Object.keys(CARD_META)
   return (
-    <section data-testid="quantx-advanced-workspace" className="space-y-5 rounded-lg border border-border bg-elevated/20 p-3">
-      <header className="flex flex-wrap items-center gap-2 border-b border-border pb-2"><Boxes className="h-4 w-4 text-accent" /><div><h2 className="text-sm font-semibold">高级市场图谱</h2><p className="text-[10px] text-muted">15 张真实数据卡片 · 单一批量快照 · {snapshot.coverage.history_start} 至 {snapshot.coverage.history_end}</p></div><span className="ml-auto rounded border border-border bg-base px-2 py-1 font-mono text-[10px] text-accent">{snapshot.coverage.available}/{snapshot.coverage.total} 可用</span></header>
-      {GROUPS.map(group => {
+    <section data-testid={testId} className={cn('space-y-5', showSummary && 'rounded-lg border border-border bg-elevated/20 p-3')}>
+      {showSummary && <header className="flex flex-wrap items-center gap-2 border-b border-border pb-2"><Boxes className="h-4 w-4 text-accent" /><div><h2 className="text-sm font-semibold">高级图谱数据覆盖</h2><p className="text-[10px] text-muted">15 张真实数据卡片已按分析域重组 · 单一批量快照 · {snapshot.coverage.history_start} 至 {snapshot.coverage.history_end}</p></div><span className="ml-auto rounded border border-border bg-base px-2 py-1 font-mono text-[10px] text-accent">{snapshot.coverage.available}/{snapshot.coverage.total} 可用</span></header>}
+      {flat ? <div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">{visibleKeys.map(key => <AdvancedCard key={key} chartKey={key} card={snapshot.cards[key]} />)}</div> : GROUPS.map(group => {
         const Icon = group.icon
-        const keys = Object.keys(CARD_META).filter(key => CARD_META[key].group === group.key)
+        const keys = visibleKeys.filter(key => CARD_META[key]?.group === group.key)
+        if (!keys.length) return null
         return <section key={group.key} data-testid={`quantx-advanced-group-${group.key}`}><div className="mb-2 flex items-center gap-2"><Icon className="h-3.5 w-3.5 text-accent" /><h3 className="text-xs font-semibold">{group.title}</h3><span className="text-[9px] text-muted">{group.hint}</span></div><div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">{keys.map(key => <AdvancedCard key={key} chartKey={key} card={snapshot.cards[key]} />)}</div></section>
       })}
     </section>

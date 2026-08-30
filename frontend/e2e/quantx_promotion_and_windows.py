@@ -115,6 +115,34 @@ def main() -> None:
         assert page.get_by_role("heading", name="连续规则候选", exact=True).count() == 1
         assert page.get_by_test_id("quantx-advanced-risk_transmission").count() == 0
         assert page.get_by_role("heading", name="同花顺热点题材覆盖", exact=True).count() == 1
+        expected_domains = [
+            "quantx-domain-conclusion",
+            "quantx-domain-market",
+            "quantx-domain-industry",
+            "quantx-domain-themes",
+            "quantx-domain-limit-board",
+            "quantx-domain-liquidity",
+            "quantx-domain-decision",
+            "quantx-domain-data",
+        ]
+        rendered_domains = page.locator('[data-testid^="quantx-domain-"]')
+        assert rendered_domains.count() == len(expected_domains)
+        assert [
+            rendered_domains.nth(index).get_attribute("data-testid")
+            for index in range(rendered_domains.count())
+        ] == expected_domains
+        page.get_by_test_id("quantx-advanced-workspace").wait_for(timeout=30_000)
+        for key in cards:
+            assert page.get_by_test_id(f"quantx-advanced-{key}").count() == 1
+        assert page.get_by_test_id("quantx-domain-industry").get_by_test_id(
+            "quantx-capital-workspace"
+        ).count() == 1
+        assert page.get_by_test_id("quantx-domain-limit-board").get_by_test_id(
+            "quantx-advanced-promotion_funnel"
+        ).count() == 1
+        assert page.get_by_test_id("quantx-domain-liquidity").get_by_test_id(
+            "quantx-congestion-panel"
+        ).count() == 1
         assert "15 张真实数据卡片" in page.get_by_test_id(
             "quantx-advanced-workspace"
         ).locator("header").first.inner_text()
