@@ -37,7 +37,7 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 - [quantx-data-pipeline.md](quantx-data-pipeline.md)：QuantX 运行、重试、重算和故障诊断手册。
 - [quantx-single-day-canonical-view-plan.md](quantx-single-day-canonical-view-plan.md)：QuantX 单日富图表从兼容 JSON 迁移到权威事实与确定性 ViewBuilder 的分批执行计划和验收清单。
 - [quantx-unified-dashboard-design.md](quantx-unified-dashboard-design.md)：QuantX 多日驾驶舱与单日富图表合并为统一高密度看板的内容、排版和零丢失设计。
-- [quantx-static-export.md](quantx-static-export.md)：把指定日期 QuantX 看板导出为无脚本、无本地服务依赖的单文件 HTML，并通过 Edge 做断网验收。
+- [quantx-static-export.md](quantx-static-export.md)：把指定日期 QuantX 看板导出为保留图表、筛选和下钻交互且无本地服务依赖的单文件 HTML，并通过 Edge 做断网验收。
 - [quantx-unified-dashboard-execution-plan.md](quantx-unified-dashboard-execution-plan.md)：统一看板按可回滚批次实施的文件边界、数据调用链、验证矩阵和完成定义。
 - [secondary-development.md](secondary-development.md)：原项目二次开发、插槽和扩展契约。
 - [configuration.md](configuration.md)、[deployment.md](deployment.md)：配置与部署。

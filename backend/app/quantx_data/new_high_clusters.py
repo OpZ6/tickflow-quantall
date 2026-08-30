@@ -230,9 +230,20 @@ def build_new_high_cluster_members(
         available.append(trade_date)
     days = [_daily_snapshot(facts, value, memberships) for value in available]
 
+    return _members_from_days(days, dimension=dimension, window=window, name=cluster_name)
+
+
+def _members_from_days(
+    days: list[dict[str, Any]],
+    *,
+    dimension: str,
+    window: int,
+    name: str,
+) -> dict[str, Any]:
+    """Build one member payload from an already-loaded daily window."""
     by_symbol: dict[str, dict[str, Any]] = {}
     for daily in days:
-        member_symbols = daily["dimensions"][dimension].get(cluster_name, set())
+        member_symbols = daily["dimensions"][dimension].get(name, set())
         observed = daily["trade_date"].strftime("%Y%m%d")
         for symbol in member_symbols:
             source = daily["stocks"].get(symbol, {})
@@ -254,7 +265,7 @@ def build_new_high_cluster_members(
                 item["name"] = str(source["name"])
             item["pct_chg"] = source.get("pct_chg")
 
-    current_symbols = days[-1]["dimensions"][dimension].get(cluster_name, set())
+    current_symbols = days[-1]["dimensions"][dimension].get(name, set())
     for symbol, item in by_symbol.items():
         item["current"] = symbol in current_symbols
 
@@ -268,15 +279,49 @@ def build_new_high_cluster_members(
         ),
     )
     return {
-        "trade_date": trade_date.strftime("%Y%m%d"),
+        "trade_date": days[-1]["trade_date"].strftime("%Y%m%d"),
         "dimension": dimension,
         "window": window,
-        "cluster_name": cluster_name,
+        "cluster_name": name,
         "valid_days": len(days),
         "current_count": len(current_symbols),
         "window_count": len(members),
         "mapping_semantics": "latest_ext_snapshot_proxy",
         "members": members,
+    }
+
+
+def build_new_high_cluster_member_bundle(
+    facts: MarketFactRepository,
+    trade_date: date,
+) -> dict[str, Any]:
+    """Return every published cluster drill-down while loading the 20-day window once."""
+    memberships = _load_memberships(facts.data_dir)
+    available = [
+        value
+        for value in facts.available_dates(DatasetId.SCREENING_CANDIDATE_DAILY)
+        if value <= trade_date
+    ][-max(WINDOWS) :]
+    if not available or available[-1] != trade_date:
+        available.append(trade_date)
+    daily = [_daily_snapshot(facts, value, memberships) for value in available]
+    datasets: dict[str, dict[str, Any]] = {}
+    for window in WINDOWS:
+        selected = daily[-window:]
+        for dimension in DIMENSIONS:
+            for row in _aggregate_dimension(selected, dimension):
+                name = row["name"]
+                key = f"{dimension}|{window}|{name}"
+                datasets[key] = _members_from_days(
+                    selected,
+                    dimension=dimension,
+                    window=window,
+                    name=name,
+                )
+    return {
+        "trade_date": trade_date.strftime("%Y%m%d"),
+        "mapping_semantics": "latest_ext_snapshot_proxy",
+        "datasets": datasets,
     }
 
 

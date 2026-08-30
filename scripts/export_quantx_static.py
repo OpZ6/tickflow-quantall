@@ -1,4 +1,4 @@
-"""Export and verify a self-contained QuantX HTML snapshot with Edge."""
+"""Export and verify a self-contained interactive QuantX HTML with Edge."""
 
 from __future__ import annotations
 
@@ -10,15 +10,9 @@ from pathlib import Path
 from playwright.sync_api import ConsoleMessage, Page, sync_playwright
 
 
-LOCAL_REFERENCE = re.compile(
-    r"(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)(?::\d+)?",
-    re.IGNORECASE,
-)
-
-
 def _args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Export one QuantX date as a self-contained static HTML file."
+        description="Export one QuantX date as a self-contained interactive HTML file."
     )
     parser.add_argument("--base-url", default="http://127.0.0.1:3011")
     parser.add_argument("--date", default="20260828")
@@ -108,9 +102,8 @@ def _verify_offline(
     screenshot: Path | None,
 ) -> dict[str, object]:
     html = output.read_text(encoding="utf-8")
-    assert not LOCAL_REFERENCE.search(html), "static HTML retains a local URL"
-    assert not re.search(r"<script(?:\s|>)", html, re.IGNORECASE)
     assert "Content-Security-Policy" in html
+    assert 'name="quantx-export-mode" content="interactive"' in html
 
     context = browser.new_context(
         offline=True,
@@ -118,22 +111,121 @@ def _verify_offline(
     )
     page = context.new_page()
     errors = _collect_page_errors(page)
+    external_requests: list[str] = []
+    page.on(
+        "request",
+        lambda request: (
+            external_requests.append(request.url)
+            if request.url.startswith(("http://", "https://"))
+            else None
+        ),
+    )
     page.goto(output.resolve().as_uri(), wait_until="load", timeout=120_000)
     page.get_by_test_id("quantx-unified-dashboard").wait_for(state="visible")
+    page.get_by_test_id("quantx-advanced-industry").wait_for(state="visible")
+    page.wait_for_function(
+        """expected => document.querySelectorAll(
+          '[data-testid="quantx-unified-dashboard"] canvas'
+        ).length >= expected""",
+        arg=source_canvas_count,
+        timeout=120_000,
+    )
 
     title = page.title()
-    exported_canvas_count = page.locator("img[data-exported-canvas]").count()
+    exported_canvas_count = (
+        page.get_by_test_id("quantx-unified-dashboard").locator("canvas").count()
+    )
     assert trade_date in title
-    assert "静态导出" in title
+    assert "交互导出" in title
     assert (
         page.locator('meta[name="quantx-trade-date"]').get_attribute("content")
         == trade_date
     )
-    assert page.locator("script").count() == 0
-    assert page.locator("canvas").count() == 0
-    assert page.get_by_test_id("quantx-export-html").count() == 0
-    assert page.locator("[data-static-export-remove]").count() == 0
-    assert exported_canvas_count == source_canvas_count
+    assert page.locator("script").count() >= 1
+    assert page.locator("img[data-exported-canvas]").count() == 0
+    assert exported_canvas_count >= source_canvas_count
+    assert not page.get_by_test_id("quantx-export-html").is_visible()
+    local_resources = page.locator("[src], [href]").evaluate_all(
+        """elements => elements.flatMap(element => ['src', 'href'].flatMap(name => {
+          const raw = element.getAttribute(name);
+          if (!raw) return [];
+          try {
+            const host = new URL(raw, document.baseURI).hostname;
+            return host === 'localhost' || host === '::1' || /^127[.]/.test(host)
+              ? [`${name}=${raw}`]
+              : [];
+          } catch {
+            return [];
+          }
+        }))"""
+    )
+    assert not local_resources, local_resources
+    assert not external_requests, external_requests
+
+    state_canvas = page.get_by_test_id("quantx-advanced-state_transition").locator(
+        "canvas"
+    )
+    state_canvas.scroll_into_view_if_needed()
+    state_canvas.hover(position={"x": 120, "y": 40})
+    page.wait_for_function(
+        """() => [...document.querySelectorAll('div')].some(element => {
+          const style = getComputedStyle(element);
+          return style.position === 'absolute'
+            && style.display !== 'none'
+            && element.innerText.includes('概率：')
+            && element.innerText.includes('样本：');
+        })""",
+        timeout=10_000,
+    )
+
+    window_structure = page.get_by_test_id("window-theme-structure")
+    original_window_text = window_structure.inner_text()
+    page.get_by_test_id("window-statistics-5").click()
+    assert (
+        page.get_by_test_id("window-statistics-5").get_attribute("aria-pressed")
+        == "true"
+    )
+    assert window_structure.inner_text() != original_window_text
+
+    page.get_by_test_id("quantx-correlation-dimension-industry_level2").click()
+    industry_select = page.get_by_test_id("quantx-correlation-industry-select")
+    industry_value = industry_select.locator("option").nth(1).get_attribute("value")
+    assert industry_value
+    industry_select.select_option(industry_value)
+    assert (
+        industry_value
+        in page.get_by_test_id("quantx-correlation-ranking-context").inner_text()
+    )
+
+    page.get_by_test_id("quantx-promotion-window-5").click()
+    assert (
+        page.get_by_test_id("quantx-promotion-window-5").get_attribute("aria-pressed")
+        == "true"
+    )
+
+    data_panel = page.get_by_test_id("quantx-collapsible-data")
+    data_panel.click()
+    assert (
+        page.get_by_test_id("quantx-collapsible-data").get_attribute("aria-expanded")
+        == "true"
+    )
+    data_panel.locator("xpath=..").locator("table").first.wait_for(
+        state="visible", timeout=30_000
+    )
+    quality_panel = page.get_by_test_id("quantx-collapsible-quality")
+    quality_panel.click()
+    assert (
+        page.get_by_test_id("quantx-collapsible-quality").get_attribute("aria-expanded")
+        == "true"
+    )
+    quality_panel.locator("xpath=..").locator("table").first.wait_for(
+        state="visible", timeout=30_000
+    )
+
+    new_high = page.get_by_test_id("quantx-new-high-clusters")
+    new_high.get_by_test_id("new-high-cluster-row").first.click()
+    new_high.get_by_test_id("new-high-member-details").wait_for(timeout=30_000)
+    assert new_high.get_by_test_id("new-high-member-row").count() > 0
     assert not errors, errors
     _assert_no_horizontal_overflow(page)
 
@@ -145,16 +237,18 @@ def _verify_offline(
 
     if screenshot:
         screenshot.parent.mkdir(parents=True, exist_ok=True)
+        page.evaluate("window.scrollTo(0, 0)")
         page.screenshot(path=str(screenshot), full_page=False)
 
     context.close()
     return {
         "title": title,
-        "canvas_images": exported_canvas_count,
+        "interactive_canvas": exported_canvas_count,
         "bytes": output.stat().st_size,
         "desktop_overflow": False,
         "mobile_overflow": False,
         "offline_errors": errors,
+        "external_requests": external_requests,
     }
 
 

@@ -15,7 +15,10 @@ from app.quantx_data.multiday import (
     rebuild_multiday_snapshot,
     rebuild_multiday_snapshots,
 )
-from app.quantx_data.new_high_clusters import build_new_high_cluster_members
+from app.quantx_data.new_high_clusters import (
+    build_new_high_cluster_member_bundle,
+    build_new_high_cluster_members,
+)
 from app.quantx_data.pipeline import get_status, run_pipeline
 from app.quantx_data.repository import QuantXTableRepository
 
@@ -275,6 +278,16 @@ def new_high_cluster_members(
             window=window,
             name=name,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/new-high/{trade_date}/member-bundle")
+def new_high_cluster_member_bundle(trade_date: str, request: Request) -> dict:
+    """Return all published cluster drill-downs for a portable QuantX report."""
+    try:
+        day = datetime.strptime(trade_date, "%Y%m%d").date()
+        return build_new_high_cluster_member_bundle(request.app.state.market_facts, day)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

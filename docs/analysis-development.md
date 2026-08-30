@@ -60,7 +60,7 @@ API handler 保持薄层：校验参数、调用 Service、映射响应。新增
 - 明确 loading、empty、error、disabled、stale 和 degraded。
 - A 股颜色和单位必须与现有页面一致。
 
-QuantX 页面静态分享统一调用 `frontend/src/lib/exportStaticHtml.ts`：导出当前页面状态，把 Canvas 固化为内嵌 PNG，把图片与 CSS 资源转为数据 URI，并移除脚本、本地链接和交互。页面按钮与 `scripts/export_quantx_static.py` 必须复用这一实现；命令行脚本还需使用 Edge 在断网上下文重新加载文件，验证图表数量、本地地址残留、控制台错误和页面级横向溢出。静态导出不是另一套报告生成流水线，不得从兼容 JSON 或目录外报告重新拼装页面。操作说明见 `docs/quantx-static-export.md`。
+QuantX 页面分享统一调用 `frontend/src/lib/exportStaticHtml.ts`：它从现有 QuantX API 收集一个交易日的已发布响应，内嵌页面样式和由 `frontend/src/portable/quantxPortable.tsx` 启动的 React/ECharts 便携运行时，在浏览器内生成一个不依赖后端的交互式 HTML。便携运行时只把内嵌响应映射回既有 `quantxApi` 契约，不复制指标计算或另建报告数据流水线；批量百日新高成员使用 `GET /api/quantx-data/new-high/{trade_date}/member-bundle`，避免导出时逐聚类请求。页面按钮与 `scripts/export_quantx_static.py` 必须复用这一实现；命令行脚本需使用 Edge 在断网浏览器上下文重新加载文件，验证图表重绘、悬浮提示、筛选、下钻、折叠区、本机地址和网络请求、控制台错误及页面级横向溢出。操作说明见 `docs/quantx-static-export.md`。
 
 单日 QuantX V2 必须额外区分字段来源：可复用数值来自 Repository，页面专用摘要进入版本化 ViewBuilder，标题和布局进入前端常量。V2 从 `QuantXReviewResponseV2.empty(trade_date)` 构建，禁止深拷贝展示缓存；新增前端消费字段必须通过 `scripts/audit_quantx_review_consumers.py`，并在 schema endpoint `GET /api/quantx/review/schema/v2` 中声明来源、单位、空值和排序。默认响应的 fallback 和 implicit cache 必须始终为空。
 
@@ -78,7 +78,7 @@ QuantX 多日快照 `tickflow-quantx-multiday-v3` 只保留 `sector_flow_continu
 
 顶部“题材主线”摘要必须按页面展示的多源归一化强度 `rank_strength` 降序排列，来源数只用于同分排序，保证名次与可见分数一致；完整“题材生灭与多源连续性”表仍按多源共识优先，用于表达不同的分析口径。
 
-百日新高卡片的权威个股集合来自 `screening_candidate_daily(candidate_type=new_high_100d)`，由 `app.quantx_data.new_high_clusters` 聚合后进入 `sections.s2.new_high`。页面主视图展示题材概念、申万一级和申万二级的 1/5/10/20 交易日聚类；点击聚类后，通过 `GET /api/quantx-data/new-high/{trade_date}/members` 按需读取完整成员证据，区分今日新高与窗口出现，并提供活跃天数、首次及最近出现日，禁止把所有成员重复塞入单日 Review 响应。概念标签须过滤“百日新高、趋势股、昨日、高换手”等市场属性标签；当日题材占比按一股多标签 `1/N` 加权。当前 `ext_data` 仅提供最新成分快照，因此历史窗口的行业与概念归属属于 `latest_ext_snapshot_proxy`，API 和页面必须显式提示，不能表述为历史时点成分。若未来接入带日期的成分表，应在领域 Service 内切换 point-in-time 映射，前端契约保持不变。
+百日新高卡片的权威个股集合来自 `screening_candidate_daily(candidate_type=new_high_100d)`，由 `app.quantx_data.new_high_clusters` 聚合后进入 `sections.s2.new_high`。页面主视图展示题材概念、申万一级和申万二级的 1/5/10/20 交易日聚类；点击聚类后，通过 `GET /api/quantx-data/new-high/{trade_date}/members` 按需读取完整成员证据，区分今日新高与窗口出现，并提供活跃天数、首次及最近出现日，禁止把所有成员重复塞入单日 Review 响应。交互式单文件导出可调用 `GET /api/quantx-data/new-high/{trade_date}/member-bundle` 一次读取该日所有已展示聚类的成员集合；该接口只用于传输优化，必须复用与单项接口相同的领域计算。概念标签须过滤“百日新高、趋势股、昨日、高换手”等市场属性标签；当日题材占比按一股多标签 `1/N` 加权。当前 `ext_data` 仅提供最新成分快照，因此历史窗口的行业与概念归属属于 `latest_ext_snapshot_proxy`，API 和页面必须显式提示，不能表述为历史时点成分。若未来接入带日期的成分表，应在领域 Service 内切换 point-in-time 映射，前端契约保持不变。
 
 ## 3. 新分析示例路径
 

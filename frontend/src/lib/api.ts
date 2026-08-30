@@ -3907,6 +3907,12 @@ export interface QuantXNewHighClusterMembers {
   }>
 }
 
+export interface QuantXNewHighMemberBundle {
+  trade_date: string
+  mapping_semantics: 'latest_ext_snapshot_proxy'
+  datasets: Record<string, QuantXNewHighClusterMembers>
+}
+
 export const quantxApi = {
   getCatalog: () =>
     request<CatalogData>(`/api/quantx-data/catalog`),
@@ -3925,6 +3931,9 @@ export const quantxApi = {
 
   getNewHighClusterMembers: (date: string, dimension: 'concept' | 'industry_level1' | 'industry_level2', window: 1 | 5 | 10 | 20, name: string) =>
     request<QuantXNewHighClusterMembers>(`/api/quantx-data/new-high/${encodeURIComponent(date)}/members?dimension=${encodeURIComponent(dimension)}&window=${window}&name=${encodeURIComponent(name)}`),
+
+  getNewHighMemberBundle: (date: string) =>
+    request<QuantXNewHighMemberBundle>(`/api/quantx-data/new-high/${encodeURIComponent(date)}/member-bundle`),
 
   getTables: (date: string) =>
     request<QuantXDataTables>(`/api/quantx-data/${date}/tables`),

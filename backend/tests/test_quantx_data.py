@@ -22,6 +22,7 @@ from app.quantx_data.multiday import (
     rebuild_multiday_snapshots,
 )
 from app.quantx_data.new_high_clusters import (
+    build_new_high_cluster_member_bundle,
     build_new_high_cluster_members,
     build_new_high_clusters,
 )
@@ -766,6 +767,14 @@ def test_new_high_clusters_group_concepts_and_industry_windows(tmp_path):
         }
     ]
 
+    bundle = build_new_high_cluster_member_bundle(
+        MarketFactRepository(tmp_path),
+        date(2026, 8, 25),
+    )
+    assert bundle["mapping_semantics"] == "latest_ext_snapshot_proxy"
+    assert bundle["datasets"]["concept|5|人工智能"] == members
+    assert len(bundle["datasets"]) == 16
+
     app = FastAPI()
     app.include_router(quantx_data_router)
     app.state.market_facts = MarketFactRepository(tmp_path)
@@ -774,8 +783,13 @@ def test_new_high_clusters_group_concepts_and_industry_windows(tmp_path):
             "/api/quantx-data/new-high/20260825/members",
             params={"dimension": "concept", "window": 5, "name": "人工智能"},
         )
+        bundle_response = client.get(
+            "/api/quantx-data/new-high/20260825/member-bundle"
+        )
     assert response.status_code == 200, response.text
     assert response.json()["members"][0]["code"] == "300002"
+    assert bundle_response.status_code == 200, bundle_response.text
+    assert bundle_response.json()["datasets"]["concept|5|人工智能"]["members"][0]["code"] == "300002"
 
 
 def test_review_api_v2_survives_removed_json_and_rejects_retired_v1(tmp_path):

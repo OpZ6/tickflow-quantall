@@ -1,14 +1,56 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
+import { build as buildWithEsbuild } from 'esbuild'
 
 const backendHost = process.env.BACKEND_HOST || '127.0.0.1'
 const proxyHost = ['0.0.0.0', '::'].includes(backendHost) ? '127.0.0.1' : backendHost
 const backendPort = process.env.BACKEND_PORT || '3018'
 const backendTarget = `http://${proxyHost}:${backendPort}`
+const portableRuntimeId = 'virtual:quantx-portable-runtime'
+const resolvedPortableRuntimeId = `\0${portableRuntimeId}`
+
+function quantxPortableRuntime() {
+  let runtime = ''
+  const compile = async () => {
+    const result = await buildWithEsbuild({
+      entryPoints: [path.resolve(__dirname, './src/portable/quantxPortable.tsx')],
+      bundle: true,
+      write: false,
+      format: 'iife',
+      platform: 'browser',
+      target: 'es2022',
+      minify: true,
+      legalComments: 'none',
+      jsx: 'automatic',
+      alias: { '@': path.resolve(__dirname, './src') },
+      external: [portableRuntimeId],
+      define: {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+        global: 'globalThis',
+      },
+    })
+    runtime = result.outputFiles[0]?.text || ''
+    if (!runtime) throw new Error('QuantX portable runtime build produced no output')
+  }
+  return {
+    name: 'quantx-portable-runtime',
+    async buildStart() {
+      await compile()
+    },
+    resolveId(id: string) {
+      return id === portableRuntimeId ? resolvedPortableRuntimeId : null
+    },
+    async load(id: string) {
+      if (id !== resolvedPortableRuntimeId) return null
+      if (!runtime) await compile()
+      return `export default ${JSON.stringify(runtime)}`
+    },
+  }
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), quantxPortableRuntime()],
   resolve: {
     // dnd-kit/framer-motion both consume React hooks.  Pin every dependency to
     // the application's React instance so a stale optimize-deps graph cannot

@@ -1,14 +1,41 @@
-type QuantXStaticExportOptions = {
+import {
+  quantxApi,
+  type CatalogData,
+  type QuantXAdvancedSnapshot,
+  type QuantXDataTables,
+  type QuantXMultidaySnapshot,
+  type QuantXNewHighClusterMembers,
+  type QuantXObservability,
+  type QuantXReviewData,
+} from '@/lib/api'
+
+type QuantXInteractiveExportOptions = {
   root: HTMLElement
   tradeDate: string
   fileName?: string
   exportedAt?: Date
 }
 
-export type QuantXStaticExportResult = {
+export type QuantXInteractiveExportResult = {
   fileName: string
   canvasCount: number
+  memberDatasets: number
   bytes: number
+}
+
+type PortablePayload = {
+  schemaVersion: 1
+  tradeDate: string
+  exportedAt: string
+  responses: {
+    catalog: CatalogData
+    review: QuantXReviewData
+    multiday: QuantXMultidaySnapshot
+    advanced: QuantXAdvancedSnapshot
+    tables: QuantXDataTables
+    observability: QuantXObservability
+    newHighMembers: Record<string, QuantXNewHighClusterMembers>
+  }
 }
 
 const CSS_URL_PATTERN = /url\(\s*(['"]?)(.*?)\1\s*\)/gi
@@ -76,118 +103,61 @@ async function collectInlineCss(): Promise<string> {
   return chunks.join('\n')
 }
 
-async function inlineExistingImages(source: HTMLElement, clone: HTMLElement): Promise<void> {
-  const sourceImages = Array.from(source.querySelectorAll<HTMLImageElement>('img'))
-  const clonedImages = Array.from(clone.querySelectorAll<HTMLImageElement>('img'))
-  await Promise.all(sourceImages.map(async (image, index) => {
-    const clonedImage = clonedImages[index]
-    if (!clonedImage) return
-    const sourceUrl = image.currentSrc || image.src
-    if (!sourceUrl) return
-    const dataUrl = await fetchAsDataUrl(sourceUrl)
-    if (dataUrl) {
-      clonedImage.src = dataUrl
-      clonedImage.removeAttribute('srcset')
-      return
-    }
-    clonedImage.removeAttribute('src')
-    clonedImage.removeAttribute('srcset')
-  }))
-}
-
-function replaceCanvases(source: HTMLElement, clone: HTMLElement): number {
-  const sourceCanvases = Array.from(source.querySelectorAll<HTMLCanvasElement>('canvas'))
-  const clonedCanvases = Array.from(clone.querySelectorAll<HTMLCanvasElement>('canvas'))
-
-  sourceCanvases.forEach((canvas, index) => {
-    const clonedCanvas = clonedCanvases[index]
-    if (!clonedCanvas) return
-    const image = document.createElement('img')
-    const bounds = canvas.getBoundingClientRect()
-    image.src = canvas.toDataURL('image/png')
-    image.alt = canvas.getAttribute('aria-label') || 'QuantX 图表静态快照'
-    image.className = clonedCanvas.className
-    image.setAttribute('data-exported-canvas', String(index + 1))
-    image.setAttribute('draggable', 'false')
-    image.setAttribute('style', clonedCanvas.getAttribute('style') || '')
-    if (bounds.width > 0) image.style.width = `${bounds.width}px`
-    if (bounds.height > 0) image.style.height = `${bounds.height}px`
-    image.style.maxWidth = '100%'
-    clonedCanvas.replaceWith(image)
-  })
-
-  return sourceCanvases.length
-}
-
-function preserveFormState(source: HTMLElement, clone: HTMLElement): void {
-  const sourceFields = Array.from(source.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea'))
-  const clonedFields = Array.from(clone.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea'))
-  sourceFields.forEach((field, index) => {
-    const clonedField = clonedFields[index]
-    if (!clonedField) return
-    if (field instanceof HTMLInputElement) {
-      clonedField.setAttribute('value', field.value)
-      if (field.checked) clonedField.setAttribute('checked', '')
-    } else if (field instanceof HTMLSelectElement && clonedField instanceof HTMLSelectElement) {
-      Array.from(clonedField.options).forEach((option, optionIndex) => {
-        option.toggleAttribute('selected', optionIndex === field.selectedIndex)
-      })
-    } else if (field instanceof HTMLTextAreaElement) {
-      clonedField.textContent = field.value
-    }
-  })
-}
-
-function makeCloneStatic(clone: HTMLElement): void {
-  clone.setAttribute('data-static-export', 'true')
-  clone.querySelectorAll('[data-static-export-remove], script, iframe').forEach(node => node.remove())
-  clone.querySelectorAll<HTMLElement>('*').forEach(element => {
-    Array.from(element.attributes).forEach(attribute => {
-      if (attribute.name.toLowerCase().startsWith('on')) element.removeAttribute(attribute.name)
-    })
-    if (element.matches('button, [role="button"], [role="tab"]')) {
-      element.setAttribute('aria-disabled', 'true')
-      element.setAttribute('tabindex', '-1')
-    }
-  })
-  clone.querySelectorAll<HTMLAnchorElement>('a[href]').forEach(anchor => {
-    const href = anchor.getAttribute('href') || ''
-    try {
-      const target = new URL(href, window.location.href)
-      if (target.origin === window.location.origin || ['localhost', '127.0.0.1', '::1'].includes(target.hostname)) {
-        anchor.removeAttribute('href')
-        anchor.setAttribute('aria-disabled', 'true')
-      }
-    } catch {
-      anchor.removeAttribute('href')
-    }
-  })
+async function collectPayload(tradeDate: string, exportedAt: Date): Promise<PortablePayload> {
+  const [catalog, review, multiday, advanced, tables, observability, memberBundle] = await Promise.all([
+    quantxApi.getCatalog(),
+    quantxApi.getReviewData(tradeDate),
+    quantxApi.getMultiday(tradeDate),
+    quantxApi.getAdvanced(tradeDate),
+    quantxApi.getTables(tradeDate),
+    quantxApi.getObservability(tradeDate),
+    quantxApi.getNewHighMemberBundle(tradeDate),
+  ])
+  return {
+    schemaVersion: 1,
+    tradeDate,
+    exportedAt: exportedAt.toISOString(),
+    responses: {
+      catalog,
+      review,
+      multiday,
+      advanced,
+      tables,
+      observability,
+      newHighMembers: memberBundle.datasets,
+    },
+  }
 }
 
 function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 }
 
-function buildStaticDocument(options: {
-  clone: HTMLElement
+function escapeScript(value: string): string {
+  return value
+    .replace(/<\/script/gi, '<\\/script')
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029')
+}
+
+function buildInteractiveDocument(options: {
   css: string
-  tradeDate: string
-  exportedAt: Date
+  runtime: string
+  payload: PortablePayload
 }): string {
-  const { clone, css, tradeDate, exportedAt } = options
-  const title = `QuantX 市场驾驶舱 — ${tradeDate}（静态导出）`
+  const { css, runtime, payload } = options
+  const title = `QuantX 市场驾驶舱 — ${payload.tradeDate}（交互导出）`
   const htmlClasses = escapeHtml(document.documentElement.className)
   const bodyClasses = escapeHtml(document.body.className)
-  const safeCss = css.replaceAll('</style', '<\\/style')
+  const safeCss = css.replace(/<\/style/gi, '<\\/style')
+  const payloadJson = JSON.stringify(payload).replaceAll('<', '\\u003c')
   const exportCss = `
-    html, body { min-height: 100%; height: auto !important; overflow: visible !important; }
+    html, body, #root { min-height: 100%; height: auto !important; }
+    html, body { overflow: visible !important; }
     body { margin: 0; background: var(--color-base, #080b10); color: var(--color-foreground, #e8edf5); }
-    .quantx-static-report { min-height: 100vh; }
-    [data-testid="quantx-unified-dashboard"] { margin-inline: auto; overflow: visible !important; }
+    [data-testid="quantx-unified-dashboard"] { margin-inline: auto; }
     [data-testid="quantx-dashboard-header"] { position: relative !important; top: auto !important; }
-    [data-static-export] button, [data-static-export] [role="button"], [data-static-export] [role="tab"] { cursor: default !important; pointer-events: none !important; }
-    img[data-exported-canvas] { display: block; object-fit: contain; }
-    .quantx-static-footer { margin: 28px auto 0; max-width: 1720px; border-top: 1px solid rgba(148, 163, 184, .18); padding: 14px 16px 24px; color: #8490a3; font: 11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .quantx-portable-loading { min-height: 100vh; display: grid; place-items: center; color: #94a3b8; font: 13px/1.6 system-ui, sans-serif; }
     @media print {
       body { background: #080b10 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
       [data-testid="quantx-dashboard-header"] { position: relative !important; }
@@ -200,30 +170,33 @@ function buildStaticDocument(options: {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:">
-  <meta name="generator" content="TickFlow QuantX static export">
-  <meta name="quantx-trade-date" content="${escapeHtml(tradeDate)}">
-  <meta name="quantx-exported-at" content="${escapeHtml(exportedAt.toISOString())}">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="generator" content="TickFlow QuantX interactive export">
+  <meta name="quantx-export-mode" content="interactive">
+  <meta name="quantx-trade-date" content="${escapeHtml(payload.tradeDate)}">
+  <meta name="quantx-exported-at" content="${escapeHtml(payload.exportedAt)}">
   <title>${escapeHtml(title)}</title>
   <style>${safeCss}\n${exportCss}</style>
 </head>
 <body class="${bodyClasses}">
-  <main class="quantx-static-report">${clone.outerHTML}</main>
-  <footer class="quantx-static-footer">QuantX 静态快照 · 数据日期 ${escapeHtml(tradeDate)} · 导出时间 ${escapeHtml(exportedAt.toLocaleString('zh-CN', { hour12: false }))} · 图表与样式已内嵌，无需 TickFlow 服务即可查看。</footer>
+  <div id="root"><div class="quantx-portable-loading">正在启动 QuantX 离线交互报告…</div></div>
+  <script id="quantx-portable-data" type="application/json">${payloadJson}</script>
+  <script>${escapeScript(runtime)}</script>
 </body>
 </html>`
 }
 
-export async function downloadQuantXStaticHtml(options: QuantXStaticExportOptions): Promise<QuantXStaticExportResult> {
-  const clone = options.root.cloneNode(true) as HTMLElement
-  preserveFormState(options.root, clone)
-  await inlineExistingImages(options.root, clone)
-  const canvasCount = replaceCanvases(options.root, clone)
-  makeCloneStatic(clone)
-  const css = await collectInlineCss()
+export async function downloadQuantXInteractiveHtml(options: QuantXInteractiveExportOptions): Promise<QuantXInteractiveExportResult> {
   const exportedAt = options.exportedAt || new Date()
-  const html = buildStaticDocument({ clone, css, tradeDate: options.tradeDate, exportedAt })
-  const safeDate = options.tradeDate.replace(/[^0-9]/g, '') || 'snapshot'
+  const canvasCount = options.root.querySelectorAll('canvas').length
+  const [css, runtimeModule, payload] = await Promise.all([
+    collectInlineCss(),
+    import('virtual:quantx-portable-runtime'),
+    collectPayload(options.tradeDate, exportedAt),
+  ])
+  if (!runtimeModule.default) throw new Error('QuantX 便携运行时为空')
+  const html = buildInteractiveDocument({ css, runtime: runtimeModule.default, payload })
+  const safeDate = options.tradeDate.replace(/[^0-9]/g, '') || 'report'
   const fileName = options.fileName || `quantx-${safeDate}.html`
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -234,5 +207,10 @@ export async function downloadQuantXStaticHtml(options: QuantXStaticExportOption
   anchor.click()
   anchor.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
-  return { fileName, canvasCount, bytes: blob.size }
+  return {
+    fileName,
+    canvasCount,
+    memberDatasets: Object.keys(payload.responses.newHighMembers).length,
+    bytes: blob.size,
+  }
 }

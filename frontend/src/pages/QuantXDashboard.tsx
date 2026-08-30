@@ -36,7 +36,7 @@ import {
 import { AdvancedPanels, type AdvancedCardLayout } from '@/components/quantx/AdvancedPanels'
 import { quantxApi, type QuantXMultidaySnapshot, type QuantXReviewData } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { downloadQuantXStaticHtml } from '@/lib/exportStaticHtml'
+import { downloadQuantXInteractiveHtml } from '@/lib/exportStaticHtml'
 import { QK } from '@/lib/queryKeys'
 import {
   AdvanceRateChart,
@@ -177,11 +177,12 @@ function MetricRibbon({ data }: { data: QuantXReviewData }) {
   )
 }
 
-function DashboardHeader({ date, dates, refreshing, exporting, coverage, onDate, onRefresh, onExport }: {
+function DashboardHeader({ date, dates, refreshing, exporting, portable, coverage, onDate, onRefresh, onExport }: {
   date: string
   dates: string[]
   refreshing: boolean
   exporting?: boolean
+  portable?: boolean
   coverage?: string
   onDate: (date: string) => void
   onRefresh: () => void
@@ -196,26 +197,29 @@ function DashboardHeader({ date, dates, refreshing, exporting, coverage, onDate,
   return (
     <header data-testid="quantx-dashboard-header" className="sticky top-0 z-20 -mx-3 flex flex-wrap items-center gap-2 border-b border-border bg-base/95 px-3 py-2 backdrop-blur md:-mx-4 md:px-4">
       <div className="mr-2 flex items-center gap-2"><Zap className="h-4 w-4 text-accent" /><h1 className="text-base font-bold text-foreground">QuantX 市场驾驶舱</h1></div>
-      <button aria-label="前一交易日" data-static-export-remove="true" disabled={!previous} onClick={() => previous && onDate(previous)} className="cursor-pointer rounded border border-border p-1.5 disabled:cursor-not-allowed disabled:opacity-30"><ChevronLeft className="h-3.5 w-3.5" /></button>
-      <DatePicker ariaLabel="QuantX交易日" value={pickerDate} allowedDates={pickerDates} min={pickerDates[0]} max={pickerDates.at(-1)} onChange={value => onDate(value.replaceAll('-', ''))} align="left" buttonClassName="font-semibold" />
-      <button aria-label="后一交易日" data-static-export-remove="true" disabled={!next} onClick={() => next && onDate(next)} className="cursor-pointer rounded border border-border p-1.5 disabled:cursor-not-allowed disabled:opacity-30"><ChevronRight className="h-3.5 w-3.5" /></button>
-      <button type="button" data-static-export-remove="true" disabled={!latest || latest === date} onClick={() => latest && onDate(latest)} className="cursor-pointer rounded border border-border px-2 py-1.5 text-[10px] text-muted disabled:cursor-not-allowed disabled:opacity-40">最新</button>
+      {portable ? <span data-testid="quantx-portable-date" className="inline-flex items-center gap-1.5 rounded border border-border bg-elevated px-2.5 py-1.5 font-mono text-xs font-semibold"><CalendarDays className="h-3.5 w-3.5 text-accent" />{pickerDate}</span> : <>
+        <button aria-label="前一交易日" disabled={!previous} onClick={() => previous && onDate(previous)} className="cursor-pointer rounded border border-border p-1.5 disabled:cursor-not-allowed disabled:opacity-30"><ChevronLeft className="h-3.5 w-3.5" /></button>
+        <DatePicker ariaLabel="QuantX交易日" value={pickerDate} allowedDates={pickerDates} min={pickerDates[0]} max={pickerDates.at(-1)} onChange={value => onDate(value.replaceAll('-', ''))} align="left" buttonClassName="font-semibold" />
+        <button aria-label="后一交易日" disabled={!next} onClick={() => next && onDate(next)} className="cursor-pointer rounded border border-border p-1.5 disabled:cursor-not-allowed disabled:opacity-30"><ChevronRight className="h-3.5 w-3.5" /></button>
+        <button type="button" disabled={!latest || latest === date} onClick={() => latest && onDate(latest)} className="cursor-pointer rounded border border-border px-2 py-1.5 text-[10px] text-muted disabled:cursor-not-allowed disabled:opacity-40">最新</button>
+      </>}
       <div className="ml-auto flex items-center gap-2 text-[10px] text-muted">
+        {portable && <span data-testid="quantx-portable-badge" className="inline-flex items-center gap-1 rounded border border-blue-400/35 bg-blue-400/10 px-2 py-1.5 font-medium text-blue-300"><Database className="h-3 w-3" />离线交互报告</span>}
         <span className="hidden items-center gap-1 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-green-400" />{coverage || '覆盖待确认'}</span>
-        {onExport && <button
+        {!portable && onExport && <button
           type="button"
           data-testid="quantx-export-html"
           data-static-export-remove="true"
           onClick={onExport}
           disabled={exporting}
-          title="导出当前日期为可离线分享的单文件 HTML"
+          title="导出当前日期为保留筛选、下钻与图表交互的离线单文件 HTML"
           className="inline-flex cursor-pointer items-center gap-1 rounded border border-accent/45 bg-accent/10 px-2 py-1.5 font-medium text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {exporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}{exporting ? '导出中' : '导出 HTML'}
+          {exporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}{exporting ? '打包中' : '导出交互 HTML'}
         </button>}
-        <button type="button" data-static-export-remove="true" onClick={onRefresh} disabled={refreshing} className="inline-flex cursor-pointer items-center gap-1 rounded border border-border px-2 py-1.5 text-foreground disabled:cursor-not-allowed disabled:opacity-50">
+        {!portable && <button type="button" onClick={onRefresh} disabled={refreshing} className="inline-flex cursor-pointer items-center gap-1 rounded border border-border px-2 py-1.5 text-foreground disabled:cursor-not-allowed disabled:opacity-50">
           {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}刷新
-        </button>
+        </button>}
       </div>
     </header>
   )
@@ -496,6 +500,7 @@ export function QuantXDashboard() {
   const [breadthLevel, setBreadthLevel] = useState<1 | 2>(1)
   const [utilityOpen, setUtilityOpen] = useState({ data: false, quality: false })
   const [exporting, setExporting] = useState(false)
+  const portable = Boolean(window.__QUANTX_PORTABLE__)
 
   const catalog = useQuery({ queryKey: QK.quantxCatalog, queryFn: quantxApi.getCatalog, staleTime: 30_000, retry: false })
   const records = useMemo(() => catalog.data?.records || [], [catalog.data])
@@ -537,8 +542,8 @@ export function QuantXDashboard() {
     }
     setExporting(true)
     try {
-      const result = await downloadQuantXStaticHtml({ root, tradeDate: date })
-      toast(`已导出 ${result.fileName}（${result.canvasCount} 张图表）`, 'success')
+      const result = await downloadQuantXInteractiveHtml({ root, tradeDate: date })
+      toast(`已导出 ${result.fileName}（${result.canvasCount} 张图表 · ${result.memberDatasets} 组新高明细）`, 'success')
     } catch (error) {
       toast(`QuantX 导出失败：${error instanceof Error ? error.message : String(error)}`, 'error')
     } finally {
@@ -567,7 +572,7 @@ export function QuantXDashboard() {
 
   return (
     <div className="mx-auto max-w-[1720px] overflow-x-clip px-3 pb-16 md:px-4" data-testid="quantx-unified-dashboard">
-      <DashboardHeader date={date} dates={dates} refreshing={refresh.isPending} exporting={exporting} coverage={coverage} onDate={goDate} onRefresh={() => refresh.mutate()} onExport={() => void exportReport()} />
+      <DashboardHeader date={date} dates={dates} refreshing={refresh.isPending} exporting={exporting} portable={portable} coverage={coverage} onDate={goDate} onRefresh={() => refresh.mutate()} onExport={portable ? undefined : () => void exportReport()} />
       <div className="mt-2 space-y-3">
         <MetricRibbon data={review} />
         <AnalysisDomainSection testId="quantx-domain-conclusion" title="今日市场结论" hint="先看市场方向、主线与风险，再进入各分析域验证" sequence="当前结论 → 今日行动" icon={<Zap className="h-4 w-4" />}>
