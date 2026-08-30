@@ -322,11 +322,63 @@ function RiskSignalBoard({ ebb, crash, participation }: { ebb: any[]; crash: any
   )
 }
 
-function NewHighPanel({ data }: { data: QuantXReviewData['sections']['s2']['new_high'] }) {
+function NewHighPanel({ date, data }: { date: string; data: QuantXReviewData['sections']['s2']['new_high'] }) {
+  const [dimension, setDimension] = useState<'concept' | 'industry_level1' | 'industry_level2'>('concept')
+  const [window, setWindow] = useState<1 | 5 | 10 | 20>(5)
+  const [expandedName, setExpandedName] = useState<string | null>(null)
+  const memberQuery = useQuery({
+    queryKey: QK.quantxNewHighMembers(date, dimension, window, expandedName || ''),
+    queryFn: () => quantxApi.getNewHighClusterMembers(date, dimension, window, expandedName || ''),
+    enabled: Boolean(expandedName),
+    staleTime: 30_000,
+    retry: false,
+  })
+  useEffect(() => setExpandedName(null), [dimension, window])
   if (!data) return <div data-testid="quantx-new-high-unavailable" className="rounded border border-orange-500/30 bg-orange-500/5 px-3 py-8 text-center text-xs text-orange-300">本日百日新高事实尚未发布，请刷新数据后重试</div>
   if (data.status !== 'ok') return <div data-testid="quantx-new-high-unavailable" className="rounded border border-orange-500/30 bg-orange-500/5 px-3 py-8 text-center text-xs text-orange-300">百日新高来源暂不可用，未用零值替代</div>
-  if (!data.stocks.length) return <div className="py-8 text-center text-xs text-muted">数据已发布，本日无百日新高个股</div>
-  return <GenericRows rows={data.stocks} columns={['code', 'name', 'pct_chg', 'concepts']} />
+  const total = data.total_stocks ?? data.stocks.length
+  if (!total) return <div className="py-8 text-center text-xs text-muted">数据已发布，本日无百日新高个股</div>
+  const selected = data.windows?.[String(window) as '1' | '5' | '10' | '20']
+  const rows = selected?.dimensions[dimension] || []
+  const coverage = data.coverage_pct?.[dimension] ?? 0
+  const top = rows[0]
+  const dimensionLabels = { concept: '题材概念', industry_level1: '申万一级', industry_level2: '申万二级' }
+  const statusTone: Record<string, string> = {
+    新生: 'bg-red-500/15 text-red-300',
+    扩散: 'bg-orange-500/15 text-orange-300',
+    持续: 'bg-accent/15 text-accent',
+    收缩: 'bg-green-500/15 text-green-300',
+    轮动: 'bg-blue-500/15 text-blue-300',
+    当日集中: 'bg-purple-500/15 text-purple-300',
+  }
+  return <div data-testid="quantx-new-high-clusters" className="space-y-2.5">
+    <div className="flex flex-wrap items-center gap-2">
+      <SmallTabs values={[["concept", '题材概念'], ["industry_level1", '申万一级'], ["industry_level2", '申万二级']]} active={dimension} onChange={setDimension} label="百日新高聚类维度" />
+      <SmallTabs values={[[1, '当日'], [5, '5日'], [10, '10日'], [20, '20日']]} active={window} onChange={setWindow} label="百日新高观察窗口" />
+      <span className="ml-auto text-[9px] text-muted">{selected?.date_range?.join('—') || '--'} · {selected?.valid_days ?? 0} 个有效交易日</span>
+    </div>
+    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+      <div className="rounded border border-border/70 bg-base/35 px-2.5 py-2"><span className="text-[9px] text-muted">当日新高</span><b className="mt-0.5 block font-mono text-base text-foreground">{total}<small className="ml-1 text-[9px] font-normal text-muted">只</small></b></div>
+      <div className="rounded border border-border/70 bg-base/35 px-2.5 py-2"><span className="text-[9px] text-muted">{dimensionLabels[dimension]}覆盖</span><b className="mt-0.5 block font-mono text-base text-foreground">{coverage.toFixed(1)}%</b></div>
+      <div className="rounded border border-border/70 bg-base/35 px-2.5 py-2"><span className="text-[9px] text-muted">最强聚类</span><b className="mt-0.5 block truncate text-sm text-foreground" title={top?.name}>{top?.name || '--'}</b></div>
+      <div className="rounded border border-border/70 bg-base/35 px-2.5 py-2"><span className="text-[9px] text-muted">窗口活跃</span><b className="mt-0.5 block font-mono text-base text-foreground">{top?.active_days ?? 0}<small className="ml-1 text-[9px] font-normal text-muted">/{selected?.valid_days ?? 0}日</small></b></div>
+    </div>
+    {rows.length ? <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-3">
+      {rows.slice(0, 15).map((row, index) => {
+        const share = window === 1 ? row.weighted_share_pct : row.average_share_pct
+        return <button type="button" data-testid="new-high-cluster-row" aria-expanded={expandedName === row.name} onClick={() => setExpandedName(current => current === row.name ? null : row.name)} key={row.name} className={cn('min-w-0 cursor-pointer rounded border px-2.5 py-2 text-left transition-colors hover:border-accent/60 hover:bg-accent/5', expandedName === row.name ? 'border-accent/60 bg-accent/5' : 'border-border/60 bg-base/25')}>
+          <div className="flex min-w-0 items-center gap-1.5"><span className="w-4 shrink-0 text-[9px] text-muted">{index + 1}</span><b className="min-w-0 flex-1 truncate text-[11px]" title={row.name}>{row.name}</b><span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[9px]', statusTone[row.status] || 'bg-elevated text-muted')}>{row.status}</span></div>
+          <div className="mt-1.5 flex items-center gap-2"><div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-elevated"><div className="h-full rounded-full bg-gradient-to-r from-accent/60 to-orange-400" style={{ width: `${Math.max(2, Math.min(100, share))}%` }} /></div><span className="w-12 shrink-0 text-right font-mono text-[10px]">{share.toFixed(1)}%</span></div>
+          <div className="mt-1 flex justify-between gap-2 text-[9px] text-muted"><span>今日 {row.current_count} · 窗口 {row.unique_count} 只 · 点击看个股</span><span className={cn('font-mono', row.change_pct > 0 ? 'text-red-300' : row.change_pct < 0 ? 'text-green-300' : '')}>{row.change_pct > 0 ? '+' : ''}{row.change_pct.toFixed(1)}pct</span></div>
+        </button>
+      })}
+    </div> : <div className="rounded border border-border/60 bg-base/25 py-8 text-center text-xs text-muted">当前映射未形成{dimensionLabels[dimension]}聚类</div>}
+    {expandedName && <section data-testid="new-high-member-details" className="overflow-hidden rounded-md border border-accent/40 bg-base/35">
+      <header className="flex flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2"><b className="text-xs text-foreground">{expandedName} · 个股明细</b>{memberQuery.data && <span className="text-[9px] text-muted">今日 {memberQuery.data.current_count} 只 · {window}日窗口 {memberQuery.data.window_count} 只</span>}<button type="button" onClick={() => setExpandedName(null)} className="ml-auto cursor-pointer rounded border border-border px-2 py-1 text-[9px] text-muted hover:text-foreground">收起</button></header>
+      {memberQuery.isLoading ? <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" />正在读取成员证据</div> : memberQuery.error ? <div className="py-8 text-center text-xs text-red-300">个股明细加载失败：{String(memberQuery.error)}</div> : <div className="max-h-72 overflow-auto"><table className="w-full min-w-[680px] text-[10px]"><thead className="sticky top-0 bg-elevated"><tr className="text-left text-muted"><th className="px-3 py-1.5">状态</th><th className="px-2 py-1.5">代码</th><th className="px-2 py-1.5">名称</th><th className="px-2 py-1.5 text-right">最新涨跌</th><th className="px-2 py-1.5 text-right">窗口活跃</th><th className="px-2 py-1.5">首次出现</th><th className="px-3 py-1.5">最近出现</th></tr></thead><tbody>{(memberQuery.data?.members || []).map(member => <tr key={member.code} data-testid="new-high-member-row" className="border-t border-border/50 hover:bg-elevated/50"><td className="px-3 py-1.5"><span className={cn('rounded px-1.5 py-0.5 text-[9px]', member.current ? 'bg-red-500/15 text-red-300' : 'bg-elevated text-muted')}>{member.current ? '今日新高' : '窗口出现'}</span></td><td className="px-2 py-1.5 font-mono text-muted">{member.code}</td><td className="px-2 py-1.5 font-medium text-foreground">{member.name || '--'}</td><td className={cn('px-2 py-1.5 text-right font-mono', (member.pct_chg ?? 0) > 0 ? 'text-red-300' : (member.pct_chg ?? 0) < 0 ? 'text-green-300' : '')}>{member.pct_chg == null ? '--' : `${member.pct_chg > 0 ? '+' : ''}${member.pct_chg.toFixed(2)}%`}</td><td className="px-2 py-1.5 text-right font-mono">{member.active_days}/{memberQuery.data?.valid_days}</td><td className="px-2 py-1.5 font-mono text-muted">{member.first_seen}</td><td className="px-3 py-1.5 font-mono text-muted">{member.last_seen}</td></tr>)}</tbody></table>{memberQuery.data && !memberQuery.data.members.length && <div className="py-8 text-center text-xs text-muted">该聚类暂无成员证据</div>}</div>}
+    </section>}
+    <p className="text-[9px] leading-4 text-muted">读法：条形表示{window === 1 ? '当日按一股多标签 1/N 加权后的聚类占比' : `${window} 日内该聚类覆盖新高股的日均比例`}；右下角表示后半窗口较前半窗口的覆盖变化。行业与概念归属使用 TickFlow 当前扩展数据快照回映历史，仅作扩散代理。</p>
+  </div>
 }
 
 function CompleteDataPanel({ data }: { data: Record<string, any> | undefined }) {
@@ -347,7 +399,7 @@ function QualityPanel({ data }: { data: any }) {
 function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthLevel, onBreadthLevel }: { tab: DeepTab; review: QuantXReviewData; multiday?: QuantXMultidaySnapshot; tables?: Record<string, any>; quality?: any; breadth: any[]; breadthLevel: 1 | 2; onBreadthLevel: (level: 1 | 2) => void }) {
   const { s1, s2, s3, s4, s5 } = review.sections
   if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel><Panel testId="quantx-congestion-panel" title="市场拥挤度：最新状态与历史" hint="单一口径 · 前 5% 活跃股票成交额占比" className="xl:col-span-2"><CongestionOverview data={s1.congestion} /></Panel></div>
-  if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /></>}<Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} columns={['source', 'name', 'count', 'rank']} /></Panel><Panel title="百日新高" className="xl:col-span-2"><NewHighPanel data={s2.new_high} /></Panel></div>
+  if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /></>}<Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} columns={['source', 'name', 'count', 'rank']} /></Panel><Panel title="百日新高扩散聚类" hint="看哪些板块正批量创出阶段新高" className="xl:col-span-2"><NewHighPanel date={review.trade_date} data={s2.new_high} /></Panel></div>
   if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel><Panel title="连板详细记录" className="xl:col-span-2"><GenericRows rows={s3.ladder_detail} columns={['code', 'name', 'limit_times', 'theme_name', 'turnover_pct', 'amount_yi']} /></Panel></div>
   if (tab === 'flow') return <div data-testid="quantx-capital-workspace" className="grid gap-3">
     <div data-testid="quantx-capital-breadth-row" className="grid gap-3 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
@@ -358,7 +410,7 @@ function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthL
       </Panel>
     </div>
     <div className="grid gap-3 xl:grid-cols-2"><Panel title="行业流入 / 流出"><SectorFlowChart topIn={s4.sector_flow.top_in} topOut={s4.sector_flow.top_out} /></Panel><Panel title="涨跌幅 × 净流入"><SectorScatterChart data={s4.sector_treemap} /></Panel></div>
-    {multiday && <><SectorFlowContinuity data={multiday.sector_flow_continuity} /><Panel title="核心个股"><GenericRows rows={multiday.sector_flow_continuity.core_stocks || []} /></Panel></>}
+    {multiday && <SectorFlowContinuity data={multiday.sector_flow_continuity} />}
   </div>
   if (tab === 'watch') return <div className="grid gap-3 xl:grid-cols-[1.35fr_1fr]"><Panel title="完整关注名单"><GenericRows rows={s5.candidates} columns={['code', 'name', 'limit_times', 'reason', 'score', 'priority']} /></Panel><Panel testId="quantx-decision-zone" title="决断区" hint="仓位 · 场景 · 次日动作"><DecisionRail data={review} /></Panel></div>
   if (tab === 'data') return <CompleteDataPanel data={tables} />
@@ -436,7 +488,7 @@ export function QuantXDashboard() {
           <RiskSignalBoard ebb={s.s3.ebb_signals} crash={s.s3.crash_signals} participation={s.s2.participation?.conditions || []} />
 
           {multiday ? <div className="xl:[grid-column:span_16/span_16]"><WindowSignalMatrix data={multiday} active={windowSize} onChange={setWindowSize} /></div> : <Panel title="多日信号矩阵" className="xl:[grid-column:span_16/span_16]"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
-          <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="趋势、分数与日期上下文统一展示" icon={<Activity className="h-3.5 w-3.5" />} className="xl:[grid-column:span_16/span_16]"><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
+          <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="QuantX market_state_daily 情绪分 · 不等同于下方 Regime 状态矩阵" icon={<Activity className="h-3.5 w-3.5" />} className="xl:[grid-column:span_16/span_16]"><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
 
           <div className="xl:[grid-column:span_16/span_16]">{multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}</div>
         </div>

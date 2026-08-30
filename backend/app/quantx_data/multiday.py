@@ -20,7 +20,7 @@ from app.market_facts.repository import MarketFactRepository
 
 from .io import read_json, validate_trade_date, write_json_atomic
 
-SCHEMA_VERSION = "tickflow-quantx-multiday-v2"
+SCHEMA_VERSION = "tickflow-quantx-multiday-v3"
 WINDOWS = (5, 10, 20)
 
 
@@ -141,7 +141,7 @@ def _sector_rows(repo: MarketFactRepository, trade_date: date) -> list[dict[str,
     ]
 
 
-def _core_stocks(repo: MarketFactRepository, trade_date: date) -> list[dict[str, Any]]:
+def _rule_candidates(repo: MarketFactRepository, trade_date: date) -> list[dict[str, Any]]:
     candidates = repo.get_screening_candidates(trade_date)
     return [
         {
@@ -207,7 +207,7 @@ def _record(repo: MarketFactRepository, trade_date: date) -> dict[str, Any]:
         ],
         "market_activity": {
             "sectors": _sector_rows(repo, trade_date),
-            "rule_candidates": _core_stocks(repo, trade_date),
+            "rule_candidates": _rule_candidates(repo, trade_date),
         },
     }
 
@@ -288,20 +288,88 @@ def _sector_flow_continuity(records: list[dict[str, Any]]) -> dict[str, Any]:
     observed_days = sum(
         bool((record.get("market_activity") or {}).get("sectors")) for record in records
     )
-    rule_candidates = stock_rows[:20]
     return {
         "semantics": "sector_flow_and_rule_candidates",
         "basis": "sector_flow_daily.net_inflow_yi + screening_candidate_daily",
         "available": observed_days > 0,
         "coverage": round(observed_days / len(records), 3) if records else 0.0,
         "industries": industry_rows[:20],
-        "rule_candidates": rule_candidates,
-        "core_stocks": rule_candidates,
+        "rule_candidates": stock_rows[:20],
         "direction": (
             f"{'净流入' if industry_rows[0]['net_inflow_sum_yi'] >= 0 else '净流出'}:{industry_rows[0]['name']}连续{industry_rows[0]['active_days']}日"
             if industry_rows
             else "暂无行业资金连续性数据"
         ),
+    }
+
+
+def _window_theme_structure(records: list[dict[str, Any]]) -> dict[str, Any]:
+    observed = [record for record in records if record.get("themes")]
+    if not observed:
+        return {"observed_days": 0, "mainline": [], "warming": [], "cooling": []}
+
+    split = max(1, len(observed) // 2)
+    early_count = split
+    recent_count = len(observed) - split
+    if recent_count == 0:
+        recent_count = 1
+        split = len(observed) - 1
+
+    names = {
+        item["name"]
+        for record in observed
+        for item in record.get("themes") or []
+        if item.get("name")
+    }
+    latest_by_name = {
+        item["name"]: item for item in observed[-1].get("themes") or [] if item.get("name")
+    }
+    rows: list[dict[str, Any]] = []
+    for name in names:
+        values = []
+        active_days = 0
+        for record in observed:
+            item = next(
+                (theme for theme in record.get("themes") or [] if theme.get("name") == name),
+                None,
+            )
+            strength = float(item.get("rank_strength") or 0) if item else 0.0
+            values.append(strength)
+            active_days += int(item is not None)
+        early_average = sum(values[:early_count]) / early_count
+        recent_average = sum(values[split:]) / recent_count
+        latest = latest_by_name.get(name) or {}
+        rows.append(
+            {
+                "name": name,
+                "active_days": active_days,
+                "persistence_pct": round(active_days / len(observed) * 100, 1),
+                "average_strength": round(sum(values) / len(observed), 1),
+                "strength_change": round(recent_average - early_average, 1),
+                "latest_strength": round(values[-1], 1),
+                "source_count": latest.get("source_count", 0),
+                "leaders": latest.get("leaders", []),
+            }
+        )
+
+    minimum_mainline_days = max(1, math.ceil(len(observed) * 0.6))
+    mainline = sorted(
+        (row for row in rows if row["active_days"] >= minimum_mainline_days),
+        key=lambda row: (-row["persistence_pct"], -row["average_strength"], row["name"]),
+    )
+    warming = sorted(
+        (row for row in rows if row["latest_strength"] > 0 and row["strength_change"] >= 8),
+        key=lambda row: (-row["strength_change"], -row["latest_strength"], row["name"]),
+    )
+    cooling = sorted(
+        (row for row in rows if row["strength_change"] <= -8),
+        key=lambda row: (row["strength_change"], row["name"]),
+    )
+    return {
+        "observed_days": len(observed),
+        "mainline": mainline[:8],
+        "warming": warming[:8],
+        "cooling": cooling[:8],
     }
 
 
@@ -325,12 +393,7 @@ def _window_signal(records: list[dict[str, Any]], window: int) -> dict[str, Any]
         direction, tone = "升温", "positive"
     else:
         direction, tone = "分歧轮动", "neutral"
-    current = scoped[-1].get("themes") if scoped else []
-    themes = {
-        "mainline": [item for item in current or [] if item.get("streak", 0) >= 2][:8],
-        "warming": [item for item in current or [] if item.get("lifecycle") in {"new", "strengthening"}][:8],
-        "cooling": [item for item in current or [] if item.get("lifecycle") == "weakening"][:8],
-    }
+    themes = _window_theme_structure(scoped)
     valid_ratio = len(scoped) / window
     confidence = "high" if valid_ratio >= 0.85 else "medium" if valid_ratio >= 0.6 else "low"
     sector_flow = _sector_flow_continuity(scoped)
@@ -342,7 +405,6 @@ def _window_signal(records: list[dict[str, Any]], window: int) -> dict[str, Any]
         "market": {"direction": direction, "tone": tone, "components": [heat, breadth, relay, risk]},
         "themes": themes,
         "sector_flow": sector_flow,
-        "institution": sector_flow,
     }
 
 
@@ -455,11 +517,9 @@ def _snapshot_from_records(records: list[dict[str, Any]], events: list[dict[str,
         "factor_attribution": latest["factor_attribution"],
         "opportunity_radar": _opportunity_radar(records),
         "sector_flow_continuity": sector_flow_continuity,
-        "institution_continuity": sector_flow_continuity,
         "data_coverage": {
             "theme_days": sum(bool(record["themes"]) for record in records[-20:]),
             "sector_flow_days": sector_flow_days,
-            "institution_days": sector_flow_days,
             "window_days": min(20, len(records)),
         },
     }

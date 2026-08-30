@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -14,6 +15,7 @@ from app.quantx_data.multiday import (
     rebuild_multiday_snapshot,
     rebuild_multiday_snapshots,
 )
+from app.quantx_data.new_high_clusters import build_new_high_cluster_members
 from app.quantx_data.pipeline import get_status, run_pipeline
 from app.quantx_data.repository import QuantXTableRepository
 
@@ -253,6 +255,28 @@ def advanced(trade_date: str, request: Request) -> dict:
         day,
         request.app.state.repo,
     )
+
+
+@router.get("/new-high/{trade_date}/members")
+def new_high_cluster_members(
+    trade_date: str,
+    request: Request,
+    dimension: Literal["concept", "industry_level1", "industry_level2"],
+    window: int,
+    name: str,
+) -> dict:
+    """Return stock-level evidence for one new-high cluster on demand."""
+    try:
+        day = datetime.strptime(trade_date, "%Y%m%d").date()
+        return build_new_high_cluster_members(
+            request.app.state.market_facts,
+            day,
+            dimension=dimension,
+            window=window,
+            name=name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/{trade_date}/tables")

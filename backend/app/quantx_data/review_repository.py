@@ -17,6 +17,7 @@ from app.services.index_sync import (
 )
 
 from .io import read_json
+from .new_high_clusters import build_new_high_clusters
 from .review_contract import (
     DEPRECATION_SCHEDULE,
     REVIEW_SCHEMA_VERSION,
@@ -886,6 +887,7 @@ class QuantXReviewRepository:
                 }
                 for row in frame.sort("symbol").to_dicts()
             ],
+            **build_new_high_clusters(self.facts, day),
         }
         fields.append("sections.s2.new_high")
 

@@ -16,9 +16,18 @@ from app.market_facts.repository import MarketFactRepository
 from app.quantx_data import collectors
 from app.quantx_data.catalog import build_catalog, load_tables
 from app.quantx_data.migration import migrate_quantx_history
-from app.quantx_data.multiday import build_multiday_snapshot, rebuild_multiday_snapshots
+from app.quantx_data.multiday import (
+    _window_signal,
+    build_multiday_snapshot,
+    rebuild_multiday_snapshots,
+)
+from app.quantx_data.new_high_clusters import (
+    build_new_high_cluster_members,
+    build_new_high_clusters,
+)
 from app.quantx_data.pipeline import run_pipeline
 from app.quantx_data.scheduler import _trade_date_today
+from app.services.ext_data import ExtConfig, ExtConfigStore, ExtField
 
 SOURCE_NAMES = (
     "tushare", "akshare", "ths_hot", "zhangtingke", "zhangtingjun", "pywencai",
@@ -325,11 +334,52 @@ def test_multiday_snapshot_contains_all_deterministic_dashboard_sections(tmp_pat
     assert continuity["basis"] == (
         "sector_flow_daily.net_inflow_yi + screening_candidate_daily"
     )
-    assert continuity["rule_candidates"] == continuity["core_stocks"]
-    assert snapshot["institution_continuity"] == continuity
+    assert "core_stocks" not in continuity
+    assert "institution_continuity" not in snapshot
     assert snapshot["data_coverage"]["sector_flow_days"] == 5
-    assert snapshot["data_coverage"]["institution_days"] == 5
+    assert "institution_days" not in snapshot["data_coverage"]
     assert "review_decision" not in snapshot
+
+
+def test_window_theme_structure_is_calculated_from_each_selected_window():
+    records = []
+    for index in range(20):
+        themes = [
+            {"name": "长期主线", "rank_strength": 70.0, "source_count": 2},
+        ]
+        if index < 10:
+            themes.append({"name": "旧题材", "rank_strength": 80.0, "source_count": 2})
+        if index >= 10:
+            themes.append({"name": "中期题材", "rank_strength": 60.0, "source_count": 2})
+        if index >= 15:
+            themes.append(
+                {
+                    "name": "新升温题材",
+                    "rank_strength": float(20 + (index - 15) * 15),
+                    "source_count": 1,
+                }
+            )
+        records.append(
+            {
+                "trade_date": f"202608{index + 1:02d}",
+                "metrics": {},
+                "themes": themes,
+                "market_activity": {},
+            }
+        )
+
+    five = _window_signal(records, 5)["themes"]
+    ten = _window_signal(records, 10)["themes"]
+    twenty = _window_signal(records, 20)["themes"]
+
+    assert {row["name"] for row in five["mainline"]} == {"长期主线", "中期题材", "新升温题材"}
+    assert {row["name"] for row in ten["mainline"]} == {"长期主线", "中期题材"}
+    assert {row["name"] for row in twenty["mainline"]} == {"长期主线"}
+    assert {row["name"] for row in twenty["warming"]} == {"中期题材", "新升温题材"}
+    assert {row["name"] for row in twenty["cooling"]} == {"旧题材"}
+    assert five["observed_days"] == 5
+    assert twenty["observed_days"] == 20
+    assert "institution" not in _window_signal(records, 5)
 
 
 def test_multiday_rebuild_uses_only_canonical_facts_after_publication(tmp_path):
@@ -363,7 +413,7 @@ def test_multiday_rebuild_persists_versioned_snapshots_and_catalog_stays_compact
 
     assert result["rebuilt"] == 2
     payload = json.loads((tmp_path / "quantx" / "20260825" / "multiday_snapshot.json").read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "tickflow-quantx-multiday-v2"
+    assert payload["schema_version"] == "tickflow-quantx-multiday-v3"
     catalog = json.loads((tmp_path / "quantx" / "catalog.json").read_text(encoding="utf-8"))
     assert "window_signals" not in catalog["records"][-1]
     assert catalog["records"][-1]["multiday_available"] is True
@@ -536,6 +586,12 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert response.json()["sections"]["s2"]["new_high"]["stocks"][0][
         "code"
     ] == "300002"
+    assert set(response.json()["sections"]["s2"]["new_high"]["windows"]) == {
+        "1",
+        "5",
+        "10",
+        "20",
+    }
     congestion = response.json()["sections"]["s1"]["congestion"]
     assert congestion["latest"]["congestion_pct"] == 43.48
     assert congestion["table"][-1][2:] == [1.0, 2.3, 43.48]
@@ -629,6 +685,97 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     ] == "available"
     assert foundation["fallback_fields"] == []
     assert foundation["implicit_cache_fields"] == []
+
+
+def test_new_high_clusters_group_concepts_and_industry_windows(tmp_path):
+    for trade_date in ("20260819", "20260820", "20260821", "20260824", "20260825"):
+        _fixture(tmp_path, trade_date)
+        assert run_pipeline(tmp_path, trade_date, recompute=True)["status"] == "complete"
+
+    concept = ExtConfig(
+        id="new_high_concepts",
+        label="新高概念映射",
+        mode="snapshot",
+        fields=[
+            ExtField("symbol", "string", "股票代码"),
+            ExtField("concept", "string", "所属概念"),
+        ],
+    )
+    industry = ExtConfig(
+        id="new_high_industries",
+        label="新高行业映射",
+        mode="snapshot",
+        fields=[
+            ExtField("symbol", "string", "股票代码"),
+            ExtField("industry", "string", "所属行业"),
+        ],
+    )
+    store = ExtConfigStore(tmp_path)
+    store.upsert(concept)
+    store.upsert(industry)
+    pl.DataFrame(
+        {
+            "symbol": ["300002.SZ"],
+            "concept": ["百日新高;趋势股;人工智能;机器人"],
+        }
+    ).write_parquet(tmp_path / "ext_data" / concept.id / "part.parquet")
+    pl.DataFrame(
+        {
+            "symbol": ["300002.SZ"],
+            "industry": ["信息技术-软件开发-应用软件"],
+        }
+    ).write_parquet(tmp_path / "ext_data" / industry.id / "part.parquet")
+
+    result = build_new_high_clusters(
+        MarketFactRepository(tmp_path),
+        date(2026, 8, 25),
+    )
+
+    assert result["total_stocks"] == 1
+    assert result["coverage_pct"] == {
+        "concept": 100.0,
+        "industry_level1": 100.0,
+        "industry_level2": 100.0,
+    }
+    today_concepts = result["windows"]["1"]["dimensions"]["concept"]
+    assert {row["name"] for row in today_concepts} == {"人工智能", "机器人"}
+    assert {row["weighted_share_pct"] for row in today_concepts} == {50.0}
+    assert result["windows"]["5"]["dimensions"]["industry_level1"][0]["name"] == "信息技术"
+    assert result["windows"]["5"]["dimensions"]["industry_level2"][0]["name"] == "软件开发"
+    assert result["windows"]["5"]["dimensions"]["concept"][0]["status"] == "持续"
+
+    members = build_new_high_cluster_members(
+        MarketFactRepository(tmp_path),
+        date(2026, 8, 25),
+        dimension="concept",
+        window=5,
+        name="人工智能",
+    )
+    assert members["cluster_name"] == "人工智能"
+    assert members["current_count"] == 1
+    assert members["window_count"] == 1
+    assert members["members"] == [
+        {
+            "code": "300002",
+            "name": "新高样本",
+            "pct_chg": 5.0,
+            "current": True,
+            "active_days": 5,
+            "first_seen": "20260819",
+            "last_seen": "20260825",
+        }
+    ]
+
+    app = FastAPI()
+    app.include_router(quantx_data_router)
+    app.state.market_facts = MarketFactRepository(tmp_path)
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/quantx-data/new-high/20260825/members",
+            params={"dimension": "concept", "window": 5, "name": "人工智能"},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["members"][0]["code"] == "300002"
 
 
 def test_review_api_v2_survives_removed_json_and_rejects_retired_v1(tmp_path):

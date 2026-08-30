@@ -3701,7 +3701,28 @@ export interface QuantXReviewDataV2 {
       ebb_risk: { verdict: string; signal_count: number } | null
       themes_pywencai: Array<{ name: string; count: number | null; rank: number | null }>
       themes_ths: Array<{ tag: string; count: number | null; rank: number | null }>
-      new_high: { status: string; stocks: Array<{ code: string; name: string; pct_chg: number | null }> } | null
+      new_high: {
+        status: string
+        stocks: Array<{ code: string; name: string; pct_chg: number | null }>
+        total_stocks?: number
+        coverage_pct?: Partial<Record<'concept' | 'industry_level1' | 'industry_level2', number>>
+        mapping_semantics?: 'latest_ext_snapshot_proxy'
+        windows?: Partial<Record<'1' | '5' | '10' | '20', {
+          valid_days: number
+          date_range: string[]
+          dimensions: Record<'concept' | 'industry_level1' | 'industry_level2', Array<{
+            name: string
+            current_count: number
+            unique_count: number
+            active_days: number
+            average_share_pct: number
+            current_share_pct: number
+            weighted_share_pct: number
+            change_pct: number
+            status: string
+          }>>
+        }>>
+      } | null
     }
     s3: {
       emotion_scores: { market_heat?: number | null; short_term?: number | null; trend?: number | null }
@@ -3765,9 +3786,24 @@ export interface QuantXWindowSignal {
   valid_days: number
   confidence: 'high' | 'medium' | 'low'
   market: { direction: string; tone: string; components: QuantXWindowComponent[] }
-  themes: { mainline: any[]; warming: any[]; cooling: any[] }
-  institution: any
+  themes: {
+    observed_days: number
+    mainline: QuantXWindowTheme[]
+    warming: QuantXWindowTheme[]
+    cooling: QuantXWindowTheme[]
+  }
   sector_flow: any
+}
+
+export interface QuantXWindowTheme {
+  name: string
+  active_days: number
+  persistence_pct: number
+  average_strength: number
+  strength_change: number
+  latest_strength: number
+  source_count: number
+  leaders: Array<{ code: string; name: string }>
 }
 
 export interface QuantXSectorFlowContinuity {
@@ -3778,7 +3814,6 @@ export interface QuantXSectorFlowContinuity {
   direction: string
   industries: any[]
   rule_candidates: any[]
-  core_stocks: any[]
 }
 
 export interface QuantXMultidaySnapshot {
@@ -3793,8 +3828,7 @@ export interface QuantXMultidaySnapshot {
   factor_attribution: Array<{ name: string; count: number }>
   opportunity_radar: { coverage_confidence: Record<string, number>; themes: any[]; sectors: any[]; stocks: any[] }
   sector_flow_continuity: QuantXSectorFlowContinuity
-  institution_continuity: QuantXSectorFlowContinuity
-  data_coverage: { theme_days: number; sector_flow_days: number; institution_days: number; window_days: number }
+  data_coverage: { theme_days: number; sector_flow_days: number; window_days: number }
 }
 
 export interface QuantXAdvancedCard {
@@ -3853,6 +3887,26 @@ export interface QuantXObservability {
   refreshed_at: string
 }
 
+export interface QuantXNewHighClusterMembers {
+  trade_date: string
+  dimension: 'concept' | 'industry_level1' | 'industry_level2'
+  window: 1 | 5 | 10 | 20
+  cluster_name: string
+  valid_days: number
+  current_count: number
+  window_count: number
+  mapping_semantics: 'latest_ext_snapshot_proxy'
+  members: Array<{
+    code: string
+    name: string
+    pct_chg: number | null
+    current: boolean
+    active_days: number
+    first_seen: string
+    last_seen: string
+  }>
+}
+
 export const quantxApi = {
   getCatalog: () =>
     request<CatalogData>(`/api/quantx-data/catalog`),
@@ -3868,6 +3922,9 @@ export const quantxApi = {
 
   getReviewData: (date: string) =>
     request<QuantXReviewData>(`/api/quantx/review/${encodeURIComponent(date)}/data`),
+
+  getNewHighClusterMembers: (date: string, dimension: 'concept' | 'industry_level1' | 'industry_level2', window: 1 | 5 | 10 | 20, name: string) =>
+    request<QuantXNewHighClusterMembers>(`/api/quantx-data/new-high/${encodeURIComponent(date)}/members?dimension=${encodeURIComponent(dimension)}&window=${window}&name=${encodeURIComponent(name)}`),
 
   getTables: (date: string) =>
     request<QuantXDataTables>(`/api/quantx-data/${date}/tables`),

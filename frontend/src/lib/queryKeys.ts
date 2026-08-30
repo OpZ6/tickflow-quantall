@@ -31,6 +31,7 @@ export const QK = {
   quantxMultiday:   (date: string) => ['quantx-multiday', date] as const,
   quantxAdvanced:   (date: string) => ['quantx-advanced', date] as const,
   quantxReview:     (date: string) => ['quantx-review', date] as const,
+  quantxNewHighMembers: (date: string, dimension: string, window: number, name: string) => ['quantx-new-high-members', date, dimension, window, name] as const,
   quantxTables:     (date: string) => ['quantx-tables', date] as const,
   quantxObservability: (date: string) => ['quantx-observability', date] as const,
 

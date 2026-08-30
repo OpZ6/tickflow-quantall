@@ -53,8 +53,8 @@ export function WindowSignalMatrix({ data, active, onChange }: { data: QuantXMul
       })}
     </div>
     <div data-testid="window-theme-structure" className="mt-3 rounded-lg border border-border/70 bg-base/25 p-2.5">
-      <div className="mb-2 flex items-center justify-between"><h3 className="text-xs font-semibold">{active} 日题材结构</h3><span className="text-[10px] text-muted">随所选窗口联动</span></div>
-      <div className="grid gap-2 md:grid-cols-3">{themeGroups.map(([label, rows]) => <section key={label} className="min-w-0 rounded-md border border-border/60 bg-base/40 p-2"><h4 className="mb-1.5 text-[10px] font-semibold text-muted">{label}题材</h4><div className="flex flex-wrap gap-1">{rows.slice(0, 8).map((row: any, index: number) => <span key={`${row.name || row}-${index}`} className="rounded bg-elevated px-1.5 py-0.5 text-[10px]">{row.name || String(row)}</span>)}{!rows.length && <span className="text-[10px] text-muted">暂无</span>}</div></section>)}</div>
+      <div className="mb-2 flex items-center justify-between"><h3 className="text-xs font-semibold">{active} 日题材结构</h3><span className="text-[10px] text-muted">窗口内有效题材 {activeSignal.themes.observed_days} 日</span></div>
+      <div className="grid gap-2 md:grid-cols-3">{themeGroups.map(([label, rows]) => <section key={label} className="min-w-0 rounded-md border border-border/60 bg-base/40 p-2"><h4 className="mb-1.5 text-[10px] font-semibold text-muted">{label}题材</h4><div className="flex flex-wrap gap-1">{rows.slice(0, 8).map(row => <span key={row.name} title={`${row.active_days}/${activeSignal.themes.observed_days} 日 · 均值 ${row.average_strength} · 前后半窗 ${row.strength_change > 0 ? '+' : ''}${row.strength_change}`} className="rounded bg-elevated px-1.5 py-0.5 text-[10px]">{row.name}</span>)}{!rows.length && <span className="text-[10px] text-muted">暂无</span>}</div></section>)}</div>
     </div>
   </Panel>
 }
@@ -131,7 +131,7 @@ export function ThemeLifecyclePanel({ data }: { data: QuantXMultidaySnapshot }) 
 
 export function FactorAttribution({ rows }: { rows: QuantXMultidaySnapshot['factor_attribution'] }) {
   const max = Math.max(1, ...rows.map(row => row.count || 0))
-  return <Panel title="涨停因子归因" hint="同花顺原因标签的确定性计数" testId="factor-attribution"><div className="space-y-2">{rows.slice(0, 10).map(row => <div key={row.name}><div className="mb-0.5 flex justify-between text-xs"><span>{row.name}</span><span className="font-mono text-muted">{row.count}</span></div><div className="h-1.5 rounded bg-base"><div className="h-full rounded bg-accent" style={{ width: `${Math.max(3, row.count / max * 100)}%` }} /></div></div>)}</div></Panel>
+  return <Panel title="同花顺热点题材覆盖" hint="同花顺热点榜题材的覆盖股票数；不是涨停原因标签归因" testId="factor-attribution"><div className="space-y-2">{rows.slice(0, 10).map(row => <div key={row.name}><div className="mb-0.5 flex justify-between text-xs"><span>{row.name}</span><span className="font-mono text-muted">{row.count}</span></div><div className="h-1.5 rounded bg-base"><div className="h-full rounded bg-accent" style={{ width: `${Math.max(3, row.count / max * 100)}%` }} /></div></div>)}</div></Panel>
 }
 
 export function OpportunityRadar({ data }: { data: QuantXMultidaySnapshot['opportunity_radar'] }) {

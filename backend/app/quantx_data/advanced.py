@@ -16,7 +16,6 @@ SCHEMA_VERSION = "tickflow-quantx-advanced-v1"
 CARD_KEYS = (
     "sentiment_phase",
     "liquidity_participation",
-    "risk_transmission",
     "state_transition",
     "sector_diffusion",
     "theme_river",
@@ -176,35 +175,6 @@ def _liquidity_participation(state: pl.DataFrame, liquidity: pl.DataFrame) -> di
         for row in joined.to_dicts()
     ]
     return {"points": points, "amount_mid": _round(amount_mid), "participation_mid": 50.0}
-
-
-def _risk_transmission(state: pl.DataFrame, liquidity: pl.DataFrame, events: pl.DataFrame) -> dict[str, Any]:
-    if state.is_empty():
-        return {}
-    latest = state.sort("trade_date").tail(1).row(0, named=True)
-    liq = liquidity.sort("trade_date").tail(1).row(0, named=True) if not liquidity.is_empty() else {}
-    broken = 0
-    if not events.is_empty() and "event_type" in events.columns:
-        last_day = events["trade_date"].max()
-        broken = events.filter((pl.col("trade_date") == last_day) & (pl.col("event_type") == "broken_board")).height
-    limit_up = int(latest.get("limit_up_count") or 0)
-    limit_down = int(latest.get("limit_down_count") or 0)
-    nodes = [
-        {"name": "流动性集中", "value": _round(liq.get("top5pct_amount_ratio_pct")) or 0},
-        {"name": "下跌扩散", "value": _round(100 - float(latest.get("up_ratio_pct") or 0)) or 0},
-        {"name": "炸板亏钱效应", "value": round(100 * broken / max(limit_up + broken, 1), 1)},
-        {"name": "跌停压力", "value": limit_down},
-        {"name": "梯队承接", "value": _round(latest.get("advance_rate_pct")) or 0},
-        {"name": "市场热度", "value": _round(latest.get("market_heat_score")) or 0},
-    ]
-    links = [
-        {"source": "流动性集中", "target": "下跌扩散"},
-        {"source": "下跌扩散", "target": "炸板亏钱效应"},
-        {"source": "跌停压力", "target": "炸板亏钱效应"},
-        {"source": "炸板亏钱效应", "target": "梯队承接"},
-        {"source": "梯队承接", "target": "市场热度"},
-    ]
-    return {"nodes": nodes, "links": links, "trade_date": str(latest["trade_date"])}
 
 
 def _sector_diffusion(frame: pl.DataFrame) -> dict[str, Any]:
@@ -526,14 +496,16 @@ def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
         return {}
     views: dict[str, Any] = {}
     scopes = (
-        ("industry_level1", "同花顺一级", 32),
-        ("industry_level2", "同花顺二级", 50),
+        ("industry_level1", "同花顺一级"),
+        ("industry_level2", "同花顺二级"),
     )
-    for dimension, label, limit in scopes:
+    for dimension, label in scopes:
         scoped = daily.filter(pl.col("dimension") == dimension)
         if scoped.is_empty():
             continue
-        counts = scoped.group_by("industry").len().sort("len", descending=True).head(limit)
+        counts = scoped.group_by("industry").len().sort(
+            ["len", "industry"], descending=[True, False]
+        )
         names = counts["industry"].to_list()
         pivot = (
             scoped.filter(pl.col("industry").is_in(names))
@@ -541,9 +513,10 @@ def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
             .sort("date")
         )
         matrix = []
-        for left in names:
+        pairs = []
+        for left_index, left in enumerate(names):
             row = []
-            for right in names:
+            for right_index, right in enumerate(names):
                 if left == right:
                     row.append(1.0)
                     continue
@@ -555,13 +528,32 @@ def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
                     if pair.height >= 3
                     else None
                 )
-                row.append(_round(corr, 3))
+                rounded = _round(corr, 3)
+                row.append(rounded)
+                if right_index > left_index and rounded is not None:
+                    pairs.append(
+                        {
+                            "left": left,
+                            "right": right,
+                            "correlation": rounded,
+                            "sample_days": pair.height,
+                        }
+                    )
             matrix.append(row)
+        highest = sorted(
+            pairs,
+            key=lambda item: (-item["correlation"], item["left"], item["right"]),
+        )[:8]
+        lowest = sorted(
+            pairs,
+            key=lambda item: (item["correlation"], item["left"], item["right"]),
+        )[:8]
         views[dimension] = {
             "label": label,
             "industries": names,
             "matrix": matrix,
             "sample_days": pivot.height,
+            "pair_rankings": {"highest": highest, "lowest": lowest},
         }
     if not views:
         return {}
@@ -599,20 +591,35 @@ def _mainline_waterfall(root: Path, end: date) -> dict[str, Any]:
             for column in weights
         ]
     )
-    leader = latest.sort("rank").row(0, named=True)
-    components = [
-        {
-            "name": label,
-            "value": _round(100 * weight * float(leader[f"_{column}_norm"] or 0)),
-            "raw": leader[column],
-        }
-        for column, (label, weight) in weights.items()
-    ]
+    mainlines = []
+    for row in latest.sort("rank").to_dicts():
+        components = [
+            {
+                "name": label,
+                "value": _round(
+                    100 * weight * float(row[f"_{column}_norm"] or 0)
+                ),
+                "raw": row[column],
+            }
+            for column, (label, weight) in weights.items()
+        ]
+        mainlines.append(
+            {
+                "focus": row["member"],
+                "rank": int(row["rank"]),
+                "score": _round(row["score"]),
+                "leader_symbol": row.get("leader_symbol"),
+                "components": components,
+            }
+        )
+    leader = mainlines[0]
     return {
         "trade_date": str(latest_day),
-        "focus": leader["member"],
-        "score": _round(leader["score"]),
-        "components": components,
+        # Compatibility fields keep existing consumers on the first-ranked mainline.
+        "focus": leader["focus"],
+        "score": leader["score"],
+        "components": leader["components"],
+        "mainlines": mainlines,
     }
 
 
@@ -722,10 +729,10 @@ def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> d
     returns = _stock_returns(root, trade_date)
     industry_daily = _industry_daily_returns(returns, repo)
 
+    mainline = _mainline_waterfall(root, trade_date)
     builders = {
         "sentiment_phase": (_sentiment_phase(state), state.height),
         "liquidity_participation": (_liquidity_participation(state, liquidity), min(state.height, liquidity.height)),
-        "risk_transmission": (_risk_transmission(state, liquidity, events), 1 if not state.is_empty() else 0),
         "state_transition": (_state_transition(regime), regime.height),
         "sector_diffusion": (_sector_diffusion(sectors), sectors.height),
         "theme_river": (_theme_river(themes), themes.height),
@@ -735,14 +742,21 @@ def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> d
         "advance_decline": (_advance_decline(root, breadth, trade_date), breadth.height),
         "turnover_lorenz": (_gini_lorenz(returns.filter(pl.col("date") == trade_date)["amount"].drop_nulls().to_list()) if not returns.is_empty() else {}, returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
         "industry_correlation": (_industry_correlation(industry_daily), industry_daily.height),
-        "mainline_waterfall": (_mainline_waterfall(root, trade_date), 1),
+        "mainline_waterfall": (mainline, len(mainline.get("mainlines", []))),
         "theme_ladder_sunburst": (_sunburst(ladder, trade_date), ladder.filter(pl.col("trade_date") == trade_date).height if not ladder.is_empty() else 0),
         "rps_rotation_clock": (_rotation_clock(industry_daily), industry_daily.height),
         "turnover_return_density": (_density(returns, trade_date), returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
     }
-    membership_note = "行业收益按当前行业成分回看历史计算。越接近当前日期越可靠"
+    industry_membership_note = "行业收益按当前行业成分回看历史计算,不是历史时点成分;越接近当前日期越可靠。"
+    mainline_membership_note = "主线历史按当前概念成分回看历史计算,不是历史时点成分;越接近当前日期越可靠。"
     for key, (data, rows) in builders.items():
-        note = membership_note if key in {"industry_correlation", "rps_rotation_clock"} else None
+        note = (
+            industry_membership_note
+            if key in {"industry_correlation", "rps_rotation_clock"}
+            else mainline_membership_note
+            if key == "mainline_waterfall"
+            else None
+        )
         cards[key] = _card(data, rows=rows, note=note)
     available = sum(card["status"] == "ok" for card in cards.values())
     return {

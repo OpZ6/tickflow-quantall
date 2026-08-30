@@ -11,6 +11,7 @@ from app.quantx_data.advanced import (
     _detect_ad_divergences,
     _gini_lorenz,
     _industry_correlation,
+    _mainline_waterfall,
     _promotion_funnel,
     _rotation_clock,
     _sector_diffusion,
@@ -224,6 +225,15 @@ def test_industry_correlation_exposes_level_views() -> None:
 
     assert set(result["views"]) == {"industry_level1", "industry_level2"}
     assert set(result["views"]["industry_level2"]["industries"]) == {"二级甲", "二级乙"}
+    rankings = result["views"]["industry_level2"]["pair_rankings"]
+    assert len(rankings["highest"]) == 1
+    assert {rankings["highest"][0]["left"], rankings["highest"][0]["right"]} == {
+        "二级甲",
+        "二级乙",
+    }
+    assert rankings["highest"][0]["correlation"] == 1.0
+    assert rankings["highest"][0]["sample_days"] == 5
+    assert rankings["lowest"] == rankings["highest"]
 
 
 def test_rotation_clock_uses_cross_sectional_rps() -> None:
@@ -246,12 +256,49 @@ def test_rotation_clock_uses_cross_sectional_rps() -> None:
     assert max(row["momentum"] for row in result["points"]) > 0
 
 
-def test_snapshot_has_exactly_the_sixteen_supported_cards(tmp_path) -> None:
+def test_mainline_waterfall_exposes_every_ranked_mainline(tmp_path) -> None:
+    target = tmp_path / "mainline_history"
+    target.mkdir()
+    pl.DataFrame(
+        {
+            "date": [date(2026, 8, 28)] * 3,
+            "kind": ["concept"] * 3,
+            "member": ["穿戴设备", "机器人", "消费电子"],
+            "limit_up_count": [9, 7, 5],
+            "max_boards": [4, 6, 3],
+            "rungs_filled": [3, 4, 2],
+            "ge2_count": [4, 5, 2],
+            "leader_symbol": ["A", "B", "C"],
+            "score": [88.0, 82.0, 55.0],
+            "rank": [1, 2, 3],
+        }
+    ).write_parquet(target / "part.parquet")
+
+    result = _mainline_waterfall(tmp_path, date(2026, 8, 28))
+
+    assert result["focus"] == "穿戴设备"
+    assert [row["focus"] for row in result["mainlines"]] == [
+        "穿戴设备",
+        "机器人",
+        "消费电子",
+    ]
+    assert result["mainlines"][1]["leader_symbol"] == "B"
+    assert result["mainlines"][1]["rank"] == 2
+    assert {row["name"] for row in result["mainlines"][1]["components"]} == {
+        "涨停广度",
+        "连板高度",
+        "梯队完整",
+        "二板以上",
+    }
+
+
+def test_snapshot_has_exactly_the_fifteen_supported_cards(tmp_path) -> None:
     snapshot = build_advanced_snapshot(tmp_path, date(2026, 8, 28))
 
     assert snapshot["schema_version"] == "tickflow-quantx-advanced-v1"
     assert set(snapshot["cards"]) == set(CARD_KEYS)
-    assert len(snapshot["cards"]) == 16
+    assert len(snapshot["cards"]) == 15
+    assert "risk_transmission" not in snapshot["cards"]
     assert "cross_day_survival_sankey" not in snapshot["cards"]
     assert "leader_handoff_timeline" not in snapshot["cards"]
     assert all(card["status"] == "unavailable" for card in snapshot["cards"].values())

@@ -62,7 +62,17 @@ API handler 保持薄层：校验参数、调用 Service、映射响应。新增
 
 单日 QuantX V2 必须额外区分字段来源：可复用数值来自 Repository，页面专用摘要进入版本化 ViewBuilder，标题和布局进入前端常量。V2 从 `QuantXReviewResponseV2.empty(trade_date)` 构建，禁止深拷贝展示缓存；新增前端消费字段必须通过 `scripts/audit_quantx_review_consumers.py`，并在 schema endpoint `GET /api/quantx/review/schema/v2` 中声明来源、单位、空值和排序。默认响应的 fallback 和 implicit cache 必须始终为空。
 
-QuantX 高级图谱由 `app.quantx_data.advanced.build_advanced_snapshot()` 在服务层一次性构建，前端只通过 `GET /api/quantx-data/advanced/{date}` 发起一个共享查询。当前契约固定包含 16 张数据卡片；每张卡必须返回 `status`、`rows`、`data`，缺数据时显式返回 `unavailable`，不得生成模拟值。行业相关性和 RPS 轮动使用当前行业成分回看历史，响应必须携带口径提示。跨日队列存活 Sankey 和龙头交接时间轴不属于当前契约。
+QuantX 高级图谱由 `app.quantx_data.advanced.build_advanced_snapshot()` 在服务层一次性构建，前端只通过 `GET /api/quantx-data/advanced/{date}` 发起一个共享查询。当前契约固定包含 15 张数据卡片；每张卡必须返回 `status`、`rows`、`data`，缺数据时显式返回 `unavailable`，不得生成模拟值。固定连线但没有统计因果依据的“风险传导链”不属于当前契约。行业相关性和 RPS 轮动使用当前行业成分回看历史，主线强度历史使用当前概念成分回看历史；响应和页面必须持续展示“不是历史时点成分、越接近当前日期越可靠”的口径提示。市场状态转移矩阵来自 TickFlow Regime 四维模型，顶部市场热度、短线情绪和趋势情绪来自 QuantX `market_state_daily`，两套分值与状态不得直接互换。跨日队列存活 Sankey 和龙头交接时间轴不属于当前契约。
+
+多日快照中的 `factor_attribution` 当前保存同花顺热点榜题材及其覆盖股票数，并非涨停个股原因标签归因。前端必须使用“同花顺热点题材覆盖”等准确名称；只有在输入事实明确包含逐只涨停股的原因标签并完成标准化后，才能恢复“涨停因子归因”名称。
+
+主线强度贡献瀑布必须发布目标交易日全部已排名主线及各自的涨停广度、连板高度、梯队完整度和二板以上贡献。首名主线兼容字段只用于默认选中，前端必须提供主线选择器，不能把首名主线呈现为当日唯一主线。
+
+行业收益相关性矩阵必须包含当前映射中具备足够收益样本的全部一级、二级行业，不得用固定数量截断二级行业。行业较多时由前端双轴缩放控制可视窗口。每个层级同时返回去除对角线和重复组合后的最高、最低 Pearson 相关行业组合排行，并显示样本交易日数；相关性不得表述为因果或收益预测。
+
+QuantX 多日快照 `tickflow-quantx-multiday-v3` 只保留 `sector_flow_continuity` 作为行业资金与规则候选连续性的权威字段，其中候选集合统一为 `rule_candidates`；不再发布内容相同的 `institution_continuity`、`institution`、`institution_days` 或 `core_stocks` 兼容别名。5/10/20 日题材结构必须分别使用所选交易日窗口聚合：主线要求在窗口有效题材日中出现率不低于 60%，升温和降温要求前后半窗归一化强度差至少为正/负 8 分，不能复用最后一个交易日的生命周期标签。
+
+百日新高卡片的权威个股集合来自 `screening_candidate_daily(candidate_type=new_high_100d)`，由 `app.quantx_data.new_high_clusters` 聚合后进入 `sections.s2.new_high`。页面主视图展示题材概念、申万一级和申万二级的 1/5/10/20 交易日聚类；点击聚类后，通过 `GET /api/quantx-data/new-high/{trade_date}/members` 按需读取完整成员证据，区分今日新高与窗口出现，并提供活跃天数、首次及最近出现日，禁止把所有成员重复塞入单日 Review 响应。概念标签须过滤“百日新高、趋势股、昨日、高换手”等市场属性标签；当日题材占比按一股多标签 `1/N` 加权。当前 `ext_data` 仅提供最新成分快照，因此历史窗口的行业与概念归属属于 `latest_ext_snapshot_proxy`，API 和页面必须显式提示，不能表述为历史时点成分。若未来接入带日期的成分表，应在领域 Service 内切换 point-in-time 映射，前端契约保持不变。
 
 ## 3. 新分析示例路径
 
