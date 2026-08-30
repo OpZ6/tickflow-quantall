@@ -70,7 +70,9 @@ def main() -> None:
         assert page.get_by_role(
             "heading", name="百日新高扩散聚类", exact=True
         ).count() == 1
-        assert card.get_by_test_id("new-high-cluster-row").count() >= 3
+        ranking = card.get_by_test_id("new-high-cluster-ranking")
+        ranking.wait_for()
+        assert 3 <= card.get_by_test_id("new-high-cluster-row").count() <= 10
 
         dimension_results = []
         for label in ("题材概念", "申万一级", "申万二级"):
@@ -88,6 +90,12 @@ def main() -> None:
         assert len(set(window_results)) == 4
 
         card.get_by_role("tab", name="5日", exact=True).click()
+        toggle_all = card.get_by_test_id("new-high-toggle-all")
+        if toggle_all.count():
+            collapsed_count = card.get_by_test_id("new-high-cluster-row").count()
+            toggle_all.click()
+            assert card.get_by_test_id("new-high-cluster-row").count() > collapsed_count
+            toggle_all.click()
         first_cluster = card.get_by_test_id("new-high-cluster-row").first
         first_cluster.click()
         details = card.get_by_test_id("new-high-member-details")

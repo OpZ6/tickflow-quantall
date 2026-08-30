@@ -29,6 +29,7 @@ import {
   ThemeLifecyclePanel,
   TradingCalendarGrid,
   WindowSignalMatrix,
+  type CalendarScoreKey,
   type WindowSize,
 } from '@/components/quantx/MultidayPanels'
 import { AdvancedPanels, type AdvancedCardLayout } from '@/components/quantx/AdvancedPanels'
@@ -233,7 +234,8 @@ function DecisionRail({ data }: { data: QuantXReviewData }) {
   )
 }
 
-function EmotionCalendar({ data, records, multiday, date, onDate }: { data: QuantXReviewData; records: Array<{ trade_date: string; metrics: Record<string, number | string | boolean | null> }>; multiday?: QuantXMultidaySnapshot; date: string; onDate: (date: string) => void }) {
+function EmotionCalendar({ data, records, multiday, date }: { data: QuantXReviewData; records: Array<{ trade_date: string; metrics: Record<string, number | string | boolean | null> }>; multiday?: QuantXMultidaySnapshot; date: string }) {
+  const [calendarScore, setCalendarScore] = useState<CalendarScoreKey>('market_heat_score')
   const dates = records.slice(-20).map(row => row.trade_date)
   const scores = {
     heat: records.slice(-20).map(row => num(row.metrics.market_heat_score) ?? 0),
@@ -255,8 +257,8 @@ function EmotionCalendar({ data, records, multiday, date, onDate }: { data: Quan
         <EmotionTrendChart dates={dates} scores={scores} height={220} />
       </div>
       <div className="min-w-0 border-t border-border pt-2 xl:border-l xl:border-t-0 xl:pl-3 xl:pt-0">
-        <div className="mb-2 flex items-center justify-between"><div><h3 className="text-xs font-semibold">交易日情绪分数</h3><p className="text-[10px] text-muted">点击日期切换整页；颜色对应市场热度</p></div><CalendarDays className="h-4 w-4 text-accent" /></div>
-        {multiday ? <TradingCalendarGrid rows={multiday.calendar} selectedDate={date} onSelect={onDate} compact /> : <div className="py-16 text-center text-xs text-muted">该日期无交易日历快照</div>}
+        <div className="mb-2 flex flex-wrap items-center gap-2"><div className="mr-auto"><h3 className="text-xs font-semibold">交易日情绪分数</h3><p className="text-[10px] text-muted">日期只读 · 颜色和数值对应当前情绪口径</p></div><SmallTabs values={[["market_heat_score", '总情绪'], ["trend_sentiment_score", '波段情绪'], ["short_term_sentiment_score", '短线情绪']]} active={calendarScore} onChange={setCalendarScore} label="交易日情绪口径" /><CalendarDays className="h-4 w-4 text-accent" /></div>
+        {multiday ? <TradingCalendarGrid rows={multiday.calendar} selectedDate={date} scoreKey={calendarScore} compact /> : <div className="py-16 text-center text-xs text-muted">该日期无交易日历快照</div>}
       </div>
     </div>
   )
@@ -362,6 +364,7 @@ function NewHighPanel({ date, data }: { date: string; data: QuantXReviewData['se
   const [dimension, setDimension] = useState<'concept' | 'industry_level1' | 'industry_level2'>('concept')
   const [window, setWindow] = useState<1 | 5 | 10 | 20>(5)
   const [expandedName, setExpandedName] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
   const memberQuery = useQuery({
     queryKey: QK.quantxNewHighMembers(date, dimension, window, expandedName || ''),
     queryFn: () => quantxApi.getNewHighClusterMembers(date, dimension, window, expandedName || ''),
@@ -369,7 +372,7 @@ function NewHighPanel({ date, data }: { date: string; data: QuantXReviewData['se
     staleTime: 30_000,
     retry: false,
   })
-  useEffect(() => setExpandedName(null), [dimension, window])
+  useEffect(() => { setExpandedName(null); setShowAll(false) }, [dimension, window])
   if (!data) return <div data-testid="quantx-new-high-unavailable" className="rounded border border-orange-500/30 bg-orange-500/5 px-3 py-8 text-center text-xs text-orange-300">本日百日新高事实尚未发布，请刷新数据后重试</div>
   if (data.status !== 'ok') return <div data-testid="quantx-new-high-unavailable" className="rounded border border-orange-500/30 bg-orange-500/5 px-3 py-8 text-center text-xs text-orange-300">百日新高来源暂不可用，未用零值替代</div>
   const total = data.total_stocks ?? data.stocks.length
@@ -399,15 +402,23 @@ function NewHighPanel({ date, data }: { date: string; data: QuantXReviewData['se
       <div className="rounded border border-border/70 bg-base/35 px-2.5 py-2"><span className="text-[9px] text-muted">最强聚类</span><b className="mt-0.5 block truncate text-sm text-foreground" title={top?.name}>{top?.name || '--'}</b></div>
       <div className="rounded border border-border/70 bg-base/35 px-2.5 py-2"><span className="text-[9px] text-muted">窗口活跃</span><b className="mt-0.5 block font-mono text-base text-foreground">{top?.active_days ?? 0}<small className="ml-1 text-[9px] font-normal text-muted">/{selected?.valid_days ?? 0}日</small></b></div>
     </div>
-    {rows.length ? <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-3">
-      {rows.slice(0, 15).map((row, index) => {
+    {rows.length ? <div data-testid="new-high-cluster-ranking" className="overflow-hidden rounded-md border border-border/70 bg-base/15">
+      <div className="hidden grid-cols-[32px_minmax(140px,1.4fr)_64px_110px_74px_120px_76px] items-center gap-2 border-b border-border/70 bg-elevated/70 px-2.5 py-1.5 text-[9px] text-muted md:grid">
+        <span>排名</span><span>聚类</span><span>状态</span><span>个股覆盖</span><span>活跃</span><span>新高占比</span><span className="text-right">趋势</span>
+      </div>
+      {(showAll ? rows : rows.slice(0, 10)).map((row, index) => {
         const share = window === 1 ? row.weighted_share_pct : row.average_share_pct
-        return <button type="button" data-testid="new-high-cluster-row" aria-expanded={expandedName === row.name} onClick={() => setExpandedName(current => current === row.name ? null : row.name)} key={row.name} className={cn('min-w-0 cursor-pointer rounded border px-2.5 py-2 text-left transition-colors hover:border-accent/60 hover:bg-accent/5', expandedName === row.name ? 'border-accent/60 bg-accent/5' : 'border-border/60 bg-base/25')}>
-          <div className="flex min-w-0 items-center gap-1.5"><span className="w-4 shrink-0 text-[9px] text-muted">{index + 1}</span><b className="min-w-0 flex-1 truncate text-[11px]" title={row.name}>{row.name}</b><span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[9px]', statusTone[row.status] || 'bg-elevated text-muted')}>{row.status}</span></div>
-          <div className="mt-1.5 flex items-center gap-2"><div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-elevated"><div className="h-full rounded-full bg-gradient-to-r from-accent/60 to-orange-400" style={{ width: `${Math.max(2, Math.min(100, share))}%` }} /></div><span className="w-12 shrink-0 text-right font-mono text-[10px]">{share.toFixed(1)}%</span></div>
-          <div className="mt-1 flex justify-between gap-2 text-[9px] text-muted"><span>今日 {row.current_count} · 窗口 {row.unique_count} 只 · 点击看个股</span><span className={cn('font-mono', row.change_pct > 0 ? 'text-red-300' : row.change_pct < 0 ? 'text-green-300' : '')}>{row.change_pct > 0 ? '+' : ''}{row.change_pct.toFixed(1)}pct</span></div>
+        return <button type="button" data-testid="new-high-cluster-row" aria-expanded={expandedName === row.name} onClick={() => setExpandedName(current => current === row.name ? null : row.name)} key={row.name} className={cn('grid w-full min-w-0 cursor-pointer grid-cols-[24px_minmax(0,1fr)_64px] items-center gap-2 border-b border-border/50 px-2.5 py-2 text-left transition-colors last:border-b-0 hover:bg-accent/5 md:grid-cols-[32px_minmax(140px,1.4fr)_64px_110px_74px_120px_76px]', expandedName === row.name && 'bg-accent/10 ring-1 ring-inset ring-accent/50')}>
+          <span className="font-mono text-[9px] text-muted">{index + 1}</span>
+          <div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><b className="truncate text-[11px]" title={row.name}>{row.name}</b><span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[9px] md:hidden', statusTone[row.status] || 'bg-elevated text-muted')}>{row.status}</span></div><div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted md:hidden"><span className="whitespace-nowrap">当 {row.current_count} / 窗 {row.unique_count}只</span><span className="whitespace-nowrap">活 {row.active_days}/{selected?.valid_days ?? 0}日</span><span className={cn('whitespace-nowrap font-mono', row.change_pct > 0 ? 'text-red-300' : row.change_pct < 0 ? 'text-green-300' : '')}>{row.change_pct > 0 ? '+' : ''}{row.change_pct.toFixed(1)}pct</span></div></div>
+          <span className={cn('hidden w-fit rounded px-1.5 py-0.5 text-[9px] md:inline', statusTone[row.status] || 'bg-elevated text-muted')}>{row.status}</span>
+          <span className="hidden text-[10px] text-muted md:inline">今日 <b className="font-mono text-foreground">{row.current_count}</b> · 窗口 <b className="font-mono text-foreground">{row.unique_count}</b>只</span>
+          <span className="hidden font-mono text-[10px] text-muted md:inline">{row.active_days}/{selected?.valid_days ?? 0}日</span>
+          <div className="min-w-0"><div className="text-right font-mono text-[10px] font-semibold">{share.toFixed(1)}%</div><div className="mt-1 h-1 overflow-hidden rounded-full bg-elevated"><div className="h-full rounded-full bg-gradient-to-r from-accent/70 to-orange-400" style={{ width: `${Math.max(2, Math.min(100, share))}%` }} /></div></div>
+          <span className={cn('hidden text-right font-mono text-[10px] md:inline', row.change_pct > 0 ? 'text-red-300' : row.change_pct < 0 ? 'text-green-300' : 'text-muted')}>{row.change_pct > 0 ? '+' : ''}{row.change_pct.toFixed(1)}pct</span>
         </button>
       })}
+      {rows.length > 10 && <button type="button" data-testid="new-high-toggle-all" aria-expanded={showAll} onClick={() => setShowAll(value => !value)} className="w-full cursor-pointer border-t border-border/70 bg-base/30 py-1.5 text-center text-[10px] text-muted transition-colors hover:bg-elevated hover:text-foreground">{showAll ? '收起至前 10 项' : `展开全部 ${rows.length} 项`}</button>}
     </div> : <div className="rounded border border-border/60 bg-base/25 py-8 text-center text-xs text-muted">当前映射未形成{dimensionLabels[dimension]}聚类</div>}
     {expandedName && <section data-testid="new-high-member-details" className="overflow-hidden rounded-md border border-accent/40 bg-base/35">
       <header className="flex flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2"><b className="text-xs text-foreground">{expandedName} · 个股明细</b>{memberQuery.data && <span className="text-[9px] text-muted">今日 {memberQuery.data.current_count} 只 · {window}日窗口 {memberQuery.data.window_count} 只</span>}<button type="button" onClick={() => setExpandedName(null)} className="ml-auto cursor-pointer rounded border border-border px-2 py-1 text-[9px] text-muted hover:text-foreground">收起</button></header>
@@ -436,13 +447,13 @@ function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthL
   const { s1, s2, s3, s4, s5 } = review.sections
   if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel></div>
   if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /></>}<Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} columns={['source', 'name', 'count', 'rank']} /></Panel><Panel title="百日新高扩散聚类" hint="看哪些板块正批量创出阶段新高" className="xl:col-span-2"><NewHighPanel date={review.trade_date} data={s2.new_high} /></Panel></div>
-  if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel><Panel title="连板详细记录" className="xl:col-span-2"><GenericRows rows={s3.ladder_detail} columns={['code', 'name', 'limit_times', 'theme_name', 'turnover_pct', 'amount_yi']} /></Panel></div>
+  if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel></div>
   if (tab === 'flow') return <div data-testid="quantx-capital-workspace" className="grid gap-3">
     <div data-testid="quantx-capital-breadth-row" className="grid gap-3 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
-      <Panel testId="quantx-capital-ecosystem" title="行业资金分布" hint="行业涨跌与净流入的面积、方向和强弱结构" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><SectorTreemapChart data={s4.sector_treemap} height={650} /></Panel>
+      <Panel testId="quantx-capital-ecosystem" title="行业资金分布" hint="行业涨跌与净流入的面积、方向和强弱结构" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><SectorTreemapChart data={s4.sector_treemap} height={750} /></Panel>
       <Panel testId="quantx-sector-breadth" title={`申万${breadthLevel === 1 ? '一级' : '二级'}行业均线宽度`} hint={`${breadth.length} 个行业 · 按 MA20 强度排序`} icon={<Gauge className="h-3.5 w-3.5" />} actions={<SmallTabs values={[[1, '一级'], [2, '二级']]} active={breadthLevel} onChange={onBreadthLevel} label="行业层级" />} className="xl:[grid-column:span_7/span_7]">
         <div data-testid="quantx-sector-breadth-legend" className="mb-2 grid grid-cols-2 gap-1 rounded border border-border/60 bg-base/35 p-2 text-[9px] sm:grid-cols-4"><span><b className="text-foreground">MA5</b><small className="ml-1 text-muted">站上5日均线占比</small></span><span><b className="text-foreground">MA10</b><small className="ml-1 text-muted">站上10日均线占比</small></span><span><b className="text-foreground">MA20</b><small className="ml-1 text-muted">站上20日均线占比</small></span><span><b className="text-foreground">MA60</b><small className="ml-1 text-muted">站上60日均线占比</small></span></div>
-        <div data-testid="quantx-sector-breadth-scroll" className="max-h-[610px] overflow-y-auto overflow-x-hidden rounded border border-border/50 bg-base/20"><SectorBreadthHeatmap data={breadth} height={Math.max(560, breadth.length * 20 + 76)} /></div>
+        <div data-testid="quantx-sector-breadth-scroll" className={cn('rounded border border-border/50 bg-base/20', breadthLevel === 1 ? 'overflow-x-clip' : 'max-h-[720px] overflow-y-auto overflow-x-hidden')}><SectorBreadthHeatmap data={breadth} height={breadthLevel === 1 ? Math.max(680, breadth.length * 20 + 76) : Math.max(720, breadth.length * 20 + 76)} /></div>
       </Panel>
     </div>
     <div className="grid gap-3 xl:grid-cols-2"><Panel title="行业流入 / 流出"><SectorFlowChart topIn={s4.sector_flow.top_in} topOut={s4.sector_flow.top_out} /></Panel><Panel title="涨跌幅 × 净流入"><SectorScatterChart data={s4.sector_treemap} /></Panel></div>
@@ -528,7 +539,7 @@ export function QuantXDashboard() {
 
         <section data-testid="quantx-deep-workspace" className="space-y-3">
           <AnalysisDomainSection testId="quantx-domain-market" title="市场状态与历史环境" hint="识别当前情绪阶段、历史异常与市场广度变化" sequence="当前状态 → 历史趋势 → 结构解释" icon={<Activity className="h-4 w-4" />}>
-            <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="QuantX market_state_daily 情绪分 · 不等同于 Regime 状态矩阵" icon={<Activity className="h-3.5 w-3.5" />}><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
+            <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="QuantX market_state_daily 情绪分 · 不等同于 Regime 状态矩阵" icon={<Activity className="h-3.5 w-3.5" />}><EmotionCalendar data={review} records={records} multiday={multiday} date={date} /></Panel>
             <AdvancedPanels snapshot={advancedQuery.data} loading={advancedQuery.isLoading} error={advancedQuery.error} cardKeys={['sentiment_phase', 'state_transition', 'anomaly_calendar', 'advance_decline']} cardLayout={DOMAIN_ADVANCED_LAYOUTS.market} flat />
             <div data-testid="quantx-deep-market"><DeepSection tab="market" review={review} multiday={multiday} breadth={breadth} breadthLevel={breadthLevel} onBreadthLevel={setBreadthLevel} /></div>
           </AnalysisDomainSection>

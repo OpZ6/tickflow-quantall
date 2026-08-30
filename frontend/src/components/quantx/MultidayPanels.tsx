@@ -4,6 +4,13 @@ import type { QuantXMultidaySnapshot, QuantXWindowComponent } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
 export type WindowSize = 5 | 10 | 20
+export type CalendarScoreKey = 'market_heat_score' | 'trend_sentiment_score' | 'short_term_sentiment_score'
+
+const CALENDAR_SCORE_LABELS: Record<CalendarScoreKey, string> = {
+  market_heat_score: '总情绪',
+  trend_sentiment_score: '波段情绪',
+  short_term_sentiment_score: '短线情绪',
+}
 
 export function Panel({ title, icon, hint, children, testId }: { title: string; icon?: React.ReactNode; hint?: string; children: React.ReactNode; testId?: string }) {
   return <section data-testid={testId} className="rounded-xl border border-border bg-elevated/25 p-4">
@@ -59,16 +66,19 @@ export function WindowSignalMatrix({ data, active, onChange }: { data: QuantXMul
   </Panel>
 }
 
-export function TradingCalendarGrid({ rows, selectedDate, onSelect, compact = false }: { rows: QuantXMultidaySnapshot['calendar']; selectedDate: string; onSelect: (date: string) => void; compact?: boolean }) {
+export function TradingCalendarGrid({ rows, selectedDate, onSelect, compact = false, scoreKey = 'market_heat_score' }: { rows: QuantXMultidaySnapshot['calendar']; selectedDate: string; onSelect?: (date: string) => void; compact?: boolean; scoreKey?: CalendarScoreKey }) {
   return (
     <div data-testid="quantx-emotion-calendar-grid" className={cn('grid grid-cols-5 gap-1.5', !compact && 'sm:grid-cols-10')}>
       {rows.slice(-30).map(row => {
-        const heat = Number(row.market_heat_score ?? 0)
-        const background = heat >= 70 ? 'border-red-400/70 bg-red-500/40 text-red-50' : heat >= 50 ? 'border-orange-400/65 bg-orange-500/35 text-orange-50' : heat >= 35 ? 'border-sky-400/60 bg-sky-500/30 text-sky-50' : 'border-slate-400/55 bg-slate-600/45 text-slate-50'
-        return <button key={row.trade_date} aria-label={`选择交易日 ${row.trade_date}`} onClick={() => onSelect(row.trade_date)} className={cn('cursor-pointer rounded border px-1 text-center shadow-sm transition-colors hover:brightness-110', compact ? 'py-1' : 'py-2', background, selectedDate === row.trade_date && 'ring-2 ring-accent ring-offset-1 ring-offset-base')}>
+        const score = Number(row[scoreKey] ?? 0)
+        const background = score >= 70 ? 'border-red-400/70 bg-red-500/40 text-red-50' : score >= 50 ? 'border-orange-400/65 bg-orange-500/35 text-orange-50' : score >= 35 ? 'border-sky-400/60 bg-sky-500/30 text-sky-50' : 'border-slate-400/55 bg-slate-600/45 text-slate-50'
+        const content = <>
           <div className="font-mono text-[10px] opacity-80">{row.trade_date.slice(4, 6)}-{row.trade_date.slice(6)}</div>
-          <div className="text-base font-bold">{row.market_heat_score ?? '--'}</div>
-        </button>
+          <div className="text-base font-bold">{row[scoreKey] ?? '--'}</div>
+        </>
+        const className = cn('rounded border px-1 text-center shadow-sm', compact ? 'py-1' : 'py-2', background, selectedDate === row.trade_date && 'ring-2 ring-accent ring-offset-1 ring-offset-base')
+        if (!onSelect) return <div key={row.trade_date} data-testid={`quantx-emotion-day-${row.trade_date}`} data-score-key={scoreKey} aria-label={`${row.trade_date} ${CALENDAR_SCORE_LABELS[scoreKey]} ${row[scoreKey] ?? '--'}`} className={className}>{content}</div>
+        return <button key={row.trade_date} type="button" aria-label={`选择交易日 ${row.trade_date}`} onClick={() => onSelect(row.trade_date)} className={cn(className, 'cursor-pointer transition-colors hover:brightness-110')}>{content}</button>
       })}
     </div>
   )

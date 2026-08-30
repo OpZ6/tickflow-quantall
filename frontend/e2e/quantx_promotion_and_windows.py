@@ -141,6 +141,7 @@ def main() -> None:
         assert page.locator('[data-testid="window-statistics"]').count() == 0
         assert page.get_by_role("heading", name="核心个股", exact=True).count() == 0
         assert page.get_by_role("heading", name="连续规则候选", exact=True).count() == 1
+        assert page.get_by_role("heading", name="连板详细记录", exact=True).count() == 0
         assert page.get_by_test_id("quantx-advanced-risk_transmission").count() == 0
         assert page.get_by_role("heading", name="同花顺热点题材覆盖", exact=True).count() == 1
         expected_domains = [
@@ -196,6 +197,38 @@ def main() -> None:
         assert "两套分值与状态不可直接互换" in page.get_by_test_id(
             "quantx-state-transition-guide"
         ).inner_text()
+        emotion_calendar = page.get_by_test_id("quantx-emotion-calendar")
+        calendar_grid = emotion_calendar.get_by_test_id("quantx-emotion-calendar-grid")
+        assert calendar_grid.locator('button[aria-label^="选择交易日"]').count() == 0
+        selected_emotion_day = calendar_grid.get_by_test_id(
+            f"quantx-emotion-day-{args.date}"
+        )
+        selected_calendar_row = next(
+            row for row in multiday["calendar"] if row["trade_date"] == args.date
+        )
+
+        def rendered_score(key: str) -> str:
+            value = selected_calendar_row[key]
+            return str(int(value)) if float(value).is_integer() else str(value)
+
+        dashboard_url = page.url
+        selected_emotion_day.click()
+        assert page.url == dashboard_url
+        assert selected_emotion_day.get_attribute("data-score-key") == "market_heat_score"
+        assert rendered_score("market_heat_score") in selected_emotion_day.inner_text()
+        emotion_calendar.get_by_role("tab", name="波段情绪", exact=True).click()
+        assert selected_emotion_day.get_attribute("data-score-key") == "trend_sentiment_score"
+        assert rendered_score("trend_sentiment_score") in selected_emotion_day.inner_text()
+        emotion_calendar.get_by_role("tab", name="短线情绪", exact=True).click()
+        assert selected_emotion_day.get_attribute("data-score-key") == "short_term_sentiment_score"
+        assert rendered_score("short_term_sentiment_score") in selected_emotion_day.inner_text()
+        breadth_scroll = page.get_by_test_id("quantx-sector-breadth-scroll")
+        breadth_metrics = breadth_scroll.evaluate(
+            "element => ({clientHeight: element.clientHeight, scrollHeight: element.scrollHeight})"
+        )
+        assert breadth_metrics["scrollHeight"] <= breadth_metrics["clientHeight"] + 1, (
+            breadth_metrics
+        )
         for key in ("industry_correlation", "rps_rotation_clock", "mainline_waterfall"):
             assert "不是历史时点成分" in page.get_by_test_id(
                 f"quantx-advanced-caveat-{key}"
