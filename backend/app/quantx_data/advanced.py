@@ -10,6 +10,8 @@ from typing import Any
 
 import polars as pl
 
+from app.market_facts.registry import DatasetId, get_route
+
 SCHEMA_VERSION = "tickflow-quantx-advanced-v1"
 CARD_KEYS = (
     "sentiment_phase",
@@ -259,6 +261,20 @@ def _theme_river(frame: pl.DataFrame) -> dict[str, Any]:
         return {}
     dates = sorted(frame["trade_date"].unique().to_list())[-20:]
     recent = frame.filter(pl.col("trade_date").is_in(dates))
+    source = None
+    if "source" in recent.columns:
+        coverage = {
+            str(row["source"]): int(row["days"])
+            for row in recent.group_by("source")
+            .agg(pl.col("trade_date").n_unique().alias("days"))
+            .to_dicts()
+        }
+        priority = list(get_route(DatasetId.THEME_OBSERVATION_DAILY).sources)
+        source = min(
+            coverage,
+            key=lambda value: (-coverage[value], priority.index(value) if value in priority else len(priority)),
+        )
+        recent = recent.filter(pl.col("source") == source)
     daily = (
         recent.with_columns(pl.col("rank").cast(pl.Float64, strict=False))
         .group_by(["trade_date", "theme_name"])
@@ -280,28 +296,83 @@ def _theme_river(frame: pl.DataFrame) -> dict[str, Any]:
         "themes": top,
         "values": [[lookup.get((str(day), theme)) for day in dates] for theme in top],
         "metric": "rank",
+        "source": source,
         "rank_max": max((value for value in lookup.values() if value is not None), default=1),
     }
 
 
-def _promotion_funnel(frame: pl.DataFrame) -> dict[str, Any]:
-    if frame.is_empty():
+def _promotion_funnel(frame: pl.DataFrame, events: pl.DataFrame | None = None) -> dict[str, Any]:
+    if frame.is_empty() and (events is None or events.is_empty()):
         return {}
-    dates = sorted(frame["trade_date"].unique().to_list())
+    events = events if events is not None else pl.DataFrame()
+    dates = sorted(
+        set(frame["trade_date"].unique().to_list() if not frame.is_empty() else [])
+        | set(events["trade_date"].unique().to_list() if not events.is_empty() else [])
+    )
     by_day = {
         day: {str(row["symbol"]).split(".")[0]: int(row["board_height"]) for row in frame.filter(pl.col("trade_date") == day).to_dicts()}
         for day in dates
     }
+    event_by_day: dict[date, list[dict[str, Any]]] = {
+        day: events.filter(pl.col("trade_date") == day).to_dicts()
+        for day in dates
+    } if not events.is_empty() else {}
+    first_pool = first_promoted = 0
+    for previous, current in pairwise(dates):
+        previous_symbols = set(by_day.get(previous, {}))
+        current_rows = event_by_day.get(current, [])
+        sealed = {
+            str(row["symbol"]).split(".")[0]
+            for row in current_rows
+            if row.get("event_type") == "limit_up" and int(row.get("board_height") or 1) == 1
+        }
+        if not sealed:
+            sealed = {symbol for symbol, height in by_day.get(current, {}).items() if height == 1}
+        broken_first_attempts = {
+            str(row["symbol"]).split(".")[0]
+            for row in current_rows
+            if row.get("event_type") == "broken_board"
+            and (
+                int(row["board_height"]) == 1
+                if row.get("board_height") is not None
+                else str(row["symbol"]).split(".")[0] not in previous_symbols
+            )
+        }
+        first_promoted += len(sealed)
+        first_pool += len(sealed | broken_first_attempts)
+
     stages = []
-    labels = ["首板→二板", "二板→三板", "三板→四板", "四板→五板+"]
-    for height, label in enumerate(labels, start=1):
+    if first_pool:
+        stages.append(
+            {
+                "name": "0→1 首板封板",
+                "pool": first_pool,
+                "promoted": first_promoted,
+                "failed": first_pool - first_promoted,
+                "rate": round(first_promoted * 100 / first_pool, 1),
+                "basis": "same_day_seal",
+            }
+        )
+
+    max_height = int(frame["board_height"].max() or 0) if not frame.is_empty() else 0
+    for height in range(1, max_height + 1):
         pool = promoted = 0
         for current, following in pairwise(dates):
-            candidates = {symbol for symbol, value in by_day[current].items() if value == height}
+            candidates = {symbol for symbol, value in by_day.get(current, {}).items() if value == height}
             pool += len(candidates)
-            promoted += sum(1 for symbol in candidates if by_day[following].get(symbol, 0) >= height + 1)
-        stages.append({"name": label, "pool": pool, "promoted": promoted, "rate": round(promoted * 100 / pool, 1) if pool else 0.0})
-    return {"stages": stages, "sample_days": len(dates)}
+            promoted += sum(1 for symbol in candidates if by_day.get(following, {}).get(symbol, 0) >= height + 1)
+        if pool:
+            stages.append(
+                {
+                    "name": f"{height}→{height + 1}",
+                    "pool": pool,
+                    "promoted": promoted,
+                    "failed": pool - promoted,
+                    "rate": round(promoted * 100 / pool, 1),
+                    "basis": "next_trade_day_promotion",
+                }
+            )
+    return {"stages": stages, "sample_days": len(dates), "max_observed_board": max_height}
 
 
 def _anomaly_calendar(regime: pl.DataFrame) -> dict[str, Any]:
@@ -658,7 +729,7 @@ def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> d
         "state_transition": (_state_transition(regime), regime.height),
         "sector_diffusion": (_sector_diffusion(sectors), sectors.height),
         "theme_river": (_theme_river(themes), themes.height),
-        "promotion_funnel": (_promotion_funnel(ladder), ladder.height),
+        "promotion_funnel": (_promotion_funnel(ladder, events), ladder.height + events.height),
         "anomaly_calendar": (_anomaly_calendar(regime), regime.height),
         "return_distribution": (_return_distribution(returns, trade_date), returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
         "advance_decline": (_advance_decline(root, breadth, trade_date), breadth.height),

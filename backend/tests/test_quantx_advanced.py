@@ -11,6 +11,7 @@ from app.quantx_data.advanced import (
     _detect_ad_divergences,
     _gini_lorenz,
     _industry_correlation,
+    _promotion_funnel,
     _rotation_clock,
     _sector_diffusion,
     _state_transition,
@@ -81,6 +82,60 @@ def test_theme_river_preserves_rank_and_missing_days() -> None:
     assert result["values"][robot] == [2.0, 1.0]
     assert result["values"][medicine] == [None, 3.0]
     assert result["metric"] == "rank"
+
+
+def test_theme_river_uses_one_rank_source_instead_of_mixing_scales() -> None:
+    frame = pl.DataFrame(
+        {
+            "trade_date": [date(2026, 8, 27)] * 2 + [date(2026, 8, 28)] * 2,
+            "theme_name": ["机器人", "机器人", "机器人", "机器人"],
+            "rank": [8, 1, 6, 1],
+            "source": ["ths_hot", "deepq", "ths_hot", "deepq"],
+        }
+    )
+
+    result = _theme_river(frame)
+
+    assert result["source"] == "ths_hot"
+    assert result["values"] == [[8.0, 6.0]]
+
+
+def test_promotion_ladder_includes_first_board_seal_and_all_observed_heights() -> None:
+    ladder = pl.DataFrame(
+        {
+            "trade_date": [
+                date(2026, 8, 26), date(2026, 8, 26), date(2026, 8, 26),
+                date(2026, 8, 27), date(2026, 8, 27), date(2026, 8, 27), date(2026, 8, 27),
+                date(2026, 8, 28), date(2026, 8, 28), date(2026, 8, 28),
+            ],
+            "symbol": ["A", "B", "H", "A", "B", "H", "N", "A", "H", "Y"],
+            "board_height": [1, 2, 6, 2, 3, 7, 1, 3, 8, 1],
+        }
+    )
+    events = pl.DataFrame(
+        {
+            "trade_date": [date(2026, 8, 27), date(2026, 8, 27), date(2026, 8, 28), date(2026, 8, 28), date(2026, 8, 28), date(2026, 8, 28)],
+            "symbol": ["N", "X", "Y", "N", "Z", "W"],
+            "event_type": ["limit_up", "broken_board", "limit_up", "broken_board", "broken_board", "broken_board"],
+            "board_height": [1, None, 1, None, None, 2],
+        },
+        schema_overrides={"board_height": pl.UInt32},
+    )
+
+    result = _promotion_funnel(ladder, events)
+
+    first_board = result["stages"][0]
+    assert first_board == {
+        "name": "0→1 首板封板",
+        "pool": 4,
+        "promoted": 2,
+        "failed": 2,
+        "rate": 50.0,
+        "basis": "same_day_seal",
+    }
+    assert next(row for row in result["stages"] if row["name"] == "1→2")['rate'] == 50.0
+    assert next(row for row in result["stages"] if row["name"] == "7→8")['rate'] == 100.0
+    assert result["max_observed_board"] == 8
 
 
 def test_anomaly_calendar_keeps_recent_weekdays_only() -> None:

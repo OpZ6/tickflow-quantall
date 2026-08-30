@@ -12,7 +12,6 @@ import {
   ThemeLifecyclePanel,
   TradingCalendar,
   WindowSignalMatrix,
-  WindowStatistics,
   type WindowSize,
 } from '@/components/quantx/MultidayPanels'
 
@@ -85,7 +84,7 @@ export function QuantXCatalog() {
         <div className="rounded-lg border border-border bg-elevated/30 p-2"><div className="text-[10px] text-muted">行业资金覆盖</div><div className="font-mono text-lg">{snapshot.data_coverage.sector_flow_days}/20 日</div></div>
       </div>
       <WindowSignalMatrix data={snapshot} active={windowSize} onChange={setWindowSize} />
-      <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]"><TradingCalendar rows={snapshot.calendar} selectedDate={selectedDate} onSelect={setSelectedDate} /><WindowStatistics data={snapshot} active={windowSize} /></div>
+      <TradingCalendar rows={snapshot.calendar} selectedDate={selectedDate} onSelect={setSelectedDate} />
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]"><ThemeLifecyclePanel data={snapshot} /><FactorAttribution rows={snapshot.factor_attribution} /></div>
       <OpportunityRadar data={snapshot.opportunity_radar} />
       <SectorFlowContinuity data={snapshot.sector_flow_continuity} />

@@ -32,17 +32,22 @@ export function WindowSignalMatrix({ data, active, onChange }: { data: QuantXMul
   const labels: Record<string, string> = { heat: '热度', breadth: '广度', relay: '接力', risk: '风险' }
   const activeSignal = data.window_signals[String(active) as '5' | '10' | '20']
   const themeGroups = [['主线', activeSignal.themes?.mainline || []], ['升温', activeSignal.themes?.warming || []], ['降温', activeSignal.themes?.cooling || []]] as const
-  return <Panel title="5 / 10 / 20 日窗口信号矩阵" icon={<TrendingUp className="h-4 w-4" />} hint="按真实交易日计算；风险箭头上行为风险增加" testId="window-signal-matrix">
+  return <Panel title="5 / 10 / 20 日信号与统计" icon={<TrendingUp className="h-4 w-4" />} hint="同卡对比方向、变化和区间统计；均按真实交易日计算，风险箭头上行为风险增加" testId="window-signal-matrix">
     <div className="grid gap-3 lg:grid-cols-3">
       {([5, 10, 20] as WindowSize[]).map(window => {
         const signal = data.window_signals[String(window) as '5' | '10' | '20']
-        return <button key={window} onClick={() => onChange(window)} className={cn('rounded-lg border p-3 text-left transition-colors', active === window ? 'border-accent bg-accent/10' : 'border-border hover:bg-elevated')}>
-          <div className="flex items-center justify-between"><span className="font-semibold">{window} 日</span><span className="rounded bg-base px-1.5 py-0.5 text-[10px] text-muted">{signal.confidence}</span></div>
+        const stats = data.window_statistics[String(window) as '5' | '10' | '20']
+        const statRows = [['热度', stats.market_heat], ['涨停', stats.limit_up], ['封板率', stats.seal_rate], ['最高板', stats.max_board]] as const
+        return <button key={window} type="button" data-testid={`window-statistics-${window}`} aria-pressed={active === window} onClick={() => onChange(window)} className={cn('cursor-pointer rounded-lg border p-3 text-left transition-colors', active === window ? 'border-accent bg-accent/10' : 'border-border hover:bg-elevated')}>
+          <div className="flex items-center justify-between gap-2"><span className="font-semibold">{window} 日</span><span className="rounded bg-base px-1.5 py-0.5 text-[10px] text-muted">有效 {stats.valid_days} 日 · 风险 {stats.risk_days} 日 · {signal.confidence}</span></div>
           <div className="mt-1 text-lg font-bold">{signal.market.direction}</div>
           <div className="mt-3 grid grid-cols-4 gap-1">
             {signal.market.components.map(component => <div key={component.key} className={cn('rounded bg-base/70 p-1.5 text-center text-[10px]', componentTone(component))}>
               <div className="flex justify-center">{ARROW[component.arrow]}</div><div>{labels[component.key]}</div><div className="font-mono">{component.delta == null ? '--' : `${component.delta > 0 ? '+' : ''}${component.delta}`}</div>
             </div>)}
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1.5 border-t border-border/60 pt-2">
+            {statRows.map(([label, item]) => <div key={label} className="rounded bg-base/45 px-2 py-1.5"><div className="flex items-baseline justify-between gap-1"><span className="text-[9px] text-muted">{label}均值</span><span className="font-mono text-xs font-semibold">{item?.average ?? '--'}</span></div><div className="mt-0.5 text-right font-mono text-[8px] text-muted">高 {item?.max ?? '--'} · 低 {item?.min ?? '--'}</div></div>)}
           </div>
         </button>
       })}
@@ -72,18 +77,6 @@ export function TradingCalendarGrid({ rows, selectedDate, onSelect, compact = fa
 export function TradingCalendar({ rows, selectedDate, onSelect }: { rows: QuantXMultidaySnapshot['calendar']; selectedDate: string; onSelect: (date: string) => void }) {
   return <Panel title="交易日历" icon={<CalendarDays className="h-4 w-4" />} hint="点击日期联动整个多日面板" testId="trading-calendar">
     <TradingCalendarGrid rows={rows} selectedDate={selectedDate} onSelect={onSelect} />
-  </Panel>
-}
-
-export function WindowStatistics({ data, active, compact = false }: { data: QuantXMultidaySnapshot; active: WindowSize; compact?: boolean }) {
-  const stats = data.window_statistics[String(active) as '5' | '10' | '20']
-  const cards = [
-    ['热度', stats.market_heat], ['涨停家数', stats.limit_up], ['封板率', stats.seal_rate], ['连板高度', stats.max_board],
-  ] as const
-  return <Panel title={`${active} 日窗口统计情报`} icon={<Radar className="h-4 w-4" />} hint={`${stats.valid_days} 个有效交易日 · 风险日 ${stats.risk_days}`} testId="window-statistics">
-    <div className={cn('grid grid-cols-2 gap-2', !compact && 'sm:grid-cols-4')}>
-      {cards.map(([label, item]) => <div key={label} className="rounded-lg border border-border bg-base/50 p-2"><div className="text-[10px] text-muted">{label}</div><div className="mt-1 font-mono text-lg font-semibold">{item?.average ?? '--'}</div><div className="text-[10px] text-muted">高 {item?.max ?? '--'} · 低 {item?.min ?? '--'}</div></div>)}
-    </div>
   </Panel>
 }
 
@@ -117,14 +110,15 @@ function LifecycleHeatmap({ heat }: { heat: QuantXMultidaySnapshot['theme_lifecy
 
 export function ThemeLifecyclePanel({ data }: { data: QuantXMultidaySnapshot }) {
   const heat = data.theme_lifecycle.heatmap
-  return <Panel title="题材生灭与连续性" icon={<Shapes className="h-4 w-4" />} hint="多源排名归一化后计算生命周期" testId="theme-lifecycle">
+  return <Panel title="题材生灭与多源连续性" icon={<Shapes className="h-4 w-4" />} hint="多源排名先分别归一化，再计算强度、连续出现和生命周期；不是原始名次" testId="theme-lifecycle">
     <div data-testid="theme-lifecycle-all" className="grid items-start gap-3 xl:grid-cols-12">
       <section data-testid="theme-lifecycle-current" className="min-w-0 rounded-lg border border-border/70 bg-base/25 p-2.5 xl:col-span-5">
         <h3 className="mb-2 text-xs font-semibold">当日结构</h3>
         <MiniTable columns={[["name", "题材"], ["source_count", "来源"], ["rank_strength", "强度"], ["streak", "连续"], ["lifecycle", "状态"]]} rows={data.theme_lifecycle.current.slice(0, 20)} />
       </section>
       <section data-testid="theme-lifecycle-heatmap" className="min-w-0 rounded-lg border border-border/70 bg-base/25 p-2.5 xl:col-span-7">
-        <h3 className="mb-2 text-xs font-semibold">连续性热力图</h3>
+        <h3 className="mb-0.5 text-xs font-semibold">多源归一化强度连续性</h3>
+        <p className="mb-2 text-[9px] text-muted">同花顺热榜、问财、DeepQ 各自按榜单长度归一化至 0–100，再按题材合并；颜色越深代表跨源持续强度越高</p>
         <LifecycleHeatmap heat={heat} />
       </section>
       <section data-testid="theme-lifecycle-events" className="min-w-0 rounded-lg border border-border/70 bg-base/25 p-2.5 xl:col-span-12">

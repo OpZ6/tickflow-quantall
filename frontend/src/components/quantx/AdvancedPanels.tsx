@@ -26,12 +26,12 @@ const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 
   advance_decline: { title: 'A/D 累积线与指数背离', hint: '涨跌家数差累积 vs 中证全指 · 阴影标出背离区间', group: 'state', span: 'xl:[grid-column:span_9/span_9]' },
   turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: '交易集中度；虚线为完全均等', group: 'state', span: 'xl:[grid-column:span_7/span_7]' },
   sector_diffusion: { title: '申万行业宽度扩散地图', hint: '切换一级/二级行业及 MA5 / MA10 / MA20', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
-  theme_river: { title: '题材排名演进热图', hint: '近 20 日逐日真实排名 · 数字越小、颜色越热，排名越靠前', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
+  theme_river: { title: '题材单源排名演进', hint: '近 20 日同一榜单逐日名次 · 数字越小、颜色越热；不与多源强度混算', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   industry_correlation: { title: '行业收益相关性矩阵', hint: '切换同花顺一级/二级行业 · 近 35 日收益相关性', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   mainline_waterfall: { title: '主线强度贡献瀑布', hint: '涨停广度、连板高度与梯队完整度综合得分', group: 'rotation' },
   theme_ladder_sunburst: { title: '题材—连板层级旭日图', hint: '当日题材 → 连板高度（悬停查看合并个股）', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]' },
   rps_rotation_clock: { title: '行业 RPS 轮动时钟', hint: '行业横截面相对强度 × 排名加速度 · 中心为行业中位数', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]' },
-  promotion_funnel: { title: '连板晋级漏斗', hint: '近 75 日逐层晋级样本与转化率', group: 'structure', span: 'xl:[grid-column:span_9/span_9]' },
+  promotion_funnel: { title: '连板晋级阶梯', hint: '0→1 为当日首板封板率；1→2 以上为下一交易日晋级率，并展示全部可评估高位板', group: 'structure', span: 'xl:[grid-column:span_9/span_9]' },
   turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度', group: 'structure', span: 'xl:[grid-column:span_7/span_7]' },
 }
 
@@ -80,10 +80,11 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     const themes = data.themes || []
     const dates = data.dates || []
     const values = (data.values || []).flatMap((row: Array<number | null>, y: number) => row.flatMap((value, x) => value == null ? [] : [[x, y, value]]))
-    return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 52, containLabel: true }, xAxis: { type: 'category', data: dates, axisLabel: { color: ct.text, rotate: 30, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', inverse: true, data: themes, axisLabel: { color: ct.textStrong, width: 112, overflow: 'truncate', fontSize: 10 } }, visualMap: { min: 1, max: Math.max(10, data.rank_max || 10), calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inverse: true, text: ['靠后', '第1名'], inRange: { color: [RED, ORANGE, '#244b75', '#101a2d'] }, textStyle: { color: ct.text, fontSize: 9 } }, series: [{ type: 'heatmap', data: values, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 }, label: { show: true, color: ct.textStrong, fontSize: 8, textBorderColor: 'rgba(0,0,0,.8)', textBorderWidth: 2, formatter: (p: any) => String(p.value[2]) }, tooltip: { formatter: (p: any) => `${themes[p.value[1]]}<br/>${dates[p.value[0]]}<br/>真实排名：第 ${p.value[2]} 名` } }] }
+    return { ...common, grid: { left: 10, right: 12, top: 10, bottom: 52, containLabel: true }, xAxis: { type: 'category', data: dates, axisLabel: { color: ct.text, rotate: 30, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', inverse: true, data: themes, axisLabel: { color: ct.textStrong, width: 112, overflow: 'truncate', fontSize: 10 } }, visualMap: { min: 1, max: Math.max(10, data.rank_max || 10), calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inverse: true, text: ['靠后', '第1名'], inRange: { color: [RED, ORANGE, '#244b75', '#101a2d'] }, textStyle: { color: ct.text, fontSize: 9 } }, series: [{ type: 'heatmap', data: values, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 }, label: { show: true, color: ct.textStrong, fontSize: 8, textBorderColor: 'rgba(0,0,0,.8)', textBorderWidth: 2, formatter: (p: any) => String(p.value[2]) }, tooltip: { formatter: (p: any) => `${themes[p.value[1]]}<br/>${dates[p.value[0]]}<br/>${data.source || '单一来源'}排名：第 ${p.value[2]} 名` } }] }
   }
   if (key === 'promotion_funnel') {
-    return { ...common, series: [{ type: 'funnel', left: '7%', right: '22%', top: 18, bottom: 18, minSize: '30%', maxSize: '100%', sort: 'none', gap: 3, label: { color: ct.textStrong, width: 118, overflow: 'break', formatter: (p: any) => `${p.name}  ${p.data.promoted}/${p.data.pool}  ${p.data.rate}%` }, labelLine: { length: 10, length2: 8 }, itemStyle: { borderColor: ct.border, borderWidth: 1 }, data: (data.stages || []).map((row: any) => ({ ...row, value: row.pool })) }] }
+    const stages = data.stages || []
+    return { ...common, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: any[]) => { const row = stages[params[0]?.dataIndex] || {}; return `${row.name}<br/>${row.basis === 'same_day_seal' ? '当日首板尝试' : '前一交易日该高度样本'}：${row.pool}<br/>晋级/封板：${row.promoted}<br/>${row.basis === 'same_day_seal' ? '首板炸板' : '未晋级（含炸板）'}：${row.failed}<br/>转化率：${row.rate}%` } }, legend: { top: 0, data: ['晋级 / 封板', '未晋级（含炸板）'], textStyle: { color: ct.text, fontSize: 9 } }, grid: { left: 12, right: 86, top: 32, bottom: 12, containLabel: true }, xAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, formatter: '{value}%' }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'category', inverse: true, data: stages.map((row: any) => row.name), axisLabel: { color: ct.textStrong, fontSize: 10 } }, series: [{ name: '晋级 / 封板', type: 'bar', stack: 'conversion', barWidth: 18, itemStyle: { color: RED }, data: stages.map((row: any, index: number) => ({ value: row.rate, itemStyle: { color: index === 0 ? ORANGE : RED, borderRadius: [3, 0, 0, 3] } })) }, { name: '未晋级（含炸板）', type: 'bar', stack: 'conversion', barWidth: 18, itemStyle: { color: ct.grid }, data: stages.map((row: any) => ({ value: Math.max(0, 100 - row.rate), itemStyle: { color: ct.grid, borderRadius: [0, 3, 3, 0] } })), label: { show: true, position: 'right', color: ct.textStrong, fontSize: 9, formatter: (p: any) => { const row = stages[p.dataIndex]; return `${row.promoted}/${row.pool} · ${row.rate}%` } } }] }
   }
   if (key === 'anomaly_calendar') {
     const records = data.records || []
@@ -186,13 +187,16 @@ function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvanc
     promotion_funnel: 350,
     turnover_return_density: 350,
   }
-  const height = heightByKey[chartKey] ?? 320
+  const height = chartKey === 'promotion_funnel'
+    ? Math.max(350, ((card.data.stages || []).length * 32) + 88)
+    : heightByKey[chartKey] ?? 320
   return (
     <section data-testid={`quantx-advanced-${chartKey}`} className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-elevated/25 xl:[grid-column:span_8/span_8]', meta.span)}>
       <header className="flex min-h-11 items-center gap-2 border-b border-border/70 px-3 py-1.5">
         <Activity className="h-3.5 w-3.5 shrink-0 text-accent" />
         <div className="min-w-0"><h3 className="truncate text-xs font-semibold">{meta.title}</h3><p className="truncate text-[9px] text-muted">{meta.hint}</p></div>
-        {card.status === 'ok' && <span className="ml-auto shrink-0 rounded bg-accent/10 px-1.5 py-0.5 font-mono text-[9px] text-accent">{card.rows ?? 0} 行</span>}
+        {chartKey === 'theme_river' && card.status === 'ok' && card.data.source && <span className="ml-auto shrink-0 rounded border border-border bg-base px-1.5 py-0.5 font-mono text-[9px] text-muted">来源 {card.data.source}</span>}
+        {card.status === 'ok' && <span className={cn('shrink-0 rounded bg-accent/10 px-1.5 py-0.5 font-mono text-[9px] text-accent', (chartKey !== 'theme_river' || !card.data.source) && 'ml-auto')}>{card.rows ?? 0} 行</span>}
       </header>
       <div className="p-2">
         {chartKey === 'sector_diffusion' && card.status === 'ok' && <div data-testid="quantx-sector-diffusion-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5 border-b border-border/60 pb-1.5"><div className="flex gap-1" role="group" aria-label="行业层级">{Object.entries(card.data.views || {}).map(([value, view]: [string, any]) => <button key={value} type="button" data-testid={`quantx-sector-dimension-${value}`} aria-pressed={sectorDimension === value} onClick={() => setSectorDimension(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', sectorDimension === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value} · {view.sectors?.length || 0} 行业 / {view.dates?.length || 0} 日</button>)}</div><div className="flex gap-1" role="group" aria-label="均线窗口">{[5, 10, 20].map(value => <button key={value} type="button" data-testid={`quantx-sector-window-${value}`} aria-pressed={sectorWindow === value} onClick={() => setSectorWindow(value)} className={cn('cursor-pointer rounded border px-2 py-1 font-mono text-[9px] transition-colors', sectorWindow === value ? 'border-orange-400/60 bg-orange-400/10 text-orange-300' : 'border-border bg-base text-muted hover:text-foreground')}>MA{value}</button>)}</div></div>}
@@ -201,6 +205,7 @@ function AdvancedCard({ chartKey, card }: { chartKey: string; card: QuantXAdvanc
         {chartKey === 'state_transition' && card.status === 'ok' && <p data-testid="quantx-state-transition-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">读法：从左侧“当前状态”沿行读取到上方“下一交易日状态”，每行合计 100%。例如“震荡 → 偏强 20%”表示处于震荡后，次日转为偏强的历史概率为 20%。</p>}
         {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>横轴是按成交额从小到大排列的股票累计占比，纵轴是这些股票贡献的累计成交额；橙线越向右下弯，成交越集中在少数头部股票。</p><p><span className="text-foreground">有什么用：</span>判断资金是广泛扩散还是抱团。Gini 接近 0 表示均匀，接近 1 表示极端集中；它描述资金结构，不判断市场涨跌方向。</p></div>}
         {chartKey === 'advance_decline' && card.status === 'ok' && <p data-testid="quantx-ad-divergence-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">红色区间：指数走强但市场广度转弱；绿色区间：指数走弱但广度修复。图钉标记背离确认点。</p>}
+        {chartKey === 'promotion_funnel' && card.status === 'ok' && <p data-testid="quantx-promotion-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">第一行用“首板封板 ÷（首板封板 + 首板炸板）”；其余行用“次日晋级数 ÷ 前一交易日该板高度股票数”。横条统一为 100%，只比较转化率，右侧同时给出成功数/样本数，避免传统漏斗面积失真。</p>}
         {card.note && <p className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-orange-300">口径提示：{card.note}</p>}
       </div>
     </section>

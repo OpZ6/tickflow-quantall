@@ -29,7 +29,6 @@ import {
   ThemeLifecyclePanel,
   TradingCalendarGrid,
   WindowSignalMatrix,
-  WindowStatistics,
   type WindowSize,
 } from '@/components/quantx/MultidayPanels'
 import { AdvancedPanels } from '@/components/quantx/AdvancedPanels'
@@ -436,10 +435,8 @@ export function QuantXDashboard() {
           <Panel testId="quantx-theme-mainline" title="题材主线" hint="强度 · 连续性 · 生命周期" icon={<Layers3 className="h-3.5 w-3.5" />} className="xl:[grid-column:span_8/span_8]"><ThemeMainline review={review} multiday={multiday} /></Panel>
           <RiskSignalBoard ebb={s.s3.ebb_signals} crash={s.s3.crash_signals} participation={s.s2.participation?.conditions || []} />
 
-          {multiday ? <div className="xl:[grid-column:span_7/span_7]"><WindowSignalMatrix data={multiday} active={windowSize} onChange={setWindowSize} /></div> : <Panel title="多日信号矩阵" className="xl:[grid-column:span_7/span_7]"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
-          <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="趋势、分数与日期上下文统一展示" icon={<Activity className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
-
-          <div className="grid gap-2 xl:[grid-column:span_16/span_16] xl:grid-cols-3">{multiday ? ([5, 10, 20] as WindowSize[]).map(value => <WindowStatistics key={value} data={multiday} active={value} compact />) : <Panel title="窗口统计情报"><div className="py-12 text-center text-xs text-muted">暂无多日窗口统计</div></Panel>}</div>
+          {multiday ? <div className="xl:[grid-column:span_16/span_16]"><WindowSignalMatrix data={multiday} active={windowSize} onChange={setWindowSize} /></div> : <Panel title="多日信号矩阵" className="xl:[grid-column:span_16/span_16]"><div className="py-12 text-center text-xs text-muted">该日期无多日快照</div></Panel>}
+          <Panel testId="quantx-emotion-calendar" title="情绪周期与交易日历" hint="趋势、分数与日期上下文统一展示" icon={<Activity className="h-3.5 w-3.5" />} className="xl:[grid-column:span_16/span_16]"><EmotionCalendar data={review} records={records} multiday={multiday} date={date} onDate={goDate} /></Panel>
 
           <div className="xl:[grid-column:span_16/span_16]">{multiday ? <OpportunityRadar data={multiday.opportunity_radar} /> : <Panel title="机会雷达"><div className="py-12 text-center text-xs text-muted">暂无多日机会数据</div></Panel>}</div>
         </div>
