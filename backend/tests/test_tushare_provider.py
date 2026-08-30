@@ -11,7 +11,7 @@ import pandas as pd
 import polars as pl
 
 from app.plugins.tushare import bridge
-from app.plugins.tushare.provider import TushareProvider, _preview
+from app.plugins.tushare.provider import TushareProvider, _normalize_financial, _preview
 
 
 def _daily_df() -> pd.DataFrame:
@@ -224,6 +224,9 @@ def test_get_financials_income(mock_get_pro):
     assert not df.is_empty()
     assert "symbol" in df.columns
     assert df["symbol"].to_list() == ["600519.SH"]
+    assert df["period_end"].to_list()[0].isoformat() == "2026-06-30"
+    assert df["announce_date"].to_list()[0].isoformat() == "2026-08-20"
+    assert df["source"].to_list() == ["tushare"]
     mock_pro.income.assert_called_once()
 
 
@@ -244,7 +247,29 @@ def test_get_financials_shares(mock_get_pro):
 
     assert not df.is_empty()
     assert "symbol" in df.columns
+    assert df["total_shares"].to_list() == [1.25e12]
+    assert df["float_shares"].to_list() == [1.0e12]
     mock_pro.daily_basic.assert_called_once()
+
+
+@patch("app.plugins.tushare.provider._get_pro")
+def test_financial_requests_each_symbol_separately(mock_get_pro):
+    mock_pro = MagicMock()
+    mock_pro.income.return_value = pd.DataFrame()
+    mock_get_pro.return_value = mock_pro
+    TushareProvider().get_financials("income", ["600519.SH", "000001.SZ"])
+    assert [call.kwargs["ts_code"] for call in mock_pro.income.call_args_list] == ["600519.SH", "000001.SZ"]
+
+
+def test_shares_are_converted_to_units_and_compressed_to_change_points():
+    raw = pd.DataFrame({
+        "ts_code": ["600519.SH"] * 3,
+        "trade_date": ["20260101", "20260102", "20260103"],
+        "total_share": [10.0, 10.0, 11.0], "float_share": [8.0, 8.0, 8.0],
+    })
+    df = _normalize_financial("shares", raw)
+    assert df.height == 2
+    assert df["total_shares"].to_list() == [100_000.0, 110_000.0]
 
 
 def test_get_financials_unsupported_table():

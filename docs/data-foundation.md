@@ -164,3 +164,11 @@ python scripts/scaffold_market_fact.py northbound_flow_daily `
 - [ ] 发布失败保留上一版本。
 - [ ] Repository、API 和前端使用同一事实。
 - [ ] 历史对账、备份和隔离恢复有证据。
+
+## 10. 财务数据双层事实
+
+- `financials/overview/part.parquet` 是全市场报告期快照，用于覆盖率、筛选和横截面对比。
+- `financials/{metrics,income,balance_sheet,cash_flow,shares}/part.parquet` 是按股票更新并累计的标准财报历史。
+- 两层都必须携带来源与观察时点；详细历史分析必须满足 `announce_date <= as_of`，概览快照不得用于其 `observed_at` 之前的回测。
+- 普通权限采用“市场概览 + 单股按需详情”，只有明确检测到批量权限时才能全市场同步详细财报。
+- 空响应和失败不得覆盖上一版数据，Parquet 发布使用临时文件原子替换。

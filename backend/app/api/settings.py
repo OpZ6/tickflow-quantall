@@ -731,6 +731,9 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
         preferences.save(updates)
     # 刷新能力快照: 当前 provider 变化会改变自定义源能力增广结果 (读缓存, 无网络请求)
     request.app.state.capabilities = detect_capabilities()
+    scheduler = getattr(request.app.state, "financial_scheduler", None)
+    if scheduler is not None:
+        scheduler.update_capabilities(request.app.state.capabilities)
     return {
         "daily_data_provider": preferences.get_daily_data_provider(),
         "adj_factor_provider": preferences.get_adj_factor_provider(),

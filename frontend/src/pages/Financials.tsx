@@ -3,7 +3,7 @@ import { RefreshCw, Download, Lock, Loader2, X, Search, FileText, Database, Cloc
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { useCapabilities } from '@/lib/useSharedQueries'
-import { useFinancialStatus, useFinancialSync } from '@/lib/useFinancials'
+import { useFinancialStatus, useFinancialSync, useFinancialScopeSync, useFinancialAnalysis } from '@/lib/useFinancials'
 import { StockFinancialSearch } from '@/components/financials/StockFinancialSearch'
 import { StockFinancialDetail } from '@/components/financials/StockFinancialDetail'
 import { ReportHistoryPanel } from '@/components/financials/ReportHistoryPanel'
@@ -33,11 +33,12 @@ export function Financials() {
   const { data: status, isLoading } = useFinancialStatus()
   const hasFinancial = caps?.capabilities?.['financial'] != null || status?.available === true
   const syncMut = useFinancialSync()
+  const scopeSync = useFinancialScopeSync()
   // 同步进行中 = 服务端真值(status.syncing)或本地乐观态(请求已发出待确认)。
   // 乐观窗口:点击后到 invalidate 触发的 refetch 返回之间,status.syncing 暂为 false,
   // 用 syncMut.isPending 覆盖,让按钮立即置灰、避免重复点击。
   // 后端 trigger() 返回时 syncing 已为 true,refetch 到达后 status.syncing 接管。
-  const syncing = (status?.syncing ?? false) || syncMut.isPending
+  const syncing = (status?.syncing ?? false) || syncMut.isPending || scopeSync.isPending
   // 本次同步开始时间戳(ms): 用于判断每张表的 last_sync 是否属于本次同步
   // (后端每张表完成即更新 last_sync, 前端轮询时对比时间戳得到精确进度)
   const [syncStartedAt, setSyncStartedAt] = useState<number | null>(null)
@@ -53,6 +54,7 @@ export function Financials() {
   }, [syncing, syncStartedAt])
   // 选中的个股(模糊搜索结果);null 时显示搜索引导
   const [selected, setSelected] = useState<{ symbol: string; name: string } | null>(null)
+  const analysis = useFinancialAnalysis(selected?.symbol)
   const { last: lastStock, remember: rememberStock } = useLastStock('financials')
   const pick = (symbol: string, name: string) => {
     setSelected({ symbol, name })
@@ -128,6 +130,16 @@ export function Financials() {
     })
   }
 
+  const handleScopeSync = (scope: 'market_overview' | 'stock' | 'market_detail', symbol?: string) => {
+    if (syncing) return
+    scopeSync.mutate({ scope, symbol }, {
+      onSuccess: (r) => {
+        if (!r.synced.started) toast(r.synced.reason || '更新未能开始', 'error')
+        else toast(scope === 'stock' ? '已开始更新该股详细财报' : '已开始更新全市场财务概览', 'success')
+      },
+    })
+  }
+
   const tables = status?.tables ?? {}
   const available = status?.available ?? false
   const lastSync = status?.last_sync ?? {}
@@ -175,20 +187,28 @@ export function Financials() {
             )}
             <button
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn bg-gradient-to-r from-accent/25 to-accent/10 border border-accent/30 text-accent text-xs font-medium hover:from-accent/35 hover:to-accent/20 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={() => handleSync('all')}
+              onClick={() => handleScopeSync(status?.supports_overview ? 'market_overview' : 'market_detail')}
               disabled={syncing}
-              title={syncing ? '正在同步，请稍候…' : '同步全部财务表'}
+              title={syncing ? '正在同步，请稍候…' : status?.supports_overview ? '更新全市场财务概览' : '同步全部财务表'}
             >
               {syncing
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <RefreshCw className="h-3.5 w-3.5" />}
-              {syncing ? '同步中…' : '全部同步'}
+              {syncing ? '同步中…' : status?.supports_overview ? '更新市场概览' : '全部同步'}
             </button>
           </div>
         }
       />
 
       <div className="px-3 sm:px-8 py-6 space-y-6 max-w-7xl">
+        {status?.provider && (
+          <div className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface px-4 py-3 text-xs">
+            <span className="font-medium text-foreground">数据源：{status.provider === 'local_financial' ? '本地财务（AkShare + Tushare）' : status.provider}</span>
+            <span className="text-secondary">模式：{status.mode === 'standard_on_demand' ? '全市场概览 + 单股按需详情' : status.mode}</span>
+            {status.overview && <span className="text-secondary">概览覆盖 {status.overview.symbols}/{status.overview.universe}（{(status.overview.coverage * 100).toFixed(1)}%） · {status.overview.latest_period || '尚未更新'}</span>}
+            {status.last_error && <span className="text-danger">上次更新失败：{status.last_error}</span>}
+          </div>
+        )}
         {syncing && (
           <div className="flex items-center gap-2 rounded-card border border-accent/30 bg-accent/[0.06] px-3 py-2 text-xs text-accent">
             <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
@@ -287,6 +307,13 @@ export function Financials() {
                     <StockFinancialSearch onSelect={pick} />
                   </div>
                   <button
+                    onClick={() => handleScopeSync('stock', selected.symbol)}
+                    disabled={syncing}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-accent rounded-btn border border-accent/30 hover:bg-accent/10 disabled:opacity-40"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />更新该股财报
+                  </button>
+                  <button
                     onClick={() => setSelected(null)}
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-secondary hover:text-foreground rounded-btn border border-border hover:bg-elevated transition-colors shrink-0"
                     title="清除选择"
@@ -313,7 +340,19 @@ export function Financials() {
             {/* 个股详情 / 空引导 */}
             <div className="pb-4">
               {selected ? (
-                <StockFinancialDetail symbol={selected.symbol} name={selected.name} />
+                <div className="space-y-4">
+                  {analysis.data && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 rounded-card border border-border bg-surface p-4">
+                      <div><div className="text-[11px] text-muted">财务质量分</div><div className="text-2xl font-semibold text-accent">{analysis.data.score.total}</div></div>
+                      <div><div className="text-[11px] text-muted">收入同比</div><div className="text-lg font-medium">{analysis.data.cards.growth?.revenue_yoy?.toFixed(1) ?? '—'}%</div></div>
+                      <div><div className="text-[11px] text-muted">利润同比</div><div className="text-lg font-medium">{analysis.data.cards.growth?.net_income_yoy?.toFixed(1) ?? '—'}%</div></div>
+                      <div><div className="text-[11px] text-muted">ROE</div><div className="text-lg font-medium">{analysis.data.cards.profitability?.roe?.toFixed(1) ?? '—'}%</div></div>
+                      <div><div className="text-[11px] text-muted">现金利润比</div><div className="text-lg font-medium">{analysis.data.cards.cash_quality?.cash_to_profit?.toFixed(2) ?? '—'}</div></div>
+                      {analysis.data.warnings.map(w => <div key={w} className="col-span-full text-[11px] text-warning">{w}</div>)}
+                    </div>
+                  )}
+                  <StockFinancialDetail symbol={selected.symbol} name={selected.name} />
+                </div>
               ) : (
                 <EmptyState
                   icon={Search}

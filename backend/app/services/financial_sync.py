@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ _BATCH_SIZE = 100
 
 # 财务报表 + 历史股本表
 FINANCIAL_TABLES = ("metrics", "income", "balance_sheet", "cash_flow", "shares")
+OVERVIEW_TABLE = "overview"
 
 
 # ================================================================
@@ -133,7 +135,9 @@ def _write_table(table: str, df: pl.DataFrame, data_dir: Path) -> int:
     out_dir = data_dir / "financials" / table
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / "part.parquet"
-    df.write_parquet(out_file)
+    tmp_file = out_dir / f".{uuid.uuid4().hex}.parquet"
+    df.write_parquet(tmp_file)
+    tmp_file.replace(out_file)
 
     logger.info("sync_%s done: %d records written", table, len(df))
     return len(df)
@@ -285,6 +289,56 @@ def get_financial_df(data_dir: Path, table: str) -> pl.DataFrame:
         return pl.DataFrame()
 
 
+def provider_info() -> dict[str, Any]:
+    """Return the effective provider and its supported synchronization mode."""
+    from app.services import preferences
+    name = preferences.get_financial_provider()
+    if name == "tickflow":
+        return {"provider": name, "mode": "expert_bulk", "supports_overview": False}
+    from app.data_providers import custom as custom_sources
+    provider = custom_sources.get_provider(name)
+    mode_fn = getattr(provider, "financial_mode", None)
+    return {
+        "provider": name,
+        "mode": mode_fn() if callable(mode_fn) else "custom",
+        "supports_overview": callable(getattr(provider, "get_financial_overview", None)),
+    }
+
+
+def sync_market_overview(data_dir: Path) -> int:
+    from app.services import preferences
+    from app.data_providers import custom as custom_sources
+    provider = custom_sources.get_provider(preferences.get_financial_provider())
+    fn = getattr(provider, "get_financial_overview", None)
+    if not callable(fn):
+        raise RuntimeError("当前财务数据源不支持全市场业绩概览")
+    df = fn()
+    symbols = set(_get_symbols(data_dir))
+    if symbols and not df.is_empty():
+        df = df.filter(pl.col("symbol").is_in(symbols))
+    if df.is_empty():
+        raise RuntimeError("上游返回空概览，已保留本地上一版数据")
+    return _write_table(OVERVIEW_TABLE, df, data_dir)
+
+
+def sync_stock(symbol: str, data_dir: Path, capset: CapabilitySet) -> dict[str, int]:
+    """Fetch all detailed tables for one stock and merge them into local history."""
+    if not symbol:
+        raise ValueError("symbol 不能为空")
+    result: dict[str, int] = {}
+    for table in FINANCIAL_TABLES:
+        fresh = _fetch_table(table, [symbol], capset, latest_only=False)
+        if fresh.is_empty():
+            result[table] = 0
+            continue
+        existing = get_financial_df(data_dir, table)
+        if table == "shares" and not existing.is_empty() and "symbol" in existing.columns:
+            existing = existing.filter(pl.col("symbol") != symbol)
+        merged = _merge_report_history(existing, fresh)
+        result[table] = _write_table(table, merged, data_dir)
+    return result
+
+
 # ================================================================
 # 调度器
 # ================================================================
@@ -301,6 +355,8 @@ class FinancialScheduler:
         self._last_sync: dict[str, str] = {}  # {table: iso_timestamp}
         # 手动同步(run_now)是否正在进行。前端据此显示"同步中"并防重复点击。
         self._is_syncing = False
+        self._active_scope: str | None = None
+        self._last_error: str | None = None
 
     def start(self, data_dir: Path, capset: CapabilitySet, *, auto_schedule: bool = False) -> None:
         """初始化调度器，并按需启动周期同步后台任务。
@@ -442,6 +498,45 @@ class FinancialScheduler:
         _refresh_financials_views(self._data_dir)
         return result
 
+    def _run_scope(self, scope: str, symbol: str | None = None) -> dict[str, int]:
+        if scope == "market_overview":
+            rows = sync_market_overview(self._data_dir)
+            self._record_sync(OVERVIEW_TABLE)
+            return {OVERVIEW_TABLE: rows}
+        if scope == "stock":
+            result = sync_stock(symbol or "", self._data_dir, self._capset)
+            for table, rows in result.items():
+                if rows:
+                    self._record_sync(table)
+            return result
+        if scope == "market_detail" and provider_info()["mode"] == "standard_on_demand":
+            raise RuntimeError("当前 Tushare 权限仅支持按个股更新详细财报，请先选择股票")
+        return self._run_body(None)
+
+    def trigger_scope(self, scope: str, symbol: str | None = None) -> dict[str, Any]:
+        if not self._capset or (not self._capset.has(Cap.FINANCIAL) and not _financial_is_custom()):
+            return {"started": False, "reason": "no FINANCIAL capability"}
+        with self._lock:
+            if self._is_syncing:
+                return {"started": False, "reason": "already running"}
+            self._is_syncing = True
+            self._active_scope = scope
+            self._last_error = None
+
+        def _bg() -> None:
+            try:
+                self._run_scope(scope, symbol)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("financial %s sync failed", scope)
+                self._last_error = str(exc)
+            finally:
+                with self._lock:
+                    self._is_syncing = False
+                    self._active_scope = None
+
+        threading.Thread(target=_bg, name=f"financial-{scope}", daemon=True).start()
+        return {"started": True, "scope": scope, "symbol": symbol}
+
     def run_now(self, table: str | None = None) -> dict[str, int]:
         """同步执行一次同步(阻塞调用线程)。
 
@@ -505,6 +600,14 @@ class FinancialScheduler:
         """手动同步是否正在进行(供 /status 返回,前端据此显示"同步中")。"""
         with self._lock:
             return self._is_syncing
+
+    @property
+    def active_scope(self) -> str | None:
+        return self._active_scope
+
+    @property
+    def last_error(self) -> str | None:
+        return self._last_error
 
     @property
     def last_sync(self) -> dict[str, str]:

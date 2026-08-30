@@ -8,6 +8,7 @@ export const FINANCIAL_QK = {
   balanceSheet: (symbol?: string) => ['financials', 'balance-sheet', symbol],
   cashFlow: (symbol?: string) => ['financials', 'cash-flow', symbol],
   shares: (symbol?: string) => ['financials', 'shares', symbol],
+  analysis: (symbol?: string) => ['financials', 'analysis', symbol],
 }
 
 export function useFinancialStatus() {
@@ -78,5 +79,22 @@ export function useFinancialSync() {
       qc.invalidateQueries({ queryKey: FINANCIAL_QK.status })
       qc.invalidateQueries({ queryKey: ['financials'] })
     },
+  })
+}
+
+export function useFinancialAnalysis(symbol?: string) {
+  return useQuery({
+    queryKey: FINANCIAL_QK.analysis(symbol),
+    queryFn: () => api.financialAnalysis(symbol!),
+    enabled: !!symbol,
+    staleTime: 300_000,
+  })
+}
+
+export function useFinancialScopeSync() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ scope, symbol }: { scope: 'market_overview' | 'stock' | 'market_detail'; symbol?: string }) => api.financialSyncScope(scope, symbol),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['financials'] }),
   })
 }

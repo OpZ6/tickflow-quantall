@@ -2,15 +2,22 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 import polars as pl
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.services.financial_sync import FINANCIAL_TABLES, get_financial_df
-from app.services.financial_analyzer import analyze_financials_stream
 from app.services import ai_reports
+from app.services.financial_analysis import analyze_stock
+from app.services.financial_analyzer import analyze_financials_stream
+from app.services.financial_sync import (
+    FINANCIAL_TABLES,
+    OVERVIEW_TABLE,
+    get_financial_df,
+    provider_info,
+)
 from app.tickflow.capabilities import Cap
 
 logger = logging.getLogger(__name__)
@@ -43,7 +50,7 @@ def financial_status(request: Request):
     data_dir = request.app.state.repo.store.data_dir
     tables = {}
 
-    for table in FINANCIAL_TABLES:
+    for table in (*FINANCIAL_TABLES, OVERVIEW_TABLE):
         path = data_dir / "financials" / table / "part.parquet"
         if path.exists():
             try:
@@ -60,6 +67,27 @@ def financial_status(request: Request):
     fs = getattr(request.app.state, "financial_scheduler", None)
     last_sync = fs.last_sync if fs else {}
 
+    try:
+        source = provider_info()
+    except Exception as exc:  # noqa: BLE001
+        source = {
+            "provider": "unavailable",
+            "mode": "unavailable",
+            "supports_overview": False,
+            "error": str(exc),
+        }
+    overview = get_financial_df(data_dir, OVERVIEW_TABLE)
+    latest_period = None
+    if not overview.is_empty() and "period_end" in overview.columns:
+        latest_period = str(overview["period_end"].max())
+    instruments = data_dir / "instruments" / "instruments.parquet"
+    universe = 0
+    if instruments.exists():
+        try:
+            universe = pl.read_parquet(instruments, columns=["symbol"])["symbol"].n_unique()
+        except Exception:
+            pass
+    overview_symbols = tables.get(OVERVIEW_TABLE, {}).get("symbols", 0)
     return {
         "available": True,
         "tables": tables,
@@ -67,6 +95,15 @@ def financial_status(request: Request):
         # 服务端是否正在同步(手动触发)——前端据此显示"同步中"并防重复点击,
         # 且刷新页面后仍能正确反映服务端状态。
         "syncing": bool(fs and fs.is_syncing),
+        **source,
+        "active_scope": fs.active_scope if fs else None,
+        "last_error": fs.last_error if fs else None,
+        "overview": {
+            "symbols": overview_symbols,
+            "universe": universe,
+            "coverage": round(overview_symbols / universe, 4) if universe else 0,
+            "latest_period": latest_period,
+        },
     }
 
 
@@ -169,6 +206,30 @@ class AnalyzeRequest(BaseModel):
     """AI 财务分析请求。"""
     symbol: str
     focus: str = ""  # 可选:用户追加的分析关注点
+
+
+class SyncRequest(BaseModel):
+    scope: str
+    symbol: str | None = None
+
+
+@router.post("/sync")
+def sync_scope(request: Request, req: SyncRequest):
+    _require_financial(request.app.state.capabilities)
+    if req.scope not in {"market_overview", "stock", "market_detail"}:
+        raise HTTPException(400, "scope 必须是 market_overview、stock 或 market_detail")
+    if req.scope == "stock" and not req.symbol:
+        raise HTTPException(400, "按个股更新时必须提供 symbol")
+    fs = getattr(request.app.state, "financial_scheduler", None)
+    if not fs:
+        raise HTTPException(503, "FinancialScheduler not available")
+    return {"status": "ok", "synced": fs.trigger_scope(req.scope, req.symbol)}
+
+
+@router.get("/analysis/{symbol}")
+def deterministic_analysis(request: Request, symbol: str, as_of: date | None = None):
+    _require_financial(request.app.state.capabilities)
+    return analyze_stock(request.app.state.repo.store.data_dir, symbol, as_of or date.today())
 
 
 @router.post("/analyze")

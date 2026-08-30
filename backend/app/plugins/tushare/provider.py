@@ -42,7 +42,7 @@ def _yyyymmdd(dt: datetime | None) -> str | None:
     return dt.strftime("%Y%m%d") if dt else None
 
 
-_DATE_COLS = ("trade_date", "end_date", "ann_date", "list_date")
+_DATE_COLS = ("trade_date", "end_date", "ann_date", "f_ann_date", "list_date")
 
 
 def _prep_dates(raw):
@@ -80,6 +80,116 @@ _TUSHARE_FINANCIAL_API: dict[str, str] = {
     "metrics": "fina_indicator",
     "shares": "daily_basic",
 }
+
+_FINANCIAL_FIELDS: dict[str, dict[str, str]] = {
+    "metrics": {
+        "eps": "eps_basic", "dt_eps": "eps_diluted", "bps": "bps", "ocfps": "ocfps",
+        "roe_waa": "roe", "roe": "roe_diluted", "roa": "roa",
+        "grossprofit_margin": "gross_margin", "netprofit_margin": "net_margin",
+        "debt_to_assets": "debt_to_asset_ratio", "or_yoy": "revenue_yoy",
+        "netprofit_yoy": "net_income_yoy", "ocf_to_or": "operating_cash_to_revenue",
+        "inv_turn": "inventory_turnover",
+    },
+    "income": {
+        "revenue": "revenue", "oper_cost": "operating_cost", "operate_profit": "operating_profit",
+        "sell_exp": "selling_expense", "admin_exp": "admin_expense", "rd_exp": "rd_expense",
+        "fin_exp": "financial_expense", "non_oper_income": "non_operating_income",
+        "non_oper_exp": "non_operating_expense", "total_profit": "total_profit",
+        "income_tax": "income_tax", "n_income": "net_income",
+        "n_income_attr_p": "net_income_attributable", "basic_eps": "basic_eps",
+        "diluted_eps": "diluted_eps",
+    },
+    "balance_sheet": {
+        "total_assets": "total_assets", "total_cur_assets": "total_current_assets",
+        "total_nca": "total_noncurrent_assets", "money_cap": "cash_and_equivalents",
+        "accounts_receiv": "accounts_receivable", "inventories": "inventory",
+        "fix_assets": "fixed_assets", "intan_assets": "intangible_assets", "goodwill": "goodwill",
+        "total_liab": "total_liabilities", "total_cur_liab": "total_current_liabilities",
+        "total_ncl": "total_noncurrent_liabilities", "st_borr": "short_term_borrowing",
+        "lt_borr": "long_term_borrowing", "acct_payable": "accounts_payable",
+        "total_hldr_eqy_inc_min_int": "total_equity",
+        "total_hldr_eqy_exc_min_int": "equity_attributable", "undistr_porfit": "retained_earnings",
+        "minority_int": "minority_interest",
+    },
+    "cash_flow": {
+        "n_cashflow_act": "net_operating_cash_flow", "n_cashflow_inv_act": "net_investing_cash_flow",
+        "n_cash_flows_fnc_act": "net_financing_cash_flow", "c_pay_acq_const_fiolta": "capex",
+        "n_incr_cash_cash_equ": "net_cash_change",
+    },
+}
+
+
+def _normalize_financial(table: str, raw) -> pl.DataFrame:
+    """Normalize vendor fields to Tickflow's stable financial contract."""
+    df = TushareProvider._to_polars_with_symbol(_prep_dates(raw))
+    if df.is_empty():
+        return df
+    rename: dict[str, str] = {}
+    if "end_date" in df.columns:
+        rename["end_date"] = "period_end"
+    if "f_ann_date" in df.columns:
+        rename["f_ann_date"] = "announce_date"
+    elif "ann_date" in df.columns:
+        rename["ann_date"] = "announce_date"
+    for src, dst in _FINANCIAL_FIELDS.get(table, {}).items():
+        if src in df.columns and src != dst:
+            if dst in df.columns and dst not in _FINANCIAL_FIELDS.get(table, {}):
+                df = df.drop(dst)
+            rename[src] = dst
+    if table == "shares":
+        if "trade_date" in df.columns:
+            rename["trade_date"] = "period_end"
+        if "total_share" in df.columns:
+            rename["total_share"] = "total_shares"
+        if "float_share" in df.columns:
+            rename["float_share"] = "float_shares"
+    if rename:
+        df = df.rename(rename)
+    for col in ("period_end", "announce_date", "effective_date"):
+        if col in df.columns and df.schema[col] == pl.Utf8:
+            df = df.with_columns(
+                pl.coalesce(
+                    pl.col(col).str.to_date("%Y%m%d", strict=False),
+                    pl.col(col).str.to_date("%Y-%m-%d", strict=False),
+                ).alias(col)
+            )
+    if table == "shares":
+        cols = [c for c in ("total_shares", "float_shares") if c in df.columns]
+        if cols:
+            df = df.with_columns([(pl.col(c).cast(pl.Float64, strict=False) * 10_000).alias(c) for c in cols])
+        if "period_end" in df.columns:
+            df = df.with_columns(pl.col("period_end").alias("effective_date"))
+    df = df.with_columns(
+        pl.lit("tushare").alias("source"),
+        pl.lit(datetime.now().date()).alias("observed_at"),
+        pl.lit("official").alias("quality_level"),
+    )
+    # Keep consolidated/latest revisions where the provider exposes flags.
+    if "report_type" in df.columns:
+        filtered = df.filter(pl.col("report_type").cast(pl.Utf8) == "1")
+        if not filtered.is_empty():
+            df = filtered
+    if "update_flag" in df.columns:
+        filtered = df.filter(pl.col("update_flag").cast(pl.Utf8) == "1")
+        if not filtered.is_empty():
+            df = filtered
+    key = "period_end" if "period_end" in df.columns else None
+    if key:
+        order = ["symbol", key] + (["announce_date"] if "announce_date" in df.columns else [])
+        df = df.sort(order, nulls_last=True).unique(["symbol", key], keep="last")
+    if table == "shares" and {"total_shares", "float_shares"} <= set(df.columns):
+        df = (
+            df.sort(["symbol", "period_end"])
+            .with_columns(
+                (
+                    (pl.col("total_shares") != pl.col("total_shares").shift(1).over("symbol"))
+                    | (pl.col("float_shares") != pl.col("float_shares").shift(1).over("symbol"))
+                ).fill_null(True).alias("_changed")
+            )
+            .filter(pl.col("_changed"))
+            .drop("_changed")
+        )
+    return df
 
 
 class TushareProvider:
@@ -277,30 +387,29 @@ class TushareProvider:
             return pl.DataFrame()
         logger.info("Tushare financials %s 拉取开始(%d symbols)", table, len(symbols))
         frames: list[pl.DataFrame] = []
-        chunks = chunked(symbols, _BATCH)
-        for chunk in chunks:
+        # Standard Tushare financial endpoints accept one ts_code per request.
+        for symbol in symbols:
             try:
                 pro = _get_pro()
                 if table == "shares":
                     raw = pro.daily_basic(
-                        ts_code=",".join(chunk),
+                        ts_code=symbol,
                         fields="ts_code,trade_date,close,turnover_rate,float_share,total_share,circ_mv,total_mv,pe,pb",
                     )
                 else:
-                    kwargs: dict = {"ts_code": ",".join(chunk)}
+                    kwargs: dict = {"ts_code": symbol}
                     raw = getattr(pro, api_name)(**kwargs)
             except Exception as e:
-                logger.warning("Tushare financials %s 拉取失败(%d symbols): %s", table, len(chunk), e)
+                logger.warning("Tushare financials %s 拉取失败(%s): %s", table, symbol, e)
                 raw = None
-            raw = _prep_dates(raw)
-            df = self._to_polars_with_symbol(raw)
+            df = _normalize_financial(table, raw)
             if not df.is_empty():
                 frames.append(df)
         if not frames:
             return pl.DataFrame()
         result = pl.concat(frames, how="diagonal_relaxed")
         if latest_only and table != "shares":
-            date_col = next((c for c in ("end_date", "ann_date", "trade_date") if c in result.columns), None)
+            date_col = next((c for c in ("period_end", "announce_date", "effective_date") if c in result.columns), None)
             if date_col:
                 result = result.sort("symbol", date_col).group_by("symbol").last()
         return result

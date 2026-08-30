@@ -141,3 +141,7 @@ class MyConfig:
 
 注册后, 插件和用户 YAML 自定义源走**完全相同的路由路径**(services 层的
 `provider_has_dataset` / `get_provider` 调用), 无需额外集成代码。
+
+## 财务插件
+
+声明 `datasets: [financial]` 后实现 `get_financials(table, symbols, latest_only=True)`。若插件还提供横截面业绩快照，可实现 `get_financial_overview(report_period=None)`；账号权限影响同步范围时，实现 `financial_mode()`，供 API 和前端选择市场概览、单股按需或全市场详细操作。字段和时点规则以 `docs/data-foundation.md` 为准。

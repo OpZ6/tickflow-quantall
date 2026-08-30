@@ -316,3 +316,9 @@ datasets:
 ```
 
 把这段 YAML 保存为 `data/data_sources/my_source.yaml`,然后在设置页重新加载即可。
+
+## 财务 Provider 契约
+
+财务源实现 `get_financials(table, symbols, latest_only=True)`；`table` 为 `metrics`、`income`、`balance_sheet`、`cash_flow` 或 `shares`。返回值至少包含 `symbol`、`period_end`，报告表应有 `announce_date`，并统一提供 `source`、`observed_at`、`quality_level`。普通权限接口必须逐只股票请求，不能假设逗号分隔代码可批量拉取。
+
+可选实现 `get_financial_overview(report_period=None)` 提供全市场概览，并用 `financial_mode()` 声明 `overview_only`、`standard_on_demand` 或 `vip_bulk`。概览与详细财报是不同数据集，不得互相伪装。

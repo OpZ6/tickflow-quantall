@@ -72,6 +72,22 @@ export interface FinancialStatus {
   last_sync: Record<string, string>
   /** 服务端是否正在同步(手动触发)——驱动"同步中"UI 并防重复点击 */
   syncing?: boolean
+  provider?: string
+  mode?: 'overview_only' | 'standard_on_demand' | 'vip_bulk' | 'expert_bulk' | 'custom' | 'unavailable'
+  supports_overview?: boolean
+  active_scope?: string | null
+  last_error?: string | null
+  overview?: { symbols: number; universe: number; coverage: number; latest_period: string | null }
+}
+
+export interface FinancialAnalysis {
+  symbol: string
+  as_of: string
+  model: string
+  score: { total: number; components: Record<string, number>; quality_flag: boolean }
+  cards: Record<string, Record<string, number | null>>
+  coverage: { periods: number; latest_period: string | null }
+  warnings: string[]
 }
 
 export interface FinancialMetricRecord {
@@ -2900,6 +2916,14 @@ export const api = {
     request<{ status: string; synced: { started: boolean; reason?: string } }>(
       `/api/financials/sync/${table}`, { method: 'POST' },
     ),
+
+  financialSyncScope: (scope: 'market_overview' | 'stock' | 'market_detail', symbol?: string) =>
+    request<{ status: string; synced: { started: boolean; reason?: string } }>(
+      '/api/financials/sync', { method: 'POST', body: JSON.stringify({ scope, symbol }) },
+    ),
+
+  financialAnalysis: (symbol: string) =>
+    request<FinancialAnalysis>(`/api/financials/analysis/${encodeURIComponent(symbol)}`),
 
   /** AI 分析报告 CRUD */
   financialReportsList: () =>
