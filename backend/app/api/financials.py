@@ -54,10 +54,17 @@ def financial_status(request: Request):
         path = data_dir / "financials" / table / "part.parquet"
         if path.exists():
             try:
-                df = pl.read_parquet(path, columns=["symbol"])
+                df = pl.read_parquet(path, columns=["symbol", "period_end"])
                 tables[table] = {
                     "rows": len(df),
                     "symbols": df["symbol"].n_unique() if not df.is_empty() else 0,
+                    "periods": df["period_end"].n_unique() if not df.is_empty() else 0,
+                    "earliest_period": (
+                        str(df["period_end"].min()) if not df.is_empty() else None
+                    ),
+                    "latest_period": (
+                        str(df["period_end"].max()) if not df.is_empty() else None
+                    ),
                 }
             except Exception:
                 tables[table] = {"rows": 0, "symbols": 0}
@@ -98,6 +105,7 @@ def financial_status(request: Request):
         **source,
         "active_scope": fs.active_scope if fs else None,
         "last_error": fs.last_error if fs else None,
+        "progress": fs.progress if fs else None,
         "overview": {
             "symbols": overview_symbols,
             "universe": universe,
@@ -211,19 +219,28 @@ class AnalyzeRequest(BaseModel):
 class SyncRequest(BaseModel):
     scope: str
     symbol: str | None = None
+    start_year: int = 2012
 
 
 @router.post("/sync")
 def sync_scope(request: Request, req: SyncRequest):
     _require_financial(request.app.state.capabilities)
-    if req.scope not in {"market_overview", "stock", "market_detail"}:
-        raise HTTPException(400, "scope 必须是 market_overview、stock 或 market_detail")
+    if req.scope not in {"market_overview", "market_history", "stock", "market_detail"}:
+        raise HTTPException(
+            400,
+            "scope 必须是 market_overview、market_history、stock 或 market_detail",
+        )
     if req.scope == "stock" and not req.symbol:
         raise HTTPException(400, "按个股更新时必须提供 symbol")
+    if not 2012 <= req.start_year <= date.today().year:
+        raise HTTPException(400, "start_year 必须在 2012 到当前年份之间")
     fs = getattr(request.app.state, "financial_scheduler", None)
     if not fs:
         raise HTTPException(503, "FinancialScheduler not available")
-    return {"status": "ok", "synced": fs.trigger_scope(req.scope, req.symbol)}
+    return {
+        "status": "ok",
+        "synced": fs.trigger_scope(req.scope, req.symbol, req.start_year),
+    }
 
 
 @router.get("/analysis/{symbol}")

@@ -68,7 +68,13 @@ export interface ChanlunStatus {
 // ===== Financials =====
 export interface FinancialStatus {
   available: boolean
-  tables: Record<string, { rows: number; symbols: number }>
+  tables: Record<string, {
+    rows: number
+    symbols: number
+    periods?: number
+    earliest_period?: string | null
+    latest_period?: string | null
+  }>
   last_sync: Record<string, string>
   /** 服务端是否正在同步(手动触发)——驱动"同步中"UI 并防重复点击 */
   syncing?: boolean
@@ -77,6 +83,14 @@ export interface FinancialStatus {
   supports_overview?: boolean
   active_scope?: string | null
   last_error?: string | null
+  progress?: {
+    step: number
+    total: number
+    table: string
+    period: string
+    skipped?: boolean
+    error?: string
+  } | null
   overview?: { symbols: number; universe: number; coverage: number; latest_period: string | null }
 }
 
@@ -2917,9 +2931,16 @@ export const api = {
       `/api/financials/sync/${table}`, { method: 'POST' },
     ),
 
-  financialSyncScope: (scope: 'market_overview' | 'stock' | 'market_detail', symbol?: string) =>
+  financialSyncScope: (
+    scope: 'market_overview' | 'market_history' | 'stock' | 'market_detail',
+    symbol?: string,
+    startYear = 2012,
+  ) =>
     request<{ status: string; synced: { started: boolean; reason?: string } }>(
-      '/api/financials/sync', { method: 'POST', body: JSON.stringify({ scope, symbol }) },
+      '/api/financials/sync', {
+        method: 'POST',
+        body: JSON.stringify({ scope, symbol, start_year: startYear }),
+      },
     ),
 
   financialAnalysis: (symbol: string) =>

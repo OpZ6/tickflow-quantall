@@ -94,7 +94,11 @@ export function useFinancialAnalysis(symbol?: string) {
 export function useFinancialScopeSync() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ scope, symbol }: { scope: 'market_overview' | 'stock' | 'market_detail'; symbol?: string }) => api.financialSyncScope(scope, symbol),
+    mutationFn: ({ scope, symbol, startYear }: {
+      scope: 'market_overview' | 'market_history' | 'stock' | 'market_detail'
+      symbol?: string
+      startYear?: number
+    }) => api.financialSyncScope(scope, symbol, startYear),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['financials'] }),
   })
 }

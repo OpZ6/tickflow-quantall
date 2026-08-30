@@ -322,3 +322,5 @@ datasets:
 财务源实现 `get_financials(table, symbols, latest_only=True)`；`table` 为 `metrics`、`income`、`balance_sheet`、`cash_flow` 或 `shares`。返回值至少包含 `symbol`、`period_end`，报告表应有 `announce_date`，并统一提供 `source`、`observed_at`、`quality_level`。普通权限接口必须逐只股票请求，不能假设逗号分隔代码可批量拉取。
 
 可选实现 `get_financial_overview(report_period=None)` 提供全市场概览，并用 `financial_mode()` 声明 `overview_only`、`standard_on_demand` 或 `vip_bulk`。概览与详细财报是不同数据集，不得互相伪装。
+
+支持按报告期批量历史回填的插件可实现 `get_financial_market_table(table, report_period)`。该入口只接受 `metrics`、`income`、`balance_sheet`、`cash_flow`，返回一整个报告期的市场核心字段；详细字段仍走 `get_financials()`。两者写入同一标准表时必须保护信息更丰富的明细行。

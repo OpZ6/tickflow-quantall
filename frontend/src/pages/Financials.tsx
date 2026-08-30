@@ -130,12 +130,22 @@ export function Financials() {
     })
   }
 
-  const handleScopeSync = (scope: 'market_overview' | 'stock' | 'market_detail', symbol?: string) => {
+  const handleScopeSync = (
+    scope: 'market_overview' | 'market_history' | 'stock' | 'market_detail',
+    symbol?: string,
+  ) => {
     if (syncing) return
     scopeSync.mutate({ scope, symbol }, {
       onSuccess: (r) => {
         if (!r.synced.started) toast(r.synced.reason || '更新未能开始', 'error')
-        else toast(scope === 'stock' ? '已开始更新该股详细财报' : '已开始更新全市场财务概览', 'success')
+        else toast(
+          scope === 'stock'
+            ? '已开始更新该股详细财报'
+            : scope === 'market_history'
+              ? '已开始增量更新全市场历史核心财报'
+              : '已开始更新全市场财务概览',
+          'success',
+        )
       },
     })
   }
@@ -182,19 +192,21 @@ export function Financials() {
                   ? `已同步 ${syncedCount}/${TABLE_ORDER.length} 张表…`
                   : isSingleSync
                     ? `同步${TABLE_LABELS[syncSingleTable!] ?? syncSingleTable}…`
-                    : '同步中…'}
+                    : status?.active_scope === 'market_history' && status.progress
+                      ? `${status.progress.table} ${status.progress.period} · ${status.progress.step}/${status.progress.total}`
+                      : '同步中…'}
               </span>
             )}
             <button
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn bg-gradient-to-r from-accent/25 to-accent/10 border border-accent/30 text-accent text-xs font-medium hover:from-accent/35 hover:to-accent/20 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={() => handleScopeSync(status?.supports_overview ? 'market_overview' : 'market_detail')}
+              onClick={() => handleScopeSync(status?.supports_overview ? 'market_history' : 'market_detail')}
               disabled={syncing}
-              title={syncing ? '正在同步，请稍候…' : status?.supports_overview ? '更新全市场财务概览' : '同步全部财务表'}
+              title={syncing ? '正在同步，请稍候…' : status?.supports_overview ? '增量更新2012年以来全市场核心财报' : '同步全部财务表'}
             >
               {syncing
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <RefreshCw className="h-3.5 w-3.5" />}
-              {syncing ? '同步中…' : status?.supports_overview ? '更新市场概览' : '全部同步'}
+              {syncing ? '同步中…' : status?.supports_overview ? '更新全市场历史' : '全部同步'}
             </button>
           </div>
         }
@@ -204,7 +216,7 @@ export function Financials() {
         {status?.provider && (
           <div className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface px-4 py-3 text-xs">
             <span className="font-medium text-foreground">数据源：{status.provider === 'local_financial' ? '本地财务（AkShare + Tushare）' : status.provider}</span>
-            <span className="text-secondary">模式：{status.mode === 'standard_on_demand' ? '全市场概览 + 单股按需详情' : status.mode}</span>
+            <span className="text-secondary">模式：{status.mode === 'standard_on_demand' ? '全市场历史核心报表 + 单股完整详情' : status.mode}</span>
             {status.overview && <span className="text-secondary">概览覆盖 {status.overview.symbols}/{status.overview.universe}（{(status.overview.coverage * 100).toFixed(1)}%） · {status.overview.latest_period || '尚未更新'}</span>}
             {status.last_error && <span className="text-danger">上次更新失败：{status.last_error}</span>}
           </div>
@@ -212,7 +224,9 @@ export function Financials() {
         {syncing && (
           <div className="flex items-center gap-2 rounded-card border border-accent/30 bg-accent/[0.06] px-3 py-2 text-xs text-accent">
             <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-            正在从财务数据源拉取数据，请稍候…
+            {status?.active_scope === 'market_history' && status.progress
+              ? `正在更新 ${TABLE_LABELS[status.progress.table] ?? status.progress.table} ${status.progress.period}，进度 ${status.progress.step}/${status.progress.total}${status.progress.skipped ? '（本地已完整，跳过）' : ''}`
+              : '正在从财务数据源拉取数据，请稍候…'}
           </div>
         )}
 
@@ -255,16 +269,18 @@ export function Financials() {
                         )}
                         <span className="text-xs font-medium text-foreground">{label}</span>
                       </div>
-                      <button
-                        className="text-muted hover:text-accent transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        onClick={() => handleSync(key)}
-                        disabled={syncing}
-                        title={syncing ? '正在同步…' : `更新${label}`}
-                      >
-                        {syncing
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : <Download className="h-3.5 w-3.5" />}
-                      </button>
+                      {status?.provider !== 'local_financial' && (
+                        <button
+                          className="text-muted hover:text-accent transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          onClick={() => handleSync(key)}
+                          disabled={syncing}
+                          title={syncing ? '正在同步…' : `更新${label}`}
+                        >
+                          {syncing
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Download className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
                     </div>
                     <div className="mt-2 text-xl font-semibold tabular-nums text-foreground">
                       {fmtBigNum(info?.rows ?? 0)}
@@ -273,6 +289,11 @@ export function Financials() {
                     <div className="text-[11px] text-muted mt-0.5">
                       {fmtBigNum(info?.symbols ?? 0)} 只标的
                     </div>
+                    {info?.periods != null && info.periods > 0 && (
+                      <div className="text-[10px] text-muted mt-0.5">
+                        {info.periods} 个报告期 · {info.earliest_period}—{info.latest_period}
+                      </div>
+                    )}
                     <div className="mt-auto pt-2 border-t border-border/40 text-[10px] text-muted flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5 shrink-0" />
                       {lsTime

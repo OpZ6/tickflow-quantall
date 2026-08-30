@@ -145,3 +145,5 @@ class MyConfig:
 ## 财务插件
 
 声明 `datasets: [financial]` 后实现 `get_financials(table, symbols, latest_only=True)`。若插件还提供横截面业绩快照，可实现 `get_financial_overview(report_period=None)`；账号权限影响同步范围时，实现 `financial_mode()`，供 API 和前端选择市场概览、单股按需或全市场详细操作。字段和时点规则以 `docs/data-foundation.md` 为准。
+
+全市场历史核心报表使用可选的 `get_financial_market_table(table, report_period)`，由同步服务负责报告期枚举、当前股票池过滤、覆盖判断、增量合并、进度和原子发布。Provider 只负责单期采集与标准化，不得自行写盘。

@@ -9,7 +9,7 @@ import asyncio
 import logging
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -321,6 +321,122 @@ def sync_market_overview(data_dir: Path) -> int:
     return _write_table(OVERVIEW_TABLE, df, data_dir)
 
 
+def _report_periods(start_year: int, today: date | None = None) -> list[date]:
+    current = today or date.today()
+    periods = [
+        date(year, month, day)
+        for year in range(max(2012, start_year), current.year + 1)
+        for month, day in ((3, 31), (6, 30), (9, 30), (12, 31))
+        if date(year, month, day) < current
+    ]
+    return periods
+
+
+def _merge_market_core(existing: pl.DataFrame, fresh: pl.DataFrame) -> pl.DataFrame:
+    """Merge bulk core facts without replacing richer non-AkShare detail rows."""
+    if fresh.is_empty():
+        return existing
+    if existing.is_empty():
+        return _merge_report_history(fresh)
+    keys = fresh.select(["symbol", "period_end"]).unique()
+    marked = existing.join(keys.with_columns(pl.lit(True).alias("_incoming")),
+                           on=["symbol", "period_end"], how="left")
+    source = pl.col("source").fill_null("") if "source" in marked.columns else pl.lit("")
+    keep_existing = marked.filter(
+        pl.col("_incoming").is_null() | ~source.str.starts_with("akshare")
+    ).drop("_incoming")
+    protected = existing.filter(
+        ~pl.col("source").fill_null("").str.starts_with("akshare")
+    ) if "source" in existing.columns else existing.head(0)
+    protected_keys = protected.select(["symbol", "period_end"]).unique()
+    accepted_fresh = fresh.join(
+        protected_keys.with_columns(pl.lit(True).alias("_protected")),
+        on=["symbol", "period_end"], how="left",
+    ).filter(pl.col("_protected").is_null()).drop("_protected")
+    return _merge_report_history(keep_existing, accepted_fresh)
+
+
+def sync_market_history(
+    data_dir: Path,
+    *,
+    start_year: int = 2012,
+    on_progress=None,
+) -> dict[str, int]:
+    """Backfill full-market core financial history by report period.
+
+    Older periods above the historical completion threshold are skipped; the
+    latest four periods are always refreshed for delayed filings and revisions.
+    """
+    from app.data_providers import custom as custom_sources
+    from app.services import preferences
+
+    provider = custom_sources.get_provider(preferences.get_financial_provider())
+    fetch = getattr(provider, "get_financial_market_table", None)
+    if not callable(fetch):
+        raise RuntimeError("当前财务数据源不支持全市场历史核心报表")
+    universe_symbols = set(_get_symbols(data_dir))
+    # Historical listed-company counts are much lower than today's universe.
+    # A completed old market period still has well over 1,000 rows, while the
+    # pre-existing on-demand detail cache normally has only a handful.
+    threshold = min(1000, max(100, int(len(universe_symbols) * 0.85)))
+    periods = _report_periods(start_year)
+    tables = ("metrics", "income", "balance_sheet", "cash_flow")
+    total_steps = len(periods) * len(tables)
+    step = 0
+    result: dict[str, int] = {}
+
+    for table in tables:
+        existing = get_financial_df(data_dir, table)
+        dirty = 0
+        for period in periods:
+            step += 1
+            period_rows = 0
+            if not existing.is_empty() and "period_end" in existing.columns:
+                period_rows = existing.filter(pl.col("period_end") == period)[
+                    "symbol"
+                ].n_unique()
+            refresh_recent = period in periods[-4:]
+            skipped = period_rows >= threshold and not refresh_recent
+            if on_progress:
+                on_progress({
+                    "step": step,
+                    "total": total_steps,
+                    "table": table,
+                    "period": period.isoformat(),
+                    "skipped": skipped,
+                })
+            if skipped:
+                continue
+            try:
+                fresh = fetch(table, period)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("market financial %s %s failed: %s", table, period, exc)
+                if on_progress:
+                    on_progress({
+                        "step": step,
+                        "total": total_steps,
+                        "table": table,
+                        "period": period.isoformat(),
+                        "error": str(exc),
+                    })
+                continue
+            if universe_symbols and not fresh.is_empty():
+                fresh = fresh.filter(pl.col("symbol").is_in(universe_symbols))
+            if fresh.is_empty():
+                logger.warning("market financial %s %s returned empty", table, period)
+                continue
+            existing = _merge_market_core(existing, fresh)
+            dirty += 1
+            if dirty % 4 == 0:
+                result[table] = _write_table(table, existing, data_dir)
+        if dirty % 4:
+            result[table] = _write_table(table, existing, data_dir)
+        if not existing.is_empty():
+            result.setdefault(table, existing.height)
+    _refresh_financials_views(data_dir)
+    return result
+
+
 def sync_stock(symbol: str, data_dir: Path, capset: CapabilitySet) -> dict[str, int]:
     """Fetch all detailed tables for one stock and merge them into local history."""
     if not symbol:
@@ -357,6 +473,7 @@ class FinancialScheduler:
         self._is_syncing = False
         self._active_scope: str | None = None
         self._last_error: str | None = None
+        self._progress: dict[str, Any] | None = None
 
     def start(self, data_dir: Path, capset: CapabilitySet, *, auto_schedule: bool = False) -> None:
         """初始化调度器，并按需启动周期同步后台任务。
@@ -498,7 +615,9 @@ class FinancialScheduler:
         _refresh_financials_views(self._data_dir)
         return result
 
-    def _run_scope(self, scope: str, symbol: str | None = None) -> dict[str, int]:
+    def _run_scope(
+        self, scope: str, symbol: str | None = None, start_year: int = 2012
+    ) -> dict[str, int]:
         if scope == "market_overview":
             rows = sync_market_overview(self._data_dir)
             self._record_sync(OVERVIEW_TABLE)
@@ -509,11 +628,26 @@ class FinancialScheduler:
                 if rows:
                     self._record_sync(table)
             return result
+        if scope == "market_history":
+            result = sync_market_history(
+                self._data_dir,
+                start_year=start_year,
+                on_progress=lambda value: setattr(self, "_progress", value),
+            )
+            for table, rows in result.items():
+                if rows:
+                    self._record_sync(table)
+            overview_rows = sync_market_overview(self._data_dir)
+            self._record_sync(OVERVIEW_TABLE)
+            result[OVERVIEW_TABLE] = overview_rows
+            return result
         if scope == "market_detail" and provider_info()["mode"] == "standard_on_demand":
             raise RuntimeError("当前 Tushare 权限仅支持按个股更新详细财报，请先选择股票")
         return self._run_body(None)
 
-    def trigger_scope(self, scope: str, symbol: str | None = None) -> dict[str, Any]:
+    def trigger_scope(
+        self, scope: str, symbol: str | None = None, start_year: int = 2012
+    ) -> dict[str, Any]:
         if not self._capset or (not self._capset.has(Cap.FINANCIAL) and not _financial_is_custom()):
             return {"started": False, "reason": "no FINANCIAL capability"}
         with self._lock:
@@ -522,10 +656,11 @@ class FinancialScheduler:
             self._is_syncing = True
             self._active_scope = scope
             self._last_error = None
+            self._progress = None
 
         def _bg() -> None:
             try:
-                self._run_scope(scope, symbol)
+                self._run_scope(scope, symbol, start_year)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("financial %s sync failed", scope)
                 self._last_error = str(exc)
@@ -533,9 +668,15 @@ class FinancialScheduler:
                 with self._lock:
                     self._is_syncing = False
                     self._active_scope = None
+                    self._progress = None
 
         threading.Thread(target=_bg, name=f"financial-{scope}", daemon=True).start()
-        return {"started": True, "scope": scope, "symbol": symbol}
+        return {
+            "started": True,
+            "scope": scope,
+            "symbol": symbol,
+            "start_year": start_year,
+        }
 
     def run_now(self, table: str | None = None) -> dict[str, int]:
         """同步执行一次同步(阻塞调用线程)。
@@ -608,6 +749,10 @@ class FinancialScheduler:
     @property
     def last_error(self) -> str | None:
         return self._last_error
+
+    @property
+    def progress(self) -> dict[str, Any] | None:
+        return dict(self._progress) if self._progress else None
 
     @property
     def last_sync(self) -> dict[str, str]:
