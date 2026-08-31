@@ -1251,7 +1251,32 @@ class KlineRepository:
             lookback_start = trading_dates[-(lookback_days + 1)]
         else:
             lookback_start = trading_dates[0]
-        return cache.filter((pl.col("date") >= lookback_start) & (pl.col("date") <= target_date))
+        result = cache.filter(
+            (pl.col("date") >= lookback_start) & (pl.col("date") <= target_date)
+        )
+        return self._overlay_live_enriched(result, lookback_start, target_date)
+
+    def _overlay_live_enriched(
+        self,
+        history: pl.DataFrame,
+        start: date,
+        end: date,
+    ) -> pl.DataFrame:
+        """Replace the cached latest partition with the current live snapshot."""
+        latest = getattr(self, "_enriched_cache", None)
+        latest_date = getattr(self, "_enriched_cache_date", None)
+        if (
+            latest is None
+            or latest.is_empty()
+            or latest_date is None
+            or latest_date < start
+            or latest_date > end
+        ):
+            return history
+        return pl.concat(
+            [history.filter(pl.col("date") != latest_date), latest],
+            how="diagonal_relaxed",
+        ).sort(["symbol", "date"])
 
     def get_enriched_range(
         self,
@@ -1286,6 +1311,7 @@ class KlineRepository:
             return None
 
         df = cache.filter((pl.col("date") >= start) & (pl.col("date") <= end))
+        df = self._overlay_live_enriched(df, start, end)
         if symbols is not None:
             df = df.filter(pl.col("symbol").is_in(symbols))
         if columns and not df.is_empty():
@@ -2473,6 +2499,17 @@ class KlineRepository:
         if asset_type == "stock":
             self._enriched_cache = cache_df
             self._enriched_cache_date = dt
+            # EnrichedPublication advances the managed generation whenever the
+            # live partition changes.  The historical cache is still valid for
+            # every earlier partition; get_enriched_range/history overlays this
+            # latest snapshot on read.  Advancing its generation here prevents
+            # a close-time quote flush from making all history readers report a
+            # false cache miss until the next full refresh.
+            if self._enriched_history_cache is not None:
+                try:
+                    self._enriched_history_generation = self.get_matrix_data_generation("stock")
+                except EnrichedGenerationUnavailableError:
+                    self._enriched_history_generation = None
         elif asset_type == "etf":
             self._etf_enriched_cache = cache_df
             self._etf_enriched_cache_date = dt

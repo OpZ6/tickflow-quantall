@@ -61,6 +61,31 @@ def test_live_enriched_cache_keeps_instrument_metadata_without_persisting_it(tmp
     assert "float_shares" not in persisted.columns
 
 
+def test_live_flush_keeps_historical_range_current(tmp_path):
+    repo = _repo(tmp_path)
+    today = cn_today()
+    yesterday = today - timedelta(days=1)
+    old_today = _live_row("600000.SH", 9.0)
+    history = pl.concat(
+        [
+            old_today.with_columns(pl.lit(yesterday).cast(pl.Date).alias("date")),
+            old_today,
+        ]
+    )
+    repo._enriched_history_cache = history
+    repo._enriched_history_start = yesterday
+    repo._enriched_history_generation = repo.get_matrix_data_generation("stock")
+
+    repo.flush_live_enriched_asset("stock", _live_row("600000.SH", 10.0))
+
+    result = repo.get_enriched_range(yesterday, today)
+    assert result is not None
+    assert result.select("date", "close").sort("date").to_dicts() == [
+        {"date": yesterday, "close": 9.0},
+        {"date": today, "close": 10.0},
+    ]
+
+
 def test_history_strategy_monitor_keeps_live_row_with_exclude_st_enabled(tmp_path):
     strategy_dir = tmp_path / "strategies"
     strategy_dir.mkdir()
