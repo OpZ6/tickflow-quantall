@@ -23,7 +23,7 @@
 - `frontend/src/lib/indicator-formulas.ts` 保存纯公式；参数通过集中存储管理。公式异常会在工作台显示并写入控制台，不得静默消失。
 - 缠论默认调用本地 `POST /api/chanlun/analyze`，显示算法版本、数据指纹和末笔确认状态。包含处理、分型、笔、段、中枢和买卖点均为同一 ECharts 的可选图层。
 - ZenChart 仅是可选对照。任何官方端点无法映射到本地 candles 时整层拒绝叠加，不替换本地 K 线。
-- 五类经典形态以及 VCP、杯柄、高而紧旗形、启动后缩量回踩均由后端消费最终图表 candles 计算；VCP 的形态确认、突破、守轴、失败和再触发各自使用实际发生日作为确认时间，回放不会提前看到后续阶段。它们是本地启发式研究标记，不代表官方缠论结论，也不依赖 `D:\quantall\apps\quants`。
+- “形态”图层只保留头肩顶、头肩底、双顶、双底、三角形五类本地启发式标记。VCP 突破、杯柄突破、高而紧旗形突破、启动后缩量回踩已注册为正式 `matrix_native` 策略，不再提供独立 `pattern.*` 图层，也不依赖 `D:\quantall\apps\quants`。
 
 `ChartAnnotationLayer` 是版本化、与 ECharts 无关的领域契约。每层都有稳定 ID、类别、状态、复权口径、算法版本、输入指纹、marker/line/zone/segment、证据和警告。Provider 注册表拒绝重复 ID，并把单层异常隔离成 `status=error`，不会把整张 K 线变成 500。
 
@@ -34,6 +34,8 @@
 ## 策略闭环与派生事件
 
 策略表格的“查看信号”携带 `strategyId/asOf/sourceRunId/paramsFingerprint/symbol/asset/returnTo`。个股页从 URL 恢复上下文、自动开启来源策略层并把信号日作为图表截止日；刷新或复制链接后仍可恢复，返回策略页保留日期、策略和筛选。
+
+可执行的价格结构条件必须先注册到策略引擎。只有从策略面板执行策略、回测或实时监控后写入 `strategy_signal_events` 的事件，才能显示在 K 线“策略”图层；仅打开个股 K 线不会现场运行策略，也不会把启发式形态伪装为买卖信号。
 
 跨日历史不再以 `strategy_cache.json` 为权威，而写入独立派生仓库：
 

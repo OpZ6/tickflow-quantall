@@ -316,10 +316,10 @@ def test_matrix_crossovers_skip_missing_asset_bars_like_polars_signals(
 def test_builtin_matrix_strategies_use_their_declared_formula_modules():
     strategy_dir = REPO_ROOT / "backend" / "app" / "strategy" / "builtin"
     strategy_files = sorted(
-        path for path in strategy_dir.glob("*.py") if path.name != "__init__.py"
+        path for path in strategy_dir.glob("*.py") if not path.name.startswith("_")
     )
 
-    assert len(strategy_files) == 19
+    assert len(strategy_files) == 23
     for strategy_path in strategy_files:
         strategy = StrategyEngine._load_file(strategy_path)
         assert strategy.execution_backend == "matrix_native"
@@ -786,7 +786,7 @@ def test_registered_builtin_matrix_strategies_share_one_cache_profile():
     profile = build_matrix_cache_profile(engine, "stock")
     strategies = engine.strategy_definitions()
 
-    assert len(strategies) == 19
+    assert len(strategies) == 23
     assert all(strategy.execution_backend == "matrix_native" for strategy in strategies)
     assert profile.warmup_bars > 0
     assert profile.forward_bars == max(int(strategy.max_hold_days or 0) for strategy in strategies)

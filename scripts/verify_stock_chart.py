@@ -18,6 +18,45 @@ def main() -> None:
     failed_requests: list[str] = []
     chart_requests: list[str] = []
 
+    with urlopen("http://127.0.0.1:3018/api/strategies", timeout=30) as response:
+        strategy_catalog = json.load(response)
+    required_strategy_ids = {
+        "vcp_breakout",
+        "cup_handle_breakout",
+        "high_tight_flag_breakout",
+        "launch_pullback_support",
+    }
+    registered_strategy_ids = {
+        item["id"] for item in strategy_catalog.get("strategies", [])
+    }
+    missing_strategies = required_strategy_ids - registered_strategy_ids
+    if missing_strategies or strategy_catalog.get("load_errors"):
+        raise SystemExit(
+            "price-structure strategy registry failed: "
+            + json.dumps(
+                {
+                    "missing": sorted(missing_strategies),
+                    "load_errors": strategy_catalog.get("load_errors", []),
+                },
+                ensure_ascii=False,
+            )
+        )
+
+    with urlopen(
+        "http://127.0.0.1:3018/api/kline/chart?symbol=600000.SH&asset_type=stock"
+        "&interval=1d&adjustment=qfq&range=1y&layers=pattern",
+        timeout=60,
+    ) as response:
+        pattern_chart = json.load(response)
+    pattern_layer_ids = {
+        layer["id"] for layer in pattern_chart.get("annotation_layers", [])
+    }
+    if pattern_layer_ids != {"pattern.classic"}:
+        raise SystemExit(
+            "price-structure layers must be registered strategies, not patterns: "
+            + json.dumps(sorted(pattern_layer_ids), ensure_ascii=False)
+        )
+
     run_request = Request(
         "http://127.0.0.1:3018/api/screener/run_preset",
         data=json.dumps({"strategy_id": "trend_breakout", "asset_type": "stock", "timeframe": "1d"}).encode(),
@@ -162,6 +201,8 @@ def main() -> None:
             "layer_manager_tabs": 6,
             "strategy_scope_switch": True,
             "annotation_density_switch": True,
+            "registered_price_structure_strategies": sorted(required_strategy_ids),
+            "pattern_layer_ids": sorted(pattern_layer_ids),
             "horizontal_overflow": overflow,
         }
         (OUTPUT_DIR / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

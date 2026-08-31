@@ -13,12 +13,19 @@ export const DEFAULT_STOCK_CHART_LAYOUT: StockChartLayout = {
   chanlun: { ...DEFAULT_CHANLUN_CONFIG, showMerged: false, showFenxing: true, bspMode: 'all' },
   keyLevelsVisible: true,
   activeLevelTypes: ['sr', 'pivot', 'keltner_s'],
-  enabledLayerIds: ['event.market', 'pattern.classic', 'pattern.vcp'],
+  enabledLayerIds: ['event.market', 'pattern.classic'],
   strategyScope: 'source',
   strategyEventTypes: ['candidate', 'entry', 'exit', 'failure', 'support', 'retrigger'],
   annotationDensity: 'auto',
   customPresets: {},
 }
+
+const RETIRED_PATTERN_LAYER_IDS = new Set([
+  'pattern.vcp',
+  'pattern.cup_handle',
+  'pattern.high_tight_flag',
+  'pattern.pullback_absorb',
+])
 
 export function loadChartLayout(): StockChartLayout {
   const stored = storage.stockChartLayout.get(null) as (Partial<StockChartLayout> & { version?: number; pattern?: string }) | null
@@ -31,7 +38,7 @@ export function loadChartLayout(): StockChartLayout {
     paneHeights: stored.paneHeights ?? {},
     chanlun: { ...DEFAULT_STOCK_CHART_LAYOUT.chanlun, ...(stored.chanlun ?? {}) },
     enabledLayerIds: Array.isArray(stored.enabledLayerIds)
-      ? stored.enabledLayerIds
+      ? stored.enabledLayerIds.filter(id => !RETIRED_PATTERN_LAYER_IDS.has(id))
       : [...DEFAULT_STOCK_CHART_LAYOUT.enabledLayerIds, ...(stored.pattern ? ['pattern.classic'] : [])],
   }
 }

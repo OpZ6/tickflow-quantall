@@ -31,7 +31,7 @@ def _event(**overrides):
         "metrics": [{"name": "close", "value": 12.3, "unit": "price", "passed": True}],
         "anchors": [{"date": "2026-08-28", "role": "entry"}],
         "levels": [{"role": "trigger", "value": 12.2}],
-        "pattern_refs": ["pattern.vcp:2026-08-28"],
+        "pattern_refs": ["pattern.classic:2026-08-28"],
         "observed_at": datetime(2026, 8, 28, 15, 1),
     }
     value.update(overrides)
@@ -49,7 +49,7 @@ def test_repository_is_idempotent_queryable_and_restart_readable(tmp_path):
     assert len(rows) == 1
     assert rows[0]["score"] == 91.0
     assert rows[0]["reason_codes"] == ["signal_breakout"]
-    assert rows[0]["pattern_refs"] == ["pattern.vcp:2026-08-28"]
+    assert rows[0]["pattern_refs"] == ["pattern.classic:2026-08-28"]
 
 
 def test_repository_keeps_observed_and_recomputed_provenance_separate(tmp_path):
