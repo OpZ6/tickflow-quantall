@@ -26,7 +26,7 @@ export interface ChartIndicatorDefinition {
 }
 
 export interface StockChartLayout {
-  version: 1
+  version: 3
   interval: ChartInterval
   adjustment: ChartAdjustment
   range: ChartRangeName
@@ -40,7 +40,10 @@ export interface StockChartLayout {
   }
   keyLevelsVisible: boolean
   activeLevelTypes: string[]
-  pattern: '' | 'HST' | 'HSB' | 'DT' | 'DB' | 'Tri'
+  enabledLayerIds: string[]
+  strategyScope: 'source' | 'all'
+  strategyEventTypes: string[]
+  annotationDensity: 'auto' | 'compact' | 'detailed'
   customPresets: Record<string, string[]>
 }
 

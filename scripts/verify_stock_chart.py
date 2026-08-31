@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 from playwright.sync_api import sync_playwright
 
@@ -16,6 +17,22 @@ def main() -> None:
     console_errors: list[str] = []
     failed_requests: list[str] = []
     chart_requests: list[str] = []
+
+    run_request = Request(
+        "http://127.0.0.1:3018/api/screener/run_preset",
+        data=json.dumps({"strategy_id": "trend_breakout", "asset_type": "stock", "timeframe": "1d"}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlopen(run_request, timeout=120) as response:  # noqa: S310 - fixed localhost acceptance target
+        strategy_result = json.load(response)
+    if not strategy_result.get("rows"):
+        raise SystemExit("trend_breakout returned no rows; cannot verify the real strategy deep-link chain")
+    target_symbol = strategy_result["rows"][0]["symbol"]
+    strategy_id = strategy_result.get("strategy") or strategy_result.get("strategy_id")
+    as_of = strategy_result["as_of"]
+    source_run_id = strategy_result["source_run_id"]
+    params_fingerprint = strategy_result["params_fingerprint"]
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="msedge", headless=True)
@@ -57,6 +74,14 @@ def main() -> None:
         # 关键结构图层与同一个 canvas 同时存在。
         page.get_by_text("支撑阻力", exact=True).wait_for(state="visible")
 
+        page.get_by_role("button", name="图层管理").click()
+        manager = page.get_by_test_id("chart-layer-manager")
+        for tab in ("技术指标", "缠论", "形态", "策略", "事件", "画线"):
+            manager.get_by_role("button", name=tab, exact=True).wait_for(state="visible")
+        manager.get_by_role("button", name="策略", exact=True).click()
+        manager.get_by_text("策略信号", exact=True).wait_for(state="visible")
+        page.get_by_role("button", name="关闭图层管理").click()
+
         chart.get_by_role("button", name="缠论", exact=True).first.click()
         page.get_by_text("默认本地算法", exact=False).wait_for(state="visible")
         page.get_by_text("包含处理", exact=True).wait_for(state="visible")
@@ -96,6 +121,35 @@ def main() -> None:
         assert page.locator("[data-testid=unified-stock-chart-instance]").count() == 1
         assert chart.get_by_role("combobox", name="周期").input_value() == "1d"
 
+        # 使用真实策略结果验证策略页 → K 线深链、批次恢复和刷新恢复。
+        page.evaluate("strategyId => localStorage.setItem('strategy-pool', JSON.stringify([strategyId]))", strategy_id)
+        page.goto(
+            f"{BASE_URL}/screener?strategyId={strategy_id}&asOf={as_of}",
+            wait_until="domcontentloaded",
+        )
+        signal_link = page.get_by_test_id(f"strategy-signal-{target_symbol}")
+        signal_link.wait_for(state="visible", timeout=30_000)
+        signal_link.click()
+        page.get_by_test_id("strategy-chart-context").wait_for(state="visible", timeout=30_000)
+        page.wait_for_url("**/stock-analysis?**")
+        assert f"strategyId={strategy_id}" in page.url
+        assert f"sourceRunId={source_run_id}" in page.url
+        assert f"paramsFingerprint={params_fingerprint}" in page.url
+        page.reload(wait_until="domcontentloaded")
+        page.get_by_test_id("strategy-chart-context").wait_for(state="visible", timeout=30_000)
+        assert page.get_by_text("策略信号层已自动激活", exact=True).is_visible()
+        assert page.locator("[data-testid=unified-stock-chart-instance] canvas").count() == 1
+        page.get_by_role("button", name="图层管理").click()
+        manager = page.get_by_test_id("chart-layer-manager")
+        manager.get_by_role("button", name="策略", exact=True).click()
+        manager.get_by_test_id("strategy-scope-all").click()
+        page.wait_for_timeout(500)
+        manager.get_by_test_id("annotation-density-detailed").click()
+        manager.get_by_test_id("annotation-density-auto").click()
+        manager.get_by_test_id("strategy-scope-source").click()
+        page.wait_for_timeout(500)
+        assert page.locator("[data-testid=unified-stock-chart-instance] canvas").count() == 1
+
         overflow = page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth")
         result = {
             "chart_requests": len(chart_requests),
@@ -103,6 +157,11 @@ def main() -> None:
             "failed_requests": failed_requests,
             "single_chart_instance": True,
             "indicator_persisted": True,
+            "strategy_deep_link": True,
+            "strategy_context_persisted": True,
+            "layer_manager_tabs": 6,
+            "strategy_scope_switch": True,
+            "annotation_density_switch": True,
             "horizontal_overflow": overflow,
         }
         (OUTPUT_DIR / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

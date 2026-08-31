@@ -631,6 +631,9 @@ async def strategy_stream(
                             yield f"event: error\ndata: {json.dumps({'message': error}, ensure_ascii=False)}\n\n"
                         else:
                             payload = r if isinstance(r, dict) else asdict(r)
+                            from app.services.strategy_evidence import persist_backtest_fill_events
+
+                            persist_backtest_fill_events(settings.data_dir, payload)
                             yield f"event: done\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
                     return
 

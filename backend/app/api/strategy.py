@@ -14,7 +14,7 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -29,6 +29,8 @@ from app.strategy.scoring import (
     effective_scoring,
     effective_scoring_directions,
 )
+from app.services.strategy_evidence import enrich_and_persist_strategy_result
+from app.services.strategy_signal_events import StrategySignalEventRepository
 
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
 logger = logging.getLogger(__name__)
@@ -248,6 +250,14 @@ class RunAllRequest(BaseModel):
     timeframe: str = "1d"
 
 
+class EventBackfillRequest(BaseModel):
+    start_date: date
+    end_date: date
+    strategy_ids: list[str]
+    asset_type: str = "stock"
+    timeframe: str = "1d"
+
+
 class SaveConfigRequest(BaseModel):
     strategy_id: str
     overrides: dict
@@ -327,6 +337,107 @@ def list_strategies(
     return {"strategies": result, "load_errors": engine.load_errors()}
 
 
+@router.get("/events")
+def query_strategy_events(
+    request: Request,
+    symbol: str | None = None,
+    strategy_ids: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    event_types: str | None = None,
+    source_run_id: str | None = None,
+    params_fingerprint: str | None = None,
+    limit: int = Query(1000, ge=1, le=5000),
+):
+    """查询版本化派生策略事件；不读取页面缓存或 Market Facts。"""
+    rows = StrategySignalEventRepository(_data_dir(request)).query(
+        symbol=symbol,
+        strategy_ids=(item.strip() for item in (strategy_ids or "").split(",") if item.strip()),
+        start_date=start_date,
+        end_date=end_date,
+        event_types=(item.strip() for item in (event_types or "").split(",") if item.strip()),
+        source_run_id=source_run_id,
+        params_fingerprint=params_fingerprint,
+    )
+    return {"rows": rows[-limit:], "total": len(rows), "generation": StrategySignalEventRepository(_data_dir(request)).generation()}
+
+
+@router.post("/events/backfill")
+def backfill_strategy_events(req: EventBackfillRequest, request: Request):
+    """受控重算本地已有交易日，结果显式标记为 recomputed。"""
+    if req.end_date < req.start_date:
+        raise HTTPException(status_code=422, detail="end_date 不能早于 start_date")
+    strategy_ids = list(dict.fromkeys(req.strategy_ids))
+    if not strategy_ids or len(strategy_ids) > 32:
+        raise HTTPException(status_code=422, detail="strategy_ids 需要 1—32 个")
+    engine = _get_engine(request)
+    for strategy_id in strategy_ids:
+        strategy = _get_public_strategy(engine, strategy_id)
+        if strategy.source != "builtin":
+            raise HTTPException(status_code=422, detail=f"仅允许回填内置策略: {strategy_id}")
+
+    data_dir = _data_dir(request)
+    from app.tickflow.repository import enriched_dirname
+
+    enriched_root = data_dir / enriched_dirname(req.asset_type)
+    dates: list[date] = []
+    for path in enriched_root.glob("date=*/part.parquet"):
+        try:
+            day = date.fromisoformat(path.parent.name.removeprefix("date="))
+        except ValueError:
+            continue
+        if req.start_date <= day <= req.end_date:
+            dates.append(day)
+    dates = sorted(set(dates))
+    if len(dates) > 120:
+        raise HTTPException(status_code=422, detail="单次最多回填 120 个本地交易日")
+
+    from app.services.screener import ScreenerService
+
+    service = ScreenerService(request.app.state.repo, asset_type=req.asset_type)
+    overrides_by_id = strategy_config.list_overrides(data_dir)
+    params_by_id = {
+        strategy_id: dict((overrides_by_id.get(strategy_id) or {}).get("params") or {})
+        for strategy_id in strategy_ids
+    }
+    written = 0
+    failures: list[dict[str, str]] = []
+    for day in dates:
+        try:
+            context = service.build_strategy_context(
+                engine,
+                day,
+                strategy_ids,
+                timeframe=req.timeframe,
+                params_map=params_by_id,
+                overrides_map={strategy_id: overrides_by_id.get(strategy_id, {}) for strategy_id in strategy_ids},
+            )
+            results = engine.run_all(
+                context,
+                params_map=params_by_id,
+                overrides_map={strategy_id: overrides_by_id.get(strategy_id, {}) for strategy_id in strategy_ids},
+                strategy_ids=strategy_ids,
+            )
+            for strategy_id, result in results.items():
+                written += len(enrich_and_persist_strategy_result(
+                    data_dir=data_dir,
+                    result=result,
+                    strategy=engine.get(strategy_id),
+                    params=params_by_id[strategy_id],
+                    context=context,
+                    provenance="recomputed",
+                ))
+        except Exception as exc:
+            failures.append({"date": day.isoformat(), "error": str(exc)})
+    return {
+        "dates": [day.isoformat() for day in dates],
+        "strategies": strategy_ids,
+        "events_written": written,
+        "failures": failures,
+        "provenance": "recomputed",
+    }
+
+
 @router.get("/{strategy_id}")
 def get_strategy(strategy_id: str, request: Request):
     engine = _get_engine(request)
@@ -380,6 +491,13 @@ def run_strategy(req: RunRequest, request: Request):
             params=params,
             overrides=overrides or None,
         )
+        enrich_and_persist_strategy_result(
+            data_dir=data_dir,
+            result=result,
+            strategy=engine.get(req.strategy_id),
+            params=params,
+            context=context,
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -428,6 +546,13 @@ def run_all(req: RunAllRequest, request: Request):
         overrides_map={sid: all_overrides.get(sid, {}) for sid in strategy_ids},
         strategy_ids=strategy_ids,
     ).items():
+        enrich_and_persist_strategy_result(
+            data_dir=data_dir,
+            result=result,
+            strategy=engine.get(sid),
+            params=params_map.get(sid, {}),
+            context=context,
+        )
         results[sid] = {"total": result.total, "as_of": str(as_of)}
 
     return {"as_of": str(as_of), "results": results}

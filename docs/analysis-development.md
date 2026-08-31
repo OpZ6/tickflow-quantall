@@ -12,6 +12,8 @@
 4. 数值单位、复权口径、时区、空值和质量等级是什么？
 5. 是否会被策略、回测、监控或多个页面复用？
 
+若分析结果需要叠加到个股 K 线，不得在 React 页面或 ECharts option 中直接复制业务算法。新增能力应实现一个 `ChartLayerProvider`，消费 `/api/kline/chart` 的最终同口径 candles，返回版本化 `ChartAnnotationLayer`；必须提供稳定 ID、算法版本、输入指纹、确认时间、证据和数据不足状态。策略派生结果写入 `strategy_signal_events`，并用 `signal_kind` 区分策略信号、回测成交和实时触发。
+
 输入不存在时先走 `data-foundation.md`，不要从页面或 service 临时抓取供应商接口。
 
 ## 2. 标准开发链

@@ -67,6 +67,8 @@ Provider 负责供应商字段、代码、日期和单位映射。业务层通�
 
 `backend/app/tickflow/` 提供 DataStore、KlineRepository 和 DuckDB/Parquet 访问。日 K 原始表、复权因子、enriched、分钟 K、指数 K 线和 instruments 按各自契约存储。
 
+个股统一图表沿用唯一链路：Repository → 复权 → 周期聚合 → 预热 → 指标/价位 → 形态与策略图层 → `/api/kline/chart` → 单一 ECharts。`backend/app/chart_layers/` 的小粒度 Provider 只消费最终 candles 和派生策略事件，不创建第二套行情请求。策略、回测和实时监控产生的历史证据进入独立 `strategy_signal_events` 分区仓库；它是带版本和来源的派生资产，不属于客观 Market Facts。
+
 ### 3.2 标准市场事实
 
 `backend/app/market_facts/` 管理可复用的非 K 线事实：

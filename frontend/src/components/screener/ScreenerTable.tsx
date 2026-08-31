@@ -6,7 +6,7 @@
  * score、signals、candle、ext 列。其余纯数据列（价格/指标/财务…）交给共享原语。
  */
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { Check, Plus, Eye, EyeOff, RefreshCw } from 'lucide-react'
+import { Check, ExternalLink, Plus, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import type { KlineRow, MinuteKlineRow } from '@/lib/api'
 import { fmtPrice, formatExtNumber } from '@/lib/format'
 import type { ColumnConfig } from '@/lib/screener-columns'
@@ -31,6 +31,7 @@ interface ScreenerTableProps {
   activeStrategy: string | null
   watchlistSet: Set<string>
   onPreview: (symbol: string, name: string) => void
+  onOpenChart: (row: any) => void
   onAddToWatchlist: (symbol: string, groupId: string | null) => void
   onRemoveFromWatchlist: (symbol: string) => void
   watchlistPending: boolean
@@ -149,7 +150,7 @@ function renderExtValue(
 
 export function ScreenerTable({
   rows, columns, strategyIdToName, symbolStrategyMap, activeStrategy,
-  watchlistSet, onPreview, onAddToWatchlist, onRemoveFromWatchlist, watchlistPending, klineData = {},
+  watchlistSet, onPreview, onOpenChart, onAddToWatchlist, onRemoveFromWatchlist, watchlistPending, klineData = {},
   dailyKChartVisible = true, onToggleDailyKChart,
   minuteData = {}, intradayChartVisible = true, onToggleIntradayChart,
   intradayAutoRefresh = false, onRefreshIntraday, intradayRefreshing = false,
@@ -242,6 +243,7 @@ export function ScreenerTable({
                   </span>
                 )}
               </button>
+              <button type="button" onClick={() => onOpenChart(r)} data-testid={`strategy-signal-${r.symbol}`} className="shrink-0 inline-flex h-5 items-center gap-1 rounded border border-emerald-400/25 bg-emerald-400/[0.06] px-1.5 text-[9px] text-emerald-300 hover:bg-emerald-400/[0.12]" title={`在统一 K 线查看 ${r.symbol} 的策略信号`} aria-label={`查看 ${r.symbol} 策略信号`}><ExternalLink className="h-2.5 w-2.5" />查看信号</button>
               {isExpired ? (
                 <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded text-[9px] font-medium leading-tight bg-red-500/10 text-red-400/60 border border-red-500/15">
                   失效

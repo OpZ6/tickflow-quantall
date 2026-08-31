@@ -1,6 +1,8 @@
 # Goal：TickFlow 统一 K 线形态、策略信号与证据图层
 
-> 状态：Ready for execution
+> 状态：Implemented and verified on 2026-08-31
+>
+> 实施说明：当前实现与验收入口以 [`../stock-chart-workbench.md`](../stock-chart-workbench.md) 和源码测试为准；本文件继续保留为完整目标契约与回归清单。
 >
 > 目标仓库：`D:\tickflow-quantall`
 >

@@ -34,7 +34,7 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 
 ## 支持文档
 
-- [stock-chart-workbench.md](stock-chart-workbench.md)：个股分析唯一 K 线实例、统一行情 API、20+38 指标、缠论/价位/形态/画线和验证契约。
+- [stock-chart-workbench.md](stock-chart-workbench.md)：个股分析唯一 K 线实例、统一行情 API、20+38 指标、缠论/价位/九类形态/策略证据/派生事件/画线和验证契约。
 - [quantx-data-pipeline.md](quantx-data-pipeline.md)：QuantX 运行、重试、重算和故障诊断手册。
 - [quantx-single-day-canonical-view-plan.md](quantx-single-day-canonical-view-plan.md)：QuantX 单日富图表从兼容 JSON 迁移到权威事实与确定性 ViewBuilder 的分批执行计划和验收清单。
 - [quantx-unified-dashboard-design.md](quantx-unified-dashboard-design.md)：QuantX 多日驾驶舱与单日富图表合并为统一高密度看板的内容、排版和零丢失设计。

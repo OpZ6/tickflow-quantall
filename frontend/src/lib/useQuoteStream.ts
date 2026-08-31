@@ -169,8 +169,9 @@ export function useQuoteStream(
       })
 
       es.addEventListener('strategy_results_updated', () => {
-        // 策略监控完成后只刷新策略结果缓存，不扩散到其他行情页面。
+        // 策略监控已同时落盘派生事件；刷新策略表和可能正在展示的统一 K 线证据层。
         qc.invalidateQueries({ queryKey: ['screener-cached'] })
+        qc.invalidateQueries({ queryKey: ['kline-chart'] })
       })
 
       es.addEventListener('depth_updated', () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Sparkles, LineChart, History as HistoryIcon, Loader2, ExternalLink, Bell } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { StockFinancialSearch } from '@/components/financials/StockFinancialSearch'
 import { StockPreviewDialog } from '@/components/StockPreviewDialog'
 import { LastStockChip } from '@/components/LastStockChip'
-import { UnifiedStockChart } from '@/features/stock-chart/UnifiedStockChart'
+import { UnifiedStockChart, type StrategyChartContext } from '@/features/stock-chart/UnifiedStockChart'
 import { PriceAlertDialog } from '@/components/stock-analysis/PriceAlertDialog'
 import { useLastStock } from '@/lib/useLastStock'
 import { toast } from '@/components/Toast'
@@ -32,6 +32,20 @@ export function StockAnalysis() {
   const [previewSymbol, setPreviewSymbol] = useState<string | null>(null)
   const [showPriceAlerts, setShowPriceAlerts] = useState(false)
   const { last: lastStock, remember: rememberStock } = useLastStock('stock-analysis')
+  const strategyContext: StrategyChartContext | undefined = useMemo(() => {
+    const strategyId = searchParams.get('strategyId') ?? undefined
+    const strategyIds = (searchParams.get('strategyIds') ?? '').split(',').map(value => value.trim()).filter(Boolean)
+    if (!strategyId && strategyIds.length === 0) return undefined
+    return {
+      strategyId,
+      strategyIds,
+      asOf: searchParams.get('asOf') ?? undefined,
+      sourceRunId: searchParams.get('sourceRunId') ?? undefined,
+      paramsFingerprint: searchParams.get('paramsFingerprint') ?? undefined,
+      signalDate: searchParams.get('signalDate') ?? searchParams.get('asOf') ?? undefined,
+      returnTo: searchParams.get('returnTo') ?? undefined,
+    }
+  }, [searchParams])
 
   // 进入页面立即加载历史报告(供右侧常驻列表)。store 内部有 historyLoaded 去重, 重复调用安全。
   useEffect(() => { loadHistory() }, [])
@@ -140,7 +154,7 @@ export function StockAnalysis() {
               hint="搜索代码或名称,查看日 K 与关键价位,并可让 AI 进行技术面 / 基本面 / 财务面 / 消息面四维综合分析。"
             />
           ) : (
-            <StockAnalysisBoard symbol={symbol} />
+            <StockAnalysisBoard symbol={symbol} strategyContext={strategyContext} />
           )}
         </div>
         <HistorySidebar />
@@ -177,7 +191,7 @@ export function StockAnalysis() {
 }
 
 // ===== 分析看板:日 K + 关键价位 =====
-function StockAnalysisBoard({ symbol }: { symbol: string }) {
+function StockAnalysisBoard({ symbol, strategyContext }: { symbol: string; strategyContext?: StrategyChartContext }) {
   // 图表高度自适应视口:撑满首屏(减去页头/搜索栏等固定开销),最小不低于 560
   const [vh, setVh] = useState(() => window.innerHeight)
   useEffect(() => {
@@ -199,7 +213,7 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
           <span className="text-[10px] text-muted">周期、复权、范围和布局均可保存</span>
         </div>
       </div>
-      <UnifiedStockChart symbol={symbol} height={chartHeight} />
+      <UnifiedStockChart symbol={symbol} height={chartHeight} strategyContext={strategyContext} />
     </div>
   )
 }

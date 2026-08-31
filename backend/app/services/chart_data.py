@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+import hashlib
+import json
+from pathlib import Path
 from typing import Literal
 
 import polars as pl
@@ -205,7 +208,25 @@ def adjust_minute(
     ).drop("_date", "_ratio")
 
 
-def build_chart_response(repo, query: ChartQuery) -> dict:
+def _chart_input_fingerprint(rows: list[dict]) -> str:
+    payload = [
+        {key: row.get(key) for key in ("date", "open", "high", "low", "close", "volume")}
+        for row in rows
+    ]
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:20]
+
+
+def build_chart_response(
+    repo,
+    query: ChartQuery,
+    *,
+    data_dir: Path | None = None,
+    layer_categories: set[str] | None = None,
+    strategy_ids: tuple[str, ...] = (),
+    source_run_id: str | None = None,
+    params_fingerprint: str | None = None,
+) -> dict:
     earliest = repo.earliest_daily_date()
     start, end = resolve_date_range(query, earliest)
     # 指标必须先在展示区间之前预热, 再裁剪; 否则范围起点处的 MA/MACD/RSI
@@ -294,11 +315,58 @@ def build_chart_response(repo, query: ChartQuery) -> dict:
     elif not rows.is_empty():
         rows = rows.with_columns(pl.col("date").cast(pl.Utf8))
 
+    output_rows = rows.to_dicts()
+    input_fingerprint = _chart_input_fingerprint(output_rows)
+    annotation_layers: list[dict] = []
+    if layer_categories:
+        from app.chart_layers.models import ChartLayerContext
+        from app.chart_layers.providers import default_chart_layer_registry
+
+        context = ChartLayerContext(
+            symbol=query.symbol,
+            asset_type=query.asset_type,
+            interval=query.interval,
+            price_basis=effective_adjustment,
+            rows=output_rows,
+            visible_start=(coverage_start or start).isoformat(),
+            visible_end=(coverage_end or end).isoformat(),
+            input_fingerprint=input_fingerprint,
+            key_levels=levels,
+            data_dir=data_dir,
+            strategy_ids=strategy_ids,
+            source_run_id=source_run_id,
+            params_fingerprint=params_fingerprint,
+        )
+        annotation_layers = [
+            layer.to_dict()
+            for layer in default_chart_layer_registry().build(context, layer_categories)
+        ]
+        pattern_refs_by_date: dict[str, list[str]] = {}
+        for layer in annotation_layers:
+            if layer["category"] != "pattern":
+                continue
+            version = layer.get("algorithm_version") or "unknown"
+            for item in layer.get("evidence") or []:
+                confirmed_at = str((item.get("metadata") or {}).get("confirmed_at") or "")[:10]
+                if confirmed_at:
+                    pattern_refs_by_date.setdefault(confirmed_at, []).append(
+                        f"{layer['id']}@{version}:{item['id']}"
+                    )
+        for layer in annotation_layers:
+            if layer["category"] != "strategy":
+                continue
+            for item in layer.get("evidence") or []:
+                metadata = item.setdefault("metadata", {})
+                event_date = str(metadata.get("event_date") or "")[:10]
+                existing = list(metadata.get("pattern_refs") or [])
+                metadata["pattern_refs"] = sorted(set(existing + pattern_refs_by_date.get(event_date, [])))
+
     return {
         "symbol": query.symbol,
         "asset_type": query.asset_type,
-        "rows": rows.to_dicts(),
+        "rows": output_rows,
         "levels": levels,
+        "annotation_layers": annotation_layers,
         "meta": {
             "requested_interval": query.interval,
             "effective_interval": query.interval,
@@ -312,6 +380,7 @@ def build_chart_response(repo, query: ChartQuery) -> dict:
             "complete": complete,
             "warmup_bars": warmup_bars,
             "warmup_complete": warmup_complete,
+            "input_fingerprint": input_fingerprint,
             "warnings": warnings,
         },
     }

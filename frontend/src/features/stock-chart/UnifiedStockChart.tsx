@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { AlertTriangle, Camera, ChevronDown, ChevronUp, Crosshair, Expand, Gauge, Layers3, Loader2, Play, Redo2, RefreshCw, Settings2, Trash2, Undo2, X } from 'lucide-react'
 
 import {
@@ -7,15 +8,16 @@ import {
   type ChartMarker, type ChartPriceLine, type OHLC,
 } from '@/components/EChartsCandlestick'
 import type { LevelType, PriceLevel } from '@/components/stock-analysis/AnalysisKChart'
-import { api, type ChartAdjustment, type ChartInterval, type ChartRangeName } from '@/lib/api'
+import { api, type AnnotationEvidence, type ChartAdjustment, type ChartInterval, type ChartLayerCategory, type ChartRangeName } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import { INDICATOR_REGISTRY, PANE_REGISTRY } from './indicatorRegistry'
 import { IndicatorDrawer } from './IndicatorDrawer'
 import { IndicatorParamEditor } from './IndicatorParamEditor'
+import { ChartLayerManager, EvidenceDrawer, type ManagerTab } from './ChartLayerManager'
+import { buildAnnotationVisuals } from './annotationLayers'
 import { loadChartDrawings, loadChartLayout, saveChartDrawings, saveChartLayout } from './chartPersistence'
 import type { StockChartLayout, UserDrawing } from './chartTypes'
-import { detectPatterns } from './patterns'
 import { rowsAtReplay } from './replay'
 
 const INTERVALS: { value: ChartInterval; label: string }[] = [
@@ -39,24 +41,26 @@ const LEVEL_LABELS: Record<string, string> = {
   keltner_m: '中 KC', keltner_l: '长 KC', atr_stop: 'ATR 止损', gap: '缺口', fib: '斐波那契', round: '整数关口',
 }
 
-interface Props { symbol: string; height?: number }
+export interface StrategyChartContext {
+  strategyId?: string
+  strategyIds?: string[]
+  asOf?: string
+  sourceRunId?: string
+  paramsFingerprint?: string
+  signalDate?: string
+  returnTo?: string
+}
+
+interface Props { symbol: string; height?: number; strategyContext?: StrategyChartContext }
 
 function levelLines(levels: Record<LevelType, PriceLevel[]>, active: string[]): ChartPriceLine[] {
   return active.flatMap(type => (levels[type as LevelType] ?? []))
     .map(level => ({ value: level.value, label: level.label, color: LEVEL_COLORS[level.type] }))
 }
 
-function eventMarkers(rows: OHLC[]): ChartMarker[] {
-  const markers: ChartMarker[] = []
-  rows.forEach(row => {
-    const source = row as unknown as Record<string, unknown>
-    if (source.signal_limit_up) markers.push({ date: row.date, kind: 'sell', above: true, label: '涨停', color: '#f04438' })
-    else if (source.signal_broken_limit_up) markers.push({ date: row.date, kind: 'neutral', above: true, label: '炸板', color: '#facc15' })
-  })
-  return markers
-}
+const ALL_LAYER_CATEGORIES: ChartLayerCategory[] = ['pattern', 'strategy', 'event', 'plan']
 
-export function UnifiedStockChart({ symbol, height = 680 }: Props) {
+export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [layout, setLayout] = useState<StockChartLayout>(loadChartLayout)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -70,11 +74,35 @@ export function UnifiedStockChart({ symbol, height = 680 }: Props) {
   const [drawingUndo, setDrawingUndo] = useState<UserDrawing[][]>([])
   const [drawingRedo, setDrawingRedo] = useState<UserDrawing[][]>([])
   const [indicatorErrors, setIndicatorErrors] = useState<string[]>([])
+  const [layerManagerOpen, setLayerManagerOpen] = useState(false)
+  const [layerManagerTab, setLayerManagerTab] = useState<ManagerTab>('pattern')
+  const [selectedEvidence, setSelectedEvidence] = useState<AnnotationEvidence | null>(null)
+  const [selectedStrategyIds, setSelectedStrategyIds] = useState<Set<string>>(new Set())
+  const [knownStrategyIds, setKnownStrategyIds] = useState<string[]>([])
+  const [visibleAnnotationBars, setVisibleAnnotationBars] = useState(60)
+
+  const sourceStrategyIds = useMemo(() => {
+    const ids = strategyContext?.strategyIds?.length ? strategyContext.strategyIds : strategyContext?.strategyId ? [strategyContext.strategyId] : []
+    return [...new Set(ids)]
+  }, [strategyContext?.strategyId, strategyContext?.strategyIds])
+  const requestedStrategyIds = layout.strategyScope === 'source'
+    ? sourceStrategyIds
+    : [...selectedStrategyIds]
 
   const drawingKey = `${symbol}|${layout.interval}|${layout.adjustment}`
   const drawings = drawingsByContext[drawingKey] ?? []
 
   useEffect(() => saveChartLayout(layout), [layout])
+  useEffect(() => {
+    if (sourceStrategyIds.length === 0) return
+    setLayout(current => ({
+      ...current,
+      strategyScope: 'source',
+      enabledLayerIds: current.enabledLayerIds.includes('strategy.signals')
+        ? current.enabledLayerIds
+        : [...current.enabledLayerIds, 'strategy.signals', 'plan.strategy'],
+    }))
+  }, [sourceStrategyIds])
   useEffect(() => saveChartDrawings(drawingsByContext), [drawingsByContext])
   useEffect(() => {
     const listener = (event: Event) => {
@@ -85,14 +113,24 @@ export function UnifiedStockChart({ symbol, height = 680 }: Props) {
     return () => window.removeEventListener('stock-chart-indicator-error', listener)
   }, [])
   useEffect(() => { setReplayIndex(null); setTrendStart(null) }, [symbol, layout.interval, layout.adjustment, layout.range])
+  useEffect(() => { setKnownStrategyIds([]); setSelectedStrategyIds(new Set()) }, [symbol])
   useEffect(() => { setDrawingUndo([]); setDrawingRedo([]); setDrawMode('none') }, [drawingKey])
 
+  const requestEnd = layout.range === 'custom' ? customEnd : strategyContext?.asOf ?? ''
+  const layerKey = ALL_LAYER_CATEGORIES.join(',')
+  const strategyKey = requestedStrategyIds.join(',')
+  const exactSourceRunId = layout.strategyScope === 'source' ? strategyContext?.sourceRunId : undefined
+  const exactParamsFingerprint = layout.strategyScope === 'source' ? strategyContext?.paramsFingerprint : undefined
   const chartQuery = useQuery({
-    queryKey: QK.klineChart(symbol, '', layout.interval, layout.adjustment, layout.range, customStart, customEnd),
+    queryKey: QK.klineChart(symbol, '', layout.interval, layout.adjustment, layout.range, customStart, requestEnd, layerKey, strategyKey, exactSourceRunId ?? '', exactParamsFingerprint ?? ''),
     queryFn: () => api.klineChart({
       symbol, interval: layout.interval, adjustment: layout.adjustment, range: layout.range,
       ...(layout.range === 'custom' && customStart ? { startDate: customStart } : {}),
-      ...(layout.range === 'custom' && customEnd ? { endDate: customEnd } : {}),
+      ...(requestEnd ? { endDate: requestEnd } : {}),
+      layers: ALL_LAYER_CATEGORIES,
+      strategyIds: requestedStrategyIds,
+      sourceRunId: exactSourceRunId,
+      paramsFingerprint: exactParamsFingerprint,
     }),
     enabled: !!symbol && (layout.range !== 'custom' || !!customStart),
     placeholderData: previous => previous,
@@ -121,7 +159,7 @@ export function UnifiedStockChart({ symbol, height = 680 }: Props) {
   const chanlunQuery = useQuery({
     queryKey: ['stock-chart', 'chanlun', symbol, layout.interval, layout.adjustment, rows.length, rows.at(-1)?.date ?? ''],
     queryFn: () => api.chanlunAnalyze(toChanlunCandles(rows)),
-    enabled: (layout.chanlun.visible || !!layout.pattern) && rows.length >= 10,
+    enabled: layout.chanlun.visible && rows.length >= 10,
     staleTime: 60_000,
   })
   const officialQuery = useQuery({
@@ -150,30 +188,31 @@ export function UnifiedStockChart({ symbol, height = 680 }: Props) {
     return { layer, warning: '' }
   }, [officialQuery.data, timeIndex])
 
-  const patternVisuals = useMemo(() => {
-    if (!layout.pattern) return { markers: [] as ChartMarker[], lines: [] as ChartPriceLine[] }
-    const matches = detectPatterns(chanlun).filter(item => item.type === layout.pattern)
-    const markers = matches.flatMap(item => item.points.map((point, index) => ({
-      date: rows[point.idx]?.date ?? '', kind: 'neutral' as const,
-      label: index === 0 ? item.label : '', above: point.type === 'high', color: '#f472b6',
-    }))).filter(item => item.date)
-    const lines = matches.flatMap(item => {
-      const result: ChartPriceLine[] = []
-      if (item.neckline) result.push({
-        value: item.neckline[0].price, endValue: item.neckline[1].price,
-        start: rows[item.neckline[0].idx]?.date, end: rows[item.neckline[1].idx]?.date,
-        label: `${item.label}颈线`, color: '#f472b6',
-      })
-      if (item.type === 'Tri' && item.points.length === 4) {
-        result.push(
-          { value: item.points[0].price, endValue: item.points[2].price, start: rows[item.points[0].idx]?.date, end: rows[item.points[2].idx]?.date, label: '三角上沿', color: '#f472b6' },
-          { value: item.points[1].price, endValue: item.points[3].price, start: rows[item.points[1].idx]?.date, end: rows[item.points[3].idx]?.date, label: '三角下沿', color: '#f472b6' },
-        )
-      }
-      return result
-    })
-    return { markers, lines }
-  }, [chanlun, layout.pattern, rows])
+  const annotationLayers = chartQuery.data?.annotation_layers ?? []
+  const availableStrategyIds = useMemo(() => [...new Set(annotationLayers
+    .filter(layer => layer.category === 'strategy')
+    .flatMap(layer => layer.evidence.flatMap(item => {
+      const ids = Array.isArray(item.metadata.strategy_ids) ? item.metadata.strategy_ids.map(String) : []
+      const id = item.metadata.strategy_id
+      return id ? [String(id), ...ids] : ids
+    })))].sort(), [annotationLayers])
+  useEffect(() => {
+    if (availableStrategyIds.length === 0) return
+    setKnownStrategyIds(current => [...new Set([...current, ...availableStrategyIds])].sort())
+  }, [availableStrategyIds])
+  const enabledLayerIds = useMemo(() => new Set(layout.enabledLayerIds), [layout.enabledLayerIds])
+  const replayDate = replayIndex == null ? undefined : rows.at(-1)?.date
+  const effectiveAnnotationDensity = layout.annotationDensity === 'auto'
+    ? (visibleAnnotationBars > 80 ? 'compact' : 'detailed')
+    : layout.annotationDensity
+  const annotationVisuals = useMemo(
+    () => buildAnnotationVisuals(annotationLayers, enabledLayerIds, replayDate, {
+      strategyIds: layout.strategyScope === 'all' ? selectedStrategyIds : new Set(sourceStrategyIds),
+      strategyEventTypes: new Set(layout.strategyEventTypes),
+      density: effectiveAnnotationDensity,
+    }),
+    [annotationLayers, enabledLayerIds, replayDate, layout.strategyScope, layout.strategyEventTypes, effectiveAnnotationDensity, selectedStrategyIds, sourceStrategyIds],
+  )
 
   const levels = (chartQuery.data?.levels ?? {}) as Record<LevelType, PriceLevel[]>
   const userLines: ChartPriceLine[] = drawings
@@ -207,6 +246,7 @@ export function UnifiedStockChart({ symbol, height = 680 }: Props) {
     setDrawingsByContext(current => ({ ...current, [drawingKey]: next }))
   }
   const toggleIndicator = (key: string) => updateLayout({ activeIndicators: layout.activeIndicators.includes(key) ? layout.activeIndicators.filter(item => item !== key) : [...layout.activeIndicators, key] })
+  const toggleLayer = (id: string) => updateLayout({ enabledLayerIds: enabledLayerIds.has(id) ? layout.enabledLayerIds.filter(item => item !== id) : [...layout.enabledLayerIds, id] })
   const movePane = (key: string, direction: -1 | 1) => {
     const next = [...layout.activeIndicators]
     const index = next.indexOf(key)
@@ -249,6 +289,7 @@ export function UnifiedStockChart({ symbol, height = 680 }: Props) {
         {layout.range === 'custom' && <><input aria-label="开始日期" type="date" value={customStart} onChange={event => setCustomStart(event.target.value)} className="rounded border border-border bg-base px-2 py-1 text-secondary" /><input aria-label="结束日期" type="date" value={customEnd} onChange={event => setCustomEnd(event.target.value)} className="rounded border border-border bg-base px-2 py-1 text-secondary" /></>}
         <button type="button" onClick={() => chartQuery.refetch()} className="tool-btn"><RefreshCw className={`h-3.5 w-3.5 ${chartQuery.isFetching ? 'animate-spin' : ''}`} />刷新</button>
         <button type="button" onClick={() => setDrawerOpen(true)} className="tool-btn"><Settings2 className="h-3.5 w-3.5" />指标管理</button>
+        <button type="button" onClick={() => setLayerManagerOpen(value => !value)} className={`tool-btn ${layerManagerOpen ? 'text-sky-300' : ''}`}><Layers3 className="h-3.5 w-3.5" />图层管理</button>
         <button type="button" onClick={() => updateLayout({ keyLevelsVisible: !layout.keyLevelsVisible })} className={`tool-btn ${layout.keyLevelsVisible ? 'text-sky-300' : ''}`}><Gauge className="h-3.5 w-3.5" />关键价位</button>
         <button type="button" onClick={() => updateLayout({ chanlun: { ...layout.chanlun, visible: !layout.chanlun.visible } })} className={`tool-btn ${layout.chanlun.visible ? 'text-cyan-300' : ''}`}><Layers3 className="h-3.5 w-3.5" />缠论</button>
         <button type="button" onClick={() => setDrawMode(drawMode === 'trend' ? 'none' : 'trend')} className={`tool-btn ${drawMode === 'trend' ? 'text-sky-300' : ''}`}><Crosshair className="h-3.5 w-3.5" />趋势线</button>
@@ -256,11 +297,14 @@ export function UnifiedStockChart({ symbol, height = 680 }: Props) {
         <button type="button" onClick={() => setDrawMode('text')} className="tool-btn">文字</button>
         <button type="button" onClick={undoDrawing} disabled={!drawingUndo.length} className="tool-btn disabled:opacity-30" aria-label="撤销画线"><Undo2 className="h-3.5 w-3.5" /></button>
         <button type="button" onClick={redoDrawing} disabled={!drawingRedo.length} className="tool-btn disabled:opacity-30" aria-label="重做画线"><Redo2 className="h-3.5 w-3.5" /></button>
-        <select aria-label="形态识别" value={layout.pattern} onChange={event => updateLayout({ pattern: event.target.value as StockChartLayout['pattern'] })} className="rounded border border-border bg-base px-2 py-1.5 text-secondary"><option value="">形态：关闭</option><option value="HST">头肩顶</option><option value="HSB">头肩底</option><option value="DT">双顶</option><option value="DB">双底</option><option value="Tri">三角形</option></select>
         <button type="button" onClick={() => setReplayIndex(replayIndex == null ? Math.max(0, allRows.length - 30) : null)} className={`tool-btn ${replayIndex != null ? 'text-amber-300' : ''}`}><Play className="h-3.5 w-3.5" />回放</button>
         <button type="button" onClick={screenshot} className="tool-btn"><Camera className="h-3.5 w-3.5" />截图</button>
         <button type="button" onClick={() => rootRef.current?.requestFullscreen()} className="tool-btn"><Expand className="h-3.5 w-3.5" />全屏</button>
       </div>
+
+      {sourceStrategyIds.length > 0 && <div className="flex flex-wrap items-center gap-2 border-b border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2 text-[11px]" data-testid="strategy-chart-context"><span className="font-medium text-emerald-300">来源策略</span><span className="font-mono text-secondary">{sourceStrategyIds.join(' + ')}</span>{strategyContext?.asOf && <span className="text-muted">信号日 {strategyContext.asOf}</span>}{strategyContext?.sourceRunId && <span className="text-muted">批次 {strategyContext.sourceRunId.slice(0, 12)}</span>}<span className="text-muted">策略信号层已自动激活</span><Link to={strategyContext?.returnTo || `/screener?strategyId=${encodeURIComponent(sourceStrategyIds[0])}${strategyContext?.asOf ? `&asOf=${encodeURIComponent(strategyContext.asOf)}` : ''}`} className="ml-auto text-sky-300 hover:text-sky-200">返回策略面板</Link></div>}
+
+      <ChartLayerManager open={layerManagerOpen} tab={layerManagerTab} layers={annotationLayers} enabledLayerIds={enabledLayerIds} chanlunVisible={layout.chanlun.visible} drawingCount={drawings.length} sourceStrategyIds={sourceStrategyIds} availableStrategyIds={knownStrategyIds} strategyScope={layout.strategyScope} selectedStrategyIds={selectedStrategyIds} strategyEventTypes={new Set(layout.strategyEventTypes)} annotationDensity={layout.annotationDensity} onTabChange={setLayerManagerTab} onToggleLayer={toggleLayer} onToggleChanlun={() => updateLayout({ chanlun: { ...layout.chanlun, visible: !layout.chanlun.visible } })} onOpenIndicators={() => { setDrawerOpen(true); setLayerManagerOpen(false) }} onStrategyScopeChange={scope => { updateLayout({ strategyScope: scope }); setSelectedStrategyIds(new Set()) }} onToggleStrategy={id => setSelectedStrategyIds(current => { const next = new Set(current.size === 0 ? knownStrategyIds : current); if (next.has(id)) next.delete(id); else next.add(id); return next })} onToggleStrategyEventType={eventType => updateLayout({ strategyEventTypes: layout.strategyEventTypes.includes(eventType) ? layout.strategyEventTypes.filter(item => item !== eventType) : [...layout.strategyEventTypes, eventType] })} onDensityChange={density => updateLayout({ annotationDensity: density })} onClose={() => setLayerManagerOpen(false)} />
 
       <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 px-3 py-2">
         {Object.entries(PRESETS).map(([name, indicators]) => <button key={name} type="button" onClick={() => updateLayout({ activeIndicators: indicators, chanlun: { ...layout.chanlun, visible: name === '缠论' }, keyLevelsVisible: name === '价位' })} className="rounded border border-border/60 bg-base/40 px-2 py-1 text-[10px] text-muted hover:text-foreground">{name}</button>)}
@@ -292,12 +336,13 @@ export function UnifiedStockChart({ symbol, height = 680 }: Props) {
 
       {drawings.length > 0 && <div className="flex flex-wrap items-center gap-1 border-b border-border/40 px-3 py-1.5 text-[10px] text-muted"><span>画线：</span>{drawings.map((item, index) => <span key={item.id} className="inline-flex items-center gap-1 rounded border border-border/70 px-1.5 py-0.5"><span>{index + 1}.{item.kind === 'horizontal' ? '水平线' : item.kind === 'trend' ? '趋势线' : item.text || '文字'}</span><button type="button" aria-label={`删除画线 ${index + 1}`} onClick={() => commitDrawings(drawings.filter(drawing => drawing.id !== item.id))} className="hover:text-danger"><X className="h-2.5 w-2.5" /></button></span>)}<button type="button" onClick={() => commitDrawings([])} className="ml-1 inline-flex items-center gap-1 hover:text-danger"><Trash2 className="h-3 w-3" />全部清除</button></div>}
 
-      {rows.length === 0 ? <div className="grid min-h-[480px] place-items-center text-sm text-muted">当前组合没有可用 K 线；请补齐数据或缩短范围。</div> : <EChartsCandlestick data={rows} symbol={symbol} height={chartHeight} visibleBars={visibleBars} activeIndicators={enabledIndicators} paneHeights={layout.paneHeights} markers={[...eventMarkers(rows), ...textMarkers, ...patternVisuals.markers]} priceLines={[...(layout.keyLevelsVisible ? levelLines(levels, layout.activeLevelTypes) : []), ...userLines, ...patternVisuals.lines]} chanlunData={chanlun} chanlunConfig={layout.chanlun} chanlunOfficial={officialResult.layer} onChartPointClick={onChartPoint} onPriceDoubleClick={(price) => commitDrawings([...drawings, { id: crypto.randomUUID(), kind: 'horizontal', price, adjustment: layout.adjustment, interval: layout.interval }])} testId="unified-stock-chart-instance" />}
+      {rows.length === 0 ? <div className="grid min-h-[480px] place-items-center text-sm text-muted">当前组合没有可用 K 线；请补齐数据或缩短范围。</div> : <EChartsCandlestick data={rows} symbol={symbol} height={chartHeight} visibleBars={visibleBars} activeIndicators={enabledIndicators} paneHeights={layout.paneHeights} markers={[...textMarkers, ...annotationVisuals.markers]} ranges={annotationVisuals.ranges} priceLines={[...(layout.keyLevelsVisible ? levelLines(levels, layout.activeLevelTypes) : []), ...userLines, ...annotationVisuals.lines]} chanlunData={chanlun} chanlunConfig={layout.chanlun} chanlunOfficial={officialResult.layer} onMarkerClick={evidenceId => setSelectedEvidence(annotationVisuals.evidence.get(evidenceId) ?? null)} onVisibleBarsChange={setVisibleAnnotationBars} onChartPointClick={onChartPoint} onPriceDoubleClick={(price) => commitDrawings([...drawings, { id: crypto.randomUUID(), kind: 'horizontal', price, adjustment: layout.adjustment, interval: layout.interval }])} testId="unified-stock-chart-instance" />}
 
       {replayIndex != null && allRows.length > 0 && <div className="sticky bottom-0 z-20 flex items-center gap-3 border-t border-border bg-surface/95 px-3 py-2"><Play className="h-3.5 w-3.5 text-amber-300" /><input aria-label="逐根回放" type="range" min="9" max={allRows.length - 1} value={replayIndex} onChange={event => setReplayIndex(Number(event.target.value))} className="flex-1" /><span className="w-28 font-mono text-[10px] text-muted">{allRows[replayIndex]?.date}</span><button type="button" onClick={() => setReplayIndex(index => Math.min(allRows.length - 1, (index ?? 0) + 1))} className="tool-btn">下一根</button><button type="button" onClick={() => setReplayIndex(null)} className="tool-btn">退出</button></div>}
 
       <IndicatorDrawer open={drawerOpen} active={layout.activeIndicators} onToggle={toggleIndicator} onConfigure={setParamKey} onClose={() => setDrawerOpen(false)} />
       <IndicatorParamEditor indicatorKey={paramKey} onChanged={() => setLayout(current => ({ ...current, activeIndicators: [...current.activeIndicators] }))} onClose={() => setParamKey(null)} />
+      <EvidenceDrawer evidence={selectedEvidence} onClose={() => setSelectedEvidence(null)} />
     </div>
   )
 }

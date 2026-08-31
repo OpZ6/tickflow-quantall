@@ -3,7 +3,7 @@ import { DEFAULT_CHANLUN_CONFIG } from '@/components/EChartsCandlestick'
 import type { StockChartLayout, UserDrawing } from './chartTypes'
 
 export const DEFAULT_STOCK_CHART_LAYOUT: StockChartLayout = {
-  version: 1,
+  version: 3,
   interval: '1d',
   adjustment: 'qfq',
   range: '1y',
@@ -13,19 +13,26 @@ export const DEFAULT_STOCK_CHART_LAYOUT: StockChartLayout = {
   chanlun: { ...DEFAULT_CHANLUN_CONFIG, showMerged: false, showFenxing: true, bspMode: 'all' },
   keyLevelsVisible: true,
   activeLevelTypes: ['sr', 'pivot', 'keltner_s'],
-  pattern: '',
+  enabledLayerIds: ['event.market', 'pattern.classic', 'pattern.vcp'],
+  strategyScope: 'source',
+  strategyEventTypes: ['candidate', 'entry', 'exit', 'failure', 'support', 'retrigger'],
+  annotationDensity: 'auto',
   customPresets: {},
 }
 
 export function loadChartLayout(): StockChartLayout {
-  const stored = storage.stockChartLayout.get(null) as Partial<StockChartLayout> | null
-  if (!stored || stored.version !== 1) return DEFAULT_STOCK_CHART_LAYOUT
+  const stored = storage.stockChartLayout.get(null) as (Partial<StockChartLayout> & { version?: number; pattern?: string }) | null
+  if (!stored || ![1, 2, 3].includes(stored.version ?? 0)) return DEFAULT_STOCK_CHART_LAYOUT
   return {
     ...DEFAULT_STOCK_CHART_LAYOUT,
     ...stored,
+    version: 3,
     activeIndicators: Array.isArray(stored.activeIndicators) ? stored.activeIndicators : DEFAULT_STOCK_CHART_LAYOUT.activeIndicators,
     paneHeights: stored.paneHeights ?? {},
     chanlun: { ...DEFAULT_STOCK_CHART_LAYOUT.chanlun, ...(stored.chanlun ?? {}) },
+    enabledLayerIds: Array.isArray(stored.enabledLayerIds)
+      ? stored.enabledLayerIds
+      : [...DEFAULT_STOCK_CHART_LAYOUT.enabledLayerIds, ...(stored.pattern ? ['pattern.classic'] : [])],
   }
 }
 

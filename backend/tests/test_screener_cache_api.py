@@ -53,6 +53,27 @@ def test_cached_summary_omits_rows_and_counts_realtime_expirations(monkeypatch, 
     assert "rows" not in payload["results"]["strategy_a"]
 
 
+def test_realtime_overlay_preserves_traceable_run_metadata(monkeypatch, tmp_path):
+    cached = {
+        "as_of": "2026-07-20",
+        "results": {"strategy_a": {
+            "as_of": "2026-07-20", "total": 1, "rows": [{"symbol": "000001.SZ"}],
+            "strategy_version": "2.0", "source_run_id": "run-a",
+            "params_fingerprint": "params-a", "input_fingerprint": "input-a",
+        }},
+    }
+    realtime = {"strategy_a": {
+        "as_of": "2026-07-20", "total": 1, "rows": [{"symbol": "600000.SH"}],
+    }}
+    monkeypatch.setattr(screener_api.strategy_cache, "read_cache", lambda *_args: cached)
+
+    payload = screener_api.get_cached_result("strategy_a", _request(tmp_path, realtime), ext_columns=None)
+
+    assert payload["result"]["rows"] == [{"symbol": "600000.SH"}]
+    assert payload["result"]["source_run_id"] == "run-a"
+    assert payload["result"]["params_fingerprint"] == "params-a"
+
+
 def test_cached_result_returns_only_requested_rows_with_ext_and_strategy_membership(monkeypatch, tmp_path):
     cached = {
         "as_of": "2026-07-20",
@@ -93,3 +114,21 @@ def test_cached_result_returns_only_requested_rows_with_ext_and_strategy_members
     assert payload["result"]["rows"] == [{"symbol": "000001.SZ", "concept.concept": "银行"}]
     assert payload["today_ever_rows"]["000002.SZ"]["concept.concept"] == "科技"
     assert payload["strategy_ids_by_symbol"] == {"000001.SZ": ["strategy_a", "strategy_b"]}
+
+
+def test_single_run_cache_update_keeps_evidence_metadata(monkeypatch, tmp_path):
+    cached = {"as_of": "2026-07-20", "results": {}}
+    written = []
+    monkeypatch.setattr(screener_api.strategy_cache, "read_cache", lambda *_args: cached)
+    monkeypatch.setattr(screener_api.strategy_cache, "write_cache", lambda *args: written.append(args))
+
+    screener_api._update_cache_strategy(tmp_path, "2026-07-20", "strategy_a", {
+        "total": 1, "rows": [{"symbol": "000001.SZ"}],
+        "source_run_id": "run-a", "params_fingerprint": "params-a",
+        "evidence": [{"id": "e1"}],
+    })
+
+    result = written[0][2]["strategy_a"]
+    assert result["source_run_id"] == "run-a"
+    assert result["params_fingerprint"] == "params-a"
+    assert result["evidence"] == [{"id": "e1"}]

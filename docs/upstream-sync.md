@@ -102,6 +102,24 @@ frontend/src/lib/queryKeys.ts
 frontend/package.json
 ```
 
+统一 K 线证据层增加后，下列文件也属于高冲突热点：
+
+```text
+backend/app/api/kline.py
+backend/app/api/screener.py
+backend/app/api/strategy.py
+backend/app/services/chart_data.py
+backend/app/services/strategy_evidence.py
+backend/app/services/strategy_signal_events.py
+backend/app/chart_layers/
+frontend/src/components/EChartsCandlestick.tsx
+frontend/src/features/stock-chart/
+frontend/src/pages/Screener.tsx
+frontend/src/pages/StockAnalysis.tsx
+```
+
+同步上游涉及这些路径时，必须保留单一 candles/单一 ECharts、版本化图层契约、策略深链接、派生事件幂等键和回放确认时间；不能用上游整文件覆盖本地证据链。
+
 QuantX 的隔离目录通常冲突较少，但凡修改共享 pipeline、data source API、依赖文件或前端路由，必须执行跨模块回归。
 
 ## 6. 验证门禁

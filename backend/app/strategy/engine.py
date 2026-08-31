@@ -212,6 +212,11 @@ class StrategyResult:
     scores: dict[str, float] = field(default_factory=dict)
     entry_signal_hits: list[dict] = field(default_factory=list)
     exit_signal_hits: list[dict] = field(default_factory=list)
+    strategy_version: str | None = None
+    params_fingerprint: str | None = None
+    source_run_id: str | None = None
+    input_fingerprint: str | None = None
+    evidence: list[dict] = field(default_factory=list)
 
 
 @dataclass

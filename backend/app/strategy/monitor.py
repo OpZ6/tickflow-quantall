@@ -1258,6 +1258,22 @@ class MonitorRuleEngine:
             "pool_entry": set() if prev_pool is None else current_pool - prev_pool,
             "pool_exit": set() if prev_pool is None else prev_pool - current_pool,
         }
+        if self._data_dir is not None and any(changes.values()):
+            try:
+                from app.services.strategy_evidence import persist_realtime_trigger_events
+
+                persist_realtime_trigger_events(
+                    data_dir=self._data_dir,
+                    strategy_id=sid,
+                    strategy_version=str(s.meta.get("version") or "1.0.0"),
+                    params=dict(overrides.get("params") or {}),
+                    as_of=result.as_of,
+                    asset_type=at,
+                    changes=changes,
+                    rows=row_map,
+                )
+            except Exception as exc:
+                logger.warning("策略 %s 实时触发事件持久化失败: %s", sid, exc)
 
         results: list[tuple[str, str, Any, Any, Any, list[str]]] = []
         signal_map = {

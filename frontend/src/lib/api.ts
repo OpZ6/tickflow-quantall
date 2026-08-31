@@ -373,6 +373,13 @@ export interface ScreenerResult {
   rows: any[]
   total: number
   elapsed_ms: number
+  strategy_version?: string | null
+  params_fingerprint?: string | null
+  source_run_id?: string | null
+  input_fingerprint?: string | null
+  entry_signal_hits?: { symbol: string; signals: string[] }[]
+  exit_signal_hits?: { symbol: string; signals: string[] }[]
+  evidence?: Record<string, unknown>[]
 }
 
 export interface ScreenerResultSummary {
@@ -1451,6 +1458,94 @@ export interface ChartDataMeta {
   complete: boolean
   warmup_bars: number
   warmup_complete: boolean
+  input_fingerprint: string
+  warnings: string[]
+}
+
+export type ChartLayerCategory = 'pattern' | 'strategy' | 'event' | 'plan'
+export type ChartLayerStatus = 'available' | 'insufficient_data' | 'unavailable' | 'error'
+
+export interface AnnotationEvidenceMetric {
+  name: string
+  value: unknown
+  threshold?: unknown
+  unit?: string
+  passed?: boolean | null
+}
+
+export interface AnnotationEvidence {
+  id: string
+  title: string
+  summary: string
+  metrics: AnnotationEvidenceMetric[]
+  reason_codes: string[]
+  warnings: string[]
+  metadata: Record<string, unknown>
+}
+
+export interface AnnotationMarker {
+  id: string
+  layer_id: string
+  date: string
+  role: string
+  price?: number | null
+  label: string
+  evidence_id?: string | null
+  detected_at?: string | null
+  confirmed_at?: string | null
+  invalidated_at?: string | null
+  count: number
+}
+
+export interface AnnotationLine {
+  id: string
+  layer_id: string
+  role: string
+  value: number
+  start_date?: string | null
+  end_date?: string | null
+  end_value?: number | null
+  label: string
+  evidence_id?: string | null
+}
+
+export interface AnnotationZone {
+  id: string
+  layer_id: string
+  role: string
+  start_date: string
+  end_date: string
+  low?: number | null
+  high?: number | null
+  label: string
+  evidence_id?: string | null
+  confirmed_at?: string | null
+}
+
+export interface AnnotationSegment {
+  id: string
+  layer_id: string
+  role: string
+  points: { date: string; price: number }[]
+  label: string
+  evidence_id?: string | null
+  confirmed_at?: string | null
+}
+
+export interface ChartAnnotationLayer {
+  schema_version: 1
+  id: string
+  category: ChartLayerCategory
+  title: string
+  status: ChartLayerStatus
+  algorithm_version?: string | null
+  input_fingerprint?: string | null
+  price_basis: ChartAdjustment
+  markers: AnnotationMarker[]
+  lines: AnnotationLine[]
+  zones: AnnotationZone[]
+  segments: AnnotationSegment[]
+  evidence: AnnotationEvidence[]
   warnings: string[]
 }
 
@@ -1460,6 +1555,7 @@ export interface ChartDataResponse {
   rows: KlineRow[]
   /** 与 rows 同周期、同复权、同裁剪窗口计算的 11 组关键价位。 */
   levels: Record<LevelType, PriceLevel[]>
+  annotation_layers?: ChartAnnotationLayer[]
   meta: ChartDataMeta
 }
 
@@ -1471,6 +1567,10 @@ export interface ChartDataQuery {
   range: ChartRangeName
   startDate?: string
   endDate?: string
+  layers?: ChartLayerCategory[]
+  strategyIds?: string[]
+  sourceRunId?: string
+  paramsFingerprint?: string
 }
 
 export interface MarketDatasetContract {
@@ -2587,7 +2687,7 @@ export const api = {
         : `/api/screener/cached-result/${encodeURIComponent(strategyId)}`,
     ),
   screenerCached: (extColumns?: string) =>
-    request<{ as_of: string | null; results: Record<string, { total: number; as_of: string; rows: any[] }>; today_ever_matched: Record<string, string[]> | null; today_ever_rows: Record<string, Record<string, any>> | null; updated_at: number | null }>(
+    request<{ as_of: string | null; results: Record<string, ScreenerResult>; today_ever_matched: Record<string, string[]> | null; today_ever_rows: Record<string, Record<string, any>> | null; updated_at: number | null }>(
       extColumns
         ? `/api/screener/cached?ext_columns=${encodeURIComponent(extColumns)}`
         : '/api/screener/cached',
@@ -3026,6 +3126,10 @@ export const api = {
     if (query.assetType) params.set('asset_type', query.assetType)
     if (query.startDate) params.set('start_date', query.startDate)
     if (query.endDate) params.set('end_date', query.endDate)
+    if (query.layers?.length) params.set('layers', query.layers.join(','))
+    if (query.strategyIds?.length) params.set('strategy_ids', query.strategyIds.join(','))
+    if (query.sourceRunId) params.set('source_run_id', query.sourceRunId)
+    if (query.paramsFingerprint) params.set('params_fingerprint', query.paramsFingerprint)
     return request<ChartDataResponse>(`/api/kline/chart?${params.toString()}`)
   },
 

@@ -30,6 +30,10 @@ def get_chart_data(
     range_name: Annotated[str, Query(alias="range", pattern="^(1m|3m|6m|1y|3y|5y|all|custom)$")] = "1y",
     start_date: date | None = None,
     end_date: date | None = None,
+    layers: Annotated[str | None, Query(description="逗号分隔: pattern,strategy,event,plan")] = None,
+    strategy_ids: Annotated[str | None, Query(description="逗号分隔策略 ID")] = None,
+    source_run_id: Annotated[str | None, Query(max_length=160)] = None,
+    params_fingerprint: Annotated[str | None, Query(max_length=160)] = None,
 ):
     """统一图表行情: 显式周期、复权、范围以及真实覆盖元数据。"""
     from app.services.chart_data import ChartQuery, build_chart_response
@@ -39,6 +43,13 @@ def get_chart_data(
     if asset_type is not None and asset_type != repo.resolve_asset_type(symbol):
         raise HTTPException(status_code=422, detail="asset_type 与本地标的类型不一致")
     try:
+        layer_categories = {item.strip() for item in (layers or "").split(",") if item.strip()}
+        unknown_layers = layer_categories - {"pattern", "strategy", "event", "plan"}
+        if unknown_layers:
+            raise ValueError(f"未知图层分类: {sorted(unknown_layers)}")
+        selected_strategies = tuple(dict.fromkeys(item.strip() for item in (strategy_ids or "").split(",") if item.strip()))
+        if len(selected_strategies) > 32:
+            raise ValueError("strategy_ids 最多 32 个")
         return build_chart_response(
             repo,
             ChartQuery(
@@ -50,6 +61,11 @@ def get_chart_data(
                 start_date=start_date,
                 end_date=end_date or cn_today(),
             ),
+            data_dir=repo.store.data_dir,
+            layer_categories=layer_categories,
+            strategy_ids=selected_strategies,
+            source_run_id=source_run_id,
+            params_fingerprint=params_fingerprint,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

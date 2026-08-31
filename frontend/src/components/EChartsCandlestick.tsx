@@ -40,6 +40,7 @@ export interface OHLC {
 }
 
 export interface ChartMarker {
+  id?: string
   date: string
   kind: 'buy' | 'sell' | 'neutral'
   label?: string
@@ -47,6 +48,8 @@ export interface ChartMarker {
   above?: boolean
   /** 自定义标签颜色，覆盖默认的 kind 对应色。 */
   color?: string
+  evidenceId?: string
+  symbol?: 'arrow' | 'triangle' | 'diamond' | 'circle' | 'pin'
 }
 
 export interface ChartRange {
@@ -54,6 +57,9 @@ export interface ChartRange {
   end: string
   label?: string
   color?: string
+  low?: number | null
+  high?: number | null
+  evidenceId?: string
 }
 
 export interface ChartPriceLine {
@@ -781,6 +787,9 @@ interface Props {
   symbol?: string
   linkedPrice?: number | null
   onDateClick?: (date: string) => void
+  onMarkerClick?: (evidenceId: string) => void
+  /** 当前缩放窗口内的 K 线根数发生变化。 */
+  onVisibleBarsChange?: (count: number) => void
   onChartPointClick?: (date: string, price: number) => void
   onPriceDoubleClick?: (price: number, currentPrice: number) => void
   /** 默认可见蜡烛根数, 默认 60 */
@@ -959,6 +968,7 @@ function buildOption(
             name: m.date, coord: [m.date, d.high],
             symbol: 'circle', symbolSize: 4, symbolOffset: [0, -10],
             itemStyle: { color: dotColor, cursor: 'pointer' },
+            evidenceId: m.evidenceId,
             label: { show: false }, z: 100, zlevel: 10,
           })
         } else {
@@ -966,6 +976,7 @@ function buildOption(
             name: m.date, coord: [m.date, d.high],
             symbol: 'circle', symbolSize: 12, symbolOffset: [0, -2],
             itemStyle: { color: 'transparent' },
+            evidenceId: m.evidenceId,
             label: {
               show: true, formatter: m.label ?? '', position: 'top', distance: 0,
               color: dotColor, fontSize: 10, fontWeight: 'normal',
@@ -976,14 +987,15 @@ function buildOption(
         }
       } else {
         markPointData.push({
-          name: m.label ?? '',
+          name: m.date,
           coord: [m.date, isBuy ? d.low : d.high],
-          symbol: 'arrow', symbolSize: 12,
+          symbol: m.symbol ?? 'arrow', symbolSize: m.symbol === 'diamond' ? 13 : 12,
           symbolRotate: isBuy ? 0 : 180,
           symbolOffset: isBuy ? [0, '60%'] : [0, '-60%'],
-          itemStyle: { color: isBuy ? THEME.bull : isSell ? THEME.bear : CT().text },
+          itemStyle: { color: m.color ?? (isBuy ? THEME.bull : isSell ? THEME.bear : CT().text) },
+          evidenceId: m.evidenceId,
           label: {
-            show: !!m.label, formatter: m.label ?? '',
+            show: !compact && !!m.label, formatter: m.label ?? '',
             position: isBuy ? 'bottom' : 'top', distance: 8,
             color: CT().text, fontSize: 10,
             fontFamily: 'JetBrains Mono, monospace',
@@ -1064,6 +1076,8 @@ function buildOption(
       {
         name: r.label ?? '',
         xAxis: r.start,
+        ...(r.high != null ? { yAxis: r.high } : {}),
+        evidenceId: r.evidenceId,
         itemStyle: { color: r.color ?? 'rgba(59,130,246,0.08)' },
         label: {
           show: !!r.label,
@@ -1079,7 +1093,7 @@ function buildOption(
           fontFamily: 'JetBrains Mono, monospace',
         },
       },
-      { xAxis: r.end },
+      { xAxis: r.end, ...(r.low != null ? { yAxis: r.low } : {}) },
     ]))
 
   // 包含处理后的合并 K 线以极淡竖区间显示；它是结构层，不替换原始蜡烛。
@@ -1467,6 +1481,8 @@ export function EChartsCandlestick({
   symbol: _symbol,
   linkedPrice,
   onDateClick,
+  onMarkerClick,
+  onVisibleBarsChange,
   onChartPointClick,
   onPriceDoubleClick,
   visibleBars = 60,
@@ -1484,6 +1500,10 @@ export function EChartsCandlestick({
   dataRef.current = data
   const onDateClickRef = useRef(onDateClick)
   onDateClickRef.current = onDateClick
+  const onMarkerClickRef = useRef(onMarkerClick)
+  onMarkerClickRef.current = onMarkerClick
+  const onVisibleBarsChangeRef = useRef(onVisibleBarsChange)
+  onVisibleBarsChangeRef.current = onVisibleBarsChange
   const onChartPointClickRef = useRef(onChartPointClick)
   onChartPointClickRef.current = onChartPointClick
   const onPriceDoubleClickRef = useRef(onPriceDoubleClick)
@@ -1662,6 +1682,8 @@ export function EChartsCandlestick({
 
     chart.on('click', (params: any) => {
       if (params.componentType === 'markPoint' && params.name) {
+        const evidenceId = params.data?.evidenceId
+        if (evidenceId) onMarkerClickRef.current?.(evidenceId)
         onDateClickRef.current?.(params.name)
         return
       }
@@ -1697,6 +1719,7 @@ export function EChartsCandlestick({
       const d = dataRef.current
       const total = d.length
       const visibleCount = Math.round(total * (zoom.end - zoom.start) / 100)
+      onVisibleBarsChangeRef.current?.(visibleCount)
       const newCompact = visibleCount > COMPACT_THRESHOLD
       if (newCompact !== compactRef.current) {
         compactRef.current = newCompact
@@ -1756,14 +1779,15 @@ export function EChartsCandlestick({
         }
       } else {
         markPointData.push({
-          name: m.label ?? '',
+          name: m.date,
           coord: [m.date, isBuy ? d.low : d.high],
-          symbol: 'arrow', symbolSize: 12,
+          symbol: m.symbol ?? 'arrow', symbolSize: m.symbol === 'diamond' ? 13 : 12,
           symbolRotate: isBuy ? 0 : 180,
           symbolOffset: isBuy ? [0, '60%'] : [0, '-60%'],
-          itemStyle: { color: isBuy ? THEME.bull : isSell ? THEME.bear : CT().text },
+          itemStyle: { color: m.color ?? (isBuy ? THEME.bull : isSell ? THEME.bear : CT().text) },
+          evidenceId: m.evidenceId,
           label: {
-            show: !!m.label, formatter: m.label ?? '',
+            show: !compact && !!m.label, formatter: m.label ?? '',
             position: isBuy ? 'bottom' : 'top', distance: 8,
             color: CT().text, fontSize: 10,
             fontFamily: 'JetBrains Mono, monospace',

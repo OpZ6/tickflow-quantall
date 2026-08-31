@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from app.db_safe import is_valid_ext_ident, quote_ident
 from app.services import strategy_cache
 from app.services.screener import ScreenerService
+from app.services.strategy_evidence import enrich_and_persist_strategy_result
 from app.strategy import config as strategy_config
 
 logger = logging.getLogger(__name__)
@@ -217,11 +218,7 @@ def _update_cache_strategy(data_dir, as_of: str, strategy_id: str, safe_data: di
     cached = strategy_cache.read_cache(data_dir)
     if cached and cached.get("as_of") == as_of:
         results = cached.get("results", {})
-        results[strategy_id] = {
-            "total": safe_data.get("total", 0),
-            "as_of": as_of,
-            "rows": safe_data.get("rows", []),
-        }
+        results[strategy_id] = {**safe_data, "as_of": as_of, "strategy": strategy_id}
         strategy_cache.write_cache(data_dir, as_of, results)
 
 
@@ -312,11 +309,19 @@ def run_preset(req: PresetRequest, request: Request):
             params=params,
             overrides=overrides or None,
         )
+        enrich_and_persist_strategy_result(
+            data_dir=data_dir,
+            result=result,
+            strategy=engine.get(req.strategy_id),
+            params=params,
+            context=context,
+        )
     except ValueError as e:
         status_code = 404 if "unknown strategy" in str(e) else 400
         raise HTTPException(status_code=status_code, detail=str(e)) from e
 
     safe_data = _safe(asdict(result))
+    safe_data["strategy"] = req.strategy_id
     _update_cache_strategy(data_dir, str(as_of), req.strategy_id, safe_data)
 
     return _result_with_ext(safe_data, ext_values)
@@ -335,7 +340,14 @@ def _cached_with_realtime(request: Request) -> dict:
         realtime_results = monitor_engine.latest_strategy_results()
         if realtime_results:
             results = dict(cached.get("results") or {})
-            results.update(realtime_results)
+            for strategy_id, realtime_result in realtime_results.items():
+                previous = results.get(strategy_id)
+                if isinstance(previous, dict) and isinstance(realtime_result, dict):
+                    # 实时监控快照只负责更新 rows/total/as_of；保留最近一次可追溯
+                    # 策略运行的版本、参数和批次，避免策略页深链丢失证据上下文。
+                    results[strategy_id] = {**previous, **realtime_result}
+                else:
+                    results[strategy_id] = realtime_result
             cached = dict(cached)
             cached["results"] = results
             # 有实时数据时, 以最新时间戳为准
@@ -425,6 +437,13 @@ def get_cached_result(
         "rows": _rows_with_ext(raw_result.get("rows") or [], ext_values),
         "total": int(raw_result.get("total") or 0),
         "elapsed_ms": 0.0,
+        "strategy_version": raw_result.get("strategy_version"),
+        "params_fingerprint": raw_result.get("params_fingerprint"),
+        "source_run_id": raw_result.get("source_run_id"),
+        "input_fingerprint": raw_result.get("input_fingerprint"),
+        "entry_signal_hits": raw_result.get("entry_signal_hits") or [],
+        "exit_signal_hits": raw_result.get("exit_signal_hits") or [],
+        "evidence": raw_result.get("evidence") or [],
     }
 
     ever_rows = None
@@ -573,12 +592,17 @@ def run_all(request: Request, body: Optional[dict] = None):
 
     results: dict[str, dict] = {}
     for sid, result in engine_results.items():
-        safe_rows = _safe(asdict(result)).get("rows", [])
-        results[sid] = {
-            "total": result.total,
-            "as_of": str(as_of),
-            "rows": safe_rows,
-        }
+        enrich_and_persist_strategy_result(
+            data_dir=data_dir,
+            result=result,
+            strategy=engine.get(sid),
+            params=params_map.get(sid, {}),
+            context=context,
+        )
+        safe_result = _safe(asdict(result))
+        safe_result["strategy"] = sid
+        safe_result["as_of"] = str(as_of)
+        results[sid] = safe_result
 
     elapsed = (time.perf_counter() - t_total) * 1000
     logger.info("run_all: total took %.1fms (%d strategies)", elapsed, len(all_ids))

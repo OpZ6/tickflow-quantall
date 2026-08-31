@@ -175,6 +175,52 @@ def test_chart_response_warms_indicators_before_trimming_and_uses_same_rows_for_
     assert set(result["levels"]) == {"sr", "pivot", "extreme", "boll", "keltner_s", "keltner_m", "keltner_l", "atr_stop", "gap", "fib", "round"}
 
 
+def test_chart_response_layers_share_the_final_candle_fingerprint() -> None:
+    dates = pl.date_range(date(2026, 1, 1), date(2026, 8, 31), interval="1d", eager=True)
+    frame = pl.DataFrame({
+        "symbol": ["000001.SZ"] * len(dates),
+        "date": dates,
+        "open": [10.0] * len(dates),
+        "high": [10.5] * len(dates),
+        "low": [9.5] * len(dates),
+        "close": [10.1] * len(dates),
+        "volume": [10_000] * len(dates),
+        "amount": [100_000] * len(dates),
+    })
+
+    class Repo:
+        def earliest_daily_date(self):
+            return date(2026, 1, 1)
+
+        def get_adjustment_factors(self, *_args):
+            return pl.DataFrame()
+
+        def get_raw_daily_asset(self, _asset_type, _symbol, start, end):
+            return frame.filter(pl.col("date").is_between(start, end))
+
+        def get_daily_asset(self, *_args, **_kwargs):
+            return pl.DataFrame()
+
+    result = build_chart_response(
+        Repo(),
+        ChartQuery(
+            symbol="000001.SZ", asset_type="stock", interval="1d", adjustment="none",
+            range_name="custom", start_date=date(2026, 7, 1), end_date=date(2026, 8, 31),
+        ),
+        layer_categories={"pattern", "event", "plan"},
+    )
+    assert result["annotation_layers"]
+    assert all(
+        layer["input_fingerprint"] == result["meta"]["input_fingerprint"]
+        for layer in result["annotation_layers"]
+    )
+    key_level_layer = next(layer for layer in result["annotation_layers"] if layer["id"] == "plan.key_levels")
+    assert len(key_level_layer["lines"]) == sum(len(items) for items in result["levels"].values())
+    assert {line["value"] for line in key_level_layer["lines"]} == {
+        level["value"] for items in result["levels"].values() for level in items
+    }
+
+
 def test_core_macd_has_fixed_numeric_sample() -> None:
     count = 80
     frame = pl.DataFrame({
