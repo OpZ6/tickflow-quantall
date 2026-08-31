@@ -1,5 +1,18 @@
 # TickFlow 上游同步制度
 
+> **稳定 Tag 硬约束（2026-08-31 起）**：Quantall 每次上游合并只允许选择上游已发布的稳定 Tag；禁止直接合并 `upstream/main`、功能分支或未打 Tag 的单独提交。若最新稳定 Tag 不满足需求，停止合并并由维护者决定是否等待下一稳定版本。
+
+## 最新同步记录（2026-08-31）
+
+| 项目 | 值 |
+| --- | --- |
+| 同步目标 | `v0.2.2` |
+| Tag commit | `80ecb6e409ef4e19a328442653b8b199f629506e` |
+| 集成分支 | `sync/upstream-v0.2.2` |
+| 明确排除 | `v0.2.2` 之后的 `upstream/main` 提交 |
+
+本次同步保留 Quantall 的 QuantX、市场实验室、本地全市场历史财务、统一 K 线和策略证据链，并接入稳定版的能力路由矩阵、fuyao、分钟策略/回测、交易日探针及异动增强。
+
 状态：权威升级流程。目标是持续跟踪 `shy3130/tick-stock-panel`，同时保留 Quantall 的 QuantX、实验室和自有功能。
 
 ## 0. 当前跟踪快照（2026-08-28）
@@ -35,7 +48,7 @@
 | `feat/minute-strategy` | 23 个提交、76 个文件，约 `+5363/-1229` | 分钟策略与回测、日线/分钟策略池、盘中增量持久化、实时预览轮询、数据源能力路由与设置页改造 | 变更面大且未进入主线/Tag；继续跟踪，待稳定后单独评估 |
 | `feat/volume-delta-alert` | 1 个提交、9 个文件，约 `+763/-18` | 量差监控与告警 | 会修改 `LimitUpLadder.tsx`，与当前本地连板梯队修复直接重叠；暂不合并 |
 
-同步候选默认只取上游正式 Tag 或 `upstream/main` 的明确提交。功能分支必须单独建立评估分支，完成契约、数据迁移和 UI 回归后才能考虑引入。
+同步候选只取上游正式稳定 Tag。`upstream/main`、功能分支和单独提交仅可做只读评估，不能进入同步分支。
 
 ## 1. 分支与远端
 
@@ -52,7 +65,7 @@
 2. 本地 HEAD 已推送到 origin。
 3. 数据、Token、缓存和报告未进入 Git。
 4. 已记录当前可运行基线和验证结果。
-5. 优先选择上游正式 Tag；没有 Tag 时才选择明确 commit。
+5. 必须选择上游正式稳定 Tag；没有新稳定 Tag 时停止本次同步。
 
 未提交内容不会进入 Git 三方预演，因此脏工作区的“无冲突”结论无效。
 
@@ -61,8 +74,8 @@
 ```powershell
 git fetch origin
 git fetch upstream --tags
-python scripts/upstream_status.py --target upstream/main
-python scripts/upgrade_check.py upstream/main
+python scripts/upstream_status.py --target vX.Y.Z
+python scripts/upgrade_check.py vX.Y.Z
 ```
 
 `upstream_status.py` 检查远端、共同基线、双方提交数、脏工作区和高冲突热点；`upgrade_check.py` 继续负责双方重叠文件和 merge-tree 文本冲突预演。
@@ -72,9 +85,9 @@ python scripts/upgrade_check.py upstream/main
 ```powershell
 git switch main
 git pull --ff-only origin main
-$syncDate = Get-Date -Format yyyyMMdd
-git switch -c "sync/upstream-$syncDate"
-git merge --no-ff upstream/main
+$stableTag = "vX.Y.Z"
+git switch -c "sync/upstream-$stableTag"
+git merge --no-ff $stableTag
 ```
 
 冲突处理原则：

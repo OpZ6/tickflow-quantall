@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import date as _date
 from pathlib import Path
 
 import polars as pl
@@ -144,7 +145,7 @@ def run_now(
     #   付费档 + 今天有数据 → 实时行情接口拉一次覆写（1请求全市场）
     #   有历史数据 → batch K-line API 补齐缺口
     #   无任何数据 → batch K-line API 拉首次 1 年
-    from datetime import date as _date, timedelta as _td, datetime as _dt
+    from datetime import datetime as _dt, timedelta as _td
     latest_daily = repo.latest_daily_date()
     today = _date.today()
     today_exists = latest_daily and latest_daily >= today
@@ -305,8 +306,6 @@ def run_now(
     written_adj = 0
     affected_symbols: list[str] = []
     adj_provider = _prefs.get_adj_factor_provider()
-    if adj_provider == "same_as_daily":
-        adj_provider = _prefs.get_daily_data_provider()
     can_sync_adj = capset.has(Cap.ADJ_FACTOR) or adj_provider != "tickflow"
     if can_sync_adj:
         from datetime import datetime, timedelta

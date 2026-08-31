@@ -138,10 +138,13 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
     staleTime: 60_000,
   })
   const previewAssetType = chartQuery.data?.asset_type
+  const previewTimeframe = layout.interval === '1d' || layout.interval === '1m'
+    ? layout.interval
+    : null
   const previewCatalogQuery = useQuery({
     queryKey: QK.strategyChartPreviewCatalog(previewAssetType ?? 'stock', layout.interval),
-    queryFn: () => api.strategyList(previewAssetType as 'stock' | 'etf', layout.interval),
-    enabled: previewAssetType === 'stock' || previewAssetType === 'etf',
+    queryFn: () => api.strategyList(previewAssetType as 'stock' | 'etf', previewTimeframe ?? 'all'),
+    enabled: (previewAssetType === 'stock' || previewAssetType === 'etf') && previewTimeframe !== null,
     staleTime: 60_000,
   })
   const previewStrategies = useMemo(
