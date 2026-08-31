@@ -127,12 +127,90 @@ def _gini_lorenz(values: list[float]) -> dict[str, Any]:
     return {"gini": round(1 - 2 * area, 4), "points": points}
 
 
-def _stock_returns(root: Path, end: date, days: int = 35) -> pl.DataFrame:
+def _mean_lorenz_points(curves: list[list[dict[str, float]]]) -> list[dict[str, float]]:
+    if not curves:
+        return []
+    points = []
+    for population_pct in range(101):
+        values = []
+        for curve in curves:
+            position = population_pct / 100 * (len(curve) - 1)
+            left = math.floor(position)
+            right = math.ceil(position)
+            fraction = position - left
+            amount_pct = curve[left]["amount_pct"]
+            if right != left:
+                amount_pct += (curve[right]["amount_pct"] - amount_pct) * fraction
+            values.append(amount_pct)
+        points.append(
+            {
+                "population_pct": float(population_pct),
+                "amount_pct": round(sum(values) / len(values), 2),
+            }
+        )
+    return points
+
+
+def _turnover_lorenz(
+    returns: pl.DataFrame,
+    end: date,
+    *,
+    period_days: int = 20,
+) -> dict[str, Any]:
+    if returns.is_empty() or not {"date", "amount"}.issubset(returns.columns):
+        return {}
+    current = _gini_lorenz(
+        returns.filter(pl.col("date") == end)["amount"].drop_nulls().to_list()
+    )
+    if not current["points"]:
+        return {}
+
+    baseline_dates = sorted(
+        day for day in returns["date"].drop_nulls().unique().to_list() if day < end
+    )[-period_days:]
+    baselines = []
+    for day in baseline_dates:
+        curve = _gini_lorenz(
+            returns.filter(pl.col("date") == day)["amount"].drop_nulls().to_list()
+        )
+        if curve["points"]:
+            baselines.append((day, curve))
+
+    result = dict(current)
+    if baselines:
+        previous_date, previous = baselines[-1]
+        result["previous"] = {"date": str(previous_date), **previous}
+        result["period_mean"] = {
+            "days": len(baselines),
+            "start_date": str(baselines[0][0]),
+            "end_date": str(baselines[-1][0]),
+            "gini": round(
+                sum(float(curve["gini"]) for _, curve in baselines) / len(baselines),
+                4,
+            ),
+            "points": _mean_lorenz_points(
+                [curve["points"] for _, curve in baselines]
+            ),
+        }
+    return result
+
+
+def _stock_returns(
+    root: Path,
+    end: date,
+    days: int = 35,
+    repo: Any = None,
+) -> pl.DataFrame:
     dates = _history_dates(root, "kline_daily_enriched", end, days + 1)
     if len(dates) < 2:
         return pl.DataFrame()
-    frame = _read_range(root, "kline_daily_enriched", dates[0], dates[-1])
     required = {"symbol", "date", "close", "amount", "turnover_rate"}
+    frame = None
+    get_enriched_range = getattr(repo, "get_enriched_range", None)
+    if callable(get_enriched_range):
+        frame = get_enriched_range(dates[0], dates[-1], columns=sorted(required))
+    if frame is None:
+        frame = _read_range(root, "kline_daily_enriched", dates[0], dates[-1])
     if frame.is_empty() or not required.issubset(frame.columns):
         return pl.DataFrame()
     return (
@@ -768,7 +846,7 @@ def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> d
     themes = _read_range(root, "theme_observation_daily", start, trade_date)
     sectors = _read_range(root, "sector_breadth_daily", start, trade_date)
     regime = _regime_history(root, trade_date)
-    returns = _stock_returns(root, trade_date)
+    returns = _stock_returns(root, trade_date, repo=repo)
     industry_daily = _industry_daily_returns(returns, repo)
 
     mainline = _mainline_waterfall(root, trade_date)
@@ -782,7 +860,7 @@ def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> d
         "anomaly_calendar": (_anomaly_calendar(regime), regime.height),
         "return_distribution": (_return_distribution(returns, trade_date), returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
         "advance_decline": (_advance_decline(root, breadth, trade_date), breadth.height),
-        "turnover_lorenz": (_gini_lorenz(returns.filter(pl.col("date") == trade_date)["amount"].drop_nulls().to_list()) if not returns.is_empty() else {}, returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
+        "turnover_lorenz": (_turnover_lorenz(returns, trade_date), returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
         "industry_correlation": (_industry_correlation(industry_daily), industry_daily.height),
         "mainline_waterfall": (mainline, len(mainline.get("mainlines", []))),
         "theme_ladder_sunburst": (_sunburst(ladder, trade_date), ladder.filter(pl.col("trade_date") == trade_date).height if not ladder.is_empty() else 0),

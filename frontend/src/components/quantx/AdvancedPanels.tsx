@@ -33,7 +33,7 @@ const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 
   anomaly_calendar: { title: '2026 年异常交易日', hint: '年初至今 · 仅显示交易日 · 综合收益、广度、涨停与成交额', group: 'state', span: 'xl:[grid-column:span_10/span_10]' },
   return_distribution: { title: '全市场收益分布剖面', hint: '当日全 A 收益横截面与中位数', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
   advance_decline: { title: 'A/D 累积线与指数背离', hint: '涨跌家数差累积 vs 中证全指 · 阴影标出背离区间', group: 'state', span: 'xl:[grid-column:span_9/span_9]' },
-  turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: '交易集中度；虚线为完全均等', group: 'state', span: 'xl:[grid-column:span_7/span_7]' },
+  turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: '实线为当日；虚线对比昨日、前 20 个交易日均值', group: 'state', span: 'xl:[grid-column:span_7/span_7]' },
   sector_diffusion: { title: '申万行业宽度扩散地图', hint: '切换一级/二级行业及 MA5 / MA10 / MA20', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   theme_river: { title: '题材单源排名演进', hint: '近 20 日同一榜单逐日名次 · 数字越小、颜色越热；不与多源强度混算', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   industry_correlation: { title: '行业收益相关性矩阵', hint: '切换同花顺一级/二级行业 · 近 35 日收益相关性', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]', caveat: '行业收益按当前行业成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
@@ -144,7 +144,26 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
   }
   if (key === 'turnover_lorenz') {
     const points = data.points || []
-    return { ...common, title: { text: `Gini ${data.gini ?? '--'}`, left: 'center', top: 2, textStyle: { color: ct.textStrong, fontSize: 11, fontWeight: 500 } }, grid: { left: 10, right: 12, top: 34, bottom: 16, containLabel: true }, xAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, series: [{ type: 'line', symbol: 'none', data: points.map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: ORANGE, width: 2 }, areaStyle: { color: 'rgba(247,129,102,.12)' } }, { type: 'line', symbol: 'none', data: [[0, 0], [100, 100]], lineStyle: { color: ct.text, type: 'dashed' } }] }
+    const previous = data.previous || {}
+    const periodMean = data.period_mean || {}
+    const previousName = previous.date ? `昨日 ${String(previous.date).slice(5)}` : '昨日'
+    const periodName = periodMean.days ? `前 ${periodMean.days} 日均值` : '近期均值'
+    const subtitle = [previous.gini != null ? `昨日 ${previous.gini}` : null, periodMean.gini != null ? `前${periodMean.days}日均值 ${periodMean.gini}` : null].filter(Boolean).join(' · ')
+    return {
+      ...common,
+      tooltip: { trigger: 'axis', valueFormatter: (value: number) => `${Number(value).toFixed(2)}%` },
+      title: { text: `当日 Gini ${data.gini ?? '--'}`, subtext: subtitle, left: 'center', top: 0, textStyle: { color: ct.textStrong, fontSize: 11, fontWeight: 500 }, subtextStyle: { color: ct.text, fontSize: 9 } },
+      legend: { top: 38, data: ['当日', previousName, periodName, '完全均等'], textStyle: { color: ct.text, fontSize: 9 }, itemWidth: 18, itemHeight: 8 },
+      grid: { left: 10, right: 12, top: 70, bottom: 16, containLabel: true },
+      xAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, formatter: '{value}%', hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } },
+      yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, formatter: '{value}%', hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } },
+      series: [
+        { name: '当日', type: 'line', symbol: 'none', data: points.map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: ORANGE, width: 2.5 }, areaStyle: { color: 'rgba(247,129,102,.10)' }, z: 4 },
+        { name: previousName, type: 'line', symbol: 'none', data: (previous.points || []).map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: BLUE, width: 1.5, type: 'dashed' }, z: 3 },
+        { name: periodName, type: 'line', symbol: 'none', data: (periodMean.points || []).map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: PURPLE, width: 1.5, type: 'dashed' }, z: 2 },
+        { name: '完全均等', type: 'line', symbol: 'none', data: [[0, 0], [100, 100]], lineStyle: { color: ct.text, width: 1, type: 'dotted', opacity: 0.65 }, z: 1 },
+      ],
+    }
   }
   if (key === 'industry_correlation') {
     const dimension = selection.correlationDimension || data.default_dimension || 'industry_level1'
@@ -311,7 +330,7 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
         {card.status === 'ok' ? <EChart chartKey={chartKey} card={card} height={height} selection={selection} onClick={chartKey === 'industry_correlation' ? handleChartClick : undefined} /> : <div className="flex items-center justify-center text-xs text-muted" style={{ height }}><span>{card.reason || '暂无足够数据'}</span></div>}
         {chartKey === 'industry_correlation' && card.status === 'ok' && <CorrelationPairRankings view={correlationView} selectedIndustry={correlationIndustry} onSelectIndustry={setCorrelationIndustry} />}
         {chartKey === 'state_transition' && card.status === 'ok' && <div data-testid="quantx-state-transition-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p>读法：从左侧“当前状态”沿行读取到上方“下一交易日状态”，每行合计 100%。例如“震荡 → 偏强 20%”表示处于震荡后，次日转为偏强的历史概率为 20%。</p><p className="text-orange-300">模型边界：本矩阵来自 TickFlow Regime 四维模型；顶部市场热度、短线情绪和趋势情绪来自 QuantX market_state_daily，两套分值与状态不可直接互换。</p></div>}
-        {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>横轴是按成交额从小到大排列的股票累计占比，纵轴是这些股票贡献的累计成交额；橙线越向右下弯，成交越集中在少数头部股票。</p><p><span className="text-foreground">有什么用：</span>判断资金是广泛扩散还是抱团。Gini 接近 0 表示均匀，接近 1 表示极端集中；它描述资金结构，不判断市场涨跌方向。</p></div>}
+        {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>横轴是按成交额从小到大排列的股票累计占比，纵轴是累计成交额；橙线越向右下弯，成交越集中在少数头部股票。蓝色虚线是昨日，紫色虚线是前 20 个交易日均值。</p><p><span className="text-foreground">有什么用：</span>当日曲线低于历史基线、Gini 更高，表示资金抱团较近期增强；更接近均等线则表示成交扩散。它描述资金结构，不判断市场涨跌方向。</p></div>}
         {chartKey === 'advance_decline' && card.status === 'ok' && <p data-testid="quantx-ad-divergence-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">红色区间：指数走强但市场广度转弱；绿色区间：指数走弱但广度修复。图钉标记背离确认点。</p>}
         {chartKey === 'promotion_funnel' && card.status === 'ok' && <p data-testid="quantx-promotion-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">当天显示目标交易日实际结果；5日、20日按窗口内成功数 ÷ 样本数计算加权均值。蓝色菱形虚线为当前快照全部历史样本基线，切换窗口时始终保留。0→1 使用首板封板率，其余层级使用次日晋级率。</p>}
         {caveat && <p data-testid={`quantx-advanced-caveat-${chartKey}`} className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-orange-300">口径提示：{caveat}</p>}

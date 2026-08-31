@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import polars as pl
+import pytest
 
 from app.quantx_data.advanced import (
     CARD_KEYS,
@@ -16,8 +17,10 @@ from app.quantx_data.advanced import (
     _rotation_clock,
     _sector_diffusion,
     _state_transition,
+    _stock_returns,
     _sunburst,
     _theme_river,
+    _turnover_lorenz,
     build_advanced_snapshot,
 )
 
@@ -28,6 +31,82 @@ def test_gini_lorenz_is_bounded_and_ends_at_one() -> None:
     assert 0 < result["gini"] < 1
     assert result["points"][0] == {"population_pct": 0.0, "amount_pct": 0.0}
     assert result["points"][-1] == {"population_pct": 100.0, "amount_pct": 100.0}
+
+
+def test_turnover_lorenz_adds_previous_and_trailing_period_baselines() -> None:
+    days = [date(2026, 8, 26), date(2026, 8, 27), date(2026, 8, 28)]
+    frame = pl.DataFrame(
+        {
+            "date": [day for day in days for _ in range(2)],
+            "amount": [1.0, 9.0, 2.0, 8.0, 5.0, 5.0],
+        }
+    )
+
+    result = _turnover_lorenz(frame, days[-1], period_days=20)
+
+    assert result["gini"] == 0.0
+    assert result["previous"]["date"] == "2026-08-27"
+    assert result["previous"]["gini"] == 0.3
+    assert result["period_mean"]["days"] == 2
+    assert result["period_mean"]["start_date"] == "2026-08-26"
+    assert result["period_mean"]["end_date"] == "2026-08-27"
+    assert result["period_mean"]["gini"] == 0.35
+    assert result["period_mean"]["points"][0] == {
+        "population_pct": 0.0,
+        "amount_pct": 0.0,
+    }
+    assert result["period_mean"]["points"][-1] == {
+        "population_pct": 100.0,
+        "amount_pct": 100.0,
+    }
+
+
+def test_stock_returns_prefers_repository_computed_turnover(tmp_path) -> None:
+    days = [date(2026, 8, 27), date(2026, 8, 28)]
+    persisted = pl.DataFrame(
+        {
+            "symbol": ["600000.SH"],
+            "date": [days[0]],
+            "close": [10.0],
+            "amount": [100.0],
+            "turnover_rate": [None],
+        },
+        schema_overrides={"turnover_rate": pl.Float64},
+    )
+    for day in days:
+        target = tmp_path / "kline_daily_enriched" / f"date={day.isoformat()}"
+        target.mkdir(parents=True)
+        persisted.with_columns(pl.lit(day).cast(pl.Date).alias("date")).write_parquet(
+            target / "part.parquet"
+        )
+
+    repository_frame = pl.DataFrame(
+        {
+            "symbol": ["600000.SH", "600000.SH"],
+            "date": days,
+            "close": [10.0, 11.0],
+            "amount": [100.0, 120.0],
+            "turnover_rate": [1.5, 1.8],
+        }
+    )
+
+    class Repository:
+        def get_enriched_range(self, start, end, *, columns):
+            assert (start, end) == (days[0], days[-1])
+            assert set(columns) == {
+                "symbol",
+                "date",
+                "close",
+                "amount",
+                "turnover_rate",
+            }
+            return repository_frame
+
+    result = _stock_returns(tmp_path, days[-1], repo=Repository())
+
+    assert result["turnover_rate"].to_list() == [1.5, 1.8]
+    assert result["return"][0] is None
+    assert result["return"][1] == pytest.approx(0.1)
 
 
 def test_state_transition_normalizes_each_non_empty_row() -> None:
