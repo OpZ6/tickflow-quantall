@@ -681,6 +681,10 @@ export interface StrategyDetail {
   execution_backend: 'polars_expr' | 'matrix_native' | 'python_history_legacy' | 'composite'
   asset_types: string[]
   timeframes: string[]
+  chart_preview: {
+    enabled: boolean
+    mode?: string
+  }
   version: string
   basic_filter: Record<string, any>
   params: StrategyParamDef[]
@@ -1571,6 +1575,26 @@ export interface ChartDataQuery {
   strategyIds?: string[]
   sourceRunId?: string
   paramsFingerprint?: string
+}
+
+export interface StrategyPreviewRequest {
+  symbol: string
+  assetType: 'stock' | 'etf' | 'index'
+  timeframe: ChartInterval
+  startDate: string
+  endDate: string
+  strategyIds: string[]
+  paramsByStrategy?: Record<string, Record<string, unknown>>
+}
+
+export interface StrategyPreviewResponse {
+  mode: 'single_asset_preview'
+  symbol: string
+  asset_type: 'stock' | 'etf' | 'index'
+  timeframe: ChartInterval
+  calculation_price_basis: 'qfq'
+  layers: ChartAnnotationLayer[]
+  warnings: string[]
 }
 
 export interface MarketDatasetContract {
@@ -3410,6 +3434,20 @@ export const api = {
     request<ScreenerResult>('/api/strategies/run', {
       method: 'POST',
       body: JSON.stringify({ strategy_id: strategyId, params, as_of: asOf ?? null, pool }),
+    }),
+
+  strategyPreview: (payload: StrategyPreviewRequest) =>
+    request<StrategyPreviewResponse>('/api/strategies/preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        symbol: payload.symbol,
+        asset_type: payload.assetType,
+        timeframe: payload.timeframe,
+        start_date: payload.startDate,
+        end_date: payload.endDate,
+        strategy_ids: payload.strategyIds,
+        params_by_strategy: payload.paramsByStrategy ?? {},
+      }),
     }),
 
   strategyRunAll: (asOf?: string) =>

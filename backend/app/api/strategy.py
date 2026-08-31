@@ -16,7 +16,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.backtest.minute_trigger import MINUTE_EXIT_TRIGGER_SIGNALS
 from app.strategy import config as strategy_config
@@ -193,6 +193,11 @@ def _strategy_detail(
         "execution_backend": s.execution_backend,
         "asset_types": s.meta.get("asset_types", ["stock"]),
         "timeframes": s.meta.get("timeframes", ["1d"]),
+        "chart_preview": (
+            dict(s.meta.get("chart_preview"))
+            if isinstance(s.meta.get("chart_preview"), dict)
+            else {"enabled": False}
+        ),
         "version": s.meta.get("version", "1.0.0"),
         "basic_filter": bf,
         "params": s.meta.get("params", []),
@@ -248,6 +253,16 @@ class RunAllRequest(BaseModel):
     as_of: date | None = None
     asset_type: str = "stock"
     timeframe: str = "1d"
+
+
+class PreviewRequest(BaseModel):
+    symbol: str
+    asset_type: Literal["stock", "etf", "index"] = "stock"
+    timeframe: str = "1d"
+    start_date: date
+    end_date: date
+    strategy_ids: list[str] = Field(default_factory=list)
+    params_by_strategy: dict[str, dict] = Field(default_factory=dict)
 
 
 class EventBackfillRequest(BaseModel):
@@ -447,6 +462,45 @@ def get_strategy(strategy_id: str, request: Request):
 
 
 # ── 执行选股 ─────────────────────────────────────────────────────────
+
+
+@router.post("/preview")
+def preview_strategy(req: PreviewRequest, request: Request):
+    """即时回放一只股票的正式策略信号，不执行全市场扫描或写入事件仓库。"""
+    if not req.symbol.strip():
+        raise HTTPException(status_code=422, detail="symbol 不能为空")
+    if req.end_date < req.start_date:
+        raise HTTPException(status_code=422, detail="end_date 不能早于 start_date")
+    strategy_ids = list(dict.fromkeys(item.strip() for item in req.strategy_ids if item.strip()))
+    if not strategy_ids or len(strategy_ids) > 3:
+        raise HTTPException(status_code=422, detail="strategy_ids 需要 1—3 个")
+
+    engine = _get_engine(request)
+    for strategy_id in strategy_ids:
+        _get_public_strategy(engine, strategy_id)
+    data_dir = _data_dir(request)
+    overrides_by_strategy = {
+        strategy_id: strategy_config.load_override(data_dir, strategy_id) or {}
+        for strategy_id in strategy_ids
+    }
+    try:
+        from app.services.strategy_preview import StrategyPreviewService
+
+        return StrategyPreviewService(request.app.state.repo, engine).preview(
+            symbol=req.symbol.strip(),
+            asset_type=req.asset_type,
+            timeframe=req.timeframe,
+            start_date=req.start_date,
+            end_date=req.end_date,
+            strategy_ids=strategy_ids,
+            params_by_strategy={
+                strategy_id: dict(req.params_by_strategy.get(strategy_id) or {})
+                for strategy_id in strategy_ids
+            },
+            overrides_by_strategy=overrides_by_strategy,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/run")

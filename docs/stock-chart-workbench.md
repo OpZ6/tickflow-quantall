@@ -13,6 +13,8 @@
 - `layers=pattern,strategy,event,plan`；不传时保持旧响应兼容，传入后返回 `annotation_layers`。
 - `strategy_ids`、`source_run_id`、`params_fingerprint` 用于恢复策略页来源及精确运行批次。
 
+`POST /api/strategies/preview` 是独立的只读单股策略接口：请求包含 `symbol`、`asset_type`、`timeframe`、`start_date`、`end_date`、至多三个正式 `strategy_ids` 和可选参数覆盖；响应返回临时策略 `annotation_layers`、策略版本和输入指纹。当前首批只开放声明日线 `chart_preview` 的四个价格结构策略，计算口径固定为前复权 enriched 日线；切换图表复权只改变 K 线显示，不重新定义策略的正式信号日期。
+
 处理顺序固定为：原始 Repository 数据 → 复权 → 周期聚合 → 隐藏区间预热 → 指标与 11 组关键价位 → 裁剪 → API。响应 `meta` 提供请求/实际周期与复权、来源、覆盖起止、`complete`、`warmup_bars`、`warmup_complete` 和告警。关键价位位于同一响应的 `levels`，不得再用另一份日线生成。
 
 分钟线只使用本地分钟仓库已有历史。覆盖不足时页面显示真实起止，并可调用 `POST /api/kline/sync_minute_single` 补齐单股历史；provider 拒绝长区间时错误原样可见。当前本地指数分钟线不受支持，不会冒充股票分钟线。
@@ -35,7 +37,7 @@
 
 策略表格的“查看信号”携带 `strategyId/asOf/sourceRunId/paramsFingerprint/symbol/asset/returnTo`。个股页从 URL 恢复上下文、自动开启来源策略层并把信号日作为图表截止日；刷新或复制链接后仍可恢复，返回策略页保留日期、策略和筛选。
 
-可执行的价格结构条件必须先注册到策略引擎。只有从策略面板执行策略、回测或实时监控后写入 `strategy_signal_events` 的事件，才能显示在 K 线“策略”图层；仅打开个股 K 线不会现场运行策略，也不会把启发式形态伪装为买卖信号。
+可执行的价格结构条件必须先注册到策略引擎。K 线“策略”页签将“即时策略标记”和“已记录的策略事件”分开：前者只允许策略登记 `chart_preview.enabled=true` 且声明 `mode=single_asset`，由 `POST /api/strategies/preview` 读取当前股票的前复权 enriched 日线和必要预热区间，因果回放入场/离场信号；它不执行全市场扫描、不写入 `strategy_signal_events`、不模拟成交，也不计算单股横向评分。后者读取策略面板执行、回测或实时监控已经写入 `strategy_signal_events` 的跨日证据。未声明预览能力的正式策略在当前周期必须显示不可用，不能以启发式形态或单股近似结果绕过注册契约。
 
 跨日历史不再以 `strategy_cache.json` 为权威，而写入独立派生仓库：
 
@@ -62,7 +64,8 @@ schema v2 的幂等键包含策略 ID/版本、参数指纹、股票、事件日
 ```powershell
 cd D:\tickflow-quantall\backend
 uv run --frozen pytest tests/test_chart_data.py tests/test_chart_layers.py tests/test_strategy_signal_events.py tests/test_chanlun_pipeline.py tests/test_chanlun_bridge.py tests/test_minute_range_api.py -q
-uv run --frozen ruff check app/chart_layers app/services/strategy_evidence.py app/services/strategy_signal_events.py tests/test_chart_layers.py tests/test_strategy_signal_events.py
+uv run --frozen pytest tests/test_strategy_preview.py -q
+uv run --frozen ruff check app/chart_layers app/services/strategy_preview.py app/services/strategy_evidence.py app/services/strategy_signal_events.py tests/test_chart_layers.py tests/test_strategy_preview.py tests/test_strategy_signal_events.py
 
 cd D:\tickflow-quantall\frontend
 pnpm test:indicators

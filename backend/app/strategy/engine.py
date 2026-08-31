@@ -219,6 +219,21 @@ class StrategyResult:
     evidence: list[dict] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class StrategySignalHistory:
+    """Causal signal matrices for one registered strategy over a supplied history.
+
+    This is deliberately narrower than a screener run: it has no candidate
+    ranking, result limit, event persistence, or execution simulation.  The
+    stock-chart preview service uses it only after it has constrained the
+    input panel to one symbol.
+    """
+
+    market: Any
+    signals: Any
+    params: dict
+
+
 @dataclass
 class _RealtimeMatrixEntry:
     fingerprint: tuple[Any, ...]
@@ -821,6 +836,79 @@ class StrategyEngine:
     # ================================================================
     # 执行
     # ================================================================
+
+    def preview_signal_history(
+        self,
+        strategy_id: str,
+        context: StrategyDataContext,
+        *,
+        params: dict | None = None,
+        overrides: dict | None = None,
+    ) -> StrategySignalHistory:
+        """Evaluate one registered matrix strategy across one asset's history.
+
+        Chart previews are signal replays, not screeners or backtests.  They
+        must therefore be explicitly enabled by the registered strategy and
+        receive exactly one symbol from the caller.  Cross-sectional scores
+        are intentionally omitted because a one-stock min/max ranking has no
+        market meaning.
+        """
+        from app.backtest.matrix import (
+            MatrixPipelineConfig,
+            MatrixStrategyPipeline,
+            build_market_data_matrix,
+        )
+
+        strategy = self.get(strategy_id)
+        self.validate_context(strategy, context)
+        preview = strategy.meta.get("chart_preview") or {}
+        if not isinstance(preview, dict) or not preview.get("enabled"):
+            raise ValueError(f"strategy {strategy_id} 不支持个股即时预览")
+        if strategy.execution_backend != "matrix_native":
+            raise ValueError(f"strategy {strategy_id} 不支持个股即时预览")
+
+        panel = context.history if context.history is not None else context.current
+        if panel is None or panel.is_empty():
+            raise ValueError(f"strategy {strategy_id} 缺少个股历史数据")
+        if "symbol" not in panel.columns:
+            raise ValueError(f"strategy {strategy_id} 个股历史缺少 symbol 列")
+        symbols = panel["symbol"].drop_nulls().cast(pl.Utf8).unique().to_list()
+        if len(symbols) != 1:
+            raise ValueError("个股即时预览只能计算一个标的")
+
+        effective_overrides = overrides or {}
+        effective_params = self.resolve_params(strategy, params, effective_overrides)
+        market = build_market_data_matrix(
+            panel,
+            field_columns=self._matrix_field_columns(
+                strategy,
+                effective_overrides,
+                effective_params,
+            ),
+        )
+        basic_filter = dict(strategy.basic_filter or {})
+        if effective_overrides.get("basic_filter"):
+            basic_filter.update(effective_overrides["basic_filter"])
+        signals = MatrixStrategyPipeline().run(
+            strategy.matrix_strategy,
+            market,
+            effective_params,
+            MatrixPipelineConfig(
+                basic_filter=basic_filter,
+                # A single asset has no cross-sectional ranking.  Signal
+                # timing remains identical; only the meaningless score is
+                # intentionally omitted from this chart-only response.
+                scoring={},
+                scoring_directions={},
+                order_by=None,
+                descending=bool(strategy.meta.get("descending", True)),
+            ),
+        )
+        return StrategySignalHistory(
+            market=market,
+            signals=signals,
+            params=effective_params,
+        )
 
     def run(
         self,

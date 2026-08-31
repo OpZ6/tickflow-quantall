@@ -13,6 +13,7 @@ META = {
     "tags": ["高而紧", "旗形", "突破"],
     "asset_types": ["stock", "etf"],
     "timeframes": ["1d"],
+    "chart_preview": {"enabled": True, "mode": "single_asset"},
     "basic_filter": {
         "price_min": 3,
         "amount_min": 0.2e8,

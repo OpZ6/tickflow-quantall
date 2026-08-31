@@ -77,6 +77,8 @@ export const QK = {
     ? ['strategy-link-options', assetType] as const
     : ['strategy-link-options'] as const,
   strategyDetail:       (id: string) => ['strategy-detail', id] as const,
+  strategyChartPreviewCatalog: (assetType: string, timeframe: string) =>
+                          ['strategy-chart-preview-catalog', assetType, timeframe] as const,
 
   // Data / Pipeline
   dataStatus:           ['data-status'] as const,
@@ -93,6 +95,8 @@ export const QK = {
                            ['kline', symbol, start, end, extColumns ?? ''] as const,
   klineChart:           (symbol: string, assetType: string, interval: string, adjustment: string, range: string, start: string, end: string, layers = '', strategies = '', sourceRunId = '', paramsFingerprint = '') =>
                            ['kline-chart', symbol, assetType, interval, adjustment, range, start, end, layers, strategies, sourceRunId, paramsFingerprint] as const,
+  strategyChartPreview: (symbol: string, assetType: string, timeframe: string, start: string, end: string, strategyIds: string, inputFingerprint: string) =>
+                           ['strategy-chart-preview', symbol, assetType, timeframe, start, end, strategyIds, inputFingerprint] as const,
   stockLevels:          (symbol: string, days?: number) => ['stock-levels', symbol, days ?? 120] as const,
   klineMinute:          (symbol: string, date: string) =>
                              ['kline-minute', symbol, date] as const,

@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 
-import type { AnnotationEvidence, ChartAnnotationLayer, ChartLayerCategory } from '@/lib/api'
+import type { AnnotationEvidence, ChartAnnotationLayer, ChartLayerCategory, StrategyDetail } from '@/lib/api'
 
 type ManagerTab = 'technical' | 'chanlun' | 'pattern' | 'strategy' | 'event' | 'drawing'
 
@@ -26,6 +26,10 @@ export function ChartLayerManager({
   selectedStrategyIds,
   strategyEventTypes,
   annotationDensity,
+  previewStrategies,
+  previewStrategyIds,
+  previewLoading,
+  previewError,
   onTabChange,
   onToggleLayer,
   onToggleChanlun,
@@ -34,6 +38,7 @@ export function ChartLayerManager({
   onToggleStrategy,
   onToggleStrategyEventType,
   onDensityChange,
+  onTogglePreviewStrategy,
   onClose,
 }: {
   open: boolean
@@ -48,6 +53,10 @@ export function ChartLayerManager({
   selectedStrategyIds: Set<string>
   strategyEventTypes: Set<string>
   annotationDensity: 'auto' | 'compact' | 'detailed'
+  previewStrategies: StrategyDetail[]
+  previewStrategyIds: Set<string>
+  previewLoading: boolean
+  previewError: string | null
   onTabChange: (tab: ManagerTab) => void
   onToggleLayer: (id: string) => void
   onToggleChanlun: () => void
@@ -56,6 +65,7 @@ export function ChartLayerManager({
   onToggleStrategy: (id: string) => void
   onToggleStrategyEventType: (eventType: string) => void
   onDensityChange: (density: 'auto' | 'compact' | 'detailed') => void
+  onTogglePreviewStrategy: (strategyId: string) => void
   onClose: () => void
 }) {
   if (!open) return null
@@ -79,11 +89,20 @@ export function ChartLayerManager({
         {tab === 'technical' && <div className="space-y-2"><button type="button" onClick={onOpenIndicators} className="tool-btn">打开 20 个主图与 38 个副图指标目录</button>{categoryLayers.map(layer => <label key={layer.id} className="flex items-center gap-2 rounded border border-border/60 p-2"><input type="checkbox" checked={enabledLayerIds.has(layer.id)} onChange={() => onToggleLayer(layer.id)} />{layer.title}<span className="text-[10px] text-muted">统一图层 {layer.lines.length} 条</span></label>)}</div>}
         {tab === 'chanlun' && <label className="flex items-center gap-2"><input type="checkbox" checked={chanlunVisible} onChange={onToggleChanlun} />启用本地缠论结构层</label>}
         {tab === 'drawing' && <div className="text-secondary">当前上下文有 {drawingCount} 条画线；请使用顶部趋势线、水平线和文字工具编辑。</div>}
-        {tab === 'strategy' && <div className="mb-3 space-y-3 rounded border border-border/60 bg-base/30 p-2">
+        {tab === 'strategy' && <div className="mb-3 space-y-3">
+          <section className="rounded border border-sky-400/25 bg-sky-400/[0.045] p-2" data-testid="single-stock-strategy-preview">
+            <div className="flex items-center justify-between gap-2"><span className="font-medium text-sky-100">即时策略标记</span>{previewLoading && <span className="text-[10px] text-sky-300">正在计算当前股票…</span>}</div>
+            <p className="mt-1 text-[10px] leading-4 text-muted">仅计算当前股票的可见历史与预热K线，不执行全市场扫描，也不写入策略事件库。</p>
+            {previewStrategies.length > 0 ? <div className="mt-2 flex max-h-28 flex-wrap gap-1 overflow-y-auto">{previewStrategies.map(strategy => <label key={strategy.id} className="inline-flex max-w-full items-center gap-1 rounded border border-sky-300/20 px-1.5 py-1 text-[10px] text-secondary"><input data-testid={`chart-preview-strategy-${strategy.id}`} type="checkbox" checked={previewStrategyIds.has(strategy.id)} onChange={() => onTogglePreviewStrategy(strategy.id)} />{strategy.name}<span className="font-mono text-muted">{strategy.id}</span></label>)}</div> : <p className="mt-2 text-[10px] text-muted">当前标的或 K 线周期没有声明可即时预览的正式策略。</p>}
+            {previewError && <p className="mt-2 text-[10px] text-danger">即时预览失败：{previewError}</p>}
+          </section>
+          <section className="space-y-3 rounded border border-border/60 bg-base/30 p-2">
+          <span className="text-[10px] font-medium text-secondary">已记录的策略事件</span>
           <div className="flex flex-wrap items-center gap-2"><span className="text-muted">范围</span><button type="button" data-testid="strategy-scope-source" onClick={() => onStrategyScopeChange('source')} className={`rounded px-2 py-1 ${strategyScope === 'source' ? 'bg-sky-400/15 text-sky-200' : 'text-muted'}`}>仅来源策略{sourceStrategyIds.length ? ` (${sourceStrategyIds.length})` : ''}</button><button type="button" data-testid="strategy-scope-all" onClick={() => onStrategyScopeChange('all')} className={`rounded px-2 py-1 ${strategyScope === 'all' ? 'bg-sky-400/15 text-sky-200' : 'text-muted'}`}>所有历史策略</button></div>
           {strategyScope === 'all' && availableStrategyIds.length > 0 && <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">{availableStrategyIds.map(id => <label key={id} className="inline-flex items-center gap-1 rounded border border-border/50 px-1.5 py-1 font-mono text-[10px]"><input type="checkbox" checked={selectedStrategyIds.size === 0 || selectedStrategyIds.has(id)} onChange={() => onToggleStrategy(id)} />{id}</label>)}</div>}
           <div className="flex flex-wrap items-center gap-2"><span className="text-muted">事件</span>{([['candidate', '候选'], ['entry', '入场'], ['exit', '离场'], ['failure', '失效'], ['support', '守轴'], ['retrigger', '再触发']] as const).map(([id, label]) => <label key={id} className="inline-flex items-center gap-1"><input type="checkbox" checked={strategyEventTypes.has(id)} onChange={() => onToggleStrategyEventType(id)} />{label}</label>)}</div>
           <div className="flex items-center gap-2"><span className="text-muted">密度</span><button type="button" data-testid="annotation-density-auto" onClick={() => onDensityChange('auto')} className={annotationDensity === 'auto' ? 'text-sky-200' : 'text-muted'}>随缩放</button><button type="button" data-testid="annotation-density-compact" onClick={() => onDensityChange('compact')} className={annotationDensity === 'compact' ? 'text-sky-200' : 'text-muted'}>聚合</button><button type="button" data-testid="annotation-density-detailed" onClick={() => onDensityChange('detailed')} className={annotationDensity === 'detailed' ? 'text-sky-200' : 'text-muted'}>详细</button></div>
+          </section>
         </div>}
         {(['pattern', 'strategy', 'event'] as ManagerTab[]).includes(tab) && (
           <div className="grid gap-2 sm:grid-cols-2">
@@ -106,7 +125,7 @@ export function EvidenceDrawer({ evidence, onClose }: { evidence: AnnotationEvid
   return (
     <aside className="absolute bottom-0 right-0 top-0 z-50 w-[min(420px,92vw)] overflow-y-auto border-l border-border bg-surface/98 p-4 shadow-2xl backdrop-blur" data-testid="chart-evidence-drawer" aria-label="图表证据">
       <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="text-sm font-semibold text-foreground">{evidence.title}</h3><p className="mt-1 text-xs leading-5 text-secondary">{evidence.summary}</p></div><button type="button" onClick={onClose} aria-label="关闭证据" className="p-1 text-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
-      <div className="mt-4 rounded border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[11px] leading-5 text-amber-100">策略信号只来自已注册策略的实际运行记录；形态仅作观察结构，不会直接生成买卖信号。两者均不代表真实账户成交，回测成交与实时监控触发会使用独立名称和标记。</div>
+      <div className="mt-4 rounded border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[11px] leading-5 text-amber-100">策略标记只来自已注册策略：可以是已记录的策略事件，也可以是当前股票的即时只读预览。形态仅作观察结构，不会直接生成买卖信号。两者均不代表真实账户成交，回测成交与实时监控触发会使用独立名称和标记。</div>
       {evidence.reason_codes.length > 0 && <section className="mt-4"><h4 className="text-[11px] font-semibold text-muted">命中条件</h4><div className="mt-2 flex flex-wrap gap-1">{evidence.reason_codes.map(code => <span key={code} className="rounded bg-sky-400/10 px-2 py-1 font-mono text-[10px] text-sky-200">{code}</span>)}</div></section>}
       {evidence.metrics.length > 0 && <section className="mt-4"><h4 className="text-[11px] font-semibold text-muted">指标证据</h4><div className="mt-2 divide-y divide-border/40 rounded border border-border/60">{evidence.metrics.map((metric, index) => <div key={`${metric.name}-${index}`} className="grid grid-cols-[1fr_auto] gap-3 px-2 py-1.5 text-[11px]"><span className="text-secondary">{metric.name}</span><span className={`font-mono ${metric.passed === false ? 'text-danger' : metric.passed === true ? 'text-emerald-300' : 'text-foreground'}`}>{String(metric.value ?? '—')}{metric.unit ? ` ${metric.unit}` : ''}{metric.threshold != null ? ` / 阈值 ${String(metric.threshold)}` : ''}</span></div>)}</div></section>}
       <section className="mt-4"><h4 className="text-[11px] font-semibold text-muted">版本与来源</h4><dl className="mt-2 space-y-1 text-[10px]">{Object.entries(evidence.metadata).map(([key, value]) => <div key={key} className="grid grid-cols-[120px_1fr] gap-2"><dt className="text-muted">{key}</dt><dd className="break-all font-mono text-secondary">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '—')}</dd></div>)}</dl></section>

@@ -69,8 +69,9 @@ export function buildAnnotationVisuals(
       const strategyId = String(item.metadata.strategy_id ?? '')
       const strategyIds = Array.isArray(item.metadata.strategy_ids) ? item.metadata.strategy_ids.map(String) : []
       const eventType = String(item.metadata.event_type ?? '')
-      if (layer.category === 'strategy' && options.strategyIds?.size && !options.strategyIds.has(strategyId) && !strategyIds.some(id => options.strategyIds?.has(id))) continue
-      if (layer.category === 'strategy' && options.strategyEventTypes?.size && eventType && eventType !== 'confluence' && !options.strategyEventTypes.has(eventType)) continue
+      const isSingleAssetPreview = item.metadata.provenance === 'single_asset_preview'
+      if (!isSingleAssetPreview && layer.category === 'strategy' && options.strategyIds?.size && !options.strategyIds.has(strategyId) && !strategyIds.some(id => options.strategyIds?.has(id))) continue
+      if (!isSingleAssetPreview && layer.category === 'strategy' && options.strategyEventTypes?.size && eventType && eventType !== 'confluence' && !options.strategyEventTypes.has(eventType)) continue
       evidence.set(item.id, item)
       acceptedEvidence.add(item.id)
     }

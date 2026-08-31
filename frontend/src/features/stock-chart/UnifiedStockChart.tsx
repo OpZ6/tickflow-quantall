@@ -8,7 +8,7 @@ import {
   type ChartMarker, type ChartPriceLine, type OHLC,
 } from '@/components/EChartsCandlestick'
 import type { LevelType, PriceLevel } from '@/components/stock-analysis/AnalysisKChart'
-import { api, type AnnotationEvidence, type ChartAdjustment, type ChartInterval, type ChartLayerCategory, type ChartRangeName } from '@/lib/api'
+import { api, type AnnotationEvidence, type ChartAdjustment, type ChartInterval, type ChartLayerCategory, type ChartRangeName, type StrategyDetail } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import { INDICATOR_REGISTRY, PANE_REGISTRY } from './indicatorRegistry'
@@ -79,6 +79,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   const [selectedEvidence, setSelectedEvidence] = useState<AnnotationEvidence | null>(null)
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<Set<string>>(new Set())
   const [knownStrategyIds, setKnownStrategyIds] = useState<string[]>([])
+  const [previewStrategyIds, setPreviewStrategyIds] = useState<Set<string>>(new Set())
   const [visibleAnnotationBars, setVisibleAnnotationBars] = useState(60)
 
   const sourceStrategyIds = useMemo(() => {
@@ -113,7 +114,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
     return () => window.removeEventListener('stock-chart-indicator-error', listener)
   }, [])
   useEffect(() => { setReplayIndex(null); setTrendStart(null) }, [symbol, layout.interval, layout.adjustment, layout.range])
-  useEffect(() => { setKnownStrategyIds([]); setSelectedStrategyIds(new Set()) }, [symbol])
+  useEffect(() => { setKnownStrategyIds([]); setSelectedStrategyIds(new Set()); setPreviewStrategyIds(new Set()) }, [symbol])
   useEffect(() => { setDrawingUndo([]); setDrawingRedo([]); setDrawMode('none') }, [drawingKey])
 
   const requestEnd = layout.range === 'custom' ? customEnd : strategyContext?.asOf ?? ''
@@ -133,6 +134,55 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
       paramsFingerprint: exactParamsFingerprint,
     }),
     enabled: !!symbol && (layout.range !== 'custom' || !!customStart),
+    placeholderData: previous => previous,
+    staleTime: 60_000,
+  })
+  const previewAssetType = chartQuery.data?.asset_type
+  const previewCatalogQuery = useQuery({
+    queryKey: QK.strategyChartPreviewCatalog(previewAssetType ?? 'stock', layout.interval),
+    queryFn: () => api.strategyList(previewAssetType as 'stock' | 'etf', layout.interval),
+    enabled: previewAssetType === 'stock' || previewAssetType === 'etf',
+    staleTime: 60_000,
+  })
+  const previewStrategies = useMemo(
+    () => (previewCatalogQuery.data?.strategies ?? []).filter((strategy: StrategyDetail) => strategy.chart_preview?.enabled),
+    [previewCatalogQuery.data],
+  )
+  const previewCatalogSignature = previewStrategies.map(strategy => strategy.id).join(',')
+  useEffect(() => {
+    if (!previewCatalogQuery.data) return
+    const supported = new Set(previewStrategies.map(strategy => strategy.id))
+    setPreviewStrategyIds(current => new Set([...current].filter(strategyId => supported.has(strategyId))))
+  }, [previewCatalogQuery.data, previewCatalogSignature, previewStrategies])
+  // A period switch renders once before the next strategy catalog resolves.
+  // Derive the executable selection from the *current* catalog so a daily-only
+  // strategy never issues a stale weekly/monthly preview request during that render.
+  const activePreviewStrategyIds = useMemo(() => {
+    const supported = new Set(previewStrategies.map(strategy => strategy.id))
+    return [...previewStrategyIds].filter(strategyId => supported.has(strategyId)).sort()
+  }, [previewCatalogSignature, previewStrategies, previewStrategyIds])
+  const previewStrategyKey = activePreviewStrategyIds.join(',')
+  const previewStart = chartQuery.data?.meta.requested_start ?? ''
+  const previewEnd = chartQuery.data?.meta.requested_end ?? ''
+  const previewQuery = useQuery({
+    queryKey: QK.strategyChartPreview(
+      symbol,
+      previewAssetType ?? 'stock',
+      layout.interval,
+      previewStart,
+      previewEnd,
+      previewStrategyKey,
+      chartQuery.data?.meta.input_fingerprint ?? '',
+    ),
+    queryFn: () => api.strategyPreview({
+      symbol,
+      assetType: previewAssetType as 'stock' | 'etf' | 'index',
+      timeframe: layout.interval,
+      startDate: previewStart,
+      endDate: previewEnd,
+      strategyIds: activePreviewStrategyIds,
+    }),
+    enabled: activePreviewStrategyIds.length > 0 && !!previewAssetType && !!previewStart && !!previewEnd,
     placeholderData: previous => previous,
     staleTime: 60_000,
   })
@@ -188,14 +238,16 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
     return { layer, warning: '' }
   }, [officialQuery.data, timeIndex])
 
-  const annotationLayers = chartQuery.data?.annotation_layers ?? []
-  const availableStrategyIds = useMemo(() => [...new Set(annotationLayers
+  const persistedAnnotationLayers = chartQuery.data?.annotation_layers ?? []
+  const previewLayers = activePreviewStrategyIds.length > 0 ? (previewQuery.data?.layers ?? []) : []
+  const annotationLayers = [...persistedAnnotationLayers, ...previewLayers]
+  const availableStrategyIds = useMemo(() => [...new Set(persistedAnnotationLayers
     .filter(layer => layer.category === 'strategy')
     .flatMap(layer => layer.evidence.flatMap(item => {
       const ids = Array.isArray(item.metadata.strategy_ids) ? item.metadata.strategy_ids.map(String) : []
       const id = item.metadata.strategy_id
       return id ? [String(id), ...ids] : ids
-    })))].sort(), [annotationLayers])
+    })))].sort(), [persistedAnnotationLayers])
   useEffect(() => {
     if (availableStrategyIds.length === 0) return
     setKnownStrategyIds(current => [...new Set([...current, ...availableStrategyIds])].sort())
@@ -247,6 +299,25 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   }
   const toggleIndicator = (key: string) => updateLayout({ activeIndicators: layout.activeIndicators.includes(key) ? layout.activeIndicators.filter(item => item !== key) : [...layout.activeIndicators, key] })
   const toggleLayer = (id: string) => updateLayout({ enabledLayerIds: enabledLayerIds.has(id) ? layout.enabledLayerIds.filter(item => item !== id) : [...layout.enabledLayerIds, id] })
+  const togglePreviewStrategy = (strategyId: string) => {
+    const layerId = `strategy.preview.${strategyId}`
+    const selected = previewStrategyIds.has(strategyId)
+    if (!selected && previewStrategyIds.size >= 3) {
+      toast('即时策略标记最多同时选择 3 个', 'error')
+      return
+    }
+    setPreviewStrategyIds(current => {
+      const next = new Set(current)
+      if (next.has(strategyId)) next.delete(strategyId)
+      else next.add(strategyId)
+      return next
+    })
+    updateLayout({
+      enabledLayerIds: selected
+        ? layout.enabledLayerIds.filter(id => id !== layerId)
+        : [...new Set([...layout.enabledLayerIds, layerId])],
+    })
+  }
   const movePane = (key: string, direction: -1 | 1) => {
     const next = [...layout.activeIndicators]
     const index = next.indexOf(key)
@@ -304,7 +375,34 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
 
       {sourceStrategyIds.length > 0 && <div className="flex flex-wrap items-center gap-2 border-b border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2 text-[11px]" data-testid="strategy-chart-context"><span className="font-medium text-emerald-300">来源策略</span><span className="font-mono text-secondary">{sourceStrategyIds.join(' + ')}</span>{strategyContext?.asOf && <span className="text-muted">信号日 {strategyContext.asOf}</span>}{strategyContext?.sourceRunId && <span className="text-muted">批次 {strategyContext.sourceRunId.slice(0, 12)}</span>}<span className="text-muted">策略信号层已自动激活</span><Link to={strategyContext?.returnTo || `/screener?strategyId=${encodeURIComponent(sourceStrategyIds[0])}${strategyContext?.asOf ? `&asOf=${encodeURIComponent(strategyContext.asOf)}` : ''}`} className="ml-auto text-sky-300 hover:text-sky-200">返回策略面板</Link></div>}
 
-      <ChartLayerManager open={layerManagerOpen} tab={layerManagerTab} layers={annotationLayers} enabledLayerIds={enabledLayerIds} chanlunVisible={layout.chanlun.visible} drawingCount={drawings.length} sourceStrategyIds={sourceStrategyIds} availableStrategyIds={knownStrategyIds} strategyScope={layout.strategyScope} selectedStrategyIds={selectedStrategyIds} strategyEventTypes={new Set(layout.strategyEventTypes)} annotationDensity={layout.annotationDensity} onTabChange={setLayerManagerTab} onToggleLayer={toggleLayer} onToggleChanlun={() => updateLayout({ chanlun: { ...layout.chanlun, visible: !layout.chanlun.visible } })} onOpenIndicators={() => { setDrawerOpen(true); setLayerManagerOpen(false) }} onStrategyScopeChange={scope => { updateLayout({ strategyScope: scope }); setSelectedStrategyIds(new Set()) }} onToggleStrategy={id => setSelectedStrategyIds(current => { const next = new Set(current.size === 0 ? knownStrategyIds : current); if (next.has(id)) next.delete(id); else next.add(id); return next })} onToggleStrategyEventType={eventType => updateLayout({ strategyEventTypes: layout.strategyEventTypes.includes(eventType) ? layout.strategyEventTypes.filter(item => item !== eventType) : [...layout.strategyEventTypes, eventType] })} onDensityChange={density => updateLayout({ annotationDensity: density })} onClose={() => setLayerManagerOpen(false)} />
+      <ChartLayerManager
+        open={layerManagerOpen}
+        tab={layerManagerTab}
+        layers={annotationLayers}
+        enabledLayerIds={enabledLayerIds}
+        chanlunVisible={layout.chanlun.visible}
+        drawingCount={drawings.length}
+        sourceStrategyIds={sourceStrategyIds}
+        availableStrategyIds={knownStrategyIds}
+        strategyScope={layout.strategyScope}
+        selectedStrategyIds={selectedStrategyIds}
+        strategyEventTypes={new Set(layout.strategyEventTypes)}
+        annotationDensity={layout.annotationDensity}
+        previewStrategies={previewStrategies}
+        previewStrategyIds={previewStrategyIds}
+        previewLoading={previewQuery.isFetching}
+        previewError={previewQuery.isError ? (previewQuery.error instanceof Error ? previewQuery.error.message : '请求失败') : null}
+        onTabChange={setLayerManagerTab}
+        onToggleLayer={toggleLayer}
+        onToggleChanlun={() => updateLayout({ chanlun: { ...layout.chanlun, visible: !layout.chanlun.visible } })}
+        onOpenIndicators={() => { setDrawerOpen(true); setLayerManagerOpen(false) }}
+        onStrategyScopeChange={scope => { updateLayout({ strategyScope: scope }); setSelectedStrategyIds(new Set()) }}
+        onToggleStrategy={id => setSelectedStrategyIds(current => { const next = new Set(current.size === 0 ? knownStrategyIds : current); if (next.has(id)) next.delete(id); else next.add(id); return next })}
+        onToggleStrategyEventType={eventType => updateLayout({ strategyEventTypes: layout.strategyEventTypes.includes(eventType) ? layout.strategyEventTypes.filter(item => item !== eventType) : [...layout.strategyEventTypes, eventType] })}
+        onDensityChange={density => updateLayout({ annotationDensity: density })}
+        onTogglePreviewStrategy={togglePreviewStrategy}
+        onClose={() => setLayerManagerOpen(false)}
+      />
 
       <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 px-3 py-2">
         {Object.entries(PRESETS).map(([name, indicators]) => <button key={name} type="button" onClick={() => updateLayout({ activeIndicators: indicators, chanlun: { ...layout.chanlun, visible: name === '缠论' }, keyLevelsVisible: name === '价位' })} className="rounded border border-border/60 bg-base/40 px-2 py-1 text-[10px] text-muted hover:text-foreground">{name}</button>)}

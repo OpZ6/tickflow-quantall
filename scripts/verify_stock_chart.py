@@ -17,6 +17,7 @@ def main() -> None:
     console_errors: list[str] = []
     failed_requests: list[str] = []
     chart_requests: list[str] = []
+    preview_requests: list[str] = []
 
     with urlopen("http://127.0.0.1:3018/api/strategies", timeout=30) as response:
         strategy_catalog = json.load(response)
@@ -30,12 +31,19 @@ def main() -> None:
         item["id"] for item in strategy_catalog.get("strategies", [])
     }
     missing_strategies = required_strategy_ids - registered_strategy_ids
-    if missing_strategies or strategy_catalog.get("load_errors"):
+    preview_strategy_ids = {
+        item["id"]
+        for item in strategy_catalog.get("strategies", [])
+        if (item.get("chart_preview") or {}).get("enabled")
+    }
+    missing_preview_strategies = required_strategy_ids - preview_strategy_ids
+    if missing_strategies or missing_preview_strategies or strategy_catalog.get("load_errors"):
         raise SystemExit(
             "price-structure strategy registry failed: "
             + json.dumps(
                 {
                     "missing": sorted(missing_strategies),
+                    "missing_chart_preview": sorted(missing_preview_strategies),
                     "load_errors": strategy_catalog.get("load_errors", []),
                 },
                 ensure_ascii=False,
@@ -72,6 +80,12 @@ def main() -> None:
     as_of = strategy_result["as_of"]
     source_run_id = strategy_result["source_run_id"]
     params_fingerprint = strategy_result["params_fingerprint"]
+    event_query = (
+        "http://127.0.0.1:3018/api/strategies/events?symbol=600000.SH"
+        "&strategy_ids=vcp_breakout&limit=5000"
+    )
+    with urlopen(event_query, timeout=30) as response:
+        preview_event_count_before = json.load(response)["total"]
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="msedge", headless=True)
@@ -93,6 +107,7 @@ def main() -> None:
 
         page.on("requestfailed", record_failed_request)
         page.on("request", lambda request: chart_requests.append(request.url) if "/api/kline/chart" in request.url else None)
+        page.on("request", lambda request: preview_requests.append(request.url) if "/api/strategies/preview" in request.url else None)
 
         page.goto(f"{BASE_URL}/stock-analysis?symbol=600000.SH&name=浦发银行", wait_until="domcontentloaded")
         chart = page.get_by_test_id("unified-stock-chart")
@@ -119,6 +134,16 @@ def main() -> None:
             manager.get_by_role("button", name=tab, exact=True).wait_for(state="visible")
         manager.get_by_role("button", name="策略", exact=True).click()
         manager.get_by_text("策略信号", exact=True).wait_for(state="visible")
+        preview_toggle = manager.get_by_test_id("chart-preview-strategy-vcp_breakout")
+        preview_toggle.wait_for(state="visible")
+        with page.expect_response(
+            lambda response: "/api/strategies/preview" in response.url and response.status == 200,
+            timeout=60_000,
+        ):
+            preview_toggle.check()
+        assert preview_toggle.is_checked()
+        assert preview_requests, "选择即时策略标记必须请求单股预览接口"
+        assert not any("/api/strategies/run" in url or "/api/screener/" in url for url in preview_requests)
         page.get_by_role("button", name="关闭图层管理").click()
 
         chart.get_by_role("button", name="缠论", exact=True).first.click()
@@ -202,11 +227,25 @@ def main() -> None:
             "strategy_scope_switch": True,
             "annotation_density_switch": True,
             "registered_price_structure_strategies": sorted(required_strategy_ids),
+            "chart_preview_price_structure_strategies": sorted(preview_strategy_ids),
             "pattern_layer_ids": sorted(pattern_layer_ids),
+            "single_stock_preview_requests": len(preview_requests),
             "horizontal_overflow": overflow,
         }
-        (OUTPUT_DIR / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         browser.close()
+
+    with urlopen(event_query, timeout=30) as response:
+        preview_event_count_after = json.load(response)["total"]
+    if preview_event_count_after != preview_event_count_before:
+        raise SystemExit(
+            "single-stock preview wrote strategy events: "
+            + json.dumps(
+                {"before": preview_event_count_before, "after": preview_event_count_after},
+                ensure_ascii=False,
+            )
+        )
+    result["single_stock_preview_event_write"] = False
+    (OUTPUT_DIR / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if console_errors or failed_requests or overflow:
         raise SystemExit(json.dumps(result, ensure_ascii=False, indent=2))
