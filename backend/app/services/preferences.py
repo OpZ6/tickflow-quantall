@@ -463,9 +463,14 @@ def set_pipeline_index_symbols(symbols: str) -> str:
 
 
 def get_pipeline_schedule() -> dict:
-    """返回盘后管道调度时间 {"hour": 15, "minute": 30}。"""
-    d = load().get("pipeline_schedule", {"hour": 15, "minute": 30})
-    return {"hour": d.get("hour", 15), "minute": d.get("minute", 30)}
+    """返回盘后管道调度时间 {"hour": 16, "minute": 30}。
+
+    默认 16:30: None/Free 档当日日 K 经 free-api 盘后约 1-2 小时(约 16:00-17:00)
+    才可用;付费档盘中实时已落盘,收盘后即刻可用,16:30 仅多等片刻不影响当日结果。
+    更早的默认(旧 15:30)会让免费档当天 K 线静默缺失。见 docs/data-source-timeline.md。
+    """
+    d = load().get("pipeline_schedule", {"hour": 16, "minute": 30})
+    return {"hour": d.get("hour", 16), "minute": d.get("minute", 30)}
 
 
 def set_pipeline_schedule(hour: int, minute: int) -> dict:
@@ -562,15 +567,16 @@ REVIEW_PUSH_CHANNELS = {"feishu", "wecom"}
 
 
 def get_review_schedule() -> dict:
-    """定时复盘调度 {"enabled": False, "hour": 15, "minute": 10}。默认关闭。
+    """定时复盘调度 {"enabled": False, "hour": 16, "minute": 45}。默认关闭。
 
-    A股 15:00 收盘, 默认时间设为 15:10(收盘后即时复盘), 强制下限 15:00。
+    A股 15:00 收盘, 默认时间设为 16:45(盘后管道 16:30 完成、enriched/日K 就绪后复盘),
+    强制下限 15:00。免费档当日日K盘后约1-2小时可用, 复盘不应早于盘后管道。
     """
-    d = load().get("review_schedule", {"enabled": False, "hour": 15, "minute": 10})
+    d = load().get("review_schedule", {"enabled": False, "hour": 16, "minute": 45})
     return {
         "enabled": bool(d.get("enabled", False)),
-        "hour": d.get("hour", 15),
-        "minute": d.get("minute", 10),
+        "hour": d.get("hour", 16),
+        "minute": d.get("minute", 45),
     }
 
 

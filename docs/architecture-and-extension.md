@@ -467,7 +467,7 @@ Provider 实现要求(详见 `docs/plugin-development.md`):
 | --- | --- |
 | 09:10 | 标的维表同步 |
 | 15:02 | 盘口定版(depth_finalize) |
-| 15:30 | 盘后管道(日 K + 除权 + enriched + 视图刷新) |
+| 16:30 | 盘后管道(日 K + 除权 + enriched + 视图刷新)。默认 16:30:None/Free 档当日日 K 盘后约 1-2 小时可用;付费档盘中实时已落盘,收盘即刻可用。付费档用户可自行调早到 15:15-16:00 |
 | 每小时 | 能力重探 |
 
 `run_now` 阶段(`daily_pipeline.py:108-`):

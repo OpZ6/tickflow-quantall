@@ -388,7 +388,7 @@ daily_pipeline 的实际阶段：
 - 首次或向历史左侧扩展时全量算 enriched；正常新增日期只重算增量和受影响标的。
 - 源码注释仍写“14 列”，但当前 ENRICHED_STORAGE_COLS 实际有 15 列：symbol、date、复权 OHLC、volume、amount、raw_close/raw_high/raw_low、turnover_rate、连续涨跌停数和 quote_ts。完整指标在读取历史时重算。
 - 管道任何阶段异常都会把 job 标为 failed，但此前成功阶段可能已经写盘，因此 failed 不等于零副作用。
-- 默认工作日调度：标的维表 09:10、盘口定版 15:02、盘后管道 15:30、能力重探每小时。
+- 默认工作日调度：标的维表 09:10、盘口定版 15:02、盘后管道 16:30、能力重探每小时。
 - regime 默认关闭；财务默认只手动同步。
 
 ## 7. 指标算法
