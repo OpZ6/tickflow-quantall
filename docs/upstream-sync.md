@@ -131,7 +131,7 @@ frontend/src/pages/Screener.tsx
 frontend/src/pages/StockAnalysis.tsx
 ```
 
-同步上游涉及这些路径时，必须保留单一 candles/单一 ECharts、版本化图层契约、策略深链接、派生事件幂等键和回放确认时间；不能用上游整文件覆盖本地证据链。
+同步上游涉及这些路径时，必须保留单一 candles/单一 ECharts、唯一指标中心、layout v4、系统/自定义指标模板、`analysis_rows` 隐藏预热、逐指标 readiness、单股按范围补齐、版本化图层契约、策略深链接、派生事件幂等键和回放确认时间；不能用上游整文件覆盖本地工作区与证据链。`indicatorRegistry.ts`、`chartPersistence.ts`、`ChartLayerManager.tsx` 和 K 线 API 查询键均按高冲突热点逐项合并，禁止恢复旧双抽屉或独立缠论/价位控制行。
 
 QuantX 的隔离目录通常冲突较少，但凡修改共享 pipeline、data source API、依赖文件或前端路由，必须执行跨模块回归。
 

@@ -97,8 +97,8 @@ export const QK = {
   // Kline
   kline:                (symbol: string, start: string, end: string, extColumns?: string) =>
                            ['kline', symbol, start, end, extColumns ?? ''] as const,
-  klineChart:           (symbol: string, assetType: string, interval: string, adjustment: string, range: string, start: string, end: string, layers = '', strategies = '', sourceRunId = '', paramsFingerprint = '') =>
-                           ['kline-chart', symbol, assetType, interval, adjustment, range, start, end, layers, strategies, sourceRunId, paramsFingerprint] as const,
+  klineChart:           (symbol: string, assetType: string, interval: string, adjustment: string, range: string, start: string, end: string, layers = '', strategies = '', sourceRunId = '', paramsFingerprint = '', warmupBars = 160, indicatorWarmups = '') =>
+                           ['kline-chart', symbol, assetType, interval, adjustment, range, start, end, layers, strategies, sourceRunId, paramsFingerprint, warmupBars, indicatorWarmups] as const,
   strategyChartPreview: (symbol: string, assetType: string, timeframe: string, start: string, end: string, strategyIds: string, inputFingerprint: string) =>
                            ['strategy-chart-preview', symbol, assetType, timeframe, start, end, strategyIds, inputFingerprint] as const,
   stockLevels:          (symbol: string, days?: number) => ['stock-levels', symbol, days ?? 120] as const,

@@ -73,6 +73,12 @@ export function setParam(key: string, name: string, value: number): void {
   storage.indicatorParams.set({ ...stored, [key]: { ...(stored[key] ?? {}), [name]: value } })
 }
 
+/** 原子覆盖某指标的完整参数，供工作区模板应用和 v4 布局恢复。 */
+export function setParams(key: string, values: Record<string, number>): void {
+  const stored = storage.indicatorParams.get({})
+  storage.indicatorParams.set({ ...stored, [key]: { ...values } })
+}
+
 /** 重置某指标参数为默认 */
 export function resetParam(key: string): void {
   const stored = storage.indicatorParams.get({})

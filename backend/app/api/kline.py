@@ -34,6 +34,8 @@ def get_chart_data(
     strategy_ids: Annotated[str | None, Query(description="逗号分隔策略 ID")] = None,
     source_run_id: Annotated[str | None, Query(max_length=160)] = None,
     params_fingerprint: Annotated[str | None, Query(max_length=160)] = None,
+    warmup_bars: Annotated[int, Query(ge=0, le=2000)] = 160,
+    indicator_warmups: Annotated[str | None, Query(max_length=2000)] = None,
 ):
     """统一图表行情: 显式周期、复权、范围以及真实覆盖元数据。"""
     from app.services.chart_data import ChartQuery, build_chart_response
@@ -50,6 +52,22 @@ def get_chart_data(
         selected_strategies = tuple(dict.fromkeys(item.strip() for item in (strategy_ids or "").split(",") if item.strip()))
         if len(selected_strategies) > 32:
             raise ValueError("strategy_ids 最多 32 个")
+        parsed_indicator_warmups: list[tuple[str, int]] = []
+        for raw_item in (indicator_warmups or "").split(","):
+            if not raw_item.strip():
+                continue
+            indicator_id, separator, raw_bars = raw_item.strip().rpartition(":")
+            if not separator or not indicator_id or len(indicator_id) > 80 or any(
+                character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
+                for character in indicator_id
+            ):
+                raise ValueError(f"无效指标预热声明: {raw_item}")
+            bars = int(raw_bars)
+            if bars < 0 or bars > 2000:
+                raise ValueError(f"指标预热超出范围: {raw_item}")
+            parsed_indicator_warmups.append((indicator_id, bars))
+        if len(parsed_indicator_warmups) > 80:
+            raise ValueError("indicator_warmups 最多 80 项")
         return build_chart_response(
             repo,
             ChartQuery(
@@ -60,6 +78,8 @@ def get_chart_data(
                 range_name=range_name,
                 start_date=start_date,
                 end_date=end_date or cn_today(),
+                required_warmup_bars=warmup_bars,
+                indicator_warmups=tuple(dict(parsed_indicator_warmups).items()),
             ),
             data_dir=repo.store.data_dir,
             layer_categories=layer_categories,
@@ -955,6 +975,55 @@ def sync_symbol(
     capset = request.app.state.capabilities
     n = kline_sync.sync_and_persist_daily_batch([symbol], repo, capset, count=days)
     return {"symbol": symbol, "rows_written": n}
+
+
+@router.post("/sync_daily_single")
+async def sync_daily_single(request: Request):
+    """按明确起止日期补齐当前单股日线, 不触发全市场历史任务。"""
+    from datetime import datetime, time
+
+    from app.api.data import invalidate_storage_cache
+    from app.tickflow.capabilities import Cap
+
+    body = await request.json()
+    symbol = str(body.get("symbol") or "").strip()
+    if not symbol:
+        raise HTTPException(status_code=422, detail="symbol 不能为空")
+    try:
+        start = date.fromisoformat(str(body.get("start_date") or ""))
+        end = date.fromisoformat(str(body.get("end_date") or ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="start_date/end_date 必须为 YYYY-MM-DD") from exc
+    if start > end:
+        raise HTTPException(status_code=422, detail="start_date 不能晚于 end_date")
+
+    repo = request.app.state.repo
+    capset = request.app.state.capabilities
+    asset_type = repo.resolve_asset_type(symbol)
+    if asset_type == "index":
+        raise HTTPException(status_code=422, detail="指数历史请使用指数同步能力")
+    start_time = datetime.combine(start, time.min)
+    end_time = datetime.combine(end, time.max)
+    rows = kline_sync.sync_and_persist_daily_batch(
+        [symbol], repo, capset, start_date=start_time, end_date=end_time
+    )
+    factor_rows = 0
+    warning = None
+    if capset.has(Cap.ADJ_FACTOR):
+        try:
+            factor_rows, _ = kline_sync.sync_adj_factor(
+                [symbol], repo, capset,
+                start_time=start_time, end_time=end_time, asset_type=asset_type,
+            )
+        except Exception as exc:
+            logger.warning("single daily adjustment sync failed for %s: %s", symbol, exc)
+            warning = f"日线已写入, 但复权因子补齐失败: {exc}"
+    invalidate_storage_cache()
+    return {
+        "status": "ok", "symbol": symbol, "asset_type": asset_type,
+        "start_date": start.isoformat(), "end_date": end.isoformat(),
+        "rows": rows, "factor_rows": factor_rows, "warning": warning,
+    }
 
 
 @router.post("/sync_batch")

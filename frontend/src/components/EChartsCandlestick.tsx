@@ -775,6 +775,8 @@ function buildOverlaySeries(key: string, data: OHLC[]): any[] {
 
 interface Props {
   data: OHLC[]
+  /** 隐藏预热 + 可见区间，仅供指标公式计算；图表仍只绘制 data。 */
+  analysisData?: OHLC[]
   markers?: ChartMarker[]
   ranges?: ChartRange[]
   priceLines?: ChartPriceLine[]
@@ -798,6 +800,8 @@ interface Props {
   activeIndicators?: string[]
   /** 用户为各副图保存的高度。 */
   paneHeights?: Record<string, number>
+  /** 指标实例样式，由统一指标工作区提供。 */
+  indicatorStyles?: Record<string, Record<string, unknown>>
   /** 独立浏览器验收时用于定位唯一图表实例。 */
   testId?: string
   /** 成交量柱相对前 N 个交易日均量的显示设置 */
@@ -929,8 +933,15 @@ function buildSubInfoGraphics(
   return graphics
 }
 
+function visibleAnalysisOffset(data: OHLC[], analysisData: OHLC[]): number {
+  if (analysisData.length === 0 || data.length === 0) return 0
+  const exact = analysisData.findIndex(item => item.date === data[0].date)
+  return exact >= 0 ? exact : Math.max(0, analysisData.length - data.length)
+}
+
 function buildOption(
   data: OHLC[],
+  analysisData: OHLC[],
   dates: string[],
   dateIndexMap: Map<string, number>,
   markers: ChartMarker[] | undefined,
@@ -947,8 +958,24 @@ function buildOption(
   chanlunCfg?: ChanlunLayerConfig,
   chanlunOff?: ChanlunMappedLayer | null,
   paneHeights: Record<string, number> = {},
+  indicatorStyles: Record<string, Record<string, unknown>> = {},
 ): EChartsOption {
   const candleData = data.map(d => [d.open, d.close, d.low, d.high])
+  const calculationData = analysisData.length > 0 ? analysisData : data
+  const offset = visibleAnalysisOffset(data, calculationData)
+  const visibleSlice = <T,>(values: T[]): T[] => values.slice(offset, offset + data.length)
+  const trimSeries = (item: any) => Array.isArray(item?.data)
+    ? { ...item, data: visibleSlice(item.data) }
+    : item
+  const styleSeries = (key: string, item: any) => {
+    const color = indicatorStyles[key]?.color
+    if (typeof color !== 'string' || !color) return item
+    return {
+      ...item,
+      lineStyle: { ...(item.lineStyle ?? {}), color },
+      itemStyle: { ...(item.itemStyle ?? {}), color },
+    }
+  }
 
   const hasMA = showMA && data.some(d => d.ma5 != null || d.ma10 != null || d.ma20 != null || d.ma60 != null)
 
@@ -1273,9 +1300,9 @@ function buildOption(
   // BOLL 无数据字段时回退到公式计算
   else if (activeIndicators.includes('boll')) {
     const bp = getParams('boll')
-    const [up, , dn] = calcBOLL(data, bp.p, bp.sd)
-    series.push(ovLine('BOLL上', '#E879F9', up, true))
-    series.push(ovLine('BOLL下', '#E879F9', dn, true))
+    const [up, , dn] = calcBOLL(calculationData, bp.p, bp.sd)
+    series.push(ovLine('BOLL上', '#E879F9', visibleSlice(up), true))
+    series.push(ovLine('BOLL下', '#E879F9', visibleSlice(dn), true))
   }
 
   // 其余主图叠加指标 (前端公式计算)
@@ -1283,7 +1310,7 @@ function buildOption(
     if (ov === 'boll' || ov === 'vol') continue
     if (!OVERLAY_KEYS.has(ov)) continue
     try {
-      series.push(...buildOverlaySeries(ov, data))
+      series.push(...buildOverlaySeries(ov, calculationData).map(trimSeries).map(item => styleSeries(ov, item)))
     } catch (error) {
       // 公式错误必须可观察，不能让某个指标在图上无声消失。
       reportIndicatorError(ov, error)
@@ -1414,7 +1441,7 @@ function buildOption(
 
     let subSeries: any[] = []
     try {
-      subSeries = def.buildSeries(data, { compact, volumeCompare, params: {} })
+      subSeries = def.buildSeries(calculationData, { compact, volumeCompare, params: {} }).map(trimSeries).map(item => styleSeries(def.key, item))
     } catch (error) {
       reportIndicatorError(def.key, error)
     }
@@ -1427,7 +1454,7 @@ function buildOption(
 
   // 子图信息栏 graphic
   const subStartTop = topPad + candleAvail + candleBottomPad
-  const infoGraphics = buildSubInfoGraphics(data, infoIdx, activeIndicators, subStartTop, volumeCompare, paneHeights)
+  const infoGraphics = buildSubInfoGraphics(calculationData, offset + infoIdx, activeIndicators, subStartTop, volumeCompare, paneHeights)
 
   return {
     animation: false,
@@ -1469,6 +1496,7 @@ function buildOption(
 
 export function EChartsCandlestick({
   data,
+  analysisData = data,
   markers,
   ranges,
   priceLines,
@@ -1488,6 +1516,7 @@ export function EChartsCandlestick({
   visibleBars = 60,
   activeIndicators = [],
   paneHeights = {},
+  indicatorStyles = {},
   testId,
   volumeCompare = { enabled: true, days: 1 },
   chanlunData = null,
@@ -1498,6 +1527,8 @@ export function EChartsCandlestick({
   const chartRef = useRef<ECharts | null>(null)
   const dataRef = useRef(data)
   dataRef.current = data
+  const analysisDataRef = useRef(analysisData)
+  analysisDataRef.current = analysisData
   const onDateClickRef = useRef(onDateClick)
   onDateClickRef.current = onDateClick
   const onMarkerClickRef = useRef(onMarkerClick)
@@ -1521,6 +1552,8 @@ export function EChartsCandlestick({
   activeIndicatorsRef.current = activeIndicators
   const volumeCompareRef = useRef(volumeCompare)
   volumeCompareRef.current = volumeCompare
+  const paneHeightsRef = useRef(paneHeights)
+  paneHeightsRef.current = paneHeights
   const chartHeightRef = useRef(300)
   const subTotalHRef = useRef(0)
   const getInfoBarHTMLRef = useRef<() => string>(() => '')
@@ -1532,16 +1565,18 @@ export function EChartsCandlestick({
     const curData = dataRef.current
     const d = idx >= 0 && idx < curData.length ? curData[idx] : null
     if (!d) return
+    const calculationData = analysisDataRef.current.length > 0 ? analysisDataRef.current : curData
+    const calculationIndex = visibleAnalysisOffset(curData, calculationData) + idx
     const chart = chartRef.current
     if (!chart) return
     const subStartTop = chartHeightRef.current - subTotalHRef.current
     const infoGraphics = buildSubInfoGraphics(
-      curData,
-      idx,
+      calculationData,
+      calculationIndex,
       activeIndicatorsRef.current,
       subStartTop,
       volumeCompareRef.current,
-      paneHeights,
+      paneHeightsRef.current,
     )
     if (infoGraphics.length > 0) {
       chart.setOption({ graphic: infoGraphics }, { lazyUpdate: true })
@@ -1816,7 +1851,7 @@ export function EChartsCandlestick({
     if (!chart) return
 
     const option = buildOption(
-      data, dates, dateIndexMap,
+      data, analysisData, dates, dateIndexMap,
       showMarkersProp ? markers : undefined,
       ranges,
       priceLines,
@@ -1829,6 +1864,7 @@ export function EChartsCandlestick({
       chanlunConfig,
       chanlunOfficial,
       paneHeights,
+      indicatorStyles,
     )
 
     chart.setOption(option, true)
@@ -1846,7 +1882,7 @@ export function EChartsCandlestick({
     if (infoEl) {
       infoEl.innerHTML = getInfoBarHTML()
     }
-  }, [data, markers, ranges, priceLines, linkedPrice, showMA, showMarkersProp, activeIndicators, volumeCompare, chartHeight, dates, dateIndexMap, initialZoom, getInfoBarHTML, theme, chanlunData, chanlunConfig, chanlunOfficial, paneHeights])
+  }, [data, analysisData, markers, ranges, priceLines, linkedPrice, showMA, showMarkersProp, activeIndicators, volumeCompare, chartHeight, dates, dateIndexMap, initialZoom, getInfoBarHTML, theme, chanlunData, chanlunConfig, chanlunOfficial, paneHeights, indicatorStyles])
 
   // 渲染信息栏容器 (内容由 JS 直接写入)
   const initialHTML = useMemo(() => {
@@ -1901,7 +1937,15 @@ export function EChartsCandlestick({
       )}
 
       {/* ECharts canvas */}
-      <div ref={containerRef} data-testid={testId} className="w-full" style={{ height: chartHeight }} />
+      <div
+        ref={containerRef}
+        data-testid={testId}
+        data-row-count={data.length}
+        data-visible-bars={visibleBars}
+        data-initial-zoom-start={initialZoom.start.toFixed(4)}
+        className="w-full"
+        style={{ height: chartHeight }}
+      />
     </div>
   )
 }

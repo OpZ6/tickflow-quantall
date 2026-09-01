@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "test:indicators": "node scripts/run-indicator-verification.mjs",
     "test:chart-layers": "node scripts/run-chart-layer-verification.mjs",
+    "test:chart-workspace": "node scripts/run-chart-workspace-verification.mjs",
     "preview": "vite preview",
     "lint": "eslint ."
   },

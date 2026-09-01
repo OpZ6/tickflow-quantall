@@ -1,10 +1,10 @@
 """统一 K 线图表数据服务。"""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
 import hashlib
 import json
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -48,6 +48,16 @@ class ChartQuery:
     range_name: ChartRange
     start_date: date | None
     end_date: date
+    required_warmup_bars: int = _MIN_WARMUP_BARS
+    indicator_warmups: tuple[tuple[str, int], ...] = ()
+
+
+def _warmup_calendar_days(interval: ChartInterval, required_bars: int) -> int:
+    bars = max(0, required_bars)
+    if interval in _MINUTE_INTERVALS:
+        return max(_WARMUP_CALENDAR_DAYS[interval], (bars // 240 + 1) * 3)
+    multiplier = 2 if interval == "1d" else 10 if interval == "1w" else 45
+    return max(_WARMUP_CALENDAR_DAYS[interval], bars * multiplier)
 
 
 def resolve_date_range(query: ChartQuery, earliest: date | None = None) -> tuple[date, date]:
@@ -231,10 +241,20 @@ def build_chart_response(
     start, end = resolve_date_range(query, earliest)
     # 指标必须先在展示区间之前预热, 再裁剪; 否则范围起点处的 MA/MACD/RSI
     # 会被错误地当成一段全新序列。all 仍从权威最早日期开始。
-    fetch_start = start if query.range_name == "all" else start - timedelta(days=_WARMUP_CALENDAR_DAYS[query.interval])
+    requested_indicator_warmups = {
+        indicator_id: max(0, min(int(bars), 2_000))
+        for indicator_id, bars in query.indicator_warmups
+    }
+    required_warmup_bars = max(
+        [max(0, min(int(query.required_warmup_bars), 2_000)), *requested_indicator_warmups.values()]
+    )
+    fetch_start = start if query.range_name == "all" else start - timedelta(
+        days=_warmup_calendar_days(query.interval, required_warmup_bars)
+    )
     warnings: list[str] = []
     effective_adjustment: ChartAdjustment = query.adjustment
     warmup_bars = 0
+    analysis_rows = pl.DataFrame()
     if query.asset_type == "index" and query.adjustment != "none":
         effective_adjustment = "none"
         warnings.append("指数不适用复权, 已使用不复权价格")
@@ -251,6 +271,7 @@ def build_chart_response(
             if not rows.is_empty():
                 rows = compute_indicators(rows.rename({"datetime": "date"})).rename({"date": "datetime"})
                 warmup_bars = rows.filter(pl.col("datetime").dt.date() < start).height
+                analysis_rows = rows
                 rows = rows.filter(pl.col("datetime").dt.date().is_between(start, end))
         time_column = "datetime"
         source = "local_minute"
@@ -284,12 +305,13 @@ def build_chart_response(
         if not rows.is_empty():
             rows = compute_indicators(rows)
             warmup_bars = rows.filter(pl.col("date") < start).height
+            analysis_rows = rows
             rows = rows.filter(pl.col("date").is_between(start, end))
         time_column = "date"
 
-    warmup_complete = query.range_name == "all" or warmup_bars >= _MIN_WARMUP_BARS
+    warmup_complete = query.range_name == "all" or warmup_bars >= required_warmup_bars
     if not warmup_complete:
-        warnings.append(f"指标预热数据不足: 需要至少 {_MIN_WARMUP_BARS} 根, 实际 {warmup_bars} 根; 区间起点部分指标为空")
+        warnings.append(f"指标预热数据不足: 需要至少 {required_warmup_bars} 根, 实际 {warmup_bars} 根; 区间起点部分指标为空")
 
     coverage_start = None
     coverage_end = None
@@ -316,6 +338,13 @@ def build_chart_response(
         rows = rows.with_columns(pl.col("date").cast(pl.Utf8))
 
     output_rows = rows.to_dicts()
+    if time_column == "datetime" and not analysis_rows.is_empty():
+        analysis_rows = analysis_rows.with_columns(
+            pl.col("datetime").dt.strftime("%Y-%m-%dT%H:%M:%S").alias("date")
+        ).drop("datetime")
+    elif not analysis_rows.is_empty():
+        analysis_rows = analysis_rows.with_columns(pl.col("date").cast(pl.Utf8))
+    output_analysis_rows = analysis_rows.to_dicts()
     input_fingerprint = _chart_input_fingerprint(output_rows)
     annotation_layers: list[dict] = []
     if layer_categories:
@@ -365,6 +394,7 @@ def build_chart_response(
         "symbol": query.symbol,
         "asset_type": query.asset_type,
         "rows": output_rows,
+        "analysis_rows": output_analysis_rows,
         "levels": levels,
         "annotation_layers": annotation_layers,
         "meta": {
@@ -374,12 +404,23 @@ def build_chart_response(
             "adjustment": effective_adjustment,
             "requested_start": start.isoformat(),
             "requested_end": end.isoformat(),
+            "required_fetch_start": fetch_start.isoformat(),
             "source": source,
             "coverage_start": coverage_start.isoformat() if coverage_start else None,
             "coverage_end": coverage_end.isoformat() if coverage_end else None,
             "complete": complete,
             "warmup_bars": warmup_bars,
+            "required_warmup_bars": required_warmup_bars,
+            "actual_warmup_bars": warmup_bars,
             "warmup_complete": warmup_complete,
+            "indicator_readiness": {
+                indicator_id: {
+                    "required_warmup_bars": bars,
+                    "actual_warmup_bars": warmup_bars,
+                    "status": "ready" if query.range_name == "all" or warmup_bars >= bars else "partial",
+                }
+                for indicator_id, bars in requested_indicator_warmups.items()
+            },
             "input_fingerprint": input_fingerprint,
             "warnings": warnings,
         },

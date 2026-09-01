@@ -33,7 +33,7 @@ from app.enriched_generation import (
     get_enriched_generation,
 )
 from app.market_time import cn_today
-from app.parquet import scan_enriched_parquet
+from app.parquet import scan_daily_parquet, scan_enriched_parquet
 
 logger = logging.getLogger(__name__)
 
@@ -1651,7 +1651,7 @@ class KlineRepository:
         if glob is None:
             return pl.DataFrame()
         try:
-            lazy = pl.scan_parquet(glob).filter(
+            lazy = scan_daily_parquet(glob).filter(
                 (pl.col("symbol") == symbol)
                 & (pl.col("date") >= start)
                 & (pl.col("date") <= end)

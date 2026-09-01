@@ -45,36 +45,51 @@ function warmupFor(key: string): number {
 
 export const OVERLAY_REGISTRY: ChartIndicatorDefinition[] = OVERLAY_INDICATORS.map(item => ({
   ...item,
+  id: item.key,
+  version: 1,
   category: 'overlay',
+  kind: 'technical',
+  placement: 'main',
+  calculation: 'client',
   group: GROUPS[item.key] ?? '趋势',
   requiredFields: item.key === 'vwma' || item.key === 'vwap' ? ['open', 'high', 'low', 'close', 'volume'] : ['open', 'high', 'low', 'close'],
   warmupBars: warmupFor(item.key),
   supportedIntervals: [...ALL_INTERVALS],
   defaultParams: { ...(PARAM_DEFS[item.key] ?? {}) },
   paramSchema: paramsFor(item.key),
+  styleSchema: [],
 }))
 
 export const PANE_REGISTRY: ChartIndicatorDefinition[] = SUB_CHARTS.map(item => ({
   key: item.key,
+  id: item.key,
+  version: 1,
   label: item.label,
   category: 'pane',
+  kind: 'technical',
+  placement: 'sub',
+  calculation: 'client',
   group: GROUPS[item.key] ?? '其他',
   requiredFields: ['open', 'high', 'low', 'close', ...(GROUPS[item.key] === '成交量' ? ['volume'] : [])],
   warmupBars: warmupFor(item.key),
   supportedIntervals: [...ALL_INTERVALS],
   defaultParams: { ...(PARAM_DEFS[item.key] ?? {}) },
   paramSchema: paramsFor(item.key),
+  styleSchema: [],
   defaultHeight: item.height,
 }))
 
 export const STRUCTURE_REGISTRY: ChartIndicatorDefinition[] = [
-  ['key-levels', '关键价位', '价位'],
-  ['chanlun', '缠论结构', '缠论'],
-  ['patterns', '价格形态', '形态'],
-  ['events', '涨停/炸板/事件', '事件'],
-].map(([key, label, group]) => ({
-  key, label, group, category: 'structure', requiredFields: ['date', 'open', 'high', 'low', 'close'],
-  warmupBars: key === 'patterns' ? 120 : 0, supportedIntervals: [...ALL_INTERVALS], defaultParams: {}, paramSchema: [],
+  ['key-levels', '关键价位', '价位', 'structure', 'repository'],
+  ['chanlun', '缠论结构', '缠论', 'structure', 'server'],
+  ['patterns', '价格形态', '形态', 'pattern', 'repository'],
+  ['strategies', '正式策略信号', '策略', 'strategy', 'repository'],
+  ['events', '涨停/炸板/事件', '事件', 'event', 'repository'],
+].map(([key, label, group, kind, calculation]) => ({
+  id: key, key, version: 1, label, group, kind, calculation,
+  category: 'structure', placement: 'main', requiredFields: ['date', 'open', 'high', 'low', 'close'],
+  warmupBars: key === 'chanlun' ? 500 : key === 'patterns' || key === 'key-levels' ? 160 : 0,
+  supportedIntervals: [...ALL_INTERVALS], defaultParams: {}, paramSchema: [], styleSchema: [],
 })) as ChartIndicatorDefinition[]
 
 export const INDICATOR_REGISTRY = [...OVERLAY_REGISTRY, ...PANE_REGISTRY, ...STRUCTURE_REGISTRY]

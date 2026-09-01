@@ -4,7 +4,10 @@ from datetime import date, datetime, timedelta
 
 import polars as pl
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from app.api.kline import router as kline_router
 from app.indicators.pipeline import compute_indicators
 from app.services.chart_data import (
     ChartQuery,
@@ -172,7 +175,46 @@ def test_chart_response_warms_indicators_before_trimming_and_uses_same_rows_for_
 
     assert result["rows"][0]["date"] == "2026-08-01"
     assert result["rows"][0]["ma20"] is not None
+    assert result["analysis_rows"][0]["date"] < result["rows"][0]["date"]
+    assert result["meta"]["required_warmup_bars"] == 160
+    assert result["meta"]["actual_warmup_bars"] == result["meta"]["warmup_bars"]
     assert set(result["levels"]) == {"sr", "pivot", "extreme", "boll", "keltner_s", "keltner_m", "keltner_l", "atr_stop", "gap", "fib", "round"}
+
+
+def test_chart_response_uses_requested_warmup_and_keeps_it_hidden() -> None:
+    dates = pl.date_range(date(2024, 1, 1), date(2026, 8, 31), interval="1d", eager=True)
+    frame = pl.DataFrame({
+        "symbol": ["000001.SZ"] * len(dates), "date": dates,
+        "open": [10.0] * len(dates), "high": [11.0] * len(dates),
+        "low": [9.0] * len(dates), "close": [10.5] * len(dates),
+        "volume": [10_000] * len(dates), "amount": [100_000] * len(dates),
+    })
+
+    class Repo:
+        def earliest_daily_date(self): return date(2024, 1, 1)
+        def get_adjustment_factors(self, *_args): return pl.DataFrame()
+        def get_raw_daily_asset(self, _asset_type, _symbol, start, end):
+            return frame.filter(pl.col("date").is_between(start, end))
+        def get_daily_asset(self, *_args, **_kwargs): return pl.DataFrame()
+
+    result = build_chart_response(Repo(), ChartQuery(
+        symbol="000001.SZ", asset_type="stock", interval="1d", adjustment="none",
+        range_name="custom", start_date=date(2026, 8, 1), end_date=date(2026, 8, 31),
+        required_warmup_bars=160,
+        indicator_warmups=(("macd", 120), ("chanlun", 500)),
+    ))
+    assert result["meta"]["required_warmup_bars"] == 500
+    assert result["meta"]["required_fetch_start"] < result["meta"]["requested_start"]
+    assert result["meta"]["actual_warmup_bars"] >= 500
+    assert result["meta"]["warmup_complete"] is True
+    assert result["meta"]["indicator_readiness"]["macd"]["status"] == "ready"
+    assert result["meta"]["indicator_readiness"]["chanlun"] == {
+        "required_warmup_bars": 500,
+        "actual_warmup_bars": result["meta"]["actual_warmup_bars"],
+        "status": "ready",
+    }
+    assert result["rows"][0]["date"] == "2026-08-01"
+    assert result["analysis_rows"][0]["date"] < "2026-08-01"
 
 
 def test_chart_response_layers_share_the_final_candle_fingerprint() -> None:
@@ -236,3 +278,36 @@ def test_core_macd_has_fixed_numeric_sample() -> None:
     assert last["macd_dif"] == pytest.approx(0.6971405774)
     assert last["macd_dea"] == pytest.approx(0.6957971887)
     assert last["macd_hist"] == pytest.approx(0.0026867774)
+
+
+def test_single_daily_sync_uses_explicit_range_without_full_market_job(monkeypatch) -> None:
+    captured = {}
+
+    class Repo:
+        def resolve_asset_type(self, symbol):
+            assert symbol == "000001.SZ"
+            return "stock"
+
+    class Capset:
+        def has(self, _cap): return False
+
+    def fake_sync(symbols, repo, capset, **kwargs):
+        captured.update(symbols=symbols, repo=repo, capset=capset, **kwargs)
+        return 321
+
+    monkeypatch.setattr("app.services.kline_sync.sync_and_persist_daily_batch", fake_sync)
+    monkeypatch.setattr("app.api.data.invalidate_storage_cache", lambda: captured.update(invalidated=True))
+    app = FastAPI()
+    app.state.repo = Repo()
+    app.state.capabilities = Capset()
+    app.include_router(kline_router)
+
+    response = TestClient(app).post("/api/kline/sync_daily_single", json={
+        "symbol": "000001.SZ", "start_date": "2023-09-01", "end_date": "2026-09-01",
+    })
+    assert response.status_code == 200
+    assert response.json()["rows"] == 321
+    assert captured["symbols"] == ["000001.SZ"]
+    assert captured["start_date"].date() == date(2023, 9, 1)
+    assert captured["end_date"].date() == date(2026, 9, 1)
+    assert captured["invalidated"] is True

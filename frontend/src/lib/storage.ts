@@ -15,7 +15,12 @@ function kv<T>(key: string) {
       return fallback
     },
     set(val: T) {
-      try { localStorage.setItem(key, JSON.stringify(val)) } catch { /* ignore */ }
+      try {
+        localStorage.setItem(key, JSON.stringify(val))
+        return true
+      } catch {
+        return false
+      }
     },
     remove() {
       try { localStorage.removeItem(key) } catch { /* ignore */ }

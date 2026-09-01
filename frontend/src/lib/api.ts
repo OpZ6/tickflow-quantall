@@ -1599,12 +1599,20 @@ export interface ChartDataMeta {
   adjustment: ChartAdjustment
   requested_start: string
   requested_end: string
+  required_fetch_start: string
   source: string
   coverage_start: string | null
   coverage_end: string | null
   complete: boolean
   warmup_bars: number
   warmup_complete: boolean
+  required_warmup_bars: number
+  actual_warmup_bars: number
+  indicator_readiness: Record<string, {
+    required_warmup_bars: number
+    actual_warmup_bars: number
+    status: 'ready' | 'partial'
+  }>
   input_fingerprint: string
   warnings: string[]
 }
@@ -1700,6 +1708,8 @@ export interface ChartDataResponse {
   symbol: string
   asset_type: 'stock' | 'etf' | 'index'
   rows: KlineRow[]
+  /** 隐藏预热 + 可见区间，仅用于分析计算，不直接绘制。 */
+  analysis_rows: KlineRow[]
   /** 与 rows 同周期、同复权、同裁剪窗口计算的 11 组关键价位。 */
   levels: Record<LevelType, PriceLevel[]>
   annotation_layers?: ChartAnnotationLayer[]
@@ -1718,6 +1728,8 @@ export interface ChartDataQuery {
   strategyIds?: string[]
   sourceRunId?: string
   paramsFingerprint?: string
+  warmupBars?: number
+  indicatorWarmups?: Record<string, number>
 }
 
 export interface StrategyPreviewRequest {
@@ -2736,6 +2748,13 @@ export const api = {
       `/api/kline/sync?symbol=${encodeURIComponent(symbol)}&days=${days}`,
       { method: 'POST' },
     ),
+  syncDailySingle: (symbol: string, startDate: string, endDate: string) =>
+    request<{ status: string; symbol: string; rows: number; factor_rows: number; warning?: string | null }>(
+      '/api/kline/sync_daily_single', {
+        method: 'POST',
+        body: JSON.stringify({ symbol, start_date: startDate, end_date: endDate }),
+      },
+    ),
   syncMinute: (days?: number, extend?: boolean) =>
     request<{ status: string; job_id: string }>('/api/kline/sync_minute', {
       method: 'POST',
@@ -3330,6 +3349,10 @@ export const api = {
     if (query.strategyIds?.length) params.set('strategy_ids', query.strategyIds.join(','))
     if (query.sourceRunId) params.set('source_run_id', query.sourceRunId)
     if (query.paramsFingerprint) params.set('params_fingerprint', query.paramsFingerprint)
+    if (query.warmupBars != null) params.set('warmup_bars', String(query.warmupBars))
+    if (query.indicatorWarmups && Object.keys(query.indicatorWarmups).length) {
+      params.set('indicator_warmups', Object.entries(query.indicatorWarmups).sort(([left], [right]) => left.localeCompare(right)).map(([id, bars]) => `${id}:${bars}`).join(','))
+    }
     return request<ChartDataResponse>(`/api/kline/chart?${params.toString()}`)
   },
 
