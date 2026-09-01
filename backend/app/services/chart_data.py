@@ -72,6 +72,37 @@ def resolve_date_range(query: ChartQuery, earliest: date | None = None) -> tuple
     return query.end_date - timedelta(days=_RANGE_DAYS[query.range_name]), query.end_date
 
 
+def _symbol_listing_date(repo, asset_type: str, symbol: str) -> date | None:
+    """Return the authoritative listing date when the instrument dimension has it."""
+    getter = getattr(repo, "get_instruments_asset", None)
+    if not callable(getter):
+        return None
+    try:
+        instruments = getter(asset_type)
+    except Exception:  # noqa: BLE001 - optional dimension must not break chart reads
+        return None
+    if instruments is None or instruments.is_empty() or "symbol" not in instruments.columns:
+        return None
+    date_column = next(
+        (column for column in ("listing_date", "list_date") if column in instruments.columns),
+        None,
+    )
+    if date_column is None:
+        return None
+    hit = instruments.filter(pl.col("symbol") == symbol).select(date_column).head(1)
+    if hit.is_empty():
+        return None
+    value = hit.item(0, 0)
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
 def apply_adjustment(
     rows: pl.DataFrame,
     factors: pl.DataFrame,
@@ -237,8 +268,16 @@ def build_chart_response(
     source_run_id: str | None = None,
     params_fingerprint: str | None = None,
 ) -> dict:
+    listing_date = _symbol_listing_date(repo, query.asset_type, query.symbol)
     earliest = repo.earliest_daily_date()
+    if query.range_name == "all" and query.start_date is None:
+        earliest = listing_date or earliest
     start, end = resolve_date_range(query, earliest)
+    # Preset ranges may include a frontend-supplied preload boundary. Never
+    # treat the time before listing as missing history, otherwise a recent IPO
+    # would trigger the same impossible backfill on every visit.
+    if listing_date is not None and query.range_name != "custom":
+        start = max(start, listing_date)
     # 指标必须先在展示区间之前预热, 再裁剪; 否则范围起点处的 MA/MACD/RSI
     # 会被错误地当成一段全新序列。all 仍从权威最早日期开始。
     requested_indicator_warmups = {
@@ -251,6 +290,8 @@ def build_chart_response(
     fetch_start = start if query.range_name == "all" else start - timedelta(
         days=_warmup_calendar_days(query.interval, required_warmup_bars)
     )
+    if listing_date is not None:
+        fetch_start = max(fetch_start, listing_date)
     warnings: list[str] = []
     effective_adjustment: ChartAdjustment = query.adjustment
     warmup_bars = 0

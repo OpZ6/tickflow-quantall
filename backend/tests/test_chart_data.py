@@ -142,6 +142,64 @@ def test_custom_range_requires_start_and_rejects_reverse_range() -> None:
         resolve_date_range(ChartQuery(start_date=date(2026, 9, 1), **base))
 
 
+def test_all_range_starts_from_symbol_listing_date_not_local_cache_floor() -> None:
+    class Repo:
+        def earliest_daily_date(self):
+            return date(2025, 1, 1)
+
+        def get_instruments_asset(self, _asset_type):
+            return pl.DataFrame({
+                "symbol": ["000001.SZ"],
+                "listing_date": ["1991-04-03"],
+            })
+
+        def get_adjustment_factors(self, *_args):
+            return pl.DataFrame()
+
+        def get_raw_daily_asset(self, *_args):
+            return pl.DataFrame()
+
+        def get_daily_asset(self, *_args, **_kwargs):
+            return pl.DataFrame()
+
+    result = build_chart_response(Repo(), ChartQuery(
+        symbol="000001.SZ", asset_type="stock", interval="1d", adjustment="none",
+        range_name="all", start_date=None, end_date=date(2026, 9, 1),
+    ))
+
+    assert result["meta"]["requested_start"] == "1991-04-03"
+    assert result["meta"]["complete"] is False
+
+
+def test_preset_range_does_not_request_history_before_listing() -> None:
+    class Repo:
+        def earliest_daily_date(self):
+            return date(2020, 1, 1)
+
+        def get_instruments_asset(self, _asset_type):
+            return pl.DataFrame({
+                "symbol": ["301999.SZ"],
+                "listing_date": ["2024-06-20"],
+            })
+
+        def get_adjustment_factors(self, *_args):
+            return pl.DataFrame()
+
+        def get_raw_daily_asset(self, *_args):
+            return pl.DataFrame()
+
+        def get_daily_asset(self, *_args, **_kwargs):
+            return pl.DataFrame()
+
+    result = build_chart_response(Repo(), ChartQuery(
+        symbol="301999.SZ", asset_type="stock", interval="1d", adjustment="none",
+        range_name="5y", start_date=date(2020, 8, 31), end_date=date(2026, 9, 1),
+    ))
+
+    assert result["meta"]["requested_start"] == "2024-06-20"
+    assert result["meta"]["required_fetch_start"] == "2024-06-20"
+
+
 def test_chart_response_warms_indicators_before_trimming_and_uses_same_rows_for_levels() -> None:
     dates = pl.date_range(date(2026, 1, 1), date(2026, 8, 31), interval="1d", eager=True)
     frame = pl.DataFrame({

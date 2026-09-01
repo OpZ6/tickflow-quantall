@@ -126,6 +126,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   const [historyExhausted, setHistoryExhausted] = useState(false)
   const [historyNotice, setHistoryNotice] = useState('')
   const historyPreviousOldestRef = useRef<string>()
+  const autoBackfillContextsRef = useRef(new Set<string>())
 
   const indicatorById = (id: string) => layout.indicators.find(item => item.indicatorId === id)
   const technicalIndicators = layout.indicators.filter(item => item.kind === 'technical' && item.enabled).sort((a, b) => a.pane.order - b.pane.order)
@@ -359,6 +360,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   const historyContext = [symbol, layout.interval, layout.adjustment, layout.range, nominalStart, effectiveEnd].join('|')
   const historyStartOverride = historyWindow?.context === historyContext ? historyWindow.start : undefined
   const requestedStart = historyStartOverride ?? initialHistoryStart
+  const currentRangeLabel = RANGES.find(item => item.value === layout.range)?.label ?? layout.range
   useEffect(() => {
     setHistoryWindow(undefined)
     setHistoryLoading(false)
@@ -477,6 +479,21 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
     },
     onError: error => toast(error instanceof Error ? error.message : '日线历史补齐失败', 'error'),
   })
+  useEffect(() => {
+    const response = chartQuery.data
+    if (!response || chartQuery.isFetching || chartQuery.isPlaceholderData || dailyBackfill.isPending) return
+    if (!['3y', '5y', 'all'].includes(layout.range)) return
+    if (layout.interval.endsWith('m') || response.asset_type === 'index' || response.meta.complete) return
+    const start = response.meta.required_fetch_start ?? response.meta.requested_start
+    const end = response.meta.requested_end
+    if (!start || !end) return
+    const attemptKey = [symbol, layout.interval, layout.range, start, end].join('|')
+    if (autoBackfillContextsRef.current.has(attemptKey)) return
+    autoBackfillContextsRef.current.add(attemptKey)
+    setHistoryExhausted(false)
+    setHistoryNotice(`本地历史不足，正在自动补齐 ${currentRangeLabel}数据…`)
+    dailyBackfill.mutate()
+  }, [chartQuery.data, chartQuery.isFetching, chartQuery.isPlaceholderData, dailyBackfill.isPending, layout.interval, layout.range, symbol])
   const allRows = (chartQuery.data?.rows ?? []) as OHLC[]
   const analysisRows = (chartQuery.data?.analysis_rows ?? chartQuery.data?.rows ?? []) as OHLC[]
   useEffect(() => {
@@ -588,8 +605,11 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   // The API can preload older candles, but the viewport still represents the
   // range selected in the toolbar. The hidden left buffer is revealed by drag.
   const visibleBars = Math.max(selectedRangeRows, 1)
-  const canLoadOlder = layout.range !== 'all' && replayIndex == null && !historyExhausted
-  const currentRangeLabel = RANGES.find(item => item.value === layout.range)?.label ?? layout.range
+  const usesAutomaticLongRangeBackfill = ['3y', '5y', 'all'].includes(layout.range)
+    && !layout.interval.endsWith('m')
+    && chartQuery.data?.asset_type !== 'index'
+  const automaticBackfillIncomplete = usesAutomaticLongRangeBackfill && chartQuery.data?.meta.complete === false
+  const canLoadOlder = !usesAutomaticLongRangeBackfill && layout.range !== 'all' && replayIndex == null && !historyExhausted
   const chartHeight = Math.max(height, 340 + enabledIndicators.filter(key => PANE_REGISTRY.some(item => item.key === key)).length * 95)
 
   const updateLayout = (change: Partial<StockChartLayout>) => setLayout(current => ({ ...current, ...change }))
@@ -734,7 +754,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
 
       {(historyLoading || historyNotice) && <div className="flex items-center gap-1.5 border-b border-border/40 px-3 py-1 text-[10px] text-muted" data-testid="chart-history-load-status">{historyLoading && <Loader2 className="h-3 w-3 animate-spin" />}<span>{historyLoading ? '正在加载更早 K 线…' : historyNotice}</span></div>}
       {rows.length === 0 ? <div className="grid min-h-[480px] place-items-center text-sm text-muted">当前组合没有可用 K 线；请补齐数据或缩短范围。</div> : <EChartsCandlestick key={historyContext} data={rows} analysisData={analysisRowsAtReplay} symbol={symbol} height={chartHeight} visibleBars={visibleBars} activeIndicators={enabledIndicators} paneHeights={paneHeights} indicatorStyles={indicatorStyles} markers={[...textMarkers, ...annotationVisuals.markers]} ranges={annotationVisuals.ranges} priceLines={[...(keyLevelsVisible ? levelLines(levels, activeLevelTypes) : []), ...userLines, ...annotationVisuals.lines]} chanlunData={chanlun} chanlunConfig={chanlunConfig} chanlunOfficial={officialResult.layer} onMarkerClick={evidenceId => setSelectedEvidence(annotationVisuals.evidence.get(evidenceId) ?? null)} onVisibleBarsChange={setVisibleAnnotationBars} onRequestOlder={requestOlderHistory} canLoadOlder={canLoadOlder} loadingOlder={historyLoading} onChartPointClick={onChartPoint} onPriceDoubleClick={(price) => commitDrawings([...drawings, { id: crypto.randomUUID(), kind: 'horizontal', price, adjustment: layout.adjustment, interval: layout.interval }])} testId="unified-stock-chart-instance" />}
-      {rows.length > 0 && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/40 px-3 py-1.5 text-[10px] text-muted" data-testid="chart-history-navigator-hint"><span>已载入 <span className="font-mono text-secondary">{allRows[0]?.date.slice(0, 10)} — {allRows.at(-1)?.date.slice(0, 10)}</span> · 当前窗口 {currentRangeLabel}</span><span className="flex items-center gap-2"><span className="text-sky-300">拖动图表底部蓝色时间窗查看历史</span>{canLoadOlder ? <button type="button" onClick={() => requestOlderHistory(allRows[0]?.date ?? '')} disabled={historyLoading} className="tool-btn border-sky-400/30 text-sky-200 disabled:opacity-50">{historyLoading && <Loader2 className="h-3 w-3 animate-spin" />}加载更早</button> : <span className="text-secondary">{layout.range === 'all' ? '已载入全部本地历史' : '已到本地最早历史'}</span>}</span></div>}
+      {rows.length > 0 && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/40 px-3 py-1.5 text-[10px] text-muted" data-testid="chart-history-navigator-hint"><span>已载入 <span className="font-mono text-secondary">{allRows[0]?.date.slice(0, 10)} — {allRows.at(-1)?.date.slice(0, 10)}</span> · 当前窗口 {currentRangeLabel}</span><span className="flex items-center gap-2"><span className="text-sky-300">拖动图表底部蓝色时间窗查看历史</span>{automaticBackfillIncomplete ? <button type="button" onClick={() => dailyBackfill.mutate()} disabled={dailyBackfill.isPending} className="tool-btn border-sky-400/30 text-sky-200 disabled:opacity-50">{dailyBackfill.isPending && <Loader2 className="h-3 w-3 animate-spin" />}{dailyBackfill.isPending ? `正在自动补齐${currentRangeLabel}` : '自动补齐未完整，重试'}</button> : usesAutomaticLongRangeBackfill ? <span className="text-secondary">{layout.range === 'all' ? '已载入全部可用历史' : `${currentRangeLabel}数据已完整`}</span> : canLoadOlder ? <button type="button" onClick={() => requestOlderHistory(allRows[0]?.date ?? '')} disabled={historyLoading} className="tool-btn border-sky-400/30 text-sky-200 disabled:opacity-50">{historyLoading && <Loader2 className="h-3 w-3 animate-spin" />}加载更早</button> : <span className="text-secondary">已到本地最早历史</span>}</span></div>}
 
       {replayIndex != null && allRows.length > 0 && <div className="sticky bottom-0 z-20 flex items-center gap-3 border-t border-border bg-surface/95 px-3 py-2"><Play className="h-3.5 w-3.5 text-amber-300" /><input aria-label="逐根回放" type="range" min="9" max={allRows.length - 1} value={replayIndex} onChange={event => setReplayIndex(Number(event.target.value))} className="flex-1" /><span className="w-28 font-mono text-[10px] text-muted">{allRows[replayIndex]?.date}</span><button type="button" onClick={() => setReplayIndex(index => Math.min(allRows.length - 1, (index ?? 0) + 1))} className="tool-btn">下一根</button><button type="button" onClick={() => setReplayIndex(null)} className="tool-btn">退出</button></div>}
 
