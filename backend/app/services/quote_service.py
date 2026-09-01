@@ -162,6 +162,30 @@ def _monitor_name_map(repo) -> dict[str, str]:
     return {s: n for s, n in repo.get_name_map().items() if n}
 
 
+def supplement_realtime_indices(
+    records: list[dict],
+    symbols: list[str],
+) -> list[dict]:
+    """Fill index gaps left by stock-only realtime providers.
+
+    Provider routing remains authoritative for the stock snapshot.  This
+    adapter only requests explicitly configured index symbols that are absent
+    from that snapshot, allowing asset-level sources to complement each other.
+    """
+    present = {str(row.get("symbol") or "") for row in records}
+    missing = [symbol for symbol in dict.fromkeys(symbols) if symbol not in present]
+    if not missing:
+        return records
+    from app.data_providers.tencent_index import fetch_index_realtime
+
+    supplemental = fetch_index_realtime(missing)
+    if supplemental:
+        logger.info("核心指数实时补齐: %d/%d 只 (Tencent)", len(supplemental), len(missing))
+    else:
+        logger.warning("核心指数实时补齐为空: %d 只仍将使用盘后日线", len(missing))
+    return [*records, *supplemental]
+
+
 class QuoteService:
     """全局实时行情服务 — 单例。"""
 
@@ -603,6 +627,9 @@ class QuoteService:
                 except Exception as e:  # noqa: BLE001
                     logger.warning("自定义实时行情拉取失败: %s", e)
                     return
+                if preferences.get_realtime_pull_index():
+                    index_symbols = preferences.get_realtime_index_symbols() or list(self.CORE_INDEX_SYMBOLS)
+                    records = supplement_realtime_indices(records, index_symbols)
                 self._process_full_market_records(records, t0=t0, now_ts=now_ts)
                 return
             # 自定义源未配置 realtime → 回退 TickFlow

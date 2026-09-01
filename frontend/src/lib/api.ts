@@ -442,6 +442,9 @@ export interface OverviewMarket {
   quote_status: {
     enabled?: boolean
     running?: boolean
+    mode?: 'none' | 'watchlist' | 'full_market'
+    symbol_count?: number
+    index_symbol_count?: number
     quote_age_ms?: number | null
     is_trading_hours?: boolean
     [key: string]: any

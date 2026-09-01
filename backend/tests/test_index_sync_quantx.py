@@ -5,8 +5,9 @@ from types import SimpleNamespace
 
 import polars as pl
 
-from app.data_providers.tencent_index import fetch_index_daily
+from app.data_providers.tencent_index import fetch_index_daily, fetch_index_realtime
 from app.services import index_sync
+from app.services.quote_service import supplement_realtime_indices
 
 
 def test_index_instrument_sync_always_includes_quantx_all_a_index(monkeypatch) -> None:
@@ -119,6 +120,76 @@ def test_tencent_index_provider_normalizes_and_filters_daily_rows() -> None:
     ]
     assert frame["data_source"].unique().to_list() == ["tencent_index"]
     assert captured["params"]["param"].startswith("sh000985,day")
+
+
+def test_tencent_index_realtime_uses_latest_two_rows_and_decimal_change() -> None:
+    class Response:
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return {
+                "code": 0,
+                "data": {
+                    "sh000001": {
+                        "day": [
+                            ["2026-08-31", "3950", "3980", "3990", "3940", "100"],
+                            ["2026-09-01", "3979", "4020", "4030", "3970", "200"],
+                        ]
+                    }
+                },
+            }
+
+    class Client:
+        def get(self, url, *, params, headers):
+            return Response()
+
+    rows = fetch_index_realtime(
+        ["000001.SH"],
+        as_of=date(2026, 9, 1),
+        client=Client(),
+        fetched_ms=123_000,
+    )
+
+    assert rows == [{
+        "symbol": "000001.SH",
+        "name": None,
+        "last_price": 4020.0,
+        "prev_close": 3980.0,
+        "open": 3979.0,
+        "high": 4030.0,
+        "low": 3970.0,
+        "volume": 200.0,
+        "amount": None,
+        "change_pct": (4020.0 - 3980.0) / 3980.0,
+        "change_amount": 40.0,
+        "amplitude": None,
+        "turnover_rate": None,
+        "timestamp": 123_000,
+        "session": None,
+    }]
+
+
+def test_realtime_index_supplement_only_fetches_missing_symbols(monkeypatch) -> None:
+    captured: list[str] = []
+
+    def fake_fetch(symbols):
+        captured.extend(symbols)
+        return [{"symbol": symbol, "last_price": 1.0} for symbol in symbols]
+
+    monkeypatch.setattr(
+        "app.data_providers.tencent_index.fetch_index_realtime",
+        fake_fetch,
+    )
+    existing = [{"symbol": "600000.SH"}, {"symbol": "000001.SH", "last_price": 2.0}]
+
+    combined = supplement_realtime_indices(
+        existing,
+        ["000001.SH", "399001.SZ"],
+    )
+
+    assert captured == ["399001.SZ"]
+    assert [row["symbol"] for row in combined] == ["600000.SH", "000001.SH", "399001.SZ"]
 
 
 def test_required_quantx_index_fallback_publishes_raw_and_enriched(monkeypatch) -> None:

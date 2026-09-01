@@ -571,9 +571,15 @@ export function Dashboard() {
   // 首次使用(无数据 + 未完成引导)自动弹窗: 同一会话只弹一次
   const [showWelcomeModal, setShowWelcomeModal] = useState(false)
   const dataStatus = useDataStatus({ staleTime: 60_000 })
+  const latestDataDate = dataStatus.data?.enriched?.latest_date ?? null
+  // 选中最新交易日等价于“回到实时”。后端的 as_of 是严格历史快照语义，
+  // 只有更早日期才能传入，避免页面标着实时却强制读取历史指数。
+  const overviewAsOf = selectedDate && selectedDate !== latestDataDate
+    ? selectedDate
+    : undefined
   const overview = useQuery({
-    queryKey: QK.overviewMarket(selectedDate),
-    queryFn: () => api.overviewMarket(selectedDate),
+    queryKey: QK.overviewMarket(overviewAsOf),
+    queryFn: () => api.overviewMarket(overviewAsOf),
     staleTime: 5_000,
     placeholderData: (prev) => prev,
   })
@@ -692,9 +698,11 @@ export function Dashboard() {
   const score = data.emotion?.score ?? 50
   const strongUp = data.breadth.strong_up ?? 0
   const strongDown = data.breadth.strong_down ?? 0
-  const latestDate = dataStatus.data?.enriched?.latest_date ?? null
+  const latestDate = latestDataDate
   const currentDate = selectedDate ?? data.as_of ?? ''
-  const quoteRunning = (!selectedDate || selectedDate === latestDate) && data.quote_status?.running
+  const stockRealtime = !overviewAsOf && !!data.quote_status?.running && (data.quote_status?.symbol_count ?? 0) > 0
+  const indexRealtime = stockRealtime && (data.quote_status?.index_symbol_count ?? 0) > 0
+  const realtimeLabel = indexRealtime ? '实时' : stockRealtime ? '股票实时 · 指数盘后' : '非实时'
   // 实时模式: none / watchlist / full_market。
   // watchlist 模式仅自选 ≤5 只实时, 看板呈现的大盘数据实为盘后快照, 需提示避免误读。
   const quoteMode = data.quote_status?.mode as ('none' | 'watchlist' | 'full_market') | undefined
@@ -748,7 +756,7 @@ export function Dashboard() {
           {currentDate ? (
             <DatePicker
               value={currentDate}
-              onChange={setSelectedDate}
+              onChange={value => setSelectedDate(value === latestDate ? undefined : value)}
               min={dataStatus.data?.enriched?.earliest_date ?? undefined}
               max={latestDate ?? undefined}
               className="w-32"
@@ -757,7 +765,7 @@ export function Dashboard() {
             <span className="font-mono text-secondary">—</span>
           )}
           <span className="flex items-center gap-1"><Timer className="h-3 w-3" />{quoteAge(data.quote_status?.quote_age_ms)}</span>
-          <span className={quoteRunning ? 'text-accent' : 'text-warning'}>{quoteRunning ? '实时' : '非实时'}</span>
+          <span className={indexRealtime ? 'text-accent' : 'text-warning'}>{realtimeLabel}</span>
           <button
             onClick={handleRefresh}
             disabled={manualFetching}

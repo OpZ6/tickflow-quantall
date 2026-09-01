@@ -26,6 +26,26 @@ const INTERVALS: { value: ChartInterval; label: string }[] = [
 const RANGES: { value: ChartRangeName; label: string }[] = [
   ['1m', '1月'], ['3m', '3月'], ['6m', '半年'], ['1y', '1年'], ['3y', '3年'], ['5y', '5年'], ['all', '全部'], ['custom', '自定义'],
 ].map(([value, label]) => ({ value: value as ChartRangeName, label }))
+const RANGE_CALENDAR_DAYS: Partial<Record<ChartRangeName, number>> = {
+  '1m': 31, '3m': 93, '6m': 186, '1y': 366, '3y': 1096, '5y': 1827,
+}
+const HISTORY_PAGE_DAYS: Record<ChartInterval, number> = {
+  '1m': 14, '5m': 31, '15m': 62, '30m': 93, '60m': 186,
+  '1d': 366, '1w': 1096, '1mo': 3653,
+}
+
+function localIsoDate(): string {
+  const now = new Date()
+  const offset = now.getTimezoneOffset() * 60_000
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10)
+}
+
+function subtractCalendarDays(value: string, days: number): string {
+  const parsed = new Date(`${value}T00:00:00Z`)
+  if (Number.isNaN(parsed.getTime())) return value
+  parsed.setUTCDate(parsed.getUTCDate() - days)
+  return parsed.toISOString().slice(0, 10)
+}
 const LEVEL_COLORS: Record<string, string> = {
   sr: '#F97316', pivot: '#8B5CF6', extreme: '#EAB308', boll: '#F97316',
   keltner_s: '#06B6D4', keltner_m: '#3B82F6', keltner_l: '#8B5CF6', atr_stop: '#EF4444',
@@ -101,6 +121,11 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [rangePanelOpen, setRangePanelOpen] = useState(false)
   const [draggedIndicatorId, setDraggedIndicatorId] = useState<string>()
+  const [historyWindow, setHistoryWindow] = useState<{ context: string; start: string }>()
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyExhausted, setHistoryExhausted] = useState(false)
+  const [historyNotice, setHistoryNotice] = useState('')
+  const historyPreviousOldestRef = useRef<string>()
 
   const indicatorById = (id: string) => layout.indicators.find(item => item.indicatorId === id)
   const technicalIndicators = layout.indicators.filter(item => item.kind === 'technical' && item.enabled).sort((a, b) => a.pane.order - b.pane.order)
@@ -320,6 +345,27 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   }, [])
 
   const requestEnd = layout.range === 'custom' ? customEnd : strategyContext?.asOf ?? ''
+  const effectiveEnd = requestEnd || localIsoDate()
+  const nominalStart = layout.range === 'custom'
+    ? customStart
+    : RANGE_CALENDAR_DAYS[layout.range]
+      ? subtractCalendarDays(effectiveEnd, RANGE_CALENDAR_DAYS[layout.range]!)
+      : ''
+  // Keep one earlier page outside the initial viewport. This makes horizontal
+  // dragging useful immediately while preserving the selected range on screen.
+  const initialHistoryStart = nominalStart && layout.range !== 'all'
+    ? subtractCalendarDays(nominalStart, HISTORY_PAGE_DAYS[layout.interval])
+    : ''
+  const historyContext = [symbol, layout.interval, layout.adjustment, layout.range, nominalStart, effectiveEnd].join('|')
+  const historyStartOverride = historyWindow?.context === historyContext ? historyWindow.start : undefined
+  const requestedStart = historyStartOverride ?? initialHistoryStart
+  useEffect(() => {
+    setHistoryWindow(undefined)
+    setHistoryLoading(false)
+    setHistoryExhausted(layout.range === 'all')
+    setHistoryNotice('')
+    historyPreviousOldestRef.current = undefined
+  }, [historyContext, layout.range])
   const layerKey = ALL_LAYER_CATEGORIES.join(',')
   const strategyKey = requestedStrategyIds.join(',')
   const exactSourceRunId = strategyScope === 'source' ? strategyContext?.sourceRunId : undefined
@@ -334,10 +380,10 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   const indicatorWarmupSignature = Object.entries(indicatorWarmups).sort(([left], [right]) => left.localeCompare(right)).map(([id, bars]) => `${id}:${bars}`).join(',')
   const requiredWarmupBars = Math.max(160, ...Object.values(indicatorWarmups))
   const chartQuery = useQuery({
-    queryKey: QK.klineChart(symbol, '', layout.interval, layout.adjustment, layout.range, customStart, requestEnd, layerKey, strategyKey, exactSourceRunId ?? '', exactParamsFingerprint ?? '', requiredWarmupBars, indicatorWarmupSignature),
+    queryKey: QK.klineChart(symbol, '', layout.interval, layout.adjustment, layout.range, requestedStart, requestEnd, layerKey, strategyKey, exactSourceRunId ?? '', exactParamsFingerprint ?? '', requiredWarmupBars, indicatorWarmupSignature),
     queryFn: () => api.klineChart({
       symbol, interval: layout.interval, adjustment: layout.adjustment, range: layout.range,
-      ...(layout.range === 'custom' && customStart ? { startDate: customStart } : {}),
+      ...(requestedStart ? { startDate: requestedStart } : {}),
       ...(requestEnd ? { endDate: requestEnd } : {}),
       layers: ALL_LAYER_CATEGORIES,
       strategyIds: requestedStrategyIds,
@@ -410,6 +456,8 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
       return api.syncMinuteSingle(symbol, days)
     },
     onSuccess: result => {
+      setHistoryExhausted(false)
+      setHistoryNotice('')
       toast(`分钟历史补齐完成：${result.rows} 行`, 'success')
       chartQuery.refetch()
     },
@@ -422,6 +470,8 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
       chartQuery.data?.meta.requested_end ?? '',
     ),
     onSuccess: result => {
+      setHistoryExhausted(false)
+      setHistoryNotice('')
       toast(`日线历史补齐完成：${result.rows} 行${result.warning ? `；${result.warning}` : ''}`, result.warning ? 'error' : 'success')
       chartQuery.refetch()
     },
@@ -435,6 +485,31 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
     }
   }, [chartQuery.data?.asset_type, layout.adjustment])
   const rows = rowsAtReplay(allRows, replayIndex)
+  const requestOlderHistory = (oldestVisibleDate: string) => {
+    if (historyLoading || historyExhausted || replayIndex != null || layout.range === 'all') return
+    const currentStart = chartQuery.data?.meta.requested_start ?? requestedStart ?? oldestVisibleDate.slice(0, 10)
+    const nextStart = subtractCalendarDays(currentStart, HISTORY_PAGE_DAYS[layout.interval])
+    if (!nextStart || nextStart >= currentStart) return
+    historyPreviousOldestRef.current = allRows[0]?.date
+    setHistoryLoading(true)
+    setHistoryNotice('')
+    setHistoryWindow({ context: historyContext, start: nextStart })
+  }
+  useEffect(() => {
+    if (!historyLoading || chartQuery.isFetching || !historyStartOverride) return
+    if (chartQuery.data?.meta.requested_start !== historyStartOverride) return
+    const previousOldest = historyPreviousOldestRef.current
+    const nextOldest = allRows[0]?.date
+    if (previousOldest && nextOldest && nextOldest < previousOldest) {
+      setHistoryNotice(`已加载至 ${nextOldest.slice(0, 10)}`)
+    } else {
+      setHistoryExhausted(true)
+      setHistoryNotice(chartQuery.data?.meta.complete
+        ? '已到达本地最早历史'
+        : '本地更早历史不足，请先使用上方补齐按钮')
+    }
+    setHistoryLoading(false)
+  }, [allRows, chartQuery.data?.meta.complete, chartQuery.data?.meta.requested_start, chartQuery.isFetching, historyLoading, historyStartOverride])
   const analysisRowsAtReplay = useMemo(() => {
     const replayEnd = rows.at(-1)?.date
     return replayEnd ? analysisRows.filter(row => row.date <= replayEnd) : analysisRows
@@ -507,8 +582,13 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
       : { value: item.start!.price, endValue: item.end!.price, start: item.start!.date, end: item.end!.date, label: '趋势线', color: '#38bdf8' })
   const textMarkers: ChartMarker[] = drawings.filter(item => item.kind === 'text' && item.start).map(item => ({ date: item.start!.date, kind: 'neutral', label: item.text, above: true, color: '#38bdf8' }))
   const enabledIndicators = activeIndicatorKeys.filter(key => !collapsedIndicatorKeys.includes(key))
-  const defaultVisibleBars = ({ '1m': 240, '5m': 240, '15m': 200, '30m': 180, '60m': 160, '1d': 250, '1w': 156, '1mo': 120 } as const)[layout.interval]
-  const visibleBars = ['3y', '5y', 'all', 'custom'].includes(layout.range) ? Math.max(allRows.length, 1) : defaultVisibleBars
+  const selectedRangeRows = nominalStart
+    ? allRows.filter(row => row.date.slice(0, 10) >= nominalStart).length
+    : allRows.length
+  // The API can preload older candles, but the viewport still represents the
+  // range selected in the toolbar. The hidden left buffer is revealed by drag.
+  const visibleBars = Math.max(selectedRangeRows, 1)
+  const canLoadOlder = layout.range !== 'all' && replayIndex == null && !historyExhausted
   const chartHeight = Math.max(height, 340 + enabledIndicators.filter(key => PANE_REGISTRY.some(item => item.key === key)).length * 95)
 
   const updateLayout = (change: Partial<StockChartLayout>) => setLayout(current => ({ ...current, ...change }))
@@ -651,7 +731,8 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
 
       {drawings.length > 0 && <div className="flex flex-wrap items-center gap-1 border-b border-border/40 px-3 py-1.5 text-[10px] text-muted"><span>画线：</span>{drawings.map((item, index) => <span key={item.id} className="inline-flex items-center gap-1 rounded border border-border/70 px-1.5 py-0.5"><span>{index + 1}.{item.kind === 'horizontal' ? '水平线' : item.kind === 'trend' ? '趋势线' : item.text || '文字'}</span><button type="button" aria-label={`删除画线 ${index + 1}`} onClick={() => commitDrawings(drawings.filter(drawing => drawing.id !== item.id))} className="hover:text-danger"><X className="h-2.5 w-2.5" /></button></span>)}<button type="button" onClick={() => commitDrawings([])} className="ml-1 inline-flex items-center gap-1 hover:text-danger"><Trash2 className="h-3 w-3" />全部清除</button></div>}
 
-      {rows.length === 0 ? <div className="grid min-h-[480px] place-items-center text-sm text-muted">当前组合没有可用 K 线；请补齐数据或缩短范围。</div> : <EChartsCandlestick data={rows} analysisData={analysisRowsAtReplay} symbol={symbol} height={chartHeight} visibleBars={visibleBars} activeIndicators={enabledIndicators} paneHeights={paneHeights} indicatorStyles={indicatorStyles} markers={[...textMarkers, ...annotationVisuals.markers]} ranges={annotationVisuals.ranges} priceLines={[...(keyLevelsVisible ? levelLines(levels, activeLevelTypes) : []), ...userLines, ...annotationVisuals.lines]} chanlunData={chanlun} chanlunConfig={chanlunConfig} chanlunOfficial={officialResult.layer} onMarkerClick={evidenceId => setSelectedEvidence(annotationVisuals.evidence.get(evidenceId) ?? null)} onVisibleBarsChange={setVisibleAnnotationBars} onChartPointClick={onChartPoint} onPriceDoubleClick={(price) => commitDrawings([...drawings, { id: crypto.randomUUID(), kind: 'horizontal', price, adjustment: layout.adjustment, interval: layout.interval }])} testId="unified-stock-chart-instance" />}
+      {(historyLoading || historyNotice) && <div className="flex items-center gap-1.5 border-b border-border/40 px-3 py-1 text-[10px] text-muted" data-testid="chart-history-load-status">{historyLoading && <Loader2 className="h-3 w-3 animate-spin" />}<span>{historyLoading ? '正在加载更早 K 线…' : historyNotice}</span></div>}
+      {rows.length === 0 ? <div className="grid min-h-[480px] place-items-center text-sm text-muted">当前组合没有可用 K 线；请补齐数据或缩短范围。</div> : <EChartsCandlestick data={rows} analysisData={analysisRowsAtReplay} symbol={symbol} height={chartHeight} visibleBars={visibleBars} activeIndicators={enabledIndicators} paneHeights={paneHeights} indicatorStyles={indicatorStyles} markers={[...textMarkers, ...annotationVisuals.markers]} ranges={annotationVisuals.ranges} priceLines={[...(keyLevelsVisible ? levelLines(levels, activeLevelTypes) : []), ...userLines, ...annotationVisuals.lines]} chanlunData={chanlun} chanlunConfig={chanlunConfig} chanlunOfficial={officialResult.layer} onMarkerClick={evidenceId => setSelectedEvidence(annotationVisuals.evidence.get(evidenceId) ?? null)} onVisibleBarsChange={setVisibleAnnotationBars} onRequestOlder={requestOlderHistory} canLoadOlder={canLoadOlder} loadingOlder={historyLoading} onChartPointClick={onChartPoint} onPriceDoubleClick={(price) => commitDrawings([...drawings, { id: crypto.randomUUID(), kind: 'horizontal', price, adjustment: layout.adjustment, interval: layout.interval }])} testId="unified-stock-chart-instance" />}
 
       {replayIndex != null && allRows.length > 0 && <div className="sticky bottom-0 z-20 flex items-center gap-3 border-t border-border bg-surface/95 px-3 py-2"><Play className="h-3.5 w-3.5 text-amber-300" /><input aria-label="逐根回放" type="range" min="9" max={allRows.length - 1} value={replayIndex} onChange={event => setReplayIndex(Number(event.target.value))} className="flex-1" /><span className="w-28 font-mono text-[10px] text-muted">{allRows[replayIndex]?.date}</span><button type="button" onClick={() => setReplayIndex(index => Math.min(allRows.length - 1, (index ?? 0) + 1))} className="tool-btn">下一根</button><button type="button" onClick={() => setReplayIndex(null)} className="tool-btn">退出</button></div>}
 

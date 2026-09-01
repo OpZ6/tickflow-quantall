@@ -1,7 +1,8 @@
 """Free daily-index fallback used by the shared post-market pipeline."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
+import time
 from typing import Any, Protocol
 
 import httpx
@@ -133,3 +134,68 @@ def fetch_index_daily(
     return frame.filter(
         (pl.col("date") >= start) & (pl.col("date") <= end)
     ).sort(["symbol", "date"])
+
+
+def fetch_index_realtime(
+    symbols: list[str],
+    *,
+    as_of: date | None = None,
+    client: _Client | None = None,
+    fetched_ms: int | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch the latest live daily candle for core indices.
+
+    Tencent's daily endpoint includes the in-progress trading-day candle.  The
+    latest two rows provide the live price and previous close without inventing
+    a percentage unit.  Stale/holiday rows are rejected so callers can fall
+    back to their explicit historical source instead of labelling stale data as
+    realtime.
+    """
+    target = as_of or date.today()
+    timestamp = fetched_ms if fetched_ms is not None else int(time.time() * 1000)
+    owned_client = None
+    active_client = client
+    if active_client is None:
+        owned_client = httpx.Client(timeout=15.0, trust_env=False)
+        active_client = owned_client
+    out: list[dict[str, Any]] = []
+    try:
+        for symbol in dict.fromkeys(symbols):
+            try:
+                frame = fetch_index_daily(
+                    symbol,
+                    target - timedelta(days=14),
+                    target,
+                    client=active_client,
+                )
+            except (TencentIndexProviderError, ValueError):
+                continue
+            if frame.height < 2:
+                continue
+            previous, latest = frame.tail(2).to_dicts()
+            if latest.get("date") != target:
+                continue
+            last_price = float(latest["close"])
+            prev_close = float(previous["close"])
+            change_amount = last_price - prev_close
+            out.append({
+                "symbol": symbol,
+                "name": None,
+                "last_price": last_price,
+                "prev_close": prev_close,
+                "open": float(latest["open"]),
+                "high": float(latest["high"]),
+                "low": float(latest["low"]),
+                "volume": float(latest["volume"]) if latest.get("volume") is not None else None,
+                "amount": None,
+                "change_pct": change_amount / prev_close if prev_close else None,
+                "change_amount": change_amount,
+                "amplitude": None,
+                "turnover_rate": None,
+                "timestamp": timestamp,
+                "session": None,
+            })
+    finally:
+        if owned_client is not None:
+            owned_client.close()
+    return out

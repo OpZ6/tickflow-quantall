@@ -792,6 +792,10 @@ interface Props {
   onMarkerClick?: (evidenceId: string) => void
   /** 当前缩放窗口内的 K 线根数发生变化。 */
   onVisibleBarsChange?: (count: number) => void
+  /** 用户把可见窗口拖到左边界时，请求更早的历史。 */
+  onRequestOlder?: (oldestVisibleDate: string) => void
+  canLoadOlder?: boolean
+  loadingOlder?: boolean
   onChartPointClick?: (date: string, price: number) => void
   onPriceDoubleClick?: (price: number, currentPrice: number) => void
   /** 默认可见蜡烛根数, 默认 60 */
@@ -1511,6 +1515,9 @@ export function EChartsCandlestick({
   onDateClick,
   onMarkerClick,
   onVisibleBarsChange,
+  onRequestOlder,
+  canLoadOlder = false,
+  loadingOlder = false,
   onChartPointClick,
   onPriceDoubleClick,
   visibleBars = 60,
@@ -1535,6 +1542,12 @@ export function EChartsCandlestick({
   onMarkerClickRef.current = onMarkerClick
   const onVisibleBarsChangeRef = useRef(onVisibleBarsChange)
   onVisibleBarsChangeRef.current = onVisibleBarsChange
+  const onRequestOlderRef = useRef(onRequestOlder)
+  onRequestOlderRef.current = onRequestOlder
+  const canLoadOlderRef = useRef(canLoadOlder)
+  canLoadOlderRef.current = canLoadOlder
+  const loadingOlderRef = useRef(loadingOlder)
+  loadingOlderRef.current = loadingOlder
   const onChartPointClickRef = useRef(onChartPointClick)
   onChartPointClickRef.current = onChartPointClick
   const onPriceDoubleClickRef = useRef(onPriceDoubleClick)
@@ -1545,7 +1558,10 @@ export function EChartsCandlestick({
   // --- 全部用 ref，避免高频交互触发 React 重渲染 ---
   const infoIdxRef = useRef<number>(data.length - 1)
   const compactRef = useRef(false)
-  const userZoomRef = useRef<{ start: number; end: number } | null>(null)
+  const userZoomRef = useRef<{ start: number; end: number; startDate?: string; endDate?: string } | null>(null)
+  const dataBoundsRef = useRef<{ first?: string; last?: string }>({})
+  const suppressOlderRequestRef = useRef(false)
+  const requestedOldestRef = useRef<string>()
 
   // 需要在闭包中访问最新值的变量 — 先声明占位，后面赋值
   const activeIndicatorsRef = useRef(activeIndicators)
@@ -1671,12 +1687,20 @@ export function EChartsCandlestick({
   }, [data, stockInfo, showMA, activeIndicators])
   getInfoBarHTMLRef.current = getInfoBarHTML
 
-  // data 变化时重置 infoIdx
+  // 普通上下文切换重置缩放；向序列左侧前插历史时保留日期锚点。
+  const dataFirstDate = data[0]?.date
+  const dataLastDate = data.at(-1)?.date
   useEffect(() => {
+    const previous = dataBoundsRef.current
+    const first = dataFirstDate
+    const last = dataLastDate
+    const prepended = !!previous.first && !!previous.last && previous.last === last && !!first && first < previous.first
     infoIdxRef.current = data.length - 1
     compactRef.current = false
-    userZoomRef.current = null
-  }, [data.length])
+    if (!prepended) userZoomRef.current = null
+    if (first !== previous.first) requestedOldestRef.current = undefined
+    dataBoundsRef.current = { first, last }
+  }, [data.length, dataFirstDate, dataLastDate])
 
   // ===== 初始化 chart (只在 chartHeight 变化时重建) =====
   useEffect(() => {
@@ -1749,12 +1773,29 @@ export function EChartsCandlestick({
       const opt = chart.getOption() as any
       const zoom = opt?.dataZoom?.[0]
       if (!zoom) return
-      userZoomRef.current = { start: zoom.start, end: zoom.end }
-
       const d = dataRef.current
       const total = d.length
+      const startIndex = Math.max(0, Math.min(total - 1, Math.floor(total * zoom.start / 100)))
+      const endIndex = Math.max(startIndex, Math.min(total - 1, Math.ceil(total * zoom.end / 100) - 1))
+      userZoomRef.current = {
+        start: zoom.start,
+        end: zoom.end,
+        startDate: d[startIndex]?.date,
+        endDate: d[endIndex]?.date,
+      }
       const visibleCount = Math.round(total * (zoom.end - zoom.start) / 100)
       onVisibleBarsChangeRef.current?.(visibleCount)
+      if (
+        !suppressOlderRequestRef.current
+        && zoom.start <= 3
+        && canLoadOlderRef.current
+        && !loadingOlderRef.current
+        && d[0]?.date
+        && requestedOldestRef.current !== d[0].date
+      ) {
+        requestedOldestRef.current = d[0].date
+        onRequestOlderRef.current?.(d[0].date)
+      }
       const newCompact = visibleCount > COMPACT_THRESHOLD
       if (newCompact !== compactRef.current) {
         compactRef.current = newCompact
@@ -1872,10 +1913,16 @@ export function EChartsCandlestick({
     // 恢复用户缩放位置
     const zoom = userZoomRef.current
     if (zoom) {
-      chart.dispatchAction({ type: 'dataZoom', start: zoom.start, end: zoom.end })
+      suppressOlderRequestRef.current = true
+      const datesStillPresent = !!zoom.startDate && !!zoom.endDate && dateIndexMap.has(zoom.startDate) && dateIndexMap.has(zoom.endDate)
+      chart.dispatchAction(datesStillPresent
+        ? { type: 'dataZoom', startValue: zoom.startDate, endValue: zoom.endDate }
+        : { type: 'dataZoom', start: zoom.start, end: zoom.end })
     } else {
+      suppressOlderRequestRef.current = true
       chart.dispatchAction({ type: 'dataZoom', start: initialZoom.start, end: initialZoom.end })
     }
+    queueMicrotask(() => { suppressOlderRequestRef.current = false })
 
     // 初始信息栏
     const infoEl = infoBarRef.current
@@ -1943,6 +1990,8 @@ export function EChartsCandlestick({
         data-row-count={data.length}
         data-visible-bars={visibleBars}
         data-initial-zoom-start={initialZoom.start.toFixed(4)}
+        data-can-load-older={canLoadOlder ? 'true' : 'false'}
+        data-loading-older={loadingOlder ? 'true' : 'false'}
         className="w-full"
         style={{ height: chartHeight }}
       />
