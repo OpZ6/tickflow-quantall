@@ -198,6 +198,8 @@ def test_preset_range_does_not_request_history_before_listing() -> None:
 
     assert result["meta"]["requested_start"] == "2024-06-20"
     assert result["meta"]["required_fetch_start"] == "2024-06-20"
+    assert result["meta"]["warmup_complete"] is True
+    assert not any("指标预热数据不足" in warning for warning in result["meta"]["warnings"])
 
 
 def test_chart_response_warms_indicators_before_trimming_and_uses_same_rows_for_levels() -> None:
@@ -369,3 +371,56 @@ def test_single_daily_sync_uses_explicit_range_without_full_market_job(monkeypat
     assert captured["start_date"].date() == date(2023, 9, 1)
     assert captured["end_date"].date() == date(2026, 9, 1)
     assert captured["invalidated"] is True
+
+
+def test_single_daily_sync_skips_covered_prices_but_still_refreshes_adjustment_factors(monkeypatch) -> None:
+    captured = {"daily_calls": 0, "factor_calls": 0}
+
+    class Repo:
+        def resolve_asset_type(self, _symbol):
+            return "stock"
+
+        def get_raw_daily_asset(self, _asset_type, _symbol, start, end):
+            return pl.DataFrame({
+                "symbol": ["605319.SH", "605319.SH"],
+                "date": [start, end],
+                "close": [10.0, 20.0],
+            })
+
+    class Capset:
+        def has(self, _cap):
+            return True
+
+    def fake_daily_sync(*_args, **_kwargs):
+        captured["daily_calls"] += 1
+        return 999
+
+    def fake_factor_sync(symbols, repo, capset, **kwargs):
+        captured.update(
+            factor_calls=captured["factor_calls"] + 1,
+            factor_symbols=symbols,
+            factor_repo=repo,
+            factor_capset=capset,
+            factor_kwargs=kwargs,
+        )
+        return 7, []
+
+    monkeypatch.setattr("app.services.kline_sync.sync_and_persist_daily_batch", fake_daily_sync)
+    monkeypatch.setattr("app.services.kline_sync.sync_adj_factor", fake_factor_sync)
+    monkeypatch.setattr("app.api.data.invalidate_storage_cache", lambda: None)
+    app = FastAPI()
+    app.state.repo = Repo()
+    app.state.capabilities = Capset()
+    app.include_router(kline_router)
+
+    response = TestClient(app).post("/api/kline/sync_daily_single", json={
+        "symbol": "605319.SH", "start_date": "2021-06-07", "end_date": "2026-09-01",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["rows"] == 0
+    assert response.json()["factor_rows"] == 7
+    assert captured["daily_calls"] == 0
+    assert captured["factor_calls"] == 1
+    assert captured["factor_kwargs"]["start_time"].date() == date(2021, 6, 7)
+    assert captured["factor_kwargs"]["end_time"].date() == date(2026, 9, 1)

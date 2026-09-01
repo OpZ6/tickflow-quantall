@@ -350,7 +350,12 @@ def build_chart_response(
             rows = rows.filter(pl.col("date").is_between(start, end))
         time_column = "date"
 
-    warmup_complete = query.range_name == "all" or warmup_bars >= required_warmup_bars
+    at_listing_boundary = listing_date is not None and start == listing_date and fetch_start == listing_date
+    warmup_complete = (
+        query.range_name == "all"
+        or at_listing_boundary
+        or warmup_bars >= required_warmup_bars
+    )
     if not warmup_complete:
         warnings.append(f"指标预热数据不足: 需要至少 {required_warmup_bars} 根, 实际 {warmup_bars} 根; 区间起点部分指标为空")
 

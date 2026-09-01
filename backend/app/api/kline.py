@@ -1004,9 +1004,41 @@ async def sync_daily_single(request: Request):
         raise HTTPException(status_code=422, detail="指数历史请使用指数同步能力")
     start_time = datetime.combine(start, time.min)
     end_time = datetime.combine(end, time.max)
-    rows = kline_sync.sync_and_persist_daily_batch(
-        [symbol], repo, capset, start_date=start_time, end_date=end_time
-    )
+    # A long-range chart commonly already has the recent tail. Re-fetching the
+    # whole range would then rewrite hundreds of existing daily partitions.
+    # Only fill the uncovered prefix/suffix; factors still refresh across the
+    # full requested range below because their coverage is independent.
+    missing_ranges = [(start, end)]
+    get_existing = getattr(repo, "get_raw_daily_asset", None)
+    if callable(get_existing):
+        try:
+            existing = get_existing(asset_type, symbol, start, end)
+            if existing is not None and not existing.is_empty() and "date" in existing.columns:
+                coverage_start = existing["date"].min()
+                coverage_end = existing["date"].max()
+                if isinstance(coverage_start, datetime):
+                    coverage_start = coverage_start.date()
+                if isinstance(coverage_end, datetime):
+                    coverage_end = coverage_end.date()
+                if not isinstance(coverage_start, date):
+                    coverage_start = date.fromisoformat(str(coverage_start)[:10])
+                if not isinstance(coverage_end, date):
+                    coverage_end = date.fromisoformat(str(coverage_end)[:10])
+                missing_ranges = []
+                if coverage_start > start:
+                    missing_ranges.append((start, coverage_start - timedelta(days=1)))
+                if coverage_end < end:
+                    missing_ranges.append((coverage_end + timedelta(days=1), end))
+        except (AttributeError, TypeError, ValueError) as exc:
+            logger.warning("single daily coverage probe failed for %s: %s", symbol, exc)
+
+    rows = 0
+    for missing_start, missing_end in missing_ranges:
+        rows += kline_sync.sync_and_persist_daily_batch(
+            [symbol], repo, capset,
+            start_date=datetime.combine(missing_start, time.min),
+            end_date=datetime.combine(missing_end, time.max),
+        )
     factor_rows = 0
     warning = None
     if capset.has(Cap.ADJ_FACTOR):

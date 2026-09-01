@@ -474,7 +474,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
     onSuccess: result => {
       setHistoryExhausted(false)
       setHistoryNotice('')
-      toast(`日线历史补齐完成：${result.rows} 行${result.warning ? `；${result.warning}` : ''}`, result.warning ? 'error' : 'success')
+      toast(`历史补齐完成：K线 ${result.rows} 行，复权因子 ${result.factor_rows} 条${result.warning ? `；${result.warning}` : ''}`, result.warning ? 'error' : 'success')
       chartQuery.refetch()
     },
     onError: error => toast(error instanceof Error ? error.message : '日线历史补齐失败', 'error'),
@@ -491,7 +491,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
     if (autoBackfillContextsRef.current.has(attemptKey)) return
     autoBackfillContextsRef.current.add(attemptKey)
     setHistoryExhausted(false)
-    setHistoryNotice(`本地历史不足，正在自动补齐 ${currentRangeLabel}数据…`)
+    setHistoryNotice(`本地历史不足，正在自动补齐 ${currentRangeLabel}K线与复权因子…`)
     dailyBackfill.mutate()
   }, [chartQuery.data, chartQuery.isFetching, chartQuery.isPlaceholderData, dailyBackfill.isPending, layout.interval, layout.range, symbol])
   const allRows = (chartQuery.data?.rows ?? []) as OHLC[]

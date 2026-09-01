@@ -19,6 +19,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
@@ -2299,25 +2300,38 @@ class KlineRepository:
             if generation_asset is not None
             else None
         )
+        def write_one(date_df: pl.DataFrame) -> None:
+            dt = date_df["date"][0]
+            ds = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
+            out = base / f"date={ds}" / "part.parquet"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            existing = pl.DataFrame()
+            if out.exists():
+                existing = pl.read_parquet(out)
+                date_df = pl.concat([existing, date_df], how="diagonal_relaxed").unique(
+                    subset=["symbol", "date"], keep="last"
+                )
+            date_df = date_df.sort(["symbol", "date"])
+            if not existing.is_empty() and existing.equals(date_df):
+                return
+            if publication is None:
+                self._atomic_write_parquet(date_df, out)
+            else:
+                publication.write_parquet(date_df, out)
+
+        partitions = df.partition_by("date")
         with self._write_lock:
-            for date_df in df.partition_by("date"):
-                dt = date_df["date"][0]
-                ds = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
-                out = base / f"date={ds}" / "part.parquet"
-                out.parent.mkdir(parents=True, exist_ok=True)
-                existing = pl.DataFrame()
-                if out.exists():
-                    existing = pl.read_parquet(out)
-                    date_df = pl.concat([existing, date_df], how="diagonal_relaxed").unique(
-                        subset=["symbol", "date"], keep="last"
-                    )
-                date_df = date_df.sort(["symbol", "date"])
-                if not existing.is_empty() and existing.equals(date_df):
-                    continue
-                if publication is None:
-                    self._atomic_write_parquet(date_df, out)
-                else:
-                    publication.write_parquet(date_df, out)
+            # Raw single-symbol history backfills touch hundreds of independent
+            # day files. A small bounded pool overlaps parquet read/compress/
+            # replace work without weakening the repository-wide writer lock.
+            # Enriched publication remains sequential because it owns a shared
+            # generation transaction.
+            if publication is None and len(partitions) >= 32:
+                with ThreadPoolExecutor(max_workers=4, thread_name_prefix="daily-partition") as pool:
+                    list(pool.map(write_one, partitions))
+            else:
+                for date_df in partitions:
+                    write_one(date_df)
             if publication is not None:
                 publication.commit()
 

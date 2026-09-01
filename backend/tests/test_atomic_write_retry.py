@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date, datetime
+import threading
+from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 
 import polars as pl
 import pytest
@@ -117,6 +119,32 @@ def test_repository_atomic_write_survives_transient_lock(tmp_path, monkeypatch):
 
     assert out.exists()
     assert state["calls"] == 2
+
+
+def test_parallel_daily_partition_upsert_preserves_existing_symbols(tmp_path):
+    """Large raw backfills may write days concurrently without losing peers."""
+    repo = object.__new__(repository.KlineRepository)
+    repo.store = SimpleNamespace(data_dir=tmp_path)
+    repo._write_lock = threading.Lock()
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(40)]
+    base = tmp_path / "kline_daily"
+    for day in days:
+        target = base / f"date={day.isoformat()}" / "part.parquet"
+        target.parent.mkdir(parents=True)
+        pl.DataFrame({
+            "symbol": ["000001.SZ"], "date": [day], "close": [10.0],
+        }).write_parquet(target)
+
+    incoming = pl.DataFrame({
+        "symbol": ["605319.SH"] * len(days),
+        "date": days,
+        "close": [20.0] * len(days),
+    })
+    repo.append_daily(incoming)
+
+    for day in days:
+        stored = pl.read_parquet(base / f"date={day.isoformat()}" / "part.parquet")
+        assert stored.sort("symbol")["symbol"].to_list() == ["000001.SZ", "605319.SH"]
 
 
 def test_write_minute_partition_survives_reader_race(tmp_path, monkeypatch):
