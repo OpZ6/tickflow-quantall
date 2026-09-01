@@ -1810,11 +1810,21 @@ export function EChartsCandlestick({
       const total = d.length
       const startIndex = Math.max(0, Math.min(total - 1, Math.floor(total * zoom.start / 100)))
       const endIndex = Math.max(startIndex, Math.min(total - 1, Math.ceil(total * zoom.end / 100) - 1))
-      userZoomRef.current = {
-        start: zoom.start,
-        end: zoom.end,
-        startDate: d[startIndex]?.date,
-        endDate: d[endIndex]?.date,
+      const startDate = d[startIndex]?.date
+      const endDate = d[endIndex]?.date
+      if (containerRef.current) {
+        containerRef.current.dataset.zoomStart = String(zoom.start)
+        containerRef.current.dataset.zoomEnd = String(zoom.end)
+        containerRef.current.dataset.zoomStartDate = startDate ?? ''
+        containerRef.current.dataset.zoomEndDate = endDate ?? ''
+      }
+      if (!suppressOlderRequestRef.current) {
+        userZoomRef.current = {
+          start: zoom.start,
+          end: zoom.end,
+          startDate,
+          endDate,
+        }
       }
       const visibleCount = Math.round(total * (zoom.end - zoom.start) / 100)
       onVisibleBarsChangeRef.current?.(visibleCount)
@@ -1941,21 +1951,20 @@ export function EChartsCandlestick({
       indicatorStyles,
     )
 
+    suppressOlderRequestRef.current = true
     chart.setOption(option, true)
 
     // 恢复用户缩放位置
     const zoom = userZoomRef.current
     if (zoom) {
-      suppressOlderRequestRef.current = true
       const datesStillPresent = !!zoom.startDate && !!zoom.endDate && dateIndexMap.has(zoom.startDate) && dateIndexMap.has(zoom.endDate)
       chart.dispatchAction(datesStillPresent
         ? { type: 'dataZoom', startValue: zoom.startDate, endValue: zoom.endDate }
         : { type: 'dataZoom', start: zoom.start, end: zoom.end })
     } else {
-      suppressOlderRequestRef.current = true
       chart.dispatchAction({ type: 'dataZoom', start: initialZoom.start, end: initialZoom.end })
     }
-    queueMicrotask(() => { suppressOlderRequestRef.current = false })
+    requestAnimationFrame(() => { suppressOlderRequestRef.current = false })
 
     // 初始信息栏
     const infoEl = infoBarRef.current
