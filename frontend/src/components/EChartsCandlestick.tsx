@@ -841,6 +841,7 @@ const COMPACT_THRESHOLD = 60
 const INFO_BAR_H = 16
 /** 子图之间的间距 (px) */
 const SUB_GAP_PX = 4
+const HISTORY_NAVIGATOR_SPACE = 30
 
 function buildSubInfoGraphics(
   data: OHLC[],
@@ -1053,7 +1054,7 @@ function buildOption(
   })
   if (activeSubDefs.length > 0) subTotalH += activeSubDefs.length * SUB_GAP_PX
 
-  const candleAvail = Math.max(containerHeight - topPad - candleBottomPad - subTotalH, 100)
+  const candleAvail = Math.max(containerHeight - topPad - candleBottomPad - HISTORY_NAVIGATOR_SPACE - subTotalH, 100)
 
   const grids: any[] = []
   const xAxes: any[] = []
@@ -1465,6 +1466,9 @@ function buildOption(
     backgroundColor: THEME.bg,
     tooltip: {
       trigger: 'axis',
+      // The chart uses its own information bar. Keeping tooltip rendering on
+      // canvas avoids ECharts' detached HTML tooltip race during history prepend.
+      renderMode: 'richText',
       axisPointer: { type: 'cross', crossStyle: { color: CT().crosshair } },
       backgroundColor: 'transparent',
       borderWidth: 0,
@@ -1491,6 +1495,35 @@ function buildOption(
         end: 100,
         moveOnMouseMove: true,
         zoomOnMouseWheel: true,
+      },
+      {
+        type: 'slider',
+        xAxisIndex: xAxisIndices,
+        left,
+        right,
+        bottom: 3,
+        height: 17,
+        start: 0,
+        end: 100,
+        showDataShadow: false,
+        showDetail: true,
+        brushSelect: false,
+        borderColor: CT().border,
+        backgroundColor: 'rgba(15,23,42,0.35)',
+        fillerColor: 'rgba(56,189,248,0.14)',
+        handleStyle: {
+          color: CT().text,
+          borderColor: '#38bdf8',
+        },
+        moveHandleStyle: {
+          color: '#38bdf8',
+          opacity: 0.55,
+        },
+        textStyle: {
+          color: CT().text,
+          fontSize: 9,
+          fontFamily: 'JetBrains Mono, monospace',
+        },
       },
     ],
     series,
@@ -1614,7 +1647,7 @@ export function EChartsCandlestick({
   const mainInfoBarH = showInfoBar ? 40 : 0
   const minCandleH = 120
 
-  const chartHeight = Math.max(height - mainInfoBarH, 8 + minCandleH + 14 + subTotalH)
+  const chartHeight = Math.max(height - mainInfoBarH, 8 + minCandleH + 14 + HISTORY_NAVIGATOR_SPACE + subTotalH)
   chartHeightRef.current = chartHeight
   subTotalHRef.current = subTotalH
 
@@ -1787,7 +1820,7 @@ export function EChartsCandlestick({
       onVisibleBarsChangeRef.current?.(visibleCount)
       if (
         !suppressOlderRequestRef.current
-        && zoom.start <= 3
+        && zoom.start <= 15
         && canLoadOlderRef.current
         && !loadingOlderRef.current
         && d[0]?.date
