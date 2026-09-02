@@ -51,7 +51,7 @@ except ImportError:
     prange = range
 
 _MATRIX_CACHE_VERSION = 1
-_DIRECT_MATRIX_LOADER_VERSION = 4
+_DIRECT_MATRIX_LOADER_VERSION = 5
 _MATRIX_AXIS_INDEX_VERSION = 1
 _ARROW_BATCH_SIZE = 131_072
 _SCORE_ASSET_CHUNK_SIZE = 256
@@ -2203,8 +2203,23 @@ def _limit_lock_matrices(
             if apply_latest_limits and time_id == shape[0] - 1:
                 latest_up = latest_limits["limit_up"]
                 latest_down = latest_limits["limit_down"]
-                use_up = np.isfinite(latest_up) & (latest_up < 10_000.0)
-                use_down = np.isfinite(latest_down) & (latest_down < 10_000.0)
+                # The instrument snapshot can be stamped as current even when its
+                # upstream limit prices still belong to the previous session.
+                # Keep the direct parquet path aligned with compute_limit_signals:
+                # only accept a supplied limit when it matches the rule-derived
+                # value for the latest row.
+                use_up = (
+                    np.isfinite(latest_up)
+                    & (latest_up > 0)
+                    & (latest_up < 10_000.0)
+                    & (np.abs(latest_up - up_price) <= 0.005)
+                )
+                use_down = (
+                    np.isfinite(latest_down)
+                    & (latest_down > 0)
+                    & (latest_down < 10_000.0)
+                    & (np.abs(latest_down - down_price) <= 0.005)
+                )
                 up_price = np.where(use_up, latest_up, up_price)
                 down_price = np.where(use_down, latest_down, down_price)
             up_locked[time_id, valid] = (

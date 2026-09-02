@@ -783,8 +783,14 @@ def compute_limit_signals(
     )
 
     # 生效涨跌停价: 维表日期与行情日期一致时使用权威值, 否则使用理论价。
+    # 部分上游会在盘前返回上一交易日的涨跌停价, 而本地同步仍把维表标成今天。
+    # 因此日期一致还不够: 有昨收时必须同时与交易所规则计算值一致。
     # 旧版维表没有 as_of, 保持仅在最新行情日使用权威值的兼容行为。
     _SENTINEL = 10000.0
+    valid_prev_raw = (
+        pl.col("_prev_raw_close").is_not_null()
+        & (pl.col("_prev_raw_close") > 0)
+    )
     if "_instrument_as_of" in df.columns:
         authoritative_date = (
             pl.col("_instrument_as_of") == pl.col("date").cast(pl.Date, strict=False)
@@ -796,6 +802,13 @@ def compute_limit_signals(
             authoritative_date
             & pl.col("limit_up").is_not_null()
             & (pl.col("limit_up") < _SENTINEL)
+            & (
+                ~valid_prev_raw
+                | (
+                    (pl.col("limit_up") - pl.col("_theoretical_limit_up")).abs()
+                    <= 0.005
+                )
+            )
         ).then(pl.col("limit_up")).otherwise(pl.col("_theoretical_limit_up"))
     else:
         effective_limit_up = pl.col("_theoretical_limit_up")
@@ -804,6 +817,13 @@ def compute_limit_signals(
             authoritative_date
             & pl.col("limit_down").is_not_null()
             & (pl.col("limit_down") < _SENTINEL)
+            & (
+                ~valid_prev_raw
+                | (
+                    (pl.col("limit_down") - pl.col("_theoretical_limit_down")).abs()
+                    <= 0.005
+                )
+            )
         ).then(pl.col("limit_down")).otherwise(pl.col("_theoretical_limit_down"))
     else:
         effective_limit_down = pl.col("_theoretical_limit_down")
@@ -2024,9 +2044,12 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
 
     limit_up_price = polars_limit_price(prev_raw, limit_pct, up=True)
     limit_down_price = polars_limit_price(prev_raw, limit_pct, up=False)
+    valid_prev_raw = prev_raw.is_not_null() & (prev_raw > 0)
 
     # 生效涨跌停价: 维表日期与行情日期一致时优先使用交易所权威值;
-    # 维表过期或价格缺失时回退自算理论价。旧版无 as_of 维表保持兼容。
+    # 维表过期、价格缺失或与实时昨收推导值不一致时回退自算理论价。
+    # 后一个校验防止盘前维表把昨日涨停价带到今天并误报整条连板梯队。
+    # 旧版无 as_of 维表保持兼容, 但同样必须通过价格一致性校验。
     # 哨兵阈值 10000 用于识别 "新股无涨跌停限制" 的占位值 (实际涨停价不可能上万)。
     _SENTINEL = 10000.0
     authoritative_date = (
@@ -2043,6 +2066,10 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
             & pl.col("limit_up").is_not_null()
             & (pl.col("limit_up") > 0)
             & (pl.col("limit_up") < _SENTINEL)
+            & (
+                ~valid_prev_raw
+                | ((pl.col("limit_up") - limit_up_price).abs() <= 0.005)
+            )
         )
         no_price_limit = (
             authoritative_date
@@ -2060,6 +2087,10 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
             & pl.col("limit_down").is_not_null()
             & (pl.col("limit_down") > 0)
             & (pl.col("limit_down") < _SENTINEL)
+            & (
+                ~valid_prev_raw
+                | ((pl.col("limit_down") - limit_down_price).abs() <= 0.005)
+            )
         )
         effective_limit_down = pl.when(
             has_authoritative_down
@@ -2067,7 +2098,6 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
     else:
         effective_limit_down = limit_down_price
 
-    valid_prev_raw = prev_raw.is_not_null() & (prev_raw > 0)
     is_limit_up = (
         pl.when(no_price_limit)
           .then(False)
