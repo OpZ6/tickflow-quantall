@@ -150,7 +150,13 @@ def test_guard_string_datetimes_classified_after_parse():
 # ---------- 路由级: 自定义源契约违规 → 回退 TickFlow ----------
 
 def _setup_custom_provider(monkeypatch, provider: object) -> None:
+    from app.data_providers import routing
+
+    routing.reset_health()
     monkeypatch.setattr(kline_sync.preferences, "get_minute_data_provider", lambda: "mock_src")
+    monkeypatch.setattr(
+        kline_sync.preferences, "get_data_provider_chain", lambda dataset: ["mock_src"],
+    )
     monkeypatch.setattr("app.data_providers.custom.provider_has_dataset", lambda name, ds: True)
     monkeypatch.setattr("app.data_providers.custom.get_provider", lambda name: provider)
 

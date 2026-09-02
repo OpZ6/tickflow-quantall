@@ -18,10 +18,11 @@ from unittest.mock import MagicMock
 import httpx
 import polars as pl
 
+from app.data_providers.custom.config import CustomSourceConfig, DatasetConfig
+from app.data_providers.custom.provider import GenericHTTPProvider
 from app.plugins.stocksdk import provider as sp
 from app.plugins.stocksdk.provider import StockSDKProvider
 from app.services import kline_sync
-
 
 # ---------- 辅助 ----------
 
@@ -59,6 +60,9 @@ def _setup_custom_provider(monkeypatch, provider: object, has_dataset: bool = Tr
         "app.data_providers.custom.get_provider",
         lambda name: provider,
     )
+    from app.data_providers import routing
+    routing.reset_health()
+    monkeypatch.setattr(routing, "_persist_lineage", lambda: None)
 
 
 # ---------- 测试 1: 自定义源成功返回 1 分钟 K ----------
@@ -85,6 +89,36 @@ def test_custom_minute_provider_returns_1m_k(monkeypatch):
     _, kwargs = spy.call_args
     assert kwargs.get("freq") == "1m"
     assert kwargs.get("asset_type") == "stock"
+
+
+def test_minute_provider_chain_fails_over(monkeypatch):
+    first = MagicMock()
+    first.get_minute.side_effect = TimeoutError("down")
+    second = MagicMock()
+    second.get_minute.return_value = _mock_minute_df()
+    monkeypatch.setattr(
+        kline_sync.preferences,
+        "get_data_provider_chain",
+        lambda dataset: ["first", "second"],
+    )
+    monkeypatch.setattr(
+        "app.data_providers.custom.provider_has_dataset", lambda name, ds: True,
+    )
+    monkeypatch.setattr(
+        "app.data_providers.custom.get_provider",
+        lambda name: first if name == "first" else second,
+    )
+    monkeypatch.setattr("app.data_providers.routing._persist_lineage", lambda: None)
+    from app.data_providers import routing
+    routing.reset_health()
+
+    df, fallback = kline_sync._try_custom_minute(
+        ["600519.SH"], None, None, asset_type="stock",
+    )
+
+    assert fallback is False
+    assert df is not None and not df.is_empty()
+    second.get_minute.assert_called_once()
 
 
 # ---------- 测试 2: stock-sdk 收到 freq=1m → bridge job period="1" ----------
@@ -503,9 +537,6 @@ def test_provider_has_dataset_exception_falls_back(monkeypatch):
 
 
 # ---------- 测试 15-17: GenericHTTPProvider opt-in 参数传递 (Issue 3) ----------
-
-from app.data_providers.custom.config import CustomSourceConfig, DatasetConfig
-from app.data_providers.custom.provider import GenericHTTPProvider
 
 
 def _make_minute_config(**extra) -> CustomSourceConfig:

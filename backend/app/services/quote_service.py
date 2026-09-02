@@ -616,24 +616,40 @@ class QuoteService:
         """拉取全市场行情 → 写 daily + 计算 enriched + 更新缓存。"""
         from app.services import preferences
 
-        provider_name = preferences.get_realtime_data_provider()
-        if provider_name != "tickflow":
-            from app.data_providers import custom as custom_sources
-            if custom_sources.provider_has_dataset(provider_name, "realtime"):
-                try:
-                    t0 = time.perf_counter()
-                    now_ts = time.perf_counter()
-                    records = custom_sources.get_provider(provider_name).get_realtime()
-                    records = [{**record, "source": provider_name} for record in records]
-                except Exception as e:  # noqa: BLE001
-                    logger.warning("自定义实时行情拉取失败: %s", e)
-                    return
-                if preferences.get_realtime_pull_index():
-                    index_symbols = preferences.get_realtime_index_symbols() or list(self.CORE_INDEX_SYMBOLS)
-                    records = supplement_realtime_indices(records, index_symbols)
-                self._process_full_market_records(records, t0=t0, now_ts=now_ts)
-                return
-            # 自定义源未配置 realtime → 回退 TickFlow
+        from app.data_providers import custom as custom_sources
+        from app.data_providers import routing
+
+        chain = preferences.get_data_provider_chain("realtime")
+        tickflow_enabled = "tickflow" in chain
+        for provider_name in chain:
+            if provider_name == "tickflow":
+                break
+            if not routing.is_healthy("realtime", provider_name):
+                continue
+            try:
+                if not custom_sources.provider_has_dataset(provider_name, "realtime"):
+                    raise RuntimeError("provider does not declare realtime")
+                t0 = time.perf_counter()
+                now_ts = time.perf_counter()
+                records = custom_sources.get_provider(provider_name).get_realtime()
+                if not records:
+                    raise RuntimeError("empty result")
+            except Exception as exc:  # noqa: BLE001
+                routing.record_failure("realtime", provider_name, str(exc))
+                logger.warning("realtime provider %s failed, trying next source: %s", provider_name, exc)
+                continue
+            routing.record_publication(
+                "realtime", provider_name, rows=len(records), scope="full_market_snapshot",
+            )
+            records = [{**record, "source": provider_name} for record in records]
+            if preferences.get_realtime_pull_index():
+                index_symbols = preferences.get_realtime_index_symbols() or list(self.CORE_INDEX_SYMBOLS)
+                records = supplement_realtime_indices(records, index_symbols)
+            self._process_full_market_records(records, t0=t0, now_ts=now_ts)
+            return
+        if not tickflow_enabled:
+            logger.warning("realtime provider chain exhausted: %s", chain)
+            return
 
         from app.tickflow.client import get_paid_realtime_client
 

@@ -114,9 +114,10 @@ def test_empty_symbols_returns_empty():
 
 
 def test_fetch_daily_selected_routes_to_stocksdk(monkeypatch):
-    from app.data_providers import custom as custom_sources
+    from app.data_providers import custom as custom_sources, routing
     from app.services import kline_sync
 
+    routing.reset_health()
     expected = pl.DataFrame({"symbol": ["600519.SH"], "date": [dt.date(2026, 1, 5)]})
 
     class Provider:
@@ -125,6 +126,9 @@ def test_fetch_daily_selected_routes_to_stocksdk(monkeypatch):
             return expected
 
     monkeypatch.setattr(kline_sync.preferences, "get_daily_data_provider", lambda: "stocksdk")
+    monkeypatch.setattr(
+        kline_sync.preferences, "get_data_provider_chain", lambda dataset: ["stocksdk"],
+    )
     monkeypatch.setattr(custom_sources, "provider_has_dataset", lambda name, dataset: True)
     monkeypatch.setattr(custom_sources, "get_provider", lambda name: Provider())
     result = kline_sync.fetch_daily_selected(["600519.SH"], count=30)
@@ -132,10 +136,14 @@ def test_fetch_daily_selected_routes_to_stocksdk(monkeypatch):
 
 
 def test_fetch_daily_selected_does_not_silently_fallback(monkeypatch):
-    from app.data_providers import custom as custom_sources
+    from app.data_providers import custom as custom_sources, routing
     from app.services import kline_sync
 
+    routing.reset_health()
     monkeypatch.setattr(kline_sync.preferences, "get_daily_data_provider", lambda: "stocksdk")
+    monkeypatch.setattr(
+        kline_sync.preferences, "get_data_provider_chain", lambda dataset: ["stocksdk"],
+    )
     monkeypatch.setattr(custom_sources, "provider_has_dataset", lambda name, dataset: False)
     monkeypatch.setattr(kline_sync, "sync_daily_batch", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("fallback")))
     assert kline_sync.fetch_daily_selected(["600519.SH"], count=30).is_empty()

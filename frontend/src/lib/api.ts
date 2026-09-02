@@ -1568,6 +1568,14 @@ export interface CapabilityRoute {
   current_display: string
   effective: string                                // 当前生效源 (独立路由, current 即生效)
   effective_display: string
+  priority_chain: string[]                         // 主源在前, 后续为自动故障切换顺序
+  health?: Record<string, {
+    healthy: boolean
+    last_success_at?: string | null
+    last_failure_at?: string | null
+    last_error?: string | null
+    cooldown_remaining_s?: number
+  }>
   candidates: CapabilityCandidate[]                // 当前可用候选 (按当前 TickFlow 档位过滤)
   pending: CapabilityCandidate[]                   // 声明了该能力但未就绪的源 (置灰提示)
 }
@@ -1889,6 +1897,10 @@ export interface Preferences {
   depth5_data_provider?: string
   realtime_data_provider?: string
   financial_data_provider?: string
+  provider_chains?: Partial<Record<
+    'daily' | 'adj_factor' | 'minute' | 'depth5' | 'realtime' | 'financial',
+    string[]
+  >>
   data_source_job_timeout_s: number
   data_source_long_job_timeout_s: number
   realtime_pull_stock?: boolean

@@ -169,33 +169,31 @@ def fetch_daily_selected(
     """
     if not symbols:
         return pl.DataFrame()
-    provider_name = preferences.get_daily_data_provider()
-    if provider_name == "tickflow":
-        return sync_daily_batch(
-            symbols,
-            count=count,
-            start_time=start_time,
-            end_time=end_time,
-            on_chunk_done=on_chunk_done,
-        )
-
     from app.data_providers import custom as custom_sources
+    from app.data_providers import routing
 
-    if not custom_sources.provider_has_dataset(provider_name, "daily"):
-        logger.warning("selected provider %s has no daily dataset", provider_name)
-        return pl.DataFrame()
-    provider = custom_sources.get_provider(provider_name)
     end = end_time or datetime.now()
     start = start_time or (end - timedelta(days=count or 365))
-    try:
-        return provider.get_daily(
-            symbols,
-            start_time=start,
-            end_time=end,
-            on_chunk_done=on_chunk_done,
+
+    def fetch(provider_name: str) -> pl.DataFrame:
+        if provider_name == "tickflow":
+            return sync_daily_batch(
+                symbols, count=count, start_time=start_time, end_time=end_time,
+                on_chunk_done=on_chunk_done,
+            )
+        if not custom_sources.provider_has_dataset(provider_name, "daily"):
+            raise RuntimeError("provider does not declare daily")
+        return custom_sources.get_provider(provider_name).get_daily(
+            symbols, start_time=start, end_time=end, on_chunk_done=on_chunk_done,
         )
-    except Exception as exc:
-        logger.warning("selected provider %s daily fetch failed: %s", provider_name, exc)
+
+    try:
+        df, _provider = routing.run_with_failover(
+            "daily", fetch, is_success=lambda _value: True,
+        )
+        return df
+    except routing.ProviderChainExhaustedError as exc:
+        logger.warning("daily provider chain failed: %s", exc)
         return pl.DataFrame()
 
 
@@ -216,58 +214,46 @@ def sync_and_persist_daily_batch(
     if not symbols:
         return 0
 
-    provider_name = preferences.get_daily_data_provider()
-    if provider_name != "tickflow":
-        from app.data_providers import custom as custom_sources
-        if custom_sources.provider_has_dataset(provider_name, "daily"):
-            provider = custom_sources.get_provider(provider_name)
-            end_time = end_date or datetime.now()
-            days = count or 365
-            start_time = start_date or (end_time - timedelta(days=days))
-            df = provider.get_daily(
-                symbols,
-                start_time=start_time,
-                end_time=end_time,
-                on_chunk_done=on_chunk_done,
-            )
-            if df.is_empty():
-                return 0
-            repo.append_daily(df)
-            try:
-                d = repo.store.data_dir.as_posix()
-                repo.db.execute(
-                    f"""CREATE OR REPLACE VIEW kline_daily AS
-                        SELECT * FROM read_parquet('{d}/kline_daily/**/*.parquet', union_by_name=true)"""
-                )
-            except Exception as e:  # noqa: BLE001
-                logger.warning("refresh view failed: %s", e)
-            return df.height
-        # 自定义源未配置 daily → 回退 TickFlow
-
-    if not capset.has(Cap.KLINE_DAILY_BATCH):
-        return 0
-
-    limit = resolve_limit(capset, Cap.KLINE_DAILY_BATCH, default_batch=100)
+    from app.data_providers import custom as custom_sources
+    from app.data_providers import routing
 
     end_time = end_date or datetime.now()
-    start_time = start_date or (end_time - timedelta(days=365))
+    start_time = start_date or (end_time - timedelta(days=count or 365))
 
-    failed_symbols: list[str] = []
-    df = sync_daily_batch(
-        symbols, count=count, batch_size=limit.batch, rpm=limit.rpm,
-        start_time=start_time, end_time=end_time,
-        on_chunk_done=on_chunk_done,
-        failed_out=failed_symbols,
-    )
-
-    if df.is_empty():
-        if failed_symbols:
+    def fetch(provider_name: str) -> pl.DataFrame:
+        if provider_name != "tickflow":
+            if not custom_sources.provider_has_dataset(provider_name, "daily"):
+                raise RuntimeError("provider does not declare daily")
+            return custom_sources.get_provider(provider_name).get_daily(
+                symbols, start_time=start_time, end_time=end_time,
+                on_chunk_done=on_chunk_done,
+            )
+        if not capset.has(Cap.KLINE_DAILY_BATCH):
+            raise RuntimeError("TickFlow daily capability unavailable")
+        limit = resolve_limit(capset, Cap.KLINE_DAILY_BATCH, default_batch=100)
+        failed_symbols: list[str] = []
+        frame = sync_daily_batch(
+            symbols, count=count, batch_size=limit.batch, rpm=limit.rpm,
+            start_time=start_time, end_time=end_time,
+            on_chunk_done=on_chunk_done, failed_out=failed_symbols,
+        )
+        if frame.is_empty() and failed_symbols:
             raise RuntimeError(
                 f"日K同步失败: {len(failed_symbols)}/{len(symbols)} 只标的未获取, 已保留旧数据"
             )
+        return frame
+
+    df, provider_name = routing.run_with_failover(
+        "daily", fetch, is_success=lambda _value: True,
+    )
+    if df.is_empty():
         return 0
 
     repo.append_daily(df)
+    routing.record_publication(
+        "daily", provider_name, rows=df.height,
+        scope=f"{start_time.date()}..{end_time.date()}",
+    )
 
     try:
         d = repo.store.data_dir.as_posix()
@@ -387,35 +373,49 @@ def sync_adj_factor(symbols: list[str], repo: KlineRepository,
     if not symbols:
         return 0, []
 
-    provider_name = preferences.get_adj_factor_provider()
-    if provider_name != "tickflow":
-        from app.data_providers import custom as custom_sources
-        if custom_sources.provider_has_dataset(provider_name, "adj_factor"):
+    from app.data_providers import custom as custom_sources
+    from app.data_providers import routing
+
+    chain = preferences.get_data_provider_chain("adj_factor")
+    tickflow_enabled = "tickflow" in chain
+    for provider_name in chain:
+        if provider_name == "tickflow":
+            break
+        if not routing.is_healthy("adj_factor", provider_name):
+            continue
+        try:
+            if not custom_sources.provider_has_dataset(provider_name, "adj_factor"):
+                raise RuntimeError("provider does not declare adj_factor")
             provider = custom_sources.get_provider(provider_name)
             new_data = provider.get_adj_factors(
-                symbols,
-                start_time=start_time,
-                end_time=end_time,
-                asset_type=asset_type,
-                on_chunk_done=on_chunk_done,
+                symbols, start_time=start_time, end_time=end_time,
+                asset_type=asset_type, on_chunk_done=on_chunk_done,
             )
-            if new_data.is_empty():
-                return 0, []
-            affected = new_data["symbol"].unique().to_list()
-            factor_dir = "adj_factor_etf" if asset_type == "etf" else "adj_factor"
-            out = repo.store.data_dir / factor_dir / "all.parquet"
-            out.parent.mkdir(parents=True, exist_ok=True)
-            if out.exists():
-                existing = pl.read_parquet(out)
-                before = existing.height
-                merged = pl.concat([existing, new_data]).unique(
-                    subset=["symbol", "trade_date"], keep="last",
-                ).sort(["symbol", "trade_date"])
-                _atomic_write_parquet(merged, out)
-                return merged.height - before, affected
-            _atomic_write_parquet(new_data.sort(["symbol", "trade_date"]), out)
-            return new_data.height, affected
-        # 自定义源未配置 adj_factor → 回退 TickFlow
+        except Exception as exc:
+            routing.record_failure("adj_factor", provider_name, str(exc))
+            logger.warning("adj_factor provider %s failed: %s", provider_name, exc)
+            continue
+        if new_data.is_empty():
+            continue
+        affected = new_data["symbol"].unique().to_list()
+        factor_dir = "adj_factor_etf" if asset_type == "etf" else "adj_factor"
+        out = repo.store.data_dir / factor_dir / "all.parquet"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        before = 0
+        if out.exists():
+            existing = pl.read_parquet(out)
+            before = existing.height
+            new_data = pl.concat([existing, new_data]).unique(
+                subset=["symbol", "trade_date"], keep="last",
+            ).sort(["symbol", "trade_date"])
+        _atomic_write_parquet(new_data.sort(["symbol", "trade_date"]), out)
+        routing.record_publication(
+            "adj_factor", provider_name, rows=new_data.height - before,
+            scope=asset_type,
+        )
+        return new_data.height - before, affected
+    if not tickflow_enabled:
+        return 0, []
 
     if not capset.has(Cap.ADJ_FACTOR):
         return 0, []
@@ -719,38 +719,46 @@ def _try_custom_minute(
     实现内部以 2 参 (cur, total) 调用。这里包装一层, provider 调 2 参时补
     默认 seg_label="custom" 转发给上层, 保证进度展示不降级。
     """
-    provider_name = preferences.get_minute_data_provider()
-    provider, fallback, err = _resolve_minute_provider(provider_name)
-    if fallback:
-        if err is not None:
-            logger.warning("custom minute provider %s resolution failed, falling back to TickFlow: %s",
-                           provider_name, err)
-        return (None, True)
+    from app.data_providers import routing
 
-    # 包装 on_chunk_done: provider 调 2 参 → 补 seg_label="custom" → 转发上层 3 参
-    wrapped_cb: Callable[[int, int], None] | None = None
-    if on_chunk_done is not None:
-        def _wrapped_cb(cur: int, total: int) -> None:
-            on_chunk_done(cur, total, "custom")
-        wrapped_cb = _wrapped_cb
+    primary = preferences.get_minute_data_provider()
+    configured_chain = preferences.get_data_provider_chain("minute")
+    provider_chain = list(configured_chain)
+    if primary != "tickflow" and (not provider_chain or provider_chain[0] != primary):
+        provider_chain = [primary, *[name for name in provider_chain if name != primary]]
+    for provider_name in provider_chain:
+        if provider_name == "tickflow":
+            return (None, True)
+        if not routing.is_healthy("minute", provider_name):
+            continue
+        provider, fallback, err = _resolve_minute_provider(provider_name)
+        if fallback:
+            if err is not None:
+                routing.record_failure("minute", provider_name, err)
+                logger.warning("minute provider %s resolution failed: %s", provider_name, err)
+            continue
 
-    try:
-        df = provider.get_minute(
-            symbols, start_time=start_time, end_time=end_time,
-            asset_type=asset_type, freq=freq, on_chunk_done=wrapped_cb,
-        )
-    except Exception as e:
-        logger.warning("custom minute provider %s call failed, falling back to TickFlow: %s",
-                       provider_name, e)
-        return (None, True)
-    try:
-        # 时区契约守卫: 插件/自定义源帧同样收口为北京墙钟 (CONTRIBUTING §3.3)
-        df = _enforce_minute_beijing_wallclock(df, source=provider_name)
-    except Exception as e:
-        logger.warning("custom minute provider %s datetime 契约校验失败, falling back to TickFlow: %s",
-                       provider_name, e)
-        return (None, True)
-    return (df, False)
+        wrapped_cb: Callable[[int, int], None] | None = None
+        if on_chunk_done is not None:
+            def _wrapped_cb(cur: int, total: int) -> None:
+                on_chunk_done(cur, total, "custom")
+            wrapped_cb = _wrapped_cb
+
+        try:
+            df = provider.get_minute(
+                symbols, start_time=start_time, end_time=end_time,
+                asset_type=asset_type, freq=freq, on_chunk_done=wrapped_cb,
+            )
+            df = _enforce_minute_beijing_wallclock(df, source=provider_name)
+        except Exception as exc:
+            routing.record_failure("minute", provider_name, str(exc))
+            logger.warning("minute provider %s failed, trying next source: %s", provider_name, exc)
+            continue
+        if df.is_empty():
+            continue
+        routing.record_success("minute", provider_name)
+        return (df, False)
+    return (None, True)
 
 
 def sync_minute_batch(

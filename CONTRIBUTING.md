@@ -124,7 +124,7 @@
 数据源已经插件化。任何通用功能都必须通过 provider 能力和标准化数据集访问数据，不能把 TickFlow SDK 调用硬编码到策略、监控、回测、API 或前端流程中。
 
 - 使用现有的 `get_provider()`、`provider_has_dataset()` 和 preferences 路由能力。
-- 支持的数据集包括但不限于 `daily`、`adj_factor`、`minute`、`realtime`、`financial`；新增数据集应先定义清晰的输入输出契约。
+- 支持的数据集包括但不限于 `daily`、`adj_factor`、`minute`、`realtime`、`depth5`、`financial`；新增数据集应先定义清晰的输入输出契约。
 - provider 负责把供应商字段、单位、日期和代码格式转换为内部标准格式。
 - 上层服务依赖标准字段和能力声明，不依赖供应商响应结构。
 - 只有明确标注为 TickFlow 专属的功能才可以直接依赖 TickFlow，并且不得影响其他 provider。
@@ -140,7 +140,7 @@
 - 各页面能力门控统一以矩阵的 `usable` 为准（生效源当前能否真正提供该能力），不是 TickFlow 套餐视角；缺能力提示统一引导到数据源配置。
 - 能力层中立：通用界面（侧栏徽章、能力路由卡、各页门控提示）不得出现 TickFlow 档位/订阅词汇；档位信息只在 TickFlow 专属详情卡展示。provider 名称作为路由事实可以出现。
 - 每个能力独立路由，禁止跟随/派生特殊值（`same_as_daily` 已下线）；存量非法偏好值由 preferences getter 回退默认自愈，不做迁移。
-- 边界注记：分时监控由分钟能力兜底（`intraday_monitor_support`），不单设分时能力；`depth5` 已进矩阵但插件数据集白名单暂未开放，当前仅 TickFlow 提供。
+- 边界注记：分时监控由分钟能力兜底（`intraday_monitor_support`），不单设分时能力；`depth5` 已开放 Python 插件声明，返回五档价量快照，但不等同于逐笔成交、逐笔委托或订单队列 L2 数据。
 
 ## 5. 领域专项要求
 

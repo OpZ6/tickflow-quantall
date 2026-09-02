@@ -61,27 +61,40 @@ def _fetch_table(
     latest_only: bool = True,
 ) -> pl.DataFrame:
     """通过当前财务数据源拉取一张标准化财务表。"""
-    is_custom = _financial_is_custom()
-    if not is_custom and not capset.has(Cap.FINANCIAL):
-        logger.info("sync_%s skipped: no FINANCIAL capability", table)
-        return pl.DataFrame()
     if not symbols:
         logger.warning("sync_%s skipped: no symbols", table)
         return pl.DataFrame()
 
-    # 自定义数据源分流
-    if is_custom:
-        from app.services import preferences
-        from app.data_providers import custom as custom_sources
+    from app.data_providers import custom as custom_sources
+    from app.data_providers import routing
+    from app.services import preferences
+
+    chain = preferences.get_data_provider_chain("financial")
+    tickflow_enabled = "tickflow" in chain
+    for provider_name in chain:
+        if provider_name == "tickflow":
+            break
+        if not routing.is_healthy("financial", provider_name):
+            continue
         try:
-            provider = custom_sources.get_provider(preferences.get_financial_provider())
+            if not custom_sources.provider_has_dataset(provider_name, "financial"):
+                raise RuntimeError("provider does not declare financial")
+            provider = custom_sources.get_provider(provider_name)
             df = provider.get_financials(table, symbols, latest_only=latest_only)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("sync_%s custom provider failed: %s", table, e)
-            return pl.DataFrame()
+        except Exception as exc:  # noqa: BLE001
+            routing.record_failure("financial", provider_name, str(exc))
+            logger.warning("sync_%s provider %s failed: %s", table, provider_name, exc)
+            continue
         if df.is_empty() or "symbol" not in df.columns:
-            return pl.DataFrame()
+            continue
+        routing.record_publication(
+            "financial", provider_name, rows=df.height, scope=table,
+        )
         return df
+
+    if not tickflow_enabled or not capset.has(Cap.FINANCIAL):
+        logger.info("sync_%s skipped: provider chain exhausted", table)
+        return pl.DataFrame()
 
     from app.tickflow.client import get_client
     tf = get_client()

@@ -415,6 +415,7 @@ class DataProvidersIn(BaseModel):
     depth5_data_provider: str | None = None
     realtime_data_provider: str | None = None
     financial_data_provider: str | None = None
+    provider_chains: dict[str, list[str]] | None = None
 
 
 class PluginKeyIn(BaseModel):
@@ -503,6 +504,12 @@ def get_preferences() -> dict:
         "depth5_data_provider": preferences.get_depth5_data_provider(),
         "realtime_data_provider": preferences.get_realtime_data_provider(),
         "financial_data_provider": preferences.get_financial_provider(),
+        "provider_chains": {
+            dataset: preferences.get_data_provider_chain(dataset)
+            for dataset in (
+                "daily", "adj_factor", "minute", "depth5", "realtime", "financial"
+            )
+        },
         "data_source_job_timeout_s": preferences.get_data_source_job_timeout_s(),
         "data_source_long_job_timeout_s": preferences.get_data_source_long_job_timeout_s(),
         **preferences.get_realtime_quote_scope(),
@@ -568,10 +575,12 @@ def get_capability_matrix() -> dict:
     TickFlow 当前档位由 tickflow policy 注入 (候选按档位过滤),
     组装逻辑在 data_providers.capabilities, 本层保持薄。
     """
+    from app.data_providers import routing
     from app.data_providers.capabilities import build_capability_matrix
     from app.services import preferences
     from app.tickflow import policy
 
+    datasets = ("daily", "adj_factor", "realtime", "minute", "depth5", "financial")
     return build_capability_matrix(
         {
             "realtime_data_provider": preferences.get_realtime_data_provider(),
@@ -582,6 +591,10 @@ def get_capability_matrix() -> dict:
             "financial_data_provider": preferences.get_financial_provider(),
         },
         tickflow_tier=policy.base_tier_name(),
+        provider_chains={
+            dataset: preferences.get_data_provider_chain(dataset) for dataset in datasets
+        },
+        provider_health={dataset: routing.health_snapshot(dataset) for dataset in datasets},
     )
 
 
@@ -770,8 +783,19 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
     """保存数据源选择。"""
     from app.services import preferences
     updates = req.model_dump(exclude_none=True)
-    if updates:
-        preferences.save(updates)
+    chains = updates.pop("provider_chains", {})
+    for dataset, chain in chains.items():
+        preferences.set_data_provider_chain(dataset, chain)
+    field_to_dataset = {
+        "daily_data_provider": "daily",
+        "adj_factor_provider": "adj_factor",
+        "minute_data_provider": "minute",
+        "depth5_data_provider": "depth5",
+        "realtime_data_provider": "realtime",
+        "financial_data_provider": "financial",
+    }
+    for field, provider in updates.items():
+        preferences.promote_data_provider(field_to_dataset[field], provider)
     # 刷新能力快照: 当前 provider 变化会改变自定义源能力增广结果 (读缓存, 无网络请求)
     request.app.state.capabilities = detect_capabilities()
     scheduler = getattr(request.app.state, "financial_scheduler", None)
@@ -784,6 +808,10 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
         "depth5_data_provider": preferences.get_depth5_data_provider(),
         "realtime_data_provider": preferences.get_realtime_data_provider(),
         "financial_data_provider": preferences.get_financial_provider(),
+        "provider_chains": {
+            dataset: preferences.get_data_provider_chain(dataset)
+            for dataset in field_to_dataset.values()
+        },
     }
 
 

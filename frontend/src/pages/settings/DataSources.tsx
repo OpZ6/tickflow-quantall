@@ -142,6 +142,10 @@ function patchMatrix(
       cap.current_display = displayOfName({ capabilities: caps }, value)
       cap.effective = value
       cap.effective_display = cap.current_display
+      cap.priority_chain = [
+        value,
+        ...(cap.priority_chain ?? []).filter(name => name !== value),
+      ]
     }
   }
   return { ...matrix, capabilities: caps }
@@ -197,6 +201,11 @@ function CapabilityCard({ cap, pendingKey, onSelect }: {
           </>
         )}
       </div>
+      {cap.field != null && cap.priority_chain.length > 1 && (
+        <div className="mt-1 text-[9px] text-muted/60 truncate" title={cap.priority_chain.join(' → ')}>
+          主备：{cap.priority_chain.map(name => displayOfName({ capabilities: [cap] }, name)).join(' → ')}
+        </div>
+      )}
 
       {/* 候选标签: 点谁该能力就由谁提供 */}
       <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-border/50 min-h-[26px] items-center">
@@ -321,7 +330,7 @@ function CapabilityRoutingSection() {
   const anyCustom = list.some(c => c.current !== c.default)
 
   return (
-    <section className="rounded-card border border-border bg-surface p-5">
+    <section id="capability-routing" className="rounded-card border border-border bg-surface p-5">
       <div className="flex items-center justify-between mb-1 gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <Route className="h-4 w-4 text-secondary shrink-0" />
@@ -657,33 +666,6 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
     },
   })
 
-  const switchProvider = useMutation({
-    mutationFn: async (name: string) => {
-      // 一键套用: 该源适配了哪些数据集就接管哪些, 其余回默认
-      if (name === 'tickflow') {
-        return api.updateDataProviders(DEFAULT_ROUTING)
-      }
-      const supported = new Set(
-        allItems.find(s => s.name === name)?.datasets ?? []
-      )
-      const pick = (dataset: string) =>
-        supported.has(dataset) ? name : DEFAULT_ROUTING[`${dataset}_data_provider` as ProviderField] ?? 'tickflow'
-      return api.updateDataProviders({
-        daily_data_provider: pick('daily'),
-        adj_factor_provider: pick('adj_factor'),
-        realtime_data_provider: pick('realtime'),
-        minute_data_provider: pick('minute'),
-        financial_data_provider: pick('financial'),
-      })
-    },
-    onSuccess: (_d, name) => {
-      invalidateSources()
-      const display = allItems.find(s => s.name === name)?.display_name || name
-      toast(`已让「${display}」接管其适配的能力`, 'success')
-    },
-    onError: (e: Error) => toast(`切换失败: ${e.message}`, 'error'),
-  })
-
   const editExisting = useMutation({
     mutationFn: (name: string) => api.dataSource(name),
     onSuccess: (_data, name) => setSelected(name),
@@ -859,11 +841,13 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                     ) : (
                       <>
                         <button
-                          onClick={(e) => { e.stopPropagation(); switchProvider.mutate(item.name) }}
-                          disabled={switchProvider.isPending}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            document.getElementById('capability-routing')?.scrollIntoView({ behavior: 'smooth' })
+                          }}
                           className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
                         >
-                          套用
+                          选择能力
                         </button>
                         {plugin && plugin?.runtime !== 'none' && (
                           uninstalling ? (
@@ -918,7 +902,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
         <div className="mt-3 flex items-center gap-3 text-[10px] text-muted/50 flex-wrap">
           <span>芯片: 高亮=服务中 · 灰=已适配 · <Lock className="inline h-2.5 w-2.5" />=需更高档位</span>
           <span className="text-muted/30">·</span>
-          <span>单击卡片查看介绍与配置, 点「套用」让该源接管其适配的全部能力</span>
+          <span>单击卡片查看介绍；点「选择能力」回到上方逐项配置，不会重置其他能力</span>
         </div>
 
       </section>
@@ -946,7 +930,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                   setSelected('tickflow')
                 }}
                 activeName={activeName}
-                onActivate={(name) => switchProvider.mutate(name)}
+                onActivate={() => document.getElementById('capability-routing')?.scrollIntoView({ behavior: 'smooth' })}
               />
             ) : (
               <DataSourceEditor
@@ -960,7 +944,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                   qc.removeQueries({ queryKey: ['data-source-detail', selected] })
                 }}
                 activeName={activeName}
-                onActivate={(name) => switchProvider.mutate(name)}
+                onActivate={() => document.getElementById('capability-routing')?.scrollIntoView({ behavior: 'smooth' })}
                 onDelete={selectedCustom ? () => setConfirmDelete(selected) : undefined}
               />
             )

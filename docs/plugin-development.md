@@ -28,7 +28,7 @@ display_name: "我的数据源"                 # 设置页显示名
 runtime: none                            # 运行时类型: node | python | none
 entry: app.plugins.my_source.provider:MyProvider   # provider 类的导入路径
 check: app.plugins.my_source.bridge:availability   # 可用性检测函数(可选)
-datasets: [realtime]                     # 支持的数据集: daily/adj_factor/minute/realtime/financial
+datasets: [realtime]                     # daily/adj_factor/minute/realtime/depth5/financial
 api_key_env: MY_SOURCE_API_KEY           # (可选)声明后设置页提供 Key 输入框
 hidden: false                            # (可选)true = 已加载但对设置页隐藏,不注册不展示
 description: "数据源描述"
@@ -152,6 +152,11 @@ class MyProvider:
     def get_realtime(self) -> list[dict]:
         """全市场实时快照 → list[dict]。失败软返回 [], 不抛异常(不阻断轮询线程)。"""
 
+    def get_depth5(self, symbols: list[str]) -> dict[str, dict]:
+        """(声明 depth5 时实现) 返回以标准 symbol 为键的五档快照。
+        每条含 bid_prices/bid_volumes/ask_prices/ask_volumes/timestamp；
+        档位数组按 1→5 排列，volume 单位为股，timestamp 为 epoch 毫秒。"""
+
     def get_financials(self, table, symbols, latest_only=False) -> pl.DataFrame:
         """财务数据(声明 financial 数据集时实现, table 见 financial_sync 调用)。"""
 
@@ -179,11 +184,20 @@ class MyProvider:
 深历史（TickFlow 基准）。浅源（如 stock-sdk 免费分时仅保留最近 5 个交易日）声明后，
 个股分时档位自动收窄为可行选项并默认 5 日，深源默认 20 日。
 
+> **五档盘口 (`depth5`) 数据集契约**：Python 插件在 `plugin.yaml` 的
+> `datasets:` 中声明 `depth5`，并实现
+> `get_depth5(symbols) -> dict[str, dict]`。每条记录包含
+> `bid_prices`、`bid_volumes`、`ask_prices`、`ask_volumes`、`timestamp`；
+> 四个档位数组均从一档到五档排列，成交量单位为股，时间戳为 epoch 毫秒。
+> 单批失败返回空字典并记录 warning，上层不会用陈旧或伪造盘口替代。
+> 该能力是五档 L1 快照，不表示逐笔成交、逐笔委托、撤单或订单队列 L2。
+
 ### 异常语义
 
 | 方法 | 失败行为 |
 | --- | --- |
 | `get_realtime` | **软失败**: 返回 `[]` + warning 日志, 保证轮询线程不中断 |
+| `get_depth5` | **软失败**: 返回 `{}` + warning 日志; 本轮不更新封单缓存 |
 | `get_minute` | 抛异常时调用方自动回退 TickFlow 重试 |
 | `get_daily` / `get_adj_factors` / `get_financials` | 异常由上层同步流程捕获记录; 无数据返回空 DataFrame |
 

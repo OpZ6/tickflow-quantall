@@ -216,6 +216,14 @@ def get_minute_refresh_interval() -> int:
 # ===== 数据源选择 (默认 TickFlow；第一阶段仅日K切换入口) =====
 
 _ALLOWED_DATA_PROVIDERS = {"tickflow"}
+_DATASET_PROVIDER_FIELDS = {
+    "daily": "daily_data_provider",
+    "adj_factor": "adj_factor_provider",
+    "minute": "minute_data_provider",
+    "depth5": "depth5_data_provider",
+    "realtime": "realtime_data_provider",
+    "financial": "financial_data_provider",
+}
 DATA_SOURCE_JOB_TIMEOUT_MIN_S = 60
 
 
@@ -250,6 +258,61 @@ def _allowed_data_providers() -> set[str]:
         return _ALLOWED_DATA_PROVIDERS | custom_sources.names()
     except Exception:  # noqa: BLE001
         return set(_ALLOWED_DATA_PROVIDERS)
+
+
+def _normalize_provider_chain(providers) -> list[str]:
+    if not isinstance(providers, list):
+        return []
+    allowed = _allowed_data_providers()
+    result: list[str] = []
+    for raw in providers:
+        provider = str(raw or "").strip().lower()
+        if provider and provider in allowed and provider not in result:
+            result.append(provider)
+    return result
+
+
+def get_data_provider_chain(dataset: str) -> list[str]:
+    field = _DATASET_PROVIDER_FIELDS.get(dataset)
+    if field is None:
+        return []
+    data = load()
+    configured = _normalize_provider_chain(
+        (data.get("provider_chains") or {}).get(dataset),
+    )
+    getter_name = {
+        "daily": "get_daily_data_provider",
+        "adj_factor": "get_adj_factor_provider",
+        "minute": "get_minute_data_provider",
+        "depth5": "get_depth5_data_provider",
+        "realtime": "get_realtime_data_provider",
+        "financial": "get_financial_provider",
+    }[dataset]
+    getter = globals().get(getter_name)
+    primary = getter() if callable(getter) else "tickflow"
+    return [primary, *[name for name in configured if name != primary]]
+
+
+def set_data_provider_chain(dataset: str, providers: list[str]) -> list[str]:
+    field = _DATASET_PROVIDER_FIELDS.get(dataset)
+    if field is None:
+        raise ValueError(f"unsupported routable dataset: {dataset}")
+    chain = _normalize_provider_chain(providers)
+    if not chain:
+        chain = ["tickflow"]
+    data = load()
+    chains = dict(data.get("provider_chains") or {})
+    chains[dataset] = chain
+    save({"provider_chains": chains, field: chain[0]})
+    return chain
+
+
+def promote_data_provider(dataset: str, provider: str) -> list[str]:
+    name = str(provider or "").strip().lower()
+    if name not in _allowed_data_providers():
+        raise ValueError(f"unknown data provider: {provider}")
+    current = get_data_provider_chain(dataset)
+    return set_data_provider_chain(dataset, [name, *current])
 
 
 def get_daily_data_provider() -> str:

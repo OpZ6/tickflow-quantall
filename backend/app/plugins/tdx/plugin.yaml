@@ -1,0 +1,9 @@
+name: tdx
+display_name: "通达信（免费行情）"
+runtime: python
+entry: app.plugins.tdx.provider:TdxProvider
+check: app.plugins.tdx.provider:availability
+datasets: [realtime, minute, depth5]
+description: "通达信公共行情服务器：A 股实时快照、逐标的 1 分钟 K 和五档盘口。不提供全市场分钟流，也不属于逐笔/L2 委托队列数据。"
+install_hint: "点击安装 eltdx 依赖；可选用 TDX_HOSTS 环境变量配置 host:port 列表。"
+homepage: "https://github.com/electkismet/eltdx"

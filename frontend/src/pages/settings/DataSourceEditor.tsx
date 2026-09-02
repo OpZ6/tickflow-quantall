@@ -194,7 +194,7 @@ export function DataSourceEditor({
               onClick={() => onActivate(config.name.toLowerCase().trim())}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn bg-accent/10 text-accent text-xs font-medium hover:bg-accent/20 transition-colors"
             >
-              <Zap className="h-3.5 w-3.5" /> 切换为当前数据源
+              <Zap className="h-3.5 w-3.5" /> 选择能力
             </button>
           )}
           {!isNew && onDelete && (

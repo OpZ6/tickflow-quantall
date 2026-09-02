@@ -54,7 +54,7 @@
 | 📡 **监控中心**   | 四类监控(策略/个股信号/价格/异动),多条件 AND/OR + 语音播报 + 飞书推送  | [features.md](./docs/features.md) |
 | 📈 **个股分析**   | 统一多周期 K 线 + 20/38 指标 + 11 类价位 + 缠论/形态/画线 + AI 分析   | [stock-chart-workbench.md](./docs/stock-chart-workbench.md) |
 | 🏆 **连板梯队**   | 连板层级统计 + 概念涨幅轮动 + 盘后 AI 复盘(龙虎榜/盘前风向标注入) + 炸板/翘板预警 | [features.md](./docs/features.md) |
-| 🧰 **数据扩展**   | 数据源插件化(TickFlow/fuyao/stock-sdk + YAML 自定义源),扩展字段配成一级页面同台分析 | [custom-data-source.md](./docs/custom-data-source.md) |
+| 🧰 **数据扩展**   | 数据源插件化(TickFlow/TDX/fuyao/stock-sdk + YAML 自定义源),扩展字段配成一级页面同台分析 | [custom-data-source.md](./docs/custom-data-source.md) |
 
 <details>
 <summary><b>📦 主要页面与功能</b></summary>
@@ -152,7 +152,7 @@
 flowchart TB
     subgraph DATA["数据源层 · 插件化"]
         direction LR
-        D1["TickFlow SDK"] ~~~ D2["fuyao<br/>同花顺 REST"] ~~~ D3["stock-sdk"] ~~~ D4["YAML 自定义源"] ~~~ D5["+ 更多插件…"]
+        D1["TickFlow SDK"] ~~~ D2["TDX<br/>eltdx"] ~~~ D3["fuyao<br/>同花顺 REST"] ~~~ D4["stock-sdk"] ~~~ D5["YAML 自定义源"]
     end
 
     subgraph ROUTE["能力路由层"]
@@ -246,7 +246,7 @@ flowchart TB
 | **后端**     | FastAPI · Pydantic v2 · APScheduler · sse-starlette                                               |
 | **数据**     | Polars(计算)· DuckDB(查询)· Parquet(存储)                                                         |
 | **回测**     | 自研仓位模拟引擎(T+1/费用/滑点/分钟回放)· vectorbt(部分路径)                                       |
-| **数据源**   | [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 官方 SDK · fuyao(同花顺 REST) · 插件化扩展(stock-sdk 示例插件 · YAML 自定义源) |
+| **数据源**   | [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 官方 SDK · TDX(eltdx,分钟/实时/五档) · fuyao(同花顺 REST) · 插件化扩展(stock-sdk · YAML 自定义源) |
 | **AI**(可选) | OpenAI 兼容接口(DeepSeek / 通义 / Ollama 等)                                                      |
 | **前端**     | React 18 · Vite · TypeScript · Tailwind · Tanstack Query · [Lightweight Charts](https://www.tradingview.com/lightweight-charts/)(TradingView 开源) · ECharts · dnd-kit |
 | **部署**     | Docker 两阶段构建,前端 dist 拷进后端镜像,**单容器**                                               |
@@ -400,6 +400,8 @@ fork同时请点个star哦,欢迎 Issue 和 PR。
 内置数据源插件 [fuyao](https://fuyao.aicubes.cn/docs/api-reference/) 提供同花顺 REST 数据接口(行情 / 财务 / 龙虎榜 / 盘前风向标 / 交易日历等),需自备 API Key,使用前请遵守其服务条款
 
 数据源插件 [stock-sdk](https://stock-sdk.linkdiary.cn) 遵循其各自的 ISC 协议。
+
+TDX 插件使用 MIT 许可的 [eltdx](https://github.com/electkismet/eltdx) 连接公共行情服务器。公共服务器的可用性、数据许可与使用限制由部署者自行确认；五档仅为 L1 快照，不代表逐笔或委托队列 L2 数据。
 
 ## 社区
 

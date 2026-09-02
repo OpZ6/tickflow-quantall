@@ -3,8 +3,7 @@
 能力 (capability) = 一个标准化数据集 (CONTRIBUTING「数据源插件化要求」):
 daily / adj_factor / realtime / minute / depth5 / financial (注册表顺序即设置页卡片顺序)。注册表集中声明每个
 能力的展示元数据、路由偏好字段与 TickFlow 档位要求, 前端设置页不再各自硬编码。
-depth5 目前仅 TickFlow 供 (插件数据集白名单未开放, 见 loader), 仍进矩阵是为了
-可用性门控诚实: 五档不可用时连板梯队封单/看板封单缺数据应有提示。
+depth5 可由 TickFlow 或声明标准五档契约的内置插件提供。
 
 build_capability_matrix 把注册表、插件/自定义源的能力声明 (datasets) 和当前
 路由偏好合并为一个矩阵, 供设置页一次拉全。当前偏好由 API 层注入
@@ -67,7 +66,6 @@ CAPABILITY_REGISTRY: list[dict] = [
         "field": "depth5_data_provider",
         "default": "tickflow",
         "tf_tier": "pro",
-        # 插件契约暂未开放 depth5 数据集 (loader 白名单), 当前仅 TickFlow 供
     },
     {
         "id": "financial",
@@ -144,7 +142,12 @@ def _display_of(sources: list[dict], name: str) -> str:
     return name
 
 
-def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none") -> dict:
+def build_capability_matrix(
+    current: dict[str, str],
+    tickflow_tier: str = "none",
+    provider_chains: dict[str, list[str]] | None = None,
+    provider_health: dict[str, dict] | None = None,
+) -> dict:
     """注册表 + 源能力声明 + 当前偏好 → 能力路由矩阵。
 
     current 为 {偏好字段: 当前值}, 由 API 层经 preferences getters 注入;
@@ -161,7 +164,10 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
     sources = _declared_sources()
 
     capabilities = []
+    chains = provider_chains or {}
+    health_by_dataset = provider_health or {}
     for cap in CAPABILITY_REGISTRY:
+        health = health_by_dataset.get(cap["id"], {})
         # field=None → 不可路由能力 (仅 TickFlow 提供, 无路由偏好), 生效源恒为默认
         effective = current.get(cap["field"], cap["default"]) if cap["field"] else cap["default"]
         tf_available = tier_rank >= _TIER_RANK[cap["tf_tier"]]
@@ -181,7 +187,23 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
                 "note": None if s["available"] else (s["status"] or "不可用"),
             }
             (candidates if s["available"] else pending).append(entry)
-        usable = any(c["name"] == effective for c in candidates)
+        available_names = {c["name"] for c in candidates}
+        if cap["field"]:
+            priority_chain = list(dict.fromkeys(
+                chains.get(cap["id"]) or [effective],
+            ))
+            if effective not in priority_chain:
+                priority_chain.insert(0, effective)
+            effective = next(
+                (
+                    name for name in priority_chain
+                    if name in available_names and health.get(name, {}).get("healthy", True)
+                ),
+                priority_chain[0],
+            )
+        else:
+            priority_chain = [cap["default"]]
+        usable = effective in available_names
         capabilities.append({
             "id": cap["id"],
             "label": cap["label"],
@@ -191,10 +213,12 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
             "tf_tier": cap["tf_tier"],
             "tf_available": tf_available,
             "usable": usable,
-            "current": effective,
-            "current_display": _display_of(sources, effective),
+            "current": priority_chain[0],
+            "current_display": _display_of(sources, priority_chain[0]),
             "effective": effective,
             "effective_display": _display_of(sources, effective),
+            "priority_chain": priority_chain,
+            "health": health,
             "candidates": candidates,
             "pending": pending,
         })

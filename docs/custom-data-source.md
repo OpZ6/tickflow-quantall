@@ -14,7 +14,9 @@
 | 分钟K | `minute` | 返回 1m 分钟K(需映射出 symbol / datetime / OHLC / 量额) |
 | 财务数据 | `financial` | 一个配置覆盖全部财务表,请求时把表名作为参数传给上游;字段由数据源决定,仅需映射出 symbol |
 
-深度盘口(depth5)暂无数据集契约,仍由 TickFlow 提供。
+声明式 HTTP/YAML 源暂不支持深度盘口。Python 插件可声明 `depth5` 并实现
+`get_depth5`,内置 TDX 插件即按此契约接入；详见
+[plugin-development.md](./plugin-development.md)。
 
 ## 配置位置
 

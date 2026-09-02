@@ -202,11 +202,7 @@ def test_adj_factor_routes_independently(monkeypatch):
 
 
 def test_depth5_capability_semantics(monkeypatch):
-    """五档: pro+ 档 TickFlow 可供 (usable); 档位不足时不可用且无候选。
-
-    插件数据集白名单未开放 depth5, 假插件即使声明其他数据集也不进五档候选;
-    未来契约开放后声明 depth5 的源会自然成为候选 (candidates 按 datasets 过滤)。
-    """
+    """五档可由 TickFlow Pro+ 或声明 depth5 的插件独立提供。"""
     _fake_sources(
         monkeypatch,
         [{"name": "fuyao", "display_name": "fuyao", "datasets": ["realtime"],
@@ -222,6 +218,17 @@ def test_depth5_capability_semantics(monkeypatch):
     assert cap["tf_available"] is False
     assert cap["candidates"] == []
     assert cap["usable"] is False
+
+    _fake_sources(
+        monkeypatch,
+        [{"name": "tdx", "display_name": "通达信", "datasets": ["depth5"],
+          "available": True, "status": "ok"}],
+    )
+    cap = _by_id(build_capability_matrix(
+        dict(DEFAULT_CURRENT, depth5_data_provider="tdx"), tickflow_tier="none",
+    ))["depth5"]
+    assert [candidate["name"] for candidate in cap["candidates"]] == ["tdx"]
+    assert cap["usable"] is True
 
 
 def test_unknown_current_display_falls_back_to_name(monkeypatch):
@@ -254,3 +261,39 @@ def test_full_minute_row_is_non_routable_expert_only(monkeypatch):
     assert fm_pro["candidates"] == []
     assert fm_pro["usable"] is False
     assert fm_pro["tf_available"] is False
+
+
+def test_matrix_uses_first_available_provider_in_priority_chain(monkeypatch):
+    _fake_sources(
+        monkeypatch,
+        [
+            {"name": "fuyao", "display_name": "fuyao", "datasets": ["realtime"],
+             "available": False, "status": "quota limited"},
+            {"name": "tdx", "display_name": "TDX", "datasets": ["realtime"],
+             "available": True, "status": "ok"},
+        ],
+    )
+    matrix = build_capability_matrix(
+        dict(DEFAULT_CURRENT, realtime_data_provider="fuyao"),
+        tickflow_tier="free",
+        provider_chains={"realtime": ["fuyao", "tdx", "tickflow"]},
+    )
+    realtime = _by_id(matrix)["realtime"]
+    assert realtime["priority_chain"] == ["fuyao", "tdx", "tickflow"]
+    assert realtime["current"] == "fuyao"
+    assert realtime["effective"] == "tdx"
+    assert realtime["usable"] is True
+
+
+def test_full_minute_never_accepts_a_provider_chain(monkeypatch):
+    _fake_sources(
+        monkeypatch,
+        [{"name": "tdx", "display_name": "TDX", "datasets": ["minute"],
+          "available": True, "status": "ok"}],
+    )
+    full_minute = _by_id(build_capability_matrix(
+        dict(DEFAULT_CURRENT), tickflow_tier="free",
+        provider_chains={"full_minute": ["tdx"]},
+    ))["full_minute"]
+    assert full_minute["priority_chain"] == ["tickflow"]
+    assert full_minute["usable"] is False
