@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import date
+from datetime import date, timedelta
 
 import polars as pl
 import pytest
@@ -144,6 +144,39 @@ def test_aggregate_daily_ma20_above():
 
 def test_aggregate_empty_returns_empty():
     assert regime_builder._aggregate_daily(pl.DataFrame()).is_empty()
+
+
+def test_aggregate_daily_infers_late_promotion_rate(monkeypatch):
+    """A float after 100 null promotion rates must not fail frame construction."""
+    from app.services import market_phase
+
+    start = date(2026, 1, 1)
+    days = [start + timedelta(days=offset) for offset in range(101)]
+
+    def late_promotion_rate(row):
+        return {
+            "first_board": 0,
+            "ge2_count": 0,
+            "ge3_count": 0,
+            "ge5_count": 0,
+            "ladder_completeness": 0.0,
+            "promo_pool": 0,
+            "promo_rate": 0.1818 if row["date"] == days[-1] else None,
+        }
+
+    monkeypatch.setattr(market_phase, "finalize_ladder_row", late_promotion_rate)
+    result = regime_builder._aggregate_daily(
+        pl.DataFrame(
+            {
+                "date": days,
+                "symbol": ["000001.SZ"] * len(days),
+                "change_pct": [0.0] * len(days),
+            }
+        )
+    )
+
+    assert result["promo_rate"].dtype == pl.Float64
+    assert result.sort("date")["promo_rate"][-1] == 0.1818
 
 
 def test_run_regime_batch_excludes_st(tmp_path, monkeypatch):

@@ -313,7 +313,17 @@ def _aggregate_daily(df: pl.DataFrame, index_pct_map: dict | None = None) -> pl.
             # 梯队指标(阶段判定所需); phase 由 refresh_phase_labels 统一重标
             **finalize_ladder_row(r),
         })
-    return pl.DataFrame(rows) if rows else pl.DataFrame()
+    if not rows:
+        return pl.DataFrame()
+    # Long histories can have more than 100 days without an eligible promotion
+    # pool.  Polars' default 100-row inference then fixes promo_rate as Null and
+    # rejects the first later float.  Scan the complete, day-level result and
+    # keep the optional rate on a stable numeric dtype.
+    return pl.DataFrame(
+        rows,
+        schema_overrides={"promo_rate": pl.Float64},
+        infer_schema_length=None,
+    )
 
 
 # 全量回填分批参数(控制内存峰值) —— 实际值从用户偏好读取(preferences.get_regime_*),
