@@ -20,6 +20,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/kline", tags=["kline"])
 
 
+def _canonical_chart_symbol(repo, symbol: str) -> str:
+    """Resolve a bare A-share code before querying chart storage."""
+    normalized = symbol.strip().upper()
+    if "." in normalized or not normalized.isdigit() or len(normalized) != 6:
+        return normalized
+    candidates = [f"{normalized}.SH", f"{normalized}.SZ", f"{normalized}.BJ"]
+    matches = list(repo.get_name_map(candidates))
+    if len(matches) == 1:
+        return matches[0]
+    if normalized.startswith(("4", "8", "92")):
+        preferred = f"{normalized}.BJ"
+    elif normalized.startswith(("5", "6", "9")):
+        preferred = f"{normalized}.SH"
+    else:
+        preferred = f"{normalized}.SZ"
+    return preferred if not matches or preferred in matches else matches[0]
+
+
 @router.get("/chart")
 def get_chart_data(
     request: Request,
@@ -41,6 +59,7 @@ def get_chart_data(
     from app.services.chart_data import ChartQuery, build_chart_response
 
     repo = request.app.state.repo
+    symbol = _canonical_chart_symbol(repo, symbol)
     resolved_asset_type = asset_type or repo.resolve_asset_type(symbol)
     if asset_type is not None and asset_type != repo.resolve_asset_type(symbol):
         raise HTTPException(status_code=422, detail="asset_type 与本地标的类型不一致")

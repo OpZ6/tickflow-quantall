@@ -10,7 +10,7 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import polars as pl
 
@@ -269,9 +269,13 @@ class TushareProvider:
         for i, chunk in enumerate(chunks):
             try:
                 pro = _get_pro()
+                # Tushare exposes a cumulative adjustment factor.  Include a
+                # baseline before the requested range so it can be converted
+                # into the event ratio used by Tickflow's internal contract.
+                fetch_start = start_time - timedelta(days=30) if start_time else None
                 raw = pro.adj_factor(
                     ts_code=",".join(chunk),
-                    start_date=_yyyymmdd(start_time),
+                    start_date=_yyyymmdd(fetch_start),
                     end_date=_yyyymmdd(end_time),
                 )
             except Exception as e:
@@ -279,6 +283,10 @@ class TushareProvider:
                 raw = None
             raw = _prep_dates(raw)
             df = self._normalize_adj(raw)
+            if start_time and not df.is_empty():
+                df = df.filter(pl.col("trade_date") >= start_time.date())
+            if end_time and not df.is_empty():
+                df = df.filter(pl.col("trade_date") <= end_time.date())
             if not df.is_empty():
                 frames.append(df)
             if on_chunk_done:
@@ -312,7 +320,20 @@ class TushareProvider:
             rename_map["adj_factor"] = "ex_factor"
         if rename_map:
             df = df.rename(rename_map)
-        return normalize_adj_factors(df, source="tushare")
+        cumulative = normalize_adj_factors(df, source="tushare")
+        if cumulative.is_empty():
+            return cumulative
+        return (
+            cumulative.sort(["symbol", "trade_date"])
+            .with_columns(
+                (
+                    pl.col("ex_factor")
+                    / pl.col("ex_factor").shift(1).over("symbol")
+                ).alias("ex_factor")
+            )
+            .drop_nulls("ex_factor")
+            .filter((pl.col("ex_factor") - 1.0).abs() > 1e-10)
+        )
 
     # ---- instruments (标的维表) ----
     def get_instruments(self, asset_type: str = "stock") -> list[dict]:

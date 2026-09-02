@@ -1048,6 +1048,31 @@ def compute_enriched(
     return df
 
 
+def _restore_raw_daily_history(enriched: pl.DataFrame) -> pl.DataFrame:
+    """Restore raw OHLC before recomputing an already-enriched history window.
+
+    Forward-incremental builds prepend stored qfq rows to newly downloaded raw
+    rows.  Feeding those stored rows directly into ``compute_enriched`` applies
+    the adjustment factor a second time and creates a price-basis break at the
+    first new partition.  The storage schema keeps raw close/high/low; raw open
+    is recovered from the row's close adjustment ratio.
+    """
+    required = {"open", "high", "low", "close", "raw_close", "raw_high", "raw_low"}
+    if enriched.is_empty() or not required.issubset(enriched.columns):
+        return enriched
+    ratio = (
+        pl.when(pl.col("close").is_not_null() & (pl.col("close") != 0))
+        .then(pl.col("raw_close") / pl.col("close"))
+        .otherwise(1.0)
+    )
+    return enriched.with_columns(
+        (pl.col("open") * ratio).alias("open"),
+        pl.col("raw_high").alias("high"),
+        pl.col("raw_low").alias("low"),
+        pl.col("raw_close").alias("close"),
+    )
+
+
 def _select_storage_cols(df: pl.DataFrame) -> pl.DataFrame:
     """写入 parquet 前裁剪到存储列 (14 列)。"""
     cols = [c for c in ENRICHED_STORAGE_COLS if c in df.columns]
@@ -1297,6 +1322,35 @@ def attach_deviation_columns_today(
     )
 
 
+def repair_today_deviation_columns(
+    df: pl.DataFrame,
+    data_dir: Path,
+) -> pl.DataFrame:
+    """Fill today's null deviation columns when index daily lags by one session.
+
+    A realtime stock snapshot may publish today's enriched partition before the
+    scheduled index-daily pipeline runs. The cold full-history join then has no
+    same-date benchmark row. Reuse the intraday benchmark extrapolation with a
+    flat index quote so the page remains usable until the index partition lands.
+    Historical dates and already-computed deviation values are left untouched.
+    """
+    if df.is_empty() or "date" not in df.columns or df["date"].max() != cn_today():
+        return df
+    dev_cols = [f"deviate_{n}d" for n in DEVIATION_WINDOWS if f"deviate_{n}d" in df.columns]
+    if not dev_cols:
+        return df
+    today_rows = df.filter(pl.col("date") == cn_today())
+    if today_rows.is_empty() or any(
+        today_rows[col].null_count() < today_rows.height for col in dev_cols
+    ):
+        return df
+    repaired = attach_deviation_columns_today(today_rows, data_dir)
+    return pl.concat(
+        [df.filter(pl.col("date") != cn_today()), repaired],
+        how="diagonal_relaxed",
+    ).sort(["symbol", "date"])
+
+
 def run_pipeline(data_dir: Path | None = None,
                  symbols: list[str] | None = None,
                  new_dates_only: bool = False,
@@ -1386,7 +1440,8 @@ def run_pipeline(data_dir: Path | None = None,
                 hist_cols = [c for c in ["symbol", "date", "open", "high", "low", "close",
                                          "volume", "amount", "raw_close", "raw_high", "raw_low"]
                              if c in hist_df.columns]
-                raw_full = pl.concat([hist_df.select(hist_cols), raw_new], how="diagonal_relaxed")
+                raw_history = _restore_raw_daily_history(hist_df.select(hist_cols))
+                raw_full = pl.concat([raw_history, raw_new], how="diagonal_relaxed")
             else:
                 raw_full = raw_new
 

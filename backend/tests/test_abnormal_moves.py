@@ -10,7 +10,9 @@ from app.indicators.pipeline import (
     attach_deviation_columns_today,
     benchmark_momentum_today,
     load_benchmark_momentum,
+    repair_today_deviation_columns,
 )
+from app.market_time import cn_today
 from app.services.abnormal_moves import (
     _hist_cache,
     _hist_cache_lock,
@@ -149,6 +151,29 @@ def test_attach_deviation_columns_today_missing_momentum(tmp_path) -> None:
     assert out["deviate_3d"][0] is None
     assert out["deviate_10d"][0] is not None
     assert out["deviate_30d"][0] is not None
+
+
+def test_repair_today_deviation_when_index_partition_lags_one_day(tmp_path) -> None:
+    today = cn_today()
+    days = [today - timedelta(days=i) for i in range(40, -1, -1)]
+    _write_index_daily(
+        tmp_path,
+        [("000001.SH", day, 100.0 + i) for i, day in enumerate(days[:-1])],
+    )
+    stock = pl.DataFrame({
+        "symbol": ["600000.SH"] * len(days),
+        "date": days,
+        "close": [10.0 + i * 0.2 for i in range(len(days))],
+    })
+    cold = attach_deviation_columns(stock, tmp_path)
+    latest = cold.filter(pl.col("date") == today)
+    assert latest["deviate_3d"][0] is None
+
+    repaired = repair_today_deviation_columns(cold, tmp_path)
+    latest = repaired.filter(pl.col("date") == today)
+    assert latest["deviate_3d"][0] is not None
+    assert latest["deviate_10d"][0] is not None
+    assert latest["deviate_30d"][0] is not None
 
 
 def test_attach_deviation_columns_no_bench_close_leak(tmp_path) -> None:

@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.api.kline import _canonical_chart_symbol
 from app.api.kline import router as kline_router
 from app.indicators.pipeline import compute_indicators
 from app.services.chart_data import (
@@ -45,6 +46,24 @@ def _factors() -> pl.DataFrame:
             "ex_factor": [2.0],
         }
     )
+
+
+def test_chart_symbol_canonicalizes_bare_a_share_codes() -> None:
+    class Repo:
+        def get_name_map(self, symbols):
+            known = {
+                "002084.SZ": "海鸥住工",
+                "920786.BJ": "骑士乳业",
+                "000001.SH": "上证指数",
+                "000001.SZ": "平安银行",
+            }
+            return {symbol: known[symbol] for symbol in symbols if symbol in known}
+
+    repo = Repo()
+    assert _canonical_chart_symbol(repo, "002084") == "002084.SZ"
+    assert _canonical_chart_symbol(repo, "920786") == "920786.BJ"
+    assert _canonical_chart_symbol(repo, "000001") == "000001.SZ"
+    assert _canonical_chart_symbol(repo, "600519.SH") == "600519.SH"
 
 
 def test_none_qfq_hfq_use_one_event_factor_contract() -> None:

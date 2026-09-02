@@ -46,7 +46,10 @@ from app.api import (
 )
 from app.api.routes import router as core_router
 from app.config import settings
-from app.enriched_generation import EnrichedGenerationUnavailableError
+from app.enriched_generation import (
+    EnrichedGenerationUnavailableError,
+    recover_orphaned_enriched_generation,
+)
 from app.extensions.loader import (
     configure_backend_extensions,
     current_extension_context,
@@ -119,6 +122,8 @@ async def _application_lifespan(app: FastAPI):
     app.state.mining_manager = mining_manager
     if recovered_mining_runs:
         logger.warning("recovered %d interrupted mining runs", recovered_mining_runs)
+    if recover_orphaned_enriched_generation(store.data_dir, "stock"):
+        logger.warning("recovered orphaned enriched publication marker")
     # 在接受回测请求前固定 managed generation，避免首批并发 worker 各自创建版本。
     if settings.backtest_matrix_disk_cache_enabled:
         try:

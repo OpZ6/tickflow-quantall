@@ -31,9 +31,9 @@ def _daily_df() -> pd.DataFrame:
 def _adj_df() -> pd.DataFrame:
     """模拟 Tushare pro.adj_factor 返回。"""
     return pd.DataFrame({
-        "ts_code": ["600519.SH"],
-        "trade_date": ["20260821"],
-        "adj_factor": [1.23],
+        "ts_code": ["600519.SH", "600519.SH", "600519.SH"],
+        "trade_date": ["20260819", "20260820", "20260821"],
+        "adj_factor": [1.0, 1.0, 1.23],
     })
 
 
@@ -44,6 +44,7 @@ def test_normalize_adj_pandas():
     assert not df.is_empty()
     assert df.columns == ["symbol", "trade_date", "ex_factor"]
     assert df["symbol"].to_list() == ["600519.SH"]
+    assert df["trade_date"].to_list() == [datetime(2026, 8, 21).date()]
     assert df["ex_factor"].to_list() == [1.23]
 
 
@@ -116,6 +117,7 @@ def test_get_adj_factors(mock_get_pro):
     assert df.columns == ["symbol", "trade_date", "ex_factor"]
     assert df["symbol"].to_list() == ["600519.SH"]
     mock_pro.adj_factor.assert_called_once()
+    assert mock_pro.adj_factor.call_args.kwargs["start_date"] == "20251202"
 
 
 def test_get_adj_factors_empty():

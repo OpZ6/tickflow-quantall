@@ -203,6 +203,31 @@ def enriched_publication_incomplete(
     )
 
 
+def recover_orphaned_enriched_generation(
+    data_dir: Path,
+    asset_type: str = "stock",
+) -> bool:
+    """Restore a stable generation marker when its publishing process is dead.
+
+    This is intentionally conservative: an active owner is never displaced, and
+    the existing generation is preserved because no data files are changed.
+    """
+    path = _marker_path(data_dir, asset_type)
+    with _exclusive_generation_lock(data_dir, asset_type):
+        payload = _read_marker(path)
+        if payload is None or payload.get("state", "ready") == "ready":
+            return False
+        if _process_is_alive(payload.get("owner_pid")):
+            return False
+        generation = payload.get("generation")
+        if not isinstance(generation, str) or not generation:
+            raise EnrichedGenerationUnavailableError(
+                "orphaned enriched publication has no recoverable generation"
+            )
+        _write_marker(path, _ready_payload(generation))
+        return True
+
+
 def bump_enriched_generation(data_dir: Path, asset_type: str = "stock") -> str:
     path = _marker_path(data_dir, asset_type)
     with _exclusive_generation_lock(data_dir, asset_type):

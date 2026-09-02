@@ -651,8 +651,12 @@ class KlineRepository:
                     logger.info("enriched refresh step done: compute indicators rows=%d (%.2fs)", len(df_full), time.perf_counter() - step)
 
                     # 异动偏离列 (deviate_Nd = 个股动量 - 基准指数动量), 运行时附着
-                    from app.indicators.pipeline import attach_deviation_columns
+                    from app.indicators.pipeline import (
+                        attach_deviation_columns,
+                        repair_today_deviation_columns,
+                    )
                     df_full = attach_deviation_columns(df_full, self.store.data_dir)
+                    df_full = repair_today_deviation_columns(df_full, self.store.data_dir)
 
                     step = time.perf_counter()
                     logger.info("enriched refresh step start: compute signals")

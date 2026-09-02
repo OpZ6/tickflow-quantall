@@ -12,6 +12,7 @@ from app.enriched_generation import (
     EnrichedGenerationUnavailableError,
     EnrichedPublication,
     get_enriched_generation,
+    recover_orphaned_enriched_generation,
 )
 from app.tickflow.repository import DataStore, KlineRepository
 
@@ -119,6 +120,39 @@ def test_recovery_takes_over_when_owner_pid_is_dead_on_windows(tmp_path, monkeyp
     assert marker["state"] == "ready"
     assert get_enriched_generation(tmp_path, "stock") == marker["generation"]
     assert pl.read_parquet(out)["close"].item() == pytest.approx(10.0)
+
+
+def test_startup_recovery_restores_dead_publication_without_bumping_generation(
+    tmp_path, monkeypatch,
+) -> None:
+    marker_path = tmp_path / ".matrix_generation_stock.json"
+    marker_path.write_text(json.dumps({
+        "state": "publishing",
+        "generation": "stable-generation",
+        "publication_id": "orphaned-publication",
+        "owner_pid": 12345,
+        "updated_at_ns": 0,
+    }), encoding="utf-8")
+    monkeypatch.setattr("app.enriched_generation._process_is_alive", lambda _pid: False)
+
+    assert recover_orphaned_enriched_generation(tmp_path, "stock") is True
+    assert get_enriched_generation(tmp_path, "stock") == "stable-generation"
+
+
+def test_startup_recovery_never_steals_active_publication(tmp_path, monkeypatch) -> None:
+    marker_path = tmp_path / ".matrix_generation_stock.json"
+    marker_path.write_text(json.dumps({
+        "state": "publishing",
+        "generation": "stable-generation",
+        "publication_id": "active-publication",
+        "owner_pid": 12345,
+        "updated_at_ns": 0,
+    }), encoding="utf-8")
+    monkeypatch.setattr("app.enriched_generation._process_is_alive", lambda _pid: True)
+
+    assert recover_orphaned_enriched_generation(tmp_path, "stock") is False
+    with pytest.raises(EnrichedGenerationUnavailableError, match="being published"):
+        get_enriched_generation(tmp_path, "stock")
 
 
 def test_panel_cache_generation_change_forces_recompute() -> None:
