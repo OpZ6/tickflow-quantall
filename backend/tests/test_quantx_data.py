@@ -557,7 +557,13 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
                         "volume": [1_000_000.0 + index for index in range(30)],
                     }
                 )
-            if symbol != "000001.SH":
+            if symbol not in {
+                "000001.SH",
+                "399001.SZ",
+                "399006.SZ",
+                "000688.SH",
+                "899050.BJ",
+            }:
                 return pl.DataFrame(
                     schema={"symbol": pl.String, "date": pl.Date, "close": pl.Float64}
                 )
@@ -633,6 +639,18 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert index["name"] == "上证指数"
     assert index["close"] == 11.0
     assert index["pct_chg"] == 10.0
+    bse_50 = next(
+        row
+        for row in response.json()["sections"]["s1"]["indexes"]
+        if row["code"] == "899050.BJ"
+    )
+    assert bse_50["name"] == "北证50"
+    assert bse_50["close"] == 11.0
+    assert bse_50["pct_chg"] == 10.0
+    assert all(
+        row["code"] != "899050.BJ"
+        for row in response.json()["metric_strip"]["indexes"]
+    )
     all_a = next(
         row
         for row in response.json()["sections"]["s1"]["indexes"]
