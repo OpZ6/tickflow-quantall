@@ -479,6 +479,7 @@ const CANDIDATE_ACTION_LABELS: Record<QuantXCandidate['action_status'], string> 
 
 function CandidateFunnelPanel({ data }: { data: QuantXReviewData['sections']['s5'] }) {
   const navigate = useNavigate()
+  const portable = Boolean(window.__QUANTX_PORTABLE__)
   const [stage, setStage] = useState('final')
   const [detailed, setDetailed] = useState(false)
   const [candidateQuery, setCandidateQuery] = useState('')
@@ -527,13 +528,13 @@ function CandidateFunnelPanel({ data }: { data: QuantXReviewData['sections']['s5
     </div>
 
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="text-[10px] text-muted">点击漏斗层查看保留与淘汰原因；一字板和 20/30cm 封板不占最终名额。</p>
+      <p className="text-[10px] text-muted">点击漏斗层查看保留与淘汰原因；一字板和 20/30cm 封板不占最终名额。{portable && <span data-testid="quantx-candidate-portable-note" className="ml-1 text-blue-300">离线报告不提供个股K线跳转。</span>}</p>
       <div className="flex items-center gap-1.5"><input value={candidateQuery} onChange={event => setCandidateQuery(event.target.value)} placeholder="搜索代码、名称或题材" className="w-40 rounded border border-border bg-base/40 px-2 py-1 text-[10px] outline-none focus:border-accent/50" /><button type="button" data-testid="quantx-candidate-detail-toggle" onClick={() => setDetailed(value => !value)} className={cn('shrink-0 rounded border px-2 py-1 text-[10px]', detailed ? 'border-accent/50 bg-accent/10 text-accent' : 'border-border text-muted')}>{detailed ? '收起详细' : '详细模式'}</button></div>
     </div>
 
     {rows.length > visibleRows.length && <div className="text-[9px] text-muted">当前层共 {rows.length} 只，为保持页面流畅仅展示前 100 只；可用搜索精确定位。</div>}
     {!visibleRows.length ? <div className="rounded border border-dashed border-border py-8 text-center text-xs text-muted">该层没有匹配候选</div> : <div className="grid gap-2 xl:grid-cols-2">
-      {visibleRows.map(row => <button key={`${stage}-${row.code}`} type="button" data-testid="quantx-candidate-card" data-action={row.action_status} onClick={() => navigate(`/stock-analysis?symbol=${encodeURIComponent(row.code)}&name=${encodeURIComponent(row.name)}`)} className="rounded border border-border/70 bg-base/25 p-2.5 text-left transition-colors hover:border-accent/40 hover:bg-elevated/60">
+      {visibleRows.map(row => <button key={`${stage}-${row.code}`} type="button" data-testid="quantx-candidate-card" data-action={row.action_status} aria-disabled={portable} title={portable ? `${row.name || row.code} · 离线报告不提供个股K线跳转` : undefined} onClick={() => { if (!portable) navigate(`/stock-analysis?symbol=${encodeURIComponent(row.code)}&name=${encodeURIComponent(row.name)}`) }} className={cn('rounded border border-border/70 bg-base/25 p-2.5 text-left transition-colors hover:border-accent/40 hover:bg-elevated/60', portable && 'cursor-default')}>
         <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5"><b className="text-xs">{row.name || row.code}</b><span className="font-mono text-[9px] text-muted">{row.code}</span><span className="rounded bg-elevated px-1.5 py-0.5 text-[9px]">{row.setup_label}</span><span className={cn('rounded px-1.5 py-0.5 text-[9px]', row.action_status === 'focus' ? 'bg-red-500/10 text-red-300' : row.action_status === 'wait_confirmation' ? 'bg-orange-500/10 text-orange-300' : 'bg-muted/10 text-muted')}>{CANDIDATE_ACTION_LABELS[row.action_status]}</span></div><div className="mt-1 truncate text-[10px] text-muted" title={row.reason}>{row.theme} · {row.reason}</div></div><b className="font-mono text-base text-accent">{row.score ?? '--'}</b></div>
         {row.eliminated_reason && <div className="mt-2 rounded bg-orange-500/5 px-2 py-1 text-[9px] text-orange-300">未进入最终池：{row.eliminated_reason}</div>}
         {detailed && <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-[9px] leading-4 text-muted"><div><b className="text-foreground">确认：</b>{row.confirmation}</div><div><b className="text-foreground">失效：</b>{row.invalidation}</div><div><b className="text-foreground">路径：</b>{row.stage_path.join(' → ')}</div>{row.component_scores && <div className="grid grid-cols-4 gap-1 pt-1">{Object.entries(row.component_scores).map(([key, value]) => <span key={key} className="rounded bg-elevated/60 px-1 py-1 text-center">{key} {value}</span>)}</div>}{row.risk_tags.length > 0 && <div className="text-orange-300">风险：{row.risk_tags.join('；')}</div>}</div>}

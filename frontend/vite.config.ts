@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin, type ResolvedConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import { build as buildWithEsbuild } from 'esbuild'
@@ -10,8 +10,10 @@ const backendTarget = `http://${proxyHost}:${backendPort}`
 const portableRuntimeId = 'virtual:quantx-portable-runtime'
 const resolvedPortableRuntimeId = `\0${portableRuntimeId}`
 
-function quantxPortableRuntime() {
+function quantxPortableRuntime(): Plugin {
   let runtime = ''
+  let command: ResolvedConfig['command'] = 'build'
+  const sourceRoot = `${path.resolve(__dirname, './src')}${path.sep}`
   const compile = async () => {
     const result = await buildWithEsbuild({
       entryPoints: [path.resolve(__dirname, './src/portable/quantxPortable.tsx')],
@@ -35,6 +37,9 @@ function quantxPortableRuntime() {
   }
   return {
     name: 'quantx-portable-runtime',
+    configResolved(config) {
+      command = config.command
+    },
     async buildStart() {
       await compile()
     },
@@ -43,8 +48,19 @@ function quantxPortableRuntime() {
     },
     async load(id: string) {
       if (id !== resolvedPortableRuntimeId) return null
-      if (!runtime) await compile()
+      // The dev server may stay alive while QuantX components are updated by
+      // HMR. Compile on virtual-module load so an export never receives the
+      // buildStart snapshot from an older frontend revision.
+      if (command === 'serve' || !runtime) await compile()
       return `export default ${JSON.stringify(runtime)}`
+    },
+    async handleHotUpdate(context) {
+      if (!`${path.resolve(context.file)}${path.sep}`.startsWith(sourceRoot)) return
+      await compile()
+      const module = context.server.moduleGraph.getModuleById(resolvedPortableRuntimeId)
+      if (!module) return
+      context.server.moduleGraph.invalidateModule(module)
+      return [module]
     },
   }
 }

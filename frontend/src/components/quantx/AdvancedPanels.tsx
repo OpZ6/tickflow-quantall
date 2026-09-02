@@ -304,6 +304,7 @@ type LadderTheme = { name: string; category: string; count: number; max_height: 
 
 function LadderMatrix({ data }: { data: Record<string, any> }) {
   const navigate = useNavigate()
+  const portable = Boolean(window.__QUANTX_PORTABLE__)
   const [detailMode, setDetailMode] = useState<'compact' | 'detailed'>('compact')
   const members = (data.members || []) as LadderMember[]
   const themes = (data.matrix?.themes || []) as LadderTheme[]
@@ -337,7 +338,7 @@ function LadderMatrix({ data }: { data: Record<string, any> }) {
       ].map(([label, value]) => <div key={String(label)} className="rounded border border-border/70 bg-base/35 px-2 py-1.5"><div className="text-[9px] text-muted">{label}</div><div className="font-mono text-sm font-semibold tabular-nums text-foreground">{value ?? 0}<span className="ml-0.5 text-[9px] font-normal text-muted">只</span></div></div>)}
     </div>
     <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border/70 bg-base/25 px-2 py-1.5">
-      <p className="text-[9px] text-muted">简洁模式看梯队，详细模式展开逐股真实理由与催化依据。</p>
+      <p className="text-[9px] text-muted">简洁模式看梯队，详细模式展开逐股真实理由与催化依据。{portable && <span data-testid="quantx-ladder-portable-note" className="ml-1 text-blue-300">离线报告不提供个股K线跳转。</span>}</p>
       <div className="flex gap-1" role="group" aria-label="梯队表信息密度">
         {([['compact', '简洁'], ['detailed', '详细']] as const).map(([value, label]) => <button key={value} type="button" data-testid={`quantx-ladder-detail-${value}`} aria-pressed={detailMode === value} onClick={() => setDetailMode(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent', detailMode === value ? 'border-purple-400/60 bg-purple-400/10 text-purple-300' : 'border-border bg-base text-muted hover:text-foreground')}>{label}</button>)}
       </div>
@@ -363,9 +364,10 @@ function LadderMatrix({ data }: { data: Record<string, any> }) {
                 <div className="space-y-0.5">{stocks.map(member => <button
                   key={member.symbol}
                   type="button"
-                  className={stockClass(member)}
-                  title={`${member.name} ${member.symbol} · ${member.height}板 · ${member.theme} · 来源 ${member.source || '--'}${member.is_supplemental ? ` · 事件补录${member.classification_basis === 'limit_reason' ? '/按涨停理由归类' : '/待归类'}` : member.classification_basis === 'previous_ladder' ? ' · 连板题材沿用前一交易日' : ''}`}
-                  onClick={() => navigate(`/stock-analysis?symbol=${encodeURIComponent(member.symbol)}&name=${encodeURIComponent(member.name)}`)}
+                  className={cn(stockClass(member), portable && 'cursor-default')}
+                  aria-disabled={portable}
+                  title={`${member.name} ${member.symbol} · ${member.height}板 · ${member.theme} · 来源 ${member.source || '--'}${member.is_supplemental ? ` · 事件补录${member.classification_basis === 'limit_reason' ? '/按涨停理由归类' : '/待归类'}` : member.classification_basis === 'previous_ladder' ? ' · 连板题材沿用前一交易日' : ''}${portable ? ' · 离线报告不提供个股K线跳转' : ''}`}
+                  onClick={() => { if (!portable) navigate(`/stock-analysis?symbol=${encodeURIComponent(member.symbol)}&name=${encodeURIComponent(member.name)}`) }}
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{member.name}</span>
