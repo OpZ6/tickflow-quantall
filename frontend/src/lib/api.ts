@@ -4224,12 +4224,12 @@ export interface QuantXReviewDataV2 {
         status: string
         stocks: Array<{ code: string; name: string; pct_chg: number | null }>
         total_stocks?: number
-        coverage_pct?: Partial<Record<'concept' | 'industry_level1' | 'industry_level2', number>>
+        coverage_pct?: Partial<Record<'concept' | 'attribute' | 'industry_level1' | 'industry_level2', number>>
         mapping_semantics?: 'latest_ext_snapshot_proxy'
         windows?: Partial<Record<'1' | '5' | '10' | '20', {
           valid_days: number
           date_range: string[]
-          dimensions: Record<'concept' | 'industry_level1' | 'industry_level2', Array<{
+          dimensions: Record<'concept' | 'attribute' | 'industry_level1' | 'industry_level2', Array<{
             name: string
             current_count: number
             unique_count: number
@@ -4255,7 +4255,16 @@ export interface QuantXReviewDataV2 {
       height_history: Array<{ date: string; height: number; name: string; names: string[]; second_height: number; second_names: string[]; turnover_pct: number | null; amount_yi: number | null }>
     }
     s4: {
-      sector_flow: { top_in: Array<Record<string, unknown>>; top_out: Array<Record<string, unknown>> }
+      sector_flow: {
+        top_in: Array<Record<string, unknown>>
+        top_out: Array<Record<string, unknown>>
+        gross_inflow_yi?: number
+        gross_outflow_yi?: number
+        net_inflow_yi?: number
+        inflow_count?: number
+        outflow_count?: number
+        sector_count?: number
+      }
       sector_treemap: Array<{ name: string; value: number | null; pct_chg: number | null }>
     }
     s5: {
@@ -4528,7 +4537,7 @@ export const quantxApi = {
   getReviewData: (date: string) =>
     request<QuantXReviewData>(`/api/quantx/review/${encodeURIComponent(date)}/data`),
 
-  getNewHighClusterMembers: (date: string, dimension: 'concept' | 'industry_level1' | 'industry_level2', window: 1 | 5 | 10 | 20, name: string) =>
+  getNewHighClusterMembers: (date: string, dimension: 'concept' | 'attribute' | 'industry_level1' | 'industry_level2', window: 1 | 5 | 10 | 20, name: string) =>
     request<QuantXNewHighClusterMembers>(`/api/quantx-data/new-high/${encodeURIComponent(date)}/members?dimension=${encodeURIComponent(dimension)}&window=${window}&name=${encodeURIComponent(name)}`),
 
   getNewHighMemberBundle: (date: string) =>

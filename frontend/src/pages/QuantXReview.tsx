@@ -390,36 +390,51 @@ export function SectorFlowChart({ topIn, topOut, height = 400 }: { topIn: any[];
   return <div ref={ref} className="w-full" style={{ height }} />
 }
 
-export function SectorTreemapChart({ data, height = 560 }: { data: any[]; height?: number }) {
+type SectorFlowSummary = {
+  gross_inflow_yi?: number
+  gross_outflow_yi?: number
+  net_inflow_yi?: number
+  inflow_count?: number
+  outflow_count?: number
+  sector_count?: number
+}
+
+export function SectorTreemapChart({ data, summary = {}, height = 560 }: { data: any[]; summary?: SectorFlowSummary; height?: number }) {
   const ct = useChartTheme()
   const inflow = useMemo(() => data.filter(d => d.value >= 0).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)), [data])
   const outflow = useMemo(() => data.filter(d => d.value < 0).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)), [data])
+  const grossInflow = summary.gross_inflow_yi ?? inflow.reduce((sum, row) => sum + Math.abs(row.value || 0), 0)
+  const grossOutflow = summary.gross_outflow_yi ?? outflow.reduce((sum, row) => sum + Math.abs(row.value || 0), 0)
+  const displayedInflow = inflow.reduce((sum, row) => sum + Math.abs(row.value || 0), 0)
+  const displayedOutflow = outflow.reduce((sum, row) => sum + Math.abs(row.value || 0), 0)
+  const total = grossInflow + grossOutflow
+  const inflowShare = total > 0 ? grossInflow / total * 100 : 50
+  const groups = useMemo(() => {
+    const children = (rows: any[], tone: 'in' | 'out') => rows.map(d => ({ name: d.name, value: Math.abs(d.value), net: d.value, pct_chg: d.pct_chg, itemStyle: { color: tone === 'in' ? 'rgba(248,81,73,0.85)' : 'rgba(63,185,80,0.85)' } }))
+    const inChildren = children(inflow, 'in')
+    const outChildren = children(outflow, 'out')
+    if (grossInflow - displayedInflow > 0.01) inChildren.push({ name: '其他流入', value: grossInflow - displayedInflow, net: grossInflow - displayedInflow, pct_chg: null, itemStyle: { color: 'rgba(248,81,73,0.45)' } })
+    if (grossOutflow - displayedOutflow > 0.01) outChildren.push({ name: '其他流出', value: grossOutflow - displayedOutflow, net: -(grossOutflow - displayedOutflow), pct_chg: null, itemStyle: { color: 'rgba(63,185,80,0.45)' } })
+    return [
+      { name: `净流入 ${grossInflow.toFixed(1)}亿`, value: grossInflow, net: grossInflow, children: inChildren, itemStyle: { color: RED } },
+      { name: `净流出 ${grossOutflow.toFixed(1)}亿`, value: grossOutflow, net: -grossOutflow, children: outChildren, itemStyle: { color: GREEN } },
+    ].filter(group => group.value > 0)
+  }, [displayedInflow, displayedOutflow, grossInflow, grossOutflow, inflow, outflow])
   const option = useMemo(() => ({
-    tooltip: { formatter: (p: any) => `${p.name}<br>净流入: ${(p.data?.net ?? p.value)?.toFixed(2)}亿<br>涨跌幅: ${p.data?.pct_chg?.toFixed(2) ?? '-'}%` },
-    title: [
-      { text: '净流入 (红)', left: '2%', top: 2, textStyle: { color: RED, fontSize: 12, fontWeight: 'bold' } },
-      { text: '净流出 (绿)', left: '52%', top: 2, textStyle: { color: GREEN, fontSize: 12, fontWeight: 'bold' } },
-    ],
-    series: [
-      {
-        type: 'treemap', roam: false, nodeClick: false,
-        top: 25, bottom: 5, left: '2%', width: '46%',
-        label: { show: true, formatter: (p: any) => `${p.name}\n+${(p.data?.net ?? p.value)?.toFixed(1)}亿`, fontSize: 11, fontWeight: 'bold', color: '#fff' },
-        itemStyle: { borderColor: ct.border, borderWidth: 1, gapWidth: 3 },
-        data: inflow.map(d => ({ name: d.name, value: Math.abs(d.value), net: d.value, pct_chg: d.pct_chg, itemStyle: { color: 'rgba(248,81,73,0.85)', borderColor: RED } })),
-      },
-      {
-        type: 'treemap', roam: false, nodeClick: false,
-        top: 25, bottom: 5, left: '52%', width: '46%',
-        label: { show: true, formatter: (p: any) => `${p.name}\n${(p.data?.net ?? p.value)?.toFixed(1)}亿`, fontSize: 11, fontWeight: 'bold', color: '#fff' },
-        itemStyle: { borderColor: ct.border, borderWidth: 1, gapWidth: 3 },
-        data: outflow.map(d => ({ name: d.name, value: Math.abs(d.value), net: d.value, pct_chg: d.pct_chg, itemStyle: { color: 'rgba(63,185,80,0.85)', borderColor: GREEN } })),
-      },
-    ],
-  }), [inflow, outflow, ct.border])
-  const ref = useEChart(option, [inflow, outflow, ct.border])
+    tooltip: { formatter: (p: any) => `${p.name}<br>${(p.data?.net ?? p.value) >= 0 ? '净流入' : '净流出'}: ${Math.abs(p.data?.net ?? p.value)?.toFixed(2)}亿${p.data?.pct_chg == null ? '' : `<br>涨跌幅: ${p.data.pct_chg.toFixed(2)}%`}` },
+    series: [{
+      type: 'treemap', roam: false, nodeClick: false, top: 8, bottom: 5, left: '1%', right: '1%',
+      breadcrumb: { show: false }, visibleMin: 2,
+      upperLabel: { show: true, height: 26, color: '#fff', fontSize: 12, fontWeight: 'bold', formatter: (p: any) => p.data?.name || '' },
+      label: { show: true, formatter: (p: any) => !p.data?.name || p.data?.children ? '' : `${p.name}\n${(p.data?.net ?? p.value) >= 0 ? '+' : '-'}${Math.abs(p.data?.net ?? p.value)?.toFixed(1)}亿`, fontSize: 10, color: '#fff' },
+      itemStyle: { borderColor: ct.border, borderWidth: 1, gapWidth: 2 },
+      levels: [{ itemStyle: { borderWidth: 0, gapWidth: 4 } }, { upperLabel: { show: true }, itemStyle: { borderWidth: 3, gapWidth: 2 } }, { itemStyle: { borderWidth: 1, gapWidth: 1 } }],
+      data: groups,
+    }],
+  }), [ct.border, groups])
+  const ref = useEChart(option, [groups, ct.border])
   if (!data.length) return null
-  return <div ref={ref} className="w-full" style={{ height }} />
+  return <div className="space-y-2"><div data-testid="quantx-sector-flow-balance" className="space-y-1"><div className="flex items-center justify-between font-mono text-[10px]"><span className="text-red-300">流入 {grossInflow.toFixed(2)}亿 · {inflowShare.toFixed(1)}%</span><b className={(summary.net_inflow_yi ?? grossInflow - grossOutflow) >= 0 ? 'text-red-300' : 'text-green-300'}>净额 {(summary.net_inflow_yi ?? grossInflow - grossOutflow) >= 0 ? '+' : ''}{(summary.net_inflow_yi ?? grossInflow - grossOutflow).toFixed(2)}亿</b><span className="text-green-300">流出 {grossOutflow.toFixed(2)}亿 · {(100 - inflowShare).toFixed(1)}%</span></div><div className="flex h-2 overflow-hidden rounded-full bg-elevated"><div className="bg-red-500/80" style={{ width: `${inflowShare}%` }} /><div className="flex-1 bg-green-500/80" /></div></div><div ref={ref} className="w-full" style={{ height }} /></div>
 }
 
 export function SectorScatterChart({ data, height = 480 }: { data: any[]; height?: number }) {

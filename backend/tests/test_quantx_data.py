@@ -673,7 +673,13 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert len(response.json()["sections"]["s3"]["crash_signals"]) == 3
     assert len(response.json()["sections"]["s2"]["participation"]["conditions"]) == 4
     assert response.json()["sections"]["s2"]["ebb_risk"]["signal_count"] == 1
-    assert response.json()["sections"]["s4"]["sector_flow"]["top_in"]
+    sector_flow = response.json()["sections"]["s4"]["sector_flow"]
+    assert sector_flow["top_in"]
+    assert sector_flow["gross_inflow_yi"] >= 0
+    assert sector_flow["gross_outflow_yi"] >= 0
+    assert sector_flow["net_inflow_yi"] == round(
+        sector_flow["gross_inflow_yi"] - sector_flow["gross_outflow_yi"], 2
+    )
     assert response.json()["sections"]["s5"]["candidates"]
     assert len(response.json()["sections"]["s5"]["candidates"]) <= 10
     assert response.json()["sections"]["s5"]["candidate_funnel"][
@@ -790,7 +796,7 @@ def test_new_high_clusters_group_concepts_and_industry_windows(tmp_path):
     pl.DataFrame(
         {
             "symbol": ["300002.SZ"],
-            "concept": ["百日新高;趋势股;人工智能;机器人"],
+            "concept": ["百日新高;趋势股;人工智能;机器人;国企改革;高股息精选"],
         }
     ).write_parquet(tmp_path / "ext_data" / concept.id / "part.parquet")
     pl.DataFrame(
@@ -808,12 +814,16 @@ def test_new_high_clusters_group_concepts_and_industry_windows(tmp_path):
     assert result["total_stocks"] == 1
     assert result["coverage_pct"] == {
         "concept": 100.0,
+        "attribute": 100.0,
         "industry_level1": 100.0,
         "industry_level2": 100.0,
     }
     today_concepts = result["windows"]["1"]["dimensions"]["concept"]
     assert {row["name"] for row in today_concepts} == {"人工智能", "机器人"}
     assert {row["weighted_share_pct"] for row in today_concepts} == {50.0}
+    today_attributes = result["windows"]["1"]["dimensions"]["attribute"]
+    assert {row["name"] for row in today_attributes} == {"国企改革", "高股息精选"}
+    assert {row["weighted_share_pct"] for row in today_attributes} == {50.0}
     assert result["windows"]["5"]["dimensions"]["industry_level1"][0]["name"] == "信息技术"
     assert result["windows"]["5"]["dimensions"]["industry_level2"][0]["name"] == "软件开发"
     assert result["windows"]["5"]["dimensions"]["concept"][0]["status"] == "持续"
@@ -846,7 +856,7 @@ def test_new_high_clusters_group_concepts_and_industry_windows(tmp_path):
     )
     assert bundle["mapping_semantics"] == "latest_ext_snapshot_proxy"
     assert bundle["datasets"]["concept|5|人工智能"] == members
-    assert len(bundle["datasets"]) == 16
+    assert len(bundle["datasets"]) == 24
 
     app = FastAPI()
     app.include_router(quantx_data_router)

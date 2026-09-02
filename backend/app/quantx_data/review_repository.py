@@ -828,6 +828,14 @@ class QuantXReviewRepository:
             rows, key=lambda row: row.get("net_inflow_yi") or 0, reverse=True
         )[:5]
         top_out = sorted(rows, key=lambda row: row.get("net_inflow_yi") or 0)[:5]
+        values = [
+            float(row["net_inflow_yi"])
+            for row in rows
+            if row.get("net_inflow_yi") is not None
+        ]
+        gross_inflow_yi = round(sum(value for value in values if value > 0), 2)
+        gross_outflow_yi = round(-sum(value for value in values if value < 0), 2)
+        net_inflow_yi = round(sum(values), 2)
         treemap = [
             {
                 "name": row["name"],
@@ -841,7 +849,16 @@ class QuantXReviewRepository:
             )[:60]
         ]
         section = _section(snapshot, "s4")
-        section["sector_flow"] = {"top_in": top_in, "top_out": top_out}
+        section["sector_flow"] = {
+            "top_in": top_in,
+            "top_out": top_out,
+            "gross_inflow_yi": gross_inflow_yi,
+            "gross_outflow_yi": gross_outflow_yi,
+            "net_inflow_yi": net_inflow_yi,
+            "inflow_count": sum(value > 0 for value in values),
+            "outflow_count": sum(value < 0 for value in values),
+            "sector_count": len(values),
+        }
         section["sector_treemap"] = treemap
         fields.extend(["sections.s4.sector_flow", "sections.s4.sector_treemap"])
 

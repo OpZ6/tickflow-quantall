@@ -17,6 +17,7 @@ from app.quantx_data.advanced import (
     _rotation_clock,
     _sector_diffusion,
     _state_transition,
+    _state_transition_views,
     _stock_returns,
     _sunburst,
     _theme_river,
@@ -67,7 +68,8 @@ def test_stock_returns_prefers_repository_computed_turnover(tmp_path) -> None:
         {
             "symbol": ["600000.SH"],
             "date": [days[0]],
-            "close": [10.0],
+            "close": [0.001],
+            "raw_close": [10.0],
             "amount": [100.0],
             "turnover_rate": [None],
         },
@@ -84,7 +86,10 @@ def test_stock_returns_prefers_repository_computed_turnover(tmp_path) -> None:
         {
             "symbol": ["600000.SH", "600000.SH"],
             "date": days,
-            "close": [10.0, 11.0],
+            # Simulate a qfq/raw price-basis switch between adjacent partitions.
+            # Returns must stay on the continuous unadjusted price series.
+            "close": [0.001, 11.0],
+            "raw_close": [10.0, 11.0],
             "amount": [100.0, 120.0],
             "turnover_rate": [1.5, 1.8],
         }
@@ -97,6 +102,7 @@ def test_stock_returns_prefers_repository_computed_turnover(tmp_path) -> None:
                 "symbol",
                 "date",
                 "close",
+                "raw_close",
                 "amount",
                 "turnover_rate",
             }
@@ -124,6 +130,31 @@ def test_state_transition_normalizes_each_non_empty_row() -> None:
     assert sum(weak_row) == 100.0
     assert sum(range_row) == 100.0
     assert result["visual_max"] == 50.0
+    assert result["start_date"] == "2026-01-01"
+    assert result["end_date"] == "2026-01-03"
+    assert result["transition_count"] == 2
+    assert result["sample_days"] == 3
+
+
+def test_state_transition_views_defaults_to_recent_500_days() -> None:
+    days = pl.date_range(
+        date(2024, 1, 1), date(2025, 12, 31), interval="1d", eager=True
+    ).head(600)
+    frame = pl.DataFrame(
+        {
+            "date": days,
+            "state": ["weak" if index % 2 == 0 else "range" for index in range(600)],
+        }
+    )
+
+    result = _state_transition_views(frame)
+
+    assert result["default_view"] == "500"
+    assert result["sample_days"] == 500
+    assert result["transition_count"] == 499
+    assert result["views"]["500"]["sample_days"] == 500
+    assert result["views"]["all"]["sample_days"] == 600
+    assert result["views"]["all"]["transition_count"] == 599
 
 
 def test_sector_diffusion_exposes_level_and_ma_views() -> None:
@@ -293,6 +324,215 @@ def test_sunburst_merges_stocks_into_second_level() -> None:
     assert level["stocks"] == ["甲公司", "乙公司"]
 
 
+def test_sunburst_exposes_complete_ladder_matrix_and_coverage() -> None:
+    day = date(2026, 8, 28)
+    ladder = pl.DataFrame(
+        {
+            "trade_date": [day] * 10,
+            "theme_name": [f"题材{index}" for index in range(10)],
+            "board_height": [7, 6, 5, 4, 3, 2, 1, 1, 1, 1],
+            "name": [f"股票{index}" for index in range(10)],
+            "symbol": [f"0000{index:02d}" for index in range(10)],
+            "exchange": ["SZSE"] * 10,
+            "source": ["zhangtingke"] * 10,
+            "is_fallback": [False] * 10,
+            "theme_reason": [f"题材催化{index}" for index in range(10)],
+            "interpretation": [f"个股解读{index}" for index in range(10)],
+        }
+    )
+    events = pl.DataFrame(
+        {
+            "trade_date": [day] * 11,
+            "event_type": ["limit_up"] * 11,
+            "board_height": [7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1],
+            "name": [f"股票{index}" for index in range(10)] + ["补录股票"],
+            "symbol": [f"0000{index:02d}" for index in range(10)] + ["920001"],
+            "exchange": ["SZSE"] * 10 + ["BSE"],
+            "source": ["pywencai"] * 11,
+            "is_fallback": [False] * 11,
+            "limit_reason": [f"涨停理由{index}" for index in range(11)],
+        }
+    )
+
+    result = _sunburst(ladder, day, events)
+
+    assert len(result["children"]) == 8
+    assert [theme["name"] for theme in result["matrix"]["themes"]] == [
+        "独立逻辑",
+    ]
+    assert result["matrix"]["themes"][0]["count"] == 11
+    assert result["matrix"]["heights"] == [7, 6, 5, 4, 3, 2, 1]
+    assert result["coverage"] == {
+        "limit_up_count": 11,
+        "ladder_count": 10,
+        "supplemental_count": 1,
+        "classified_count": 11,
+        "unclassified_count": 0,
+        "sunburst_count": 8,
+    }
+    supplemental = next(
+        member for member in result["members"] if member["symbol"] == "920001.BJ"
+    )
+    assert supplemental == {
+        "symbol": "920001.BJ",
+        "name": "补录股票",
+        "height": 1,
+        "theme": "涨停理由10",
+        "category": "题材/行业",
+        "exchange": "BSE",
+        "source": "pywencai",
+        "is_supplemental": True,
+        "is_fallback": False,
+        "board_kind": "30cm",
+        "matrix_theme": "独立逻辑",
+        "subtheme": "涨停理由10",
+        "limit_reason": "涨停理由10",
+        "theme_reason": "",
+        "interpretation": "",
+        "reason": "涨停理由10",
+        "reason_kind": "涨停理由",
+        "classification_basis": "limit_reason",
+    }
+
+
+def test_sunburst_groups_any_single_stock_theme_and_keeps_reason_detail() -> None:
+    day = date(2026, 8, 28)
+    ladder = pl.DataFrame(
+        {
+            "trade_date": [day] * 3,
+            "theme_name": ["军工", "机器人", "机器人"],
+            "board_height": [3, 2, 1],
+            "name": ["独立股", "主题股甲", "主题股乙"],
+            "symbol": ["000001", "000002", "000003"],
+            "exchange": ["SZSE"] * 3,
+            "source": ["zhangtingke"] * 3,
+            "is_fallback": [False] * 3,
+            "theme_reason": ["行业催化", "产业政策", "产业政策"],
+            "interpretation": ["军工产品交付", "机器人产品量产", "机器人订单增长"],
+        }
+    )
+    events = pl.DataFrame(
+        {
+            "trade_date": [day] * 3,
+            "event_type": ["limit_up"] * 3,
+            "board_height": [3, 2, 1],
+            "name": ["独立股", "主题股甲", "主题股乙"],
+            "symbol": ["000001", "000002", "000003"],
+            "exchange": ["SZSE"] * 3,
+            "source": ["pywencai"] * 3,
+            "is_fallback": [False] * 3,
+            "limit_reason": ["军工", "机器人", "机器人"],
+        }
+    )
+
+    result = _sunburst(ladder, day, events)
+
+    assert [theme["name"] for theme in result["matrix"]["themes"]] == [
+        "独立逻辑",
+        "机器人",
+    ]
+    independent = next(
+        member for member in result["members"] if member["symbol"] == "000001.SZ"
+    )
+    assert independent["matrix_theme"] == "独立逻辑"
+    assert independent["subtheme"] == "军工"
+    assert independent["reason"] == "军工产品交付"
+    assert independent["reason_kind"] == "个股解读"
+
+
+def test_sunburst_carries_previous_classification_for_continuing_board() -> None:
+    previous_day = date(2026, 9, 1)
+    day = date(2026, 9, 2)
+    ladder = pl.DataFrame(
+        {
+            "trade_date": [previous_day, day],
+            "theme_name": ["大农业", "待归类"],
+            "board_height": [4, 5],
+            "name": ["新赛股份", "新赛股份"],
+            "symbol": ["600540.SH", "600540"],
+            "exchange": ["SSE", "SSE"],
+            "source": ["zhangtingke", "zhangtingke"],
+            "is_fallback": [False, False],
+            "theme_reason": ["小麦期货创三年新高", ""],
+            "interpretation": ["聚焦棉业全产业链", ""],
+        }
+    )
+    events = pl.DataFrame(
+        {
+            "trade_date": [day],
+            "event_type": ["limit_up"],
+            "board_height": [5],
+            "name": ["新赛股份"],
+            "symbol": ["600540.SH"],
+            "exchange": ["SSE"],
+            "source": ["zhangtingke"],
+            "is_fallback": [False],
+            "limit_reason": [""],
+        }
+    )
+
+    result = _sunburst(ladder, day, events)
+    member = result["members"][0]
+
+    assert member["symbol"] == "600540.SH"
+    assert member["theme"] == "大农业"
+    assert member["classification_basis"] == "previous_ladder"
+    assert member["reason"] == "聚焦棉业全产业链"
+    assert member["reason_kind"] == "个股解读"
+
+
+def test_sunburst_does_not_carry_previous_classification_without_board_continuity() -> None:
+    previous_day = date(2026, 8, 20)
+    day = date(2026, 9, 2)
+    ladder = pl.DataFrame(
+        {
+            "trade_date": [previous_day, day],
+            "theme_name": ["旧题材", "待归类"],
+            "board_height": [2, 1],
+            "name": ["示例股份", "示例股份"],
+            "symbol": ["000001", "000001.SZ"],
+            "exchange": ["SZSE", "SZSE"],
+            "source": ["zhangtingke", "zhangtingke"],
+            "is_fallback": [False, False],
+            "theme_reason": ["旧催化", ""],
+            "interpretation": ["旧解读", ""],
+        }
+    )
+
+    result = _sunburst(ladder, day)
+    member = result["members"][0]
+
+    assert member["theme"] == "待归类"
+    assert member["classification_basis"] == "ladder"
+    assert member["reason"] == ""
+
+
+def test_sunburst_does_not_carry_stale_matching_board_height() -> None:
+    stale_day = date(2026, 8, 20)
+    previous_day = date(2026, 9, 1)
+    day = date(2026, 9, 2)
+    ladder = pl.DataFrame(
+        {
+            "trade_date": [stale_day, previous_day, day],
+            "theme_name": ["旧题材", "其他题材", "待归类"],
+            "board_height": [4, 1, 5],
+            "name": ["示例股份", "其他股份", "示例股份"],
+            "symbol": ["000001", "000002", "000001.SZ"],
+            "exchange": ["SZSE", "SZSE", "SZSE"],
+            "source": ["zhangtingke"] * 3,
+            "is_fallback": [False] * 3,
+            "theme_reason": ["旧催化", "其他催化", ""],
+            "interpretation": ["旧解读", "其他解读", ""],
+        }
+    )
+
+    result = _sunburst(ladder, day)
+    member = next(row for row in result["members"] if row["symbol"] == "000001.SZ")
+
+    assert member["theme"] == "待归类"
+    assert member["reason"] == ""
+
+
 def test_density_includes_zero_count_cells() -> None:
     returns = pl.DataFrame(
         {
@@ -352,6 +592,10 @@ def test_rotation_clock_uses_cross_sectional_rps() -> None:
     assert result["metric"] == "cross_sectional_rps"
     assert min(row["momentum"] for row in result["points"]) < 0
     assert max(row["momentum"] for row in result["points"]) > 0
+    assert result["as_of"] == "2026-08-28"
+    assert result["previous_as_of"] == "2026-08-27"
+    assert all(row["previous_momentum"] is not None for row in result["points"])
+    assert all(row["movement"] >= 0 for row in result["points"])
 
 
 def test_mainline_waterfall_exposes_every_ranked_mainline(tmp_path) -> None:

@@ -388,7 +388,7 @@ function RiskSignalBoard({ ebb, crash, participation }: { ebb: any[]; crash: any
 }
 
 function NewHighPanel({ date, data }: { date: string; data: QuantXReviewData['sections']['s2']['new_high'] }) {
-  const [dimension, setDimension] = useState<'concept' | 'industry_level1' | 'industry_level2'>('concept')
+  const [dimension, setDimension] = useState<'concept' | 'attribute' | 'industry_level1' | 'industry_level2'>('concept')
   const [window, setWindow] = useState<1 | 5 | 10 | 20>(5)
   const [expandedName, setExpandedName] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
@@ -408,7 +408,7 @@ function NewHighPanel({ date, data }: { date: string; data: QuantXReviewData['se
   const rows = selected?.dimensions[dimension] || []
   const coverage = data.coverage_pct?.[dimension] ?? 0
   const top = rows[0]
-  const dimensionLabels = { concept: '题材概念', industry_level1: '申万一级', industry_level2: '申万二级' }
+  const dimensionLabels = { concept: '题材概念', attribute: '属性/事件', industry_level1: '申万一级', industry_level2: '申万二级' }
   const statusTone: Record<string, string> = {
     新生: 'bg-red-500/15 text-red-300',
     扩散: 'bg-orange-500/15 text-orange-300',
@@ -419,7 +419,7 @@ function NewHighPanel({ date, data }: { date: string; data: QuantXReviewData['se
   }
   return <div data-testid="quantx-new-high-clusters" className="space-y-2.5">
     <div className="flex flex-wrap items-center gap-2">
-      <SmallTabs values={[["concept", '题材概念'], ["industry_level1", '申万一级'], ["industry_level2", '申万二级']]} active={dimension} onChange={setDimension} label="百日新高聚类维度" />
+      <SmallTabs values={[["concept", '题材概念'], ["attribute", '属性/事件'], ["industry_level1", '申万一级'], ["industry_level2", '申万二级']]} active={dimension} onChange={setDimension} label="百日新高聚类维度" />
       <SmallTabs values={[[1, '当日'], [5, '5日'], [10, '10日'], [20, '20日']]} active={window} onChange={setWindow} label="百日新高观察窗口" />
       <span className="ml-auto text-[9px] text-muted">{selected?.date_range?.join('—') || '--'} · {selected?.valid_days ?? 0} 个有效交易日</span>
     </div>
@@ -549,7 +549,7 @@ function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthL
   if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel></div>
   if (tab === 'flow') return <div data-testid="quantx-capital-workspace" className="grid gap-3">
     <div data-testid="quantx-capital-breadth-row" className="grid gap-3 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
-      <Panel testId="quantx-capital-ecosystem" title="行业资金分布" hint="行业涨跌与净流入的面积、方向和强弱结构" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><SectorTreemapChart data={s4.sector_treemap} height={750} /></Panel>
+      <Panel testId="quantx-capital-ecosystem" title="行业资金分布" hint="全行业流入/流出使用同一面积尺度，其他行业合并但总额不丢失" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><SectorTreemapChart data={s4.sector_treemap} summary={s4.sector_flow} height={750} /></Panel>
       <Panel testId="quantx-sector-breadth" title={`申万${breadthLevel === 1 ? '一级' : '二级'}行业均线宽度`} hint={`${breadth.length} 个行业 · 按 MA20 强度排序`} icon={<Gauge className="h-3.5 w-3.5" />} actions={<SmallTabs values={[[1, '一级'], [2, '二级']]} active={breadthLevel} onChange={onBreadthLevel} label="行业层级" />} className="xl:[grid-column:span_7/span_7]">
         <div data-testid="quantx-sector-breadth-legend" className="mb-2 grid grid-cols-2 gap-1 rounded border border-border/60 bg-base/35 p-2 text-[9px] sm:grid-cols-4"><span><b className="text-foreground">MA5</b><small className="ml-1 text-muted">站上5日均线占比</small></span><span><b className="text-foreground">MA10</b><small className="ml-1 text-muted">站上10日均线占比</small></span><span><b className="text-foreground">MA20</b><small className="ml-1 text-muted">站上20日均线占比</small></span><span><b className="text-foreground">MA60</b><small className="ml-1 text-muted">站上60日均线占比</small></span></div>
         <div data-testid="quantx-sector-breadth-scroll" className={cn('rounded border border-border/50 bg-base/20', breadthLevel === 1 ? 'overflow-x-clip' : 'max-h-[720px] overflow-y-auto overflow-x-hidden')}><SectorBreadthHeatmap data={breadth} height={breadthLevel === 1 ? Math.max(680, breadth.length * 20 + 76) : Math.max(720, breadth.length * 20 + 76)} /></div>

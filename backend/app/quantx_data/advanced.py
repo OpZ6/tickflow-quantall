@@ -105,6 +105,26 @@ def _state_transition(frame: pl.DataFrame) -> dict[str, Any]:
         "matrix": matrix,
         "counts": counts,
         "visual_max": 50.0,
+        "start_date": frame["date"].min().isoformat() if not frame.is_empty() else None,
+        "end_date": frame["date"].max().isoformat() if not frame.is_empty() else None,
+        "transition_count": sum(sum(row) for row in counts),
+        "sample_days": frame.height,
+    }
+
+
+def _state_transition_views(frame: pl.DataFrame) -> dict[str, Any]:
+    """Expose a recent regime window by default while retaining full history."""
+    ordered = frame.sort("date") if not frame.is_empty() else frame
+    recent = ordered.tail(500)
+    recent_view = _state_transition(recent)
+    full_view = _state_transition(ordered)
+    return {
+        **recent_view,
+        "default_view": "500",
+        "views": {
+            "500": {**recent_view, "label": "近500日"},
+            "all": {**full_view, "label": "全历史"},
+        },
     }
 
 
@@ -204,7 +224,7 @@ def _stock_returns(
     dates = _history_dates(root, "kline_daily_enriched", end, days + 1)
     if len(dates) < 2:
         return pl.DataFrame()
-    required = {"symbol", "date", "close", "amount", "turnover_rate"}
+    required = {"symbol", "date", "close", "raw_close", "amount", "turnover_rate"}
     frame = None
     get_enriched_range = getattr(repo, "get_enriched_range", None)
     if callable(get_enriched_range):
@@ -216,7 +236,13 @@ def _stock_returns(
     return (
         frame.select(sorted(required))
         .sort(["symbol", "date"])
-        .with_columns((pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("return"))
+        .with_columns(
+            (
+                pl.col("raw_close")
+                / pl.col("raw_close").shift(1).over("symbol")
+                - 1
+            ).alias("return")
+        )
     )
 
 
@@ -743,15 +769,247 @@ def _mainline_waterfall(root: Path, end: date) -> dict[str, Any]:
     }
 
 
-def _sunburst(ladder: pl.DataFrame, end: date) -> dict[str, Any]:
+_EVENT_THEME_KEYWORDS = (
+    "股权",
+    "并购",
+    "重组",
+    "控制权",
+    "业绩",
+    "公告",
+    "摘帽",
+    "回购",
+    "增持",
+    "资产注入",
+)
+
+
+def _ladder_category(theme: str) -> str:
+    if theme == "待归类":
+        return "待归类"
+    if theme in {"其他", "独立逻辑"}:
+        return "独立逻辑"
+    if any(keyword in theme for keyword in _EVENT_THEME_KEYWORDS):
+        return "公告/事件"
+    return "题材/行业"
+
+
+def _board_kind(symbol: str, exchange: str) -> str:
+    if exchange == "BSE" or symbol.startswith(("4", "8", "9")):
+        return "30cm"
+    if symbol.startswith(("300", "301", "688", "689")):
+        return "20cm"
+    return "10cm"
+
+
+def _canonical_ladder_symbol(symbol: str, exchange: str) -> str:
+    normalized = symbol.strip().upper()
+    if "." in normalized:
+        return normalized
+    suffix = {"SSE": "SH", "SZSE": "SZ", "BSE": "BJ"}.get(exchange)
+    if suffix:
+        return f"{normalized}.{suffix}"
+    if normalized.startswith(("4", "8", "92")):
+        return f"{normalized}.BJ"
+    if normalized.startswith(("5", "6", "9")):
+        return f"{normalized}.SH"
+    return f"{normalized}.SZ"
+
+
+def _ladder_symbol_key(symbol: str) -> str:
+    """Normalize source-specific exchange suffixes for cross-source joins."""
+    return symbol.strip().upper().split(".", 1)[0]
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _reason_detail(
+    interpretation: str,
+    limit_reason: str,
+    theme_reason: str,
+) -> tuple[str, str]:
+    if interpretation:
+        return interpretation, "个股解读"
+    if limit_reason:
+        return limit_reason, "涨停理由"
+    if theme_reason:
+        return theme_reason, "题材催化"
+    return "", "暂无理由"
+
+
+_UNCLASSIFIED_REASONS = {"", "--", "-", "其他", "其它", "未知", "暂无", "待定"}
+
+
+def _supplemental_theme(limit_reason: str) -> tuple[str, str]:
+    """Use observed limit-up reasons as a provisional theme for ledger supplements."""
+    normalized = limit_reason.strip().strip(" :;,.\u3002\uff1a\uff1b\uff0c")
+    if len(normalized) < 2 or normalized in _UNCLASSIFIED_REASONS:
+        return "待归类", "unclassified"
+    return normalized, "limit_reason"
+
+
+def _matrix_theme(theme: str, theme_count: int) -> tuple[str, str]:
+    if theme == "待归类":
+        return theme, ""
+    if theme == "独立逻辑":
+        return theme, ""
+    if theme == "其他":
+        return "独立逻辑", "其他个股逻辑"
+    if theme_count == 1:
+        return "独立逻辑", theme
+    return theme, ""
+
+
+def _sunburst(
+    ladder: pl.DataFrame,
+    end: date,
+    events: pl.DataFrame | None = None,
+) -> dict[str, Any]:
     latest = ladder.filter(pl.col("trade_date") == end)
-    if latest.is_empty():
+    limit_events = pl.DataFrame()
+    if events is not None and not events.is_empty():
+        limit_events = events.filter(
+            (pl.col("trade_date") == end) & (pl.col("event_type") == "limit_up")
+        )
+    if latest.is_empty() and limit_events.is_empty():
         return {}
-    themes: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
+
+    event_by_symbol = {
+        _ladder_symbol_key(str(row.get("symbol") or "")): row
+        for row in limit_events.to_dicts()
+        if row.get("symbol")
+    }
+    previous_by_symbol: dict[str, dict[str, Any]] = {}
+    previous_trade_date = None
+    if not ladder.is_empty():
+        previous_rows = ladder.filter(pl.col("trade_date") < end).sort(
+            "trade_date", descending=True
+        )
+        if not previous_rows.is_empty():
+            previous_trade_date = previous_rows["trade_date"].max()
+        for row in previous_rows.to_dicts():
+            key = _ladder_symbol_key(str(row.get("symbol") or ""))
+            if key and key not in previous_by_symbol:
+                previous_by_symbol[key] = row
+    members_by_symbol: dict[str, dict[str, Any]] = {}
     for row in latest.to_dicts():
-        theme = str(row.get("theme_name") or "其他")
-        themes[theme][int(row.get("board_height") or 1)].append(str(row.get("name") or row.get("symbol")))
-    ranked = sorted(themes.items(), key=lambda item: -sum(len(values) for values in item[1].values()))[:8]
+        symbol = str(row.get("symbol") or "")
+        if not symbol:
+            continue
+        symbol_key = _ladder_symbol_key(symbol)
+        theme = _text(row.get("theme_name")) or "待归类"
+        exchange = _text(row.get("exchange"))
+        event = event_by_symbol.get(symbol_key, {})
+        limit_reason = _text(event.get("limit_reason"))
+        theme_reason = _text(row.get("theme_reason"))
+        interpretation = _text(row.get("interpretation"))
+        classification_basis = "ladder"
+        previous = previous_by_symbol.get(symbol_key, {})
+        current_height = int(row.get("board_height") or 1)
+        previous_height = int(previous.get("board_height") or 0)
+        previous_theme = _text(previous.get("theme_name"))
+        can_carry_previous = (
+            current_height > 1
+            and previous_height == current_height - 1
+            and previous.get("trade_date") == previous_trade_date
+            and previous_theme not in _UNCLASSIFIED_REASONS
+            and previous_theme != "待归类"
+        )
+        if theme == "待归类" and can_carry_previous:
+            theme = previous_theme
+            classification_basis = "previous_ladder"
+        if can_carry_previous:
+            theme_reason = theme_reason or _text(previous.get("theme_reason"))
+            interpretation = interpretation or _text(previous.get("interpretation"))
+        reason, reason_kind = _reason_detail(
+            interpretation, limit_reason, theme_reason
+        )
+        members_by_symbol[symbol_key] = {
+            "symbol": _canonical_ladder_symbol(symbol, exchange),
+            "name": str(row.get("name") or symbol),
+            "height": current_height,
+            "theme": theme,
+            "category": _ladder_category(theme),
+            "exchange": exchange,
+            "source": _text(row.get("source")),
+            "is_supplemental": False,
+            "is_fallback": bool(row.get("is_fallback", False)),
+            "board_kind": _board_kind(symbol, exchange),
+            "limit_reason": limit_reason,
+            "theme_reason": theme_reason,
+            "interpretation": interpretation,
+            "reason": reason,
+            "reason_kind": reason_kind,
+            "classification_basis": classification_basis,
+        }
+    for row in limit_events.to_dicts():
+        symbol = str(row.get("symbol") or "")
+        symbol_key = _ladder_symbol_key(symbol)
+        if not symbol or symbol_key in members_by_symbol:
+            continue
+        exchange = _text(row.get("exchange"))
+        limit_reason = _text(row.get("limit_reason"))
+        theme, classification_basis = _supplemental_theme(limit_reason)
+        reason, reason_kind = _reason_detail("", limit_reason, "")
+        members_by_symbol[symbol_key] = {
+            "symbol": _canonical_ladder_symbol(symbol, exchange),
+            "name": str(row.get("name") or symbol),
+            "height": int(row.get("board_height") or 1),
+            "theme": theme,
+            "category": _ladder_category(theme),
+            "exchange": exchange,
+            "source": _text(row.get("source")),
+            "is_supplemental": True,
+            "is_fallback": bool(row.get("is_fallback", False)),
+            "board_kind": _board_kind(symbol, exchange),
+            "limit_reason": limit_reason,
+            "theme_reason": "",
+            "interpretation": "",
+            "reason": reason,
+            "reason_kind": reason_kind,
+            "classification_basis": classification_basis,
+        }
+
+    raw_theme_counts = Counter(
+        member["theme"] for member in members_by_symbol.values()
+    )
+    for member in members_by_symbol.values():
+        matrix_theme, subtheme = _matrix_theme(
+            member["theme"], raw_theme_counts[member["theme"]]
+        )
+        member["matrix_theme"] = matrix_theme
+        member["subtheme"] = subtheme
+
+    members = sorted(
+        members_by_symbol.values(),
+        key=lambda row: (-row["height"], row["theme"], row["symbol"]),
+    )
+    themes: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
+    matrix_groups: dict[str, dict[int, list[str]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for member in members:
+        themes[member["theme"]][member["height"]].append(member["name"])
+        matrix_groups[member["matrix_theme"]][member["height"]].append(
+            member["name"]
+        )
+    ranked_all = sorted(
+        matrix_groups.items(),
+        key=lambda item: (
+            -max(item[1]),
+            -sum(len(values) for values in item[1].values()),
+            item[0],
+        ),
+    )
+    ranked = sorted(
+        (item for item in themes.items() if item[0] != "待归类"),
+        key=lambda item: (
+            -sum(len(values) for values in item[1].values()),
+            -max(item[1]),
+            item[0],
+        ),
+    )[:8]
     children = []
     for theme, levels in ranked:
         level_nodes = []
@@ -765,7 +1023,84 @@ def _sunburst(ladder: pl.DataFrame, end: date) -> dict[str, Any]:
                 }
             )
         children.append({"name": theme, "children": level_nodes})
-    return {"children": children, "stock_count": latest.height}
+    matrix_themes = [
+        {
+            "name": theme,
+            "category": _ladder_category(theme),
+            "count": sum(len(values) for values in levels.values()),
+            "max_height": max(levels),
+            "subthemes": sorted(
+                {
+                    member["subtheme"]
+                    for member in members
+                    if member["matrix_theme"] == theme and member["subtheme"]
+                }
+            ),
+        }
+        for theme, levels in ranked_all
+    ]
+    classified_count = sum(member["theme"] != "待归类" for member in members)
+    total_count = limit_events["symbol"].n_unique() if not limit_events.is_empty() else len(members)
+    ladder_count = sum(not member["is_supplemental"] for member in members)
+    sunburst_names = {theme for theme, _levels in ranked}
+    sunburst_count = sum(member["theme"] in sunburst_names for member in members)
+    return {
+        "children": children,
+        "members": members,
+        "matrix": {
+            "themes": matrix_themes,
+            "heights": sorted({member["height"] for member in members}, reverse=True),
+        },
+        "coverage": {
+            "limit_up_count": total_count,
+            "ladder_count": ladder_count,
+            "supplemental_count": len(members) - ladder_count,
+            "classified_count": classified_count,
+            "unclassified_count": len(members) - classified_count,
+            "sunburst_count": sunburst_count,
+        },
+        "stock_count": len(members),
+    }
+
+
+def _rotation_positions(
+    daily: pl.DataFrame, dates: list[date]
+) -> dict[str, dict[str, float]]:
+    if len(dates) < 6:
+        return {}
+    recent_dates = dates[-5:]
+    previous_dates = dates[-10:-5] or dates[:-5]
+    recent = (
+        daily.filter(pl.col("date").is_in(recent_dates))
+        .group_by("industry")
+        .agg(pl.col("return").mean().alias("recent"))
+    )
+    previous = (
+        daily.filter(pl.col("date").is_in(previous_dates))
+        .group_by("industry")
+        .agg(pl.col("return").mean().alias("previous"))
+    )
+    joined = recent.join(previous, on="industry", how="inner")
+    joined = joined.with_columns(
+        (pl.col("recent").rank(method="average") / pl.len() * 100).alias(
+            "recent_rps"
+        ),
+        (pl.col("previous").rank(method="average") / pl.len() * 100).alias(
+            "previous_rps"
+        ),
+    ).with_columns(
+        (pl.col("recent_rps") - 50).alias("momentum"),
+        (pl.col("recent_rps") - pl.col("previous_rps")).alias("acceleration"),
+    )
+    return {
+        row["industry"]: {
+            "momentum": _round(row["momentum"]),
+            "acceleration": _round(row["acceleration"]),
+            "recent_rps": _round(row["recent_rps"]),
+            "recent_return_pct": _round(float(row["recent"]) * 100),
+        }
+        for row in joined.to_dicts()
+    }
 
 
 def _rotation_clock(daily: pl.DataFrame) -> dict[str, Any]:
@@ -780,31 +1115,33 @@ def _rotation_clock(daily: pl.DataFrame) -> dict[str, Any]:
         return {}
     recent_dates = dates[-5:]
     previous_dates = dates[-10:-5] or dates[:-5]
-    recent = daily.filter(pl.col("date").is_in(recent_dates)).group_by("industry").agg(pl.col("return").mean().alias("recent"))
-    previous = daily.filter(pl.col("date").is_in(previous_dates)).group_by("industry").agg(pl.col("return").mean().alias("previous"))
-    joined = recent.join(previous, on="industry", how="inner")
-    joined = joined.with_columns(
-        (pl.col("recent").rank(method="average") / pl.len() * 100).alias("recent_rps"),
-        (pl.col("previous").rank(method="average") / pl.len() * 100).alias("previous_rps"),
-    ).with_columns(
-        (pl.col("recent_rps") - 50).alias("momentum"),
-        (pl.col("recent_rps") - pl.col("previous_rps")).alias("acceleration"),
-    )
+    current = _rotation_positions(daily, dates)
+    prior = _rotation_positions(daily, dates[:-1])
     rows = [
         {
-            "name": row["industry"],
-            "momentum": _round(row["momentum"]),
-            "acceleration": _round(row["acceleration"]),
-            "recent_rps": _round(row["recent_rps"]),
-            "recent_return_pct": _round(float(row["recent"]) * 100),
+            "name": industry,
+            **position,
+            "previous_momentum": prior.get(industry, {}).get("momentum"),
+            "previous_acceleration": prior.get(industry, {}).get("acceleration"),
+            "movement": _round(
+                math.hypot(
+                    position["momentum"] - prior.get(industry, position)["momentum"],
+                    position["acceleration"]
+                    - prior.get(industry, position)["acceleration"],
+                )
+            ),
         }
-        for row in joined.sort("recent_rps", descending=True).to_dicts()
+        for industry, position in sorted(
+            current.items(), key=lambda item: item[1]["recent_rps"], reverse=True
+        )
     ]
     return {
         "points": rows,
         "recent_days": len(recent_dates),
         "previous_days": len(previous_dates),
         "metric": "cross_sectional_rps",
+        "as_of": dates[-1].isoformat(),
+        "previous_as_of": dates[-2].isoformat() if len(dates) > 1 else None,
     }
 
 
@@ -853,7 +1190,7 @@ def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> d
     builders = {
         "sentiment_phase": (_sentiment_phase(state), state.height),
         "liquidity_participation": (_liquidity_participation(state, liquidity), min(state.height, liquidity.height)),
-        "state_transition": (_state_transition(regime), regime.height),
+        "state_transition": (_state_transition_views(regime), regime.height),
         "sector_diffusion": (_sector_diffusion(sectors), sectors.height),
         "theme_river": (_theme_river(themes), themes.height),
         "promotion_funnel": (_promotion_funnel(ladder, events), ladder.height + events.height),
@@ -863,7 +1200,17 @@ def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> d
         "turnover_lorenz": (_turnover_lorenz(returns, trade_date), returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
         "industry_correlation": (_industry_correlation(industry_daily), industry_daily.height),
         "mainline_waterfall": (mainline, len(mainline.get("mainlines", []))),
-        "theme_ladder_sunburst": (_sunburst(ladder, trade_date), ladder.filter(pl.col("trade_date") == trade_date).height if not ladder.is_empty() else 0),
+        "theme_ladder_sunburst": (
+            _sunburst(ladder, trade_date, events),
+            events.filter(
+                (pl.col("trade_date") == trade_date)
+                & (pl.col("event_type") == "limit_up")
+            ).height
+            if not events.is_empty()
+            else ladder.filter(pl.col("trade_date") == trade_date).height
+            if not ladder.is_empty()
+            else 0,
+        ),
         "rps_rotation_clock": (_rotation_clock(industry_daily), industry_daily.height),
         "turnover_return_density": (_density(returns, trade_date), returns.filter(pl.col("date") == trade_date).height if not returns.is_empty() else 0),
     }

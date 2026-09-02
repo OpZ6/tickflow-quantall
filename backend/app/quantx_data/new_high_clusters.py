@@ -20,11 +20,17 @@ from app.services.market_overview_builder import (
 )
 
 WINDOWS = (1, 5, 10, 20)
-DIMENSIONS = ("concept", "industry_level1", "industry_level2")
+DIMENSIONS = ("concept", "attribute", "industry_level1", "industry_level2")
 _INDUSTRY_SPLIT = re.compile(r"\s*[-—>]+\s*")
 _CONCEPT_NOISE = re.compile(
     r"(?:百日新高|近期新高|趋势股|昨日|高振幅|高换手|热股|打板|首板|连板|"
     r"融资融券|沪股通|深股通|陆股通|MSCI|富时罗素|中证\d+|上证\d+|深成\d+)",
+    re.IGNORECASE,
+)
+_CONCEPT_ATTRIBUTE = re.compile(
+    r"(?:国企改革|央企|国资|地方国企|高股息|中特估|低估值|低市盈率|破净股|"
+    r"专精特新|业绩预增|中报预增|年报预增|机构重仓|基金重仓|社保重仓|"
+    r"证金持股|QFII|行业龙头|漂亮100)",
     re.IGNORECASE,
 )
 
@@ -43,6 +49,10 @@ def _is_investable_concept(value: str) -> bool:
     return len(value.strip()) >= 2 and not _CONCEPT_NOISE.search(value)
 
 
+def _concept_dimension(value: str) -> str:
+    return "attribute" if _CONCEPT_ATTRIBUTE.search(value) else "concept"
+
+
 def _load_memberships(data_dir) -> dict[str, dict[str, set[str]]]:
     memberships: dict[str, dict[str, set[str]]] = {
         dimension: defaultdict(set) for dimension in DIMENSIONS
@@ -57,7 +67,9 @@ def _load_memberships(data_dir) -> dict[str, dict[str, set[str]]]:
                     if _is_investable_concept(value)
                 }
                 for key in _symbol_keys(row, config):
-                    memberships["concept"][_symbol(key)].update(concepts)
+                    normalized = _symbol(key)
+                    for concept in concepts:
+                        memberships[_concept_dimension(concept)][normalized].add(concept)
 
         industry_field = _dimension_field(config, "industry")
         if industry_field:
@@ -190,16 +202,28 @@ def _aggregate_dimension(days: list[dict[str, Any]], dimension: str) -> list[dic
                 "status": _status(shares, active_days),
             }
         )
-    rows.sort(
-        key=lambda row: (
-            row["current_count"] > 0,
-            row["current_share_pct"],
-            row["average_share_pct"],
-            row["active_days"],
-            row["name"],
-        ),
-        reverse=True,
-    )
+    if dimension in {"concept", "attribute"}:
+        rows.sort(
+            key=lambda row: (
+                row["current_count"] > 0,
+                row["weighted_share_pct"],
+                row["average_share_pct"],
+                row["active_days"],
+                row["name"],
+            ),
+            reverse=True,
+        )
+    else:
+        rows.sort(
+            key=lambda row: (
+                row["current_count"] > 0,
+                row["current_share_pct"],
+                row["average_share_pct"],
+                row["active_days"],
+                row["name"],
+            ),
+            reverse=True,
+        )
     return rows[:20]
 
 
