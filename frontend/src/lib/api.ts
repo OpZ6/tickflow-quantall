@@ -4335,6 +4335,48 @@ export interface QuantXSectorFlowContinuity {
   rule_candidates: any[]
 }
 
+export interface QuantXOpportunityWindow {
+  window: 5 | 20
+  valid_days: number
+  date_range: string[]
+  coverage_confidence: Record<'themes' | 'sectors' | 'stocks', number>
+  themes: Array<{
+    name: string
+    score: number
+    active_days: number
+    last_seen: string
+    lifecycle?: string
+  }>
+  sectors: Array<{
+    name: string
+    score: number
+    active_days: number
+    last_seen: string
+    net_inflow_sum_yi: number
+    last_net_inflow_yi?: number | null
+    last_pct_chg?: number | null
+  }>
+  stocks: Array<{
+    code: string
+    name?: string
+    score: number
+    active_days: number
+    last_seen: string
+    priority?: string
+    source?: string
+  }>
+}
+
+export interface QuantXOpportunityRadar {
+  schema_version: 'opportunity-radar-v2'
+  default_window: 5
+  windows: Record<'5' | '20', QuantXOpportunityWindow>
+  coverage_confidence: Record<string, number>
+  themes: QuantXOpportunityWindow['themes']
+  sectors: QuantXOpportunityWindow['sectors']
+  stocks: QuantXOpportunityWindow['stocks']
+}
+
 export interface QuantXMultidaySnapshot {
   schema_version: string
   generated_at: string
@@ -4345,7 +4387,7 @@ export interface QuantXMultidaySnapshot {
   window_statistics: Record<'5' | '10' | '20', Record<string, any>>
   theme_lifecycle: { current: any[]; events: any[]; exited: any[]; heatmap: { dates: string[]; rows: Array<{ name: string; values: Array<number | null> }> } }
   factor_attribution: Array<{ name: string; count: number }>
-  opportunity_radar: { coverage_confidence: Record<string, number>; themes: any[]; sectors: any[]; stocks: any[] }
+  opportunity_radar: QuantXOpportunityRadar
   sector_flow_continuity: QuantXSectorFlowContinuity
   data_coverage: { theme_days: number; sector_flow_days: number; window_days: number }
 }

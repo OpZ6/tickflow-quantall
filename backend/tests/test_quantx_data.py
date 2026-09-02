@@ -17,6 +17,7 @@ from app.quantx_data import collectors
 from app.quantx_data.catalog import build_catalog, load_tables
 from app.quantx_data.migration import migrate_quantx_history
 from app.quantx_data.multiday import (
+    _opportunity_radar,
     _window_signal,
     build_multiday_snapshot,
     rebuild_multiday_snapshots,
@@ -381,6 +382,53 @@ def test_window_theme_structure_is_calculated_from_each_selected_window():
     assert five["observed_days"] == 5
     assert twenty["observed_days"] == 20
     assert "institution" not in _window_signal(records, 5)
+
+
+def test_opportunity_radar_publishes_five_and_twenty_day_views():
+    records = []
+    for index in range(20):
+        records.append(
+            {
+                "trade_date": f"202608{index + 1:02d}",
+                "themes": [
+                    {
+                        "name": "人工智能",
+                        "rank_strength": 60 + index,
+                        "lifecycle": "continuing",
+                        "leaders": [{"code": "300001", "name": "龙头样本"}],
+                    }
+                ],
+                "market_activity": {
+                    "sectors": [
+                        {
+                            "name": "计算机",
+                            "net_inflow_yi": 2.0,
+                            "pct_chg": 1.0,
+                        }
+                    ],
+                    "rule_candidates": [
+                        {
+                            "code": "300002",
+                            "name": "规则样本",
+                            "priority": "核心",
+                            "source": "deterministic_rule_screen",
+                        }
+                    ],
+                },
+            }
+        )
+
+    radar = _opportunity_radar(records)
+
+    assert radar["schema_version"] == "opportunity-radar-v2"
+    assert set(radar["windows"]) == {"5", "20"}
+    assert radar["themes"] == radar["windows"]["5"]["themes"]
+    assert radar["windows"]["5"]["valid_days"] == 5
+    assert radar["windows"]["20"]["valid_days"] == 20
+    assert radar["windows"]["5"]["sectors"][0]["net_inflow_sum_yi"] == 10.0
+    assert radar["windows"]["20"]["sectors"][0]["net_inflow_sum_yi"] == 40.0
+    assert radar["windows"]["20"]["stocks"][0]["active_days"] == 20
+    assert radar["windows"]["20"]["stocks"][0]["priority"] == "核心"
 
 
 def test_multiday_rebuild_uses_only_canonical_facts_after_publication(tmp_path):

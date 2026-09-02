@@ -446,47 +446,153 @@ def _theme_heatmap(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _opportunity_radar(records: list[dict[str, Any]]) -> dict[str, Any]:
-    scoped = records[-20:]
-    recent = scoped[-5:]
-    weights = [0.1, 0.1, 0.15, 0.15, 0.5][-len(recent):]
+def _opportunity_weights(window: int, valid_days: int) -> list[float]:
+    if valid_days <= 0:
+        return []
+    if window == 5:
+        return [0.1, 0.1, 0.15, 0.15, 0.5][-valid_days:]
+    denominator = sum(range(1, window + 1))
+    return [value / denominator for value in range(1, window + 1)][-valid_days:]
+
+
+def _opportunity_window(
+    records: list[dict[str, Any]], window: int
+) -> dict[str, Any]:
+    scoped = records[-window:]
+    weights = _opportunity_weights(window, len(scoped))
     theme_scores: dict[str, dict[str, Any]] = {}
     sector_scores: dict[str, dict[str, Any]] = {}
     stock_scores: dict[str, dict[str, Any]] = {}
-    for weight, record in zip(weights, recent, strict=False):
+    for weight, record in zip(weights, scoped, strict=False):
         for item in record.get("themes") or []:
-            row = theme_scores.setdefault(item["name"], {"name": item["name"], "score": 0.0, "active_days": 0, "last_seen": record["trade_date"], "lifecycle": item.get("lifecycle"), "leaders": item.get("leaders", [])})
+            row = theme_scores.setdefault(
+                item["name"],
+                {
+                    "name": item["name"],
+                    "score": 0.0,
+                    "active_days": 0,
+                    "last_seen": record["trade_date"],
+                    "lifecycle": item.get("lifecycle"),
+                    "leaders": item.get("leaders", []),
+                },
+            )
             row["score"] += weight * float(item.get("rank_strength") or 0)
             row["active_days"] += 1
-            row.update({"last_seen": record["trade_date"], "lifecycle": item.get("lifecycle"), "leaders": item.get("leaders", [])})
+            row.update(
+                {
+                    "last_seen": record["trade_date"],
+                    "lifecycle": item.get("lifecycle"),
+                    "leaders": item.get("leaders", []),
+                }
+            )
         for item in (record.get("market_activity") or {}).get("sectors") or []:
-            row = sector_scores.setdefault(item["name"], {"name": item["name"], "score": 0.0, "active_days": 0, "last_seen": record["trade_date"], "net_inflow_yi": item.get("net_inflow_yi"), "pct_chg": item.get("pct_chg")})
+            row = sector_scores.setdefault(
+                item["name"],
+                {
+                    "name": item["name"],
+                    "score": 0.0,
+                    "active_days": 0,
+                    "last_seen": record["trade_date"],
+                    "net_inflow_sum_yi": 0.0,
+                    "last_net_inflow_yi": item.get("net_inflow_yi"),
+                    "last_pct_chg": item.get("pct_chg"),
+                },
+            )
             flow = max(-50.0, min(50.0, _number(item.get("net_inflow_yi"), 0.0) or 0.0))
             price = max(-10.0, min(10.0, _number(item.get("pct_chg"), 0.0) or 0.0))
             row["score"] += weight * (50 + flow + price * 2.5)
             row["active_days"] += 1
-            row.update({"last_seen": record["trade_date"], "net_inflow_yi": item.get("net_inflow_yi"), "pct_chg": item.get("pct_chg")})
-        leader_codes = {leader["code"]: leader for theme in record.get("themes") or [] for leader in theme.get("leaders") or [] if leader.get("code")}
-        cores = {item["code"]: item for item in (record.get("market_activity") or {}).get("rule_candidates") or [] if item.get("code")}
+            row["net_inflow_sum_yi"] += _number(item.get("net_inflow_yi"), 0.0) or 0.0
+            row.update(
+                {
+                    "last_seen": record["trade_date"],
+                    "last_net_inflow_yi": item.get("net_inflow_yi"),
+                    "last_pct_chg": item.get("pct_chg"),
+                }
+            )
+        leader_codes = {
+            leader["code"]: leader
+            for theme in record.get("themes") or []
+            for leader in theme.get("leaders") or []
+            if leader.get("code")
+        }
+        cores = {
+            item["code"]: item
+            for item in (record.get("market_activity") or {}).get("rule_candidates")
+            or []
+            if item.get("code")
+        }
         for code, item in {**leader_codes, **cores}.items():
-            row = stock_scores.setdefault(code, {"code": code, "name": item.get("name"), "score": 0.0, "active_days": 0, "last_seen": record["trade_date"], "source": item.get("source", "theme_leader")})
+            row = stock_scores.setdefault(
+                code,
+                {
+                    "code": code,
+                    "name": item.get("name"),
+                    "score": 0.0,
+                    "active_days": 0,
+                    "last_seen": record["trade_date"],
+                    "priority": item.get("priority") or "题材龙头",
+                    "source": item.get("source", "theme_leader"),
+                },
+            )
             row["score"] += weight * (70 if code in cores else 55)
             row["active_days"] += 1
-            row["last_seen"] = record["trade_date"]
+            row.update(
+                {
+                    "name": item.get("name") or row.get("name"),
+                    "last_seen": record["trade_date"],
+                    "priority": item.get("priority") or row.get("priority"),
+                    "source": item.get("source") or row.get("source"),
+                }
+            )
     for collection in (theme_scores, sector_scores, stock_scores):
         for row in collection.values():
             row["score"] = round(max(0.0, min(100.0, row["score"])), 1)
+    for row in sector_scores.values():
+        row["net_inflow_sum_yi"] = round(row["net_inflow_sum_yi"], 2)
     coverage = {
-        "themes": round(sum(bool(record.get("themes")) for record in recent) / len(recent), 2) if recent else 0.0,
-        "sectors": round(sum(bool((record.get("market_activity") or {}).get("sectors")) for record in recent) / len(recent), 2) if recent else 0.0,
-        "stocks": round(sum(bool((record.get("market_activity") or {}).get("rule_candidates")) for record in recent) / len(recent), 2) if recent else 0.0,
+        "themes": round(sum(bool(record.get("themes")) for record in scoped) / window, 2),
+        "sectors": round(
+            sum(bool((record.get("market_activity") or {}).get("sectors")) for record in scoped)
+            / window,
+            2,
+        ),
+        "stocks": round(
+            sum(
+                bool((record.get("market_activity") or {}).get("rule_candidates"))
+                for record in scoped
+            )
+            / window,
+            2,
+        ),
     }
     return {
-        "schema_version": "opportunity-radar-v1",
+        "window": window,
+        "valid_days": len(scoped),
+        "date_range": [scoped[0]["trade_date"], scoped[-1]["trade_date"]]
+        if scoped
+        else [],
         "coverage_confidence": coverage,
         "themes": sorted(theme_scores.values(), key=lambda item: (-item["score"], item["name"]))[:12],
         "sectors": sorted(sector_scores.values(), key=lambda item: (-item["score"], item["name"]))[:12],
         "stocks": sorted(stock_scores.values(), key=lambda item: (-item["score"], item["code"]))[:16],
+    }
+
+
+def _opportunity_radar(records: list[dict[str, Any]]) -> dict[str, Any]:
+    windows = {
+        str(window): _opportunity_window(records, window) for window in (5, 20)
+    }
+    default = windows["5"]
+    return {
+        "schema_version": "opportunity-radar-v2",
+        "default_window": 5,
+        "windows": windows,
+        # v1 compatibility for existing API consumers and portable exports.
+        "coverage_confidence": default["coverage_confidence"],
+        "themes": default["themes"],
+        "sectors": default["sectors"],
+        "stocks": default["stocks"],
     }
 
 
@@ -542,7 +648,13 @@ def load_multiday_snapshot(quantx_dir: Path, trade_date: str) -> dict[str, Any]:
     validate_trade_date(trade_date)
     path = Path(quantx_dir) / trade_date / "multiday_snapshot.json"
     cached = read_json(path)
-    if isinstance(cached, dict) and cached.get("schema_version") == SCHEMA_VERSION:
+    radar = cached.get("opportunity_radar") if isinstance(cached, dict) else None
+    if (
+        isinstance(cached, dict)
+        and cached.get("schema_version") == SCHEMA_VERSION
+        and isinstance(radar, dict)
+        and radar.get("schema_version") == "opportunity-radar-v2"
+    ):
         return cached
     return build_multiday_snapshot(quantx_dir, trade_date)
 

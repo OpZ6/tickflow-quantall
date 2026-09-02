@@ -7,7 +7,6 @@ import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import {
   FactorAttribution,
-  SectorFlowContinuity,
   OpportunityRadar,
   ThemeLifecyclePanel,
   TradingCalendar,
@@ -87,7 +86,6 @@ export function QuantXCatalog() {
       <TradingCalendar rows={snapshot.calendar} selectedDate={selectedDate} onSelect={setSelectedDate} />
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]"><ThemeLifecyclePanel data={snapshot} /><FactorAttribution rows={snapshot.factor_attribution} /></div>
       <OpportunityRadar data={snapshot.opportunity_radar} />
-      <SectorFlowContinuity data={snapshot.sector_flow_continuity} />
     </>}
 
     {!snapshot && !snapshotQuery.isLoading && records.length === 0 && <div className="rounded-xl border border-border py-20 text-center text-sm text-muted"><Database className="mx-auto mb-2 h-8 w-8" />暂无 QuantX 数据</div>}

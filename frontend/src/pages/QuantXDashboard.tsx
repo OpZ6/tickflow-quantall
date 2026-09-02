@@ -26,7 +26,6 @@ import { DatePicker } from '@/components/DatePicker'
 import {
   FactorAttribution,
   OpportunityRadar,
-  SectorFlowContinuity,
   ThemeLifecyclePanel,
   TradingCalendarGrid,
   WindowSignalMatrix,
@@ -485,7 +484,6 @@ function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthL
       </Panel>
     </div>
     <div className="grid gap-3 xl:grid-cols-2"><Panel title="行业流入 / 流出"><SectorFlowChart topIn={s4.sector_flow.top_in} topOut={s4.sector_flow.top_out} /></Panel><Panel title="涨跌幅 × 净流入"><SectorScatterChart data={s4.sector_treemap} /></Panel></div>
-    {multiday && <SectorFlowContinuity data={multiday.sector_flow_continuity} />}
   </div>
   if (tab === 'watch') return <div className="grid gap-3 xl:grid-cols-[1.35fr_1fr]"><Panel title="完整关注名单"><GenericRows rows={s5.candidates} columns={['code', 'name', 'limit_times', 'reason', 'score', 'priority']} /></Panel><Panel testId="quantx-decision-zone" title="决断区" hint="仓位 · 场景 · 次日动作"><DecisionRail data={review} /></Panel></div>
   if (tab === 'data') return <CompleteDataPanel data={tables} />

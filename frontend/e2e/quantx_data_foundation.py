@@ -74,9 +74,14 @@ def main() -> None:
 
         page.goto(f"{base_url}/quantx", wait_until="networkidle", timeout=30_000)
         page.get_by_test_id("quantx-data-coverage").wait_for()
-        page.get_by_test_id("sector-flow-continuity").wait_for()
+        opportunity = page.get_by_test_id("opportunity-radar")
+        opportunity.wait_for()
+        assert page.get_by_test_id("sector-flow-continuity").count() == 0
         page.get_by_text("行业资金覆盖", exact=True).wait_for()
-        page.get_by_text("行业资金与规则候选连续性", exact=True).wait_for()
+        page.get_by_text("题材 / 行业 / 个股多日机会与连续性", exact=True).wait_for()
+        opportunity.get_by_role("button", name="20日", exact=True).click()
+        opportunity.get_by_role("tab", name="行业", exact=True).click()
+        opportunity.get_by_role("columnheader", name="累计净流入(亿)").wait_for()
         page.screenshot(
             path=str(RESULTS / "quantx-data-foundation-multiday.png"), full_page=True
         )

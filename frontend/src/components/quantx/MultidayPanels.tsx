@@ -145,23 +145,25 @@ export function FactorAttribution({ rows }: { rows: QuantXMultidaySnapshot['fact
 }
 
 export function OpportunityRadar({ data }: { data: QuantXMultidaySnapshot['opportunity_radar'] }) {
+  const [window, setWindow] = useState<5 | 20>(data.default_window)
   const [tab, setTab] = useState<'themes' | 'sectors' | 'stocks'>('themes')
-  const rows = data[tab]
+  const selected = data.windows[String(window) as '5' | '20']
+  const rows = useMemo(() => tab === 'sectors'
+    ? selected.sectors.map(row => ({ ...row, net_inflow_sum_yi: Number(row.net_inflow_sum_yi ?? 0).toFixed(2) }))
+    : selected[tab], [selected, tab])
   const columns: Array<[string, string]> = tab === 'stocks'
-    ? [['code', '代码'], ['name', '名称'], ['score', '评分'], ['active_days', '活跃日'], ['source', '来源']]
-    : [['name', tab === 'themes' ? '题材' : '行业'], ['score', '评分'], ['active_days', '活跃日'], ['last_seen', '最近']]
-  return <Panel title="题材 / 行业 / 个股多日机会雷达" icon={<Radar className="h-4 w-4" />} hint="确定性规则评分，不含人工或 LLM 判断" testId="opportunity-radar">
-    <div className="mb-3 flex items-center gap-1">{(['themes', 'sectors', 'stocks'] as const).map(key => <button key={key} onClick={() => setTab(key)} className={cn('rounded px-2.5 py-1 text-xs', tab === key ? 'bg-accent/20 text-accent' : 'text-muted')}>{key === 'themes' ? '题材' : key === 'sectors' ? '行业' : '个股'}</button>)}<span className="ml-auto text-[10px] text-muted">覆盖 {(data.coverage_confidence[tab] * 100).toFixed(0)}%</span></div>
-    <MiniTable columns={columns} rows={rows} />
-  </Panel>
-}
-
-export function SectorFlowContinuity({ data }: { data: QuantXMultidaySnapshot['sector_flow_continuity'] }) {
-  const industries = useMemo(() => data.industries.map(row => ({ ...row, net_inflow_sum_yi: Number(row.net_inflow_sum_yi ?? 0).toFixed(2) })), [data.industries])
-  return <Panel title="行业资金与规则候选连续性" icon={<TrendingUp className="h-4 w-4" />} hint={`${data.direction} · 覆盖 ${(data.coverage * 100).toFixed(0)}% · 不代表机构身份`} testId="sector-flow-continuity">
-    <div className="grid items-start gap-3 xl:grid-cols-2">
-      <section data-testid="sector-flow-industries" className="min-w-0 rounded-lg border border-border/60 bg-base/25 p-2.5"><h3 className="mb-2 text-xs font-semibold">行业资金连续性</h3><MiniTable columns={[["name", "行业"], ["active_days", "活跃日"], ["net_inflow_sum_yi", "累计净流入(亿)"], ["last_pct_chg", "最新涨跌"], ["last_seen", "最近"]]} rows={industries} /></section>
-      <section data-testid="sector-flow-rules" className="min-w-0 rounded-lg border border-border/60 bg-base/25 p-2.5"><h3 className="mb-2 text-xs font-semibold">连续规则候选</h3><MiniTable columns={[["code", "代码"], ["name", "名称"], ["priority", "层级"], ["active_days", "活跃日"], ["source", "规则类型"]]} rows={data.rule_candidates} /></section>
+    ? [['code', '代码'], ['name', '名称'], ['score', '评分'], ['active_days', '活跃日'], ['priority', '层级'], ['source', '来源']]
+    : tab === 'sectors'
+      ? [['name', '行业'], ['score', '评分'], ['active_days', '活跃日'], ['net_inflow_sum_yi', '累计净流入(亿)'], ['last_pct_chg', '最新涨跌']]
+      : [['name', '题材'], ['score', '评分'], ['active_days', '活跃日'], ['lifecycle', '状态'], ['last_seen', '最近']]
+  const modeLabel = window === 5 ? '近期加权机会强度' : '中期资金与活跃连续性'
+  return <Panel title="题材 / 行业 / 个股多日机会与连续性" icon={<Radar className="h-4 w-4" />} hint={`${window}日 · ${modeLabel} · 确定性规则，不含人工或 LLM 判断`} testId="opportunity-radar">
+    <div className="mb-3 flex flex-wrap items-center gap-1">
+      <div className="flex items-center rounded border border-border/70 bg-base/30 p-0.5" role="group" aria-label="选择机会统计周期">{([5, 20] as const).map(key => <button key={key} type="button" aria-pressed={window === key} onClick={() => setWindow(key)} className={cn('cursor-pointer rounded px-2.5 py-1 text-xs transition-colors', window === key ? 'bg-accent/20 text-accent' : 'text-muted hover:text-foreground')}>{key}日</button>)}</div>
+      <div className="mx-1 h-5 w-px bg-border" />
+      <div className="flex items-center" role="tablist" aria-label="选择机会维度">{(['themes', 'sectors', 'stocks'] as const).map(key => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={cn('cursor-pointer rounded px-2.5 py-1 text-xs transition-colors', tab === key ? 'bg-accent/20 text-accent' : 'text-muted hover:text-foreground')}>{key === 'themes' ? '题材' : key === 'sectors' ? '行业' : '个股'}</button>)}</div>
+      <span className="ml-auto text-[10px] text-muted">有效 {selected.valid_days}/{window} 日 · 覆盖 {(selected.coverage_confidence[tab] * 100).toFixed(0)}%</span>
     </div>
+    <MiniTable columns={columns} rows={rows} />
   </Panel>
 }

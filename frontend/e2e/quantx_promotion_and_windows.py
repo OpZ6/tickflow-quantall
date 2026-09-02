@@ -140,7 +140,15 @@ def main() -> None:
         assert page.locator('[data-testid^="window-statistics-"]').count() == 3
         assert page.locator('[data-testid="window-statistics"]').count() == 0
         assert page.get_by_role("heading", name="核心个股", exact=True).count() == 0
-        assert page.get_by_role("heading", name="连续规则候选", exact=True).count() == 1
+        opportunity = page.get_by_test_id("opportunity-radar")
+        assert opportunity.count() == 1
+        assert page.get_by_test_id("sector-flow-continuity").count() == 0
+        assert page.get_by_role("heading", name="连续规则候选", exact=True).count() == 0
+        opportunity.get_by_role("button", name="20日", exact=True).click()
+        opportunity.get_by_role("tab", name="行业", exact=True).click()
+        opportunity.get_by_role("columnheader", name="累计净流入(亿)").wait_for()
+        opportunity.get_by_role("tab", name="个股", exact=True).click()
+        opportunity.get_by_role("columnheader", name="层级", exact=True).wait_for()
         assert page.get_by_role("heading", name="连板详细记录", exact=True).count() == 0
         assert page.get_by_test_id("quantx-advanced-risk_transmission").count() == 0
         assert page.get_by_role("heading", name="同花顺热点题材覆盖", exact=True).count() == 1
