@@ -48,3 +48,39 @@ def test_realtime_turnover_rate_falls_back_to_float_shares_when_missing():
     out = pipeline._compute_limit_signals_today(_today_rows(), _instruments())
 
     assert out["turnover_rate"][0] == pytest.approx(0.8)
+
+
+def test_realtime_turnover_rate_fills_null_api_value_from_float_shares():
+    rows = _today_rows().with_columns(
+        pl.lit(None).cast(pl.Float64).alias("turnover_rate")
+    )
+
+    out = pipeline._compute_limit_signals_today(rows, _instruments())
+
+    assert out["turnover_rate"][0] == pytest.approx(0.8)
+
+
+def test_tdx_realtime_volume_is_normalized_from_shares_to_hands():
+    records = QuoteService._normalize_custom_realtime_records(
+        [{
+            "symbol": "600000.SH",
+            "volume": 2_000.0,
+            "amount": 20_000.0,
+            "source": "tdx",
+        }],
+    )
+
+    assert records[0]["volume"] == pytest.approx(20.0)
+
+
+def test_fuyao_realtime_volume_already_in_hands_is_unchanged():
+    records = QuoteService._normalize_custom_realtime_records(
+        [{
+            "symbol": "600000.SH",
+            "volume": 20.0,
+            "amount": 20_000.0,
+            "source": "fuyao",
+        }],
+    )
+
+    assert records[0]["volume"] == pytest.approx(20.0)

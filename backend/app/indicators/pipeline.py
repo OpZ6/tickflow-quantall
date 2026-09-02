@@ -2013,15 +2013,22 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
 
     df = df.join(inst_subset, on="symbol", how="left", suffix="_inst")
 
-    # 换手率: API 有则直接用, 无则从 float_shares 计算
-    if "turnover_rate" not in df.columns:
-        if "float_shares" in df.columns and "volume" in df.columns:
-            df = df.with_columns(
-                pl.when(pl.col("float_shares") > 0)
-                  .then(pl.col("volume") * 10000.0 / pl.col("float_shares"))
-                  .otherwise(None)
-                  .alias("turnover_rate")
+    # 换手率: API 有效值直接用; 缺列或空值时从 float_shares 计算。
+    if "float_shares" in df.columns and "volume" in df.columns:
+        calculated_turnover = (
+            pl.when(pl.col("float_shares") > 0)
+            .then(pl.col("volume") * 10000.0 / pl.col("float_shares"))
+            .otherwise(None)
+        )
+        if "turnover_rate" in df.columns:
+            turnover_rate = (
+                pl.col("turnover_rate")
+                .cast(pl.Float64, strict=False)
+                .fill_null(calculated_turnover)
             )
+        else:
+            turnover_rate = calculated_turnover
+        df = df.with_columns(turnover_rate.alias("turnover_rate"))
 
     # 涨跌停 (用 raw_close / raw_high 和前一日原始收盘价)
     # 优先用 API 原始前收盘价, 回退到 close_right, 最后回退到 raw_close

@@ -624,6 +624,7 @@ class QuoteService:
                     t0 = time.perf_counter()
                     now_ts = time.perf_counter()
                     records = custom_sources.get_provider(provider_name).get_realtime()
+                    records = [{**record, "source": provider_name} for record in records]
                 except Exception as e:  # noqa: BLE001
                     logger.warning("自定义实时行情拉取失败: %s", e)
                     return
@@ -726,6 +727,7 @@ class QuoteService:
     def _process_full_market_records(self, records: list[dict], *, t0: float, now_ts: float) -> None:
         """把全市场 records 写盘并增量计算 enriched。"""
         from app.services import preferences
+        records = self._normalize_custom_realtime_records(records)
         all_index_symbols = set(self._repo.get_index_symbol_set()) if self._repo else set()
         core_index_symbols = set(preferences.get_realtime_index_symbols() or self.CORE_INDEX_SYMBOLS)
         all_index_symbols.update(core_index_symbols)
@@ -814,6 +816,25 @@ class QuoteService:
     # ================================================================
     # 工具
     # ================================================================
+
+    @staticmethod
+    def _normalize_custom_realtime_records(
+        records: list[dict],
+    ) -> list[dict]:
+        """Normalize provider-specific realtime units to the internal OHLCV contract."""
+        normalized: list[dict] = []
+        for record in records:
+            volume = record.get("volume")
+            normalized.append({
+                **record,
+                # TDX exposes total volume in shares; daily/enriched OHLCV uses hands.
+                "volume": (
+                    float(volume) / 100.0
+                    if record.get("source") == "tdx" and volume is not None
+                    else volume
+                ),
+            })
+        return normalized
 
     @staticmethod
     @staticmethod
