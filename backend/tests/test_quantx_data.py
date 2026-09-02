@@ -675,6 +675,13 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert response.json()["sections"]["s2"]["ebb_risk"]["signal_count"] == 1
     assert response.json()["sections"]["s4"]["sector_flow"]["top_in"]
     assert response.json()["sections"]["s5"]["candidates"]
+    assert len(response.json()["sections"]["s5"]["candidates"]) <= 10
+    assert response.json()["sections"]["s5"]["candidate_funnel"][
+        "algorithm_version"
+    ] == "quantx-candidate-funnel-v1"
+    assert "sections.s5.candidate_funnel" in response.json()["data_foundation"][
+        "derived_fields"
+    ]
     assert response.json()["sections"]["s6"]["position"]["band"] != "错误缓存"
     assert len(response.json()["sections"]["s6"]["scenes"]) == 3
     assert response.json()["sections"]["s0"]["diagnosis"][0]["name"] == "市场热度"

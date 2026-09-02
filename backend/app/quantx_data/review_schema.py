@@ -94,6 +94,8 @@ class Section4(_StrictModel):
 
 class Section5(_StrictModel):
     candidates: list[dict[str, Any]] = Field(default_factory=list)
+    candidate_funnel: dict[str, Any] | None = None
+    market_anchors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class Section6(_StrictModel):

@@ -16,6 +16,7 @@ from app.services.index_sync import (
     QUANTX_ALL_A_STORAGE_SYMBOL,
 )
 
+from .candidate_funnel import build_candidate_funnel
 from .io import read_json
 from .new_high_clusters import build_new_high_clusters
 from .review_contract import (
@@ -167,7 +168,7 @@ def _clear_canonical_cache_fields(snapshot: dict[str, Any]) -> None:
             "height_history",
         ),
         "s4": ("sector_flow", "sector_treemap"),
-        "s5": ("candidates",),
+        "s5": ("candidates", "candidate_funnel", "market_anchors"),
         "s6": ("position", "scenes"),
     }
     for section_name, keys in fields_by_section.items():
@@ -265,6 +266,14 @@ class QuantXReviewRepository:
             snapshot,
             loss_severity=str(loss_effect.get("severity") or ""),
         )
+        if _section(snapshot, "s5").get("candidate_funnel") is not None:
+            derived_fields.extend(
+                [
+                    "sections.s5.candidates",
+                    "sections.s5.market_anchors",
+                    "sections.s5.candidate_funnel",
+                ]
+            )
         audit = audit_review_fields(
             snapshot,
             canonical_fields=canonical_fields,
@@ -842,29 +851,17 @@ class QuantXReviewRepository:
         day: date,
         fields: list[str],
     ) -> None:
-        frame = self.facts.get_screening_candidates(day).filter(
-            pl.col("included")
-            & (pl.col("candidate_type") != "new_high_100d")
-        )
-        if frame.is_empty():
+        result = build_candidate_funnel(self.facts, self.indexes, day)
+        if not result["universe_count"]:
             return
-        frame = frame.sort(
-            ["priority", "score", "symbol"],
-            descending=[False, True, False],
-            nulls_last=True,
-        )
-        _section(snapshot, "s5")["candidates"] = [
-            {
-                "code": row["symbol"],
-                "name": row.get("name") or "",
-                "limit_times": None,
-                "reason": ", ".join(row.get("rules_matched") or []),
-                "score": row.get("score"),
-                "priority": row.get("priority"),
-            }
-            for row in frame.head(6).to_dicts()
-        ]
-        fields.append("sections.s5.candidates")
+        section = _section(snapshot, "s5")
+        section["candidates"] = result["candidates"]
+        section["market_anchors"] = result["market_anchors"]
+        section["candidate_funnel"] = {
+            key: value
+            for key, value in result.items()
+            if key not in {"candidates", "market_anchors"}
+        }
 
     def _apply_new_high(
         self,

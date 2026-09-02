@@ -48,7 +48,9 @@ V2_FIELD_CONTRACTS: dict[str, str] = {
     "sections.s3.height_history": "canonical_fact",
     "sections.s4.sector_flow": "canonical_fact",
     "sections.s4.sector_treemap": "canonical_fact",
-    "sections.s5.candidates": "canonical_fact",
+    "sections.s5.candidates": "derived_view",
+    "sections.s5.candidate_funnel": "derived_view",
+    "sections.s5.market_anchors": "derived_view",
     "sections.s6.position": "derived_view",
     "sections.s6.scenes": "derived_view",
 }
@@ -81,7 +83,8 @@ _V2_LIST_SORT_RULES = {
     "sections.s3.height_history": "trade_date_asc",
     "sections.s4.sector_flow": "net_inflow_desc_or_asc",
     "sections.s4.sector_treemap": "absolute_net_inflow_desc",
-    "sections.s5.candidates": "priority_asc_score_desc_symbol_asc",
+    "sections.s5.candidates": "adaptive_score_desc_symbol_asc_max_10",
+    "sections.s5.market_anchors": "board_height_desc_symbol_asc",
     "sections.s6.scenes": "strong_neutral_weak",
 }
 
@@ -131,6 +134,8 @@ _CANONICAL_EXPANSIONS: dict[str, tuple[str, ...]] = {
     "sections.s4.sector_flow": ("sections.s4.sector_flow",),
     "sections.s4.sector_treemap": ("sections.s4.sector_treemap",),
     "sections.s5.candidates": ("sections.s5.candidates",),
+    "sections.s5.candidate_funnel": ("sections.s5.candidate_funnel",),
+    "sections.s5.market_anchors": ("sections.s5.market_anchors",),
     "sections.s2.new_high": ("sections.s2.new_high",),
     "sections.s1.indexes": ("sections.s1.indexes",),
     "sections.s1.kline_history": ("sections.s1.kline_history",),

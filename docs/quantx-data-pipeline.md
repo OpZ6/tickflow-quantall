@@ -53,6 +53,12 @@ GET  /api/quantx-data/{date}/candidates
 GET  /api/quantx-data/{date}/quality
 ```
 
+### QuantX 候选漏斗
+
+`GET /api/quantx/review/{date}/data?view_version=v2` 的 `sections.s5` 是报告末尾关注名单的唯一读模型。候选漏斗不改写 `screening_candidate_daily` 事实，而是按所选交易日做 point-in-time 派生：合并近 45 个自然日内的规则候选与百日新高事实，再使用截至所选日的 TickFlow 日 K、涨停事件和连板梯队识别强势前排、分歧承接、健康回调、低位启动四类形态。
+
+漏斗先根据市场热度、短线情绪、趋势情绪、上涨家数占比、退潮信号和崩溃信号确定强势进攻、强势分歧、震荡轮动或弱势防守状态，再动态调整逻辑、强度、形态和可执行性权重。最终关注池必须满足：最多 10 只、同一题材最多 2 只、相同输入稳定排序；一字板不进入可执行池，20cm/30cm 封板只进入 `market_anchors` 并标记等待分歧。`candidate_funnel.audit_rows` 保留每只股票经过的层级和淘汰原因，供页面逐层审查；这些结果是次日观察条件，不是自动买卖信号。
+
 `POST /api/pipeline/run` 会先完成 TickFlow 主行情、enriched 和指数更新，然后在同一任务结果中运行并返回 `quantx` 发布结果。主数据更新成功但 QuantX 发布失败时，手动数据任务不得伪报为完整成功。
 
 `GET /catalog` 只扫描并返回紧凑日期目录，不写文件；`POST /catalog/rebuild?trade_date=YYYYMMDD`

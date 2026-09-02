@@ -33,7 +33,7 @@ import {
   type WindowSize,
 } from '@/components/quantx/MultidayPanels'
 import { AdvancedPanels, type AdvancedCardLayout } from '@/components/quantx/AdvancedPanels'
-import { quantxApi, type QuantXMultidaySnapshot, type QuantXReviewData } from '@/lib/api'
+import { quantxApi, type QuantXCandidate, type QuantXMultidaySnapshot, type QuantXReviewData } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { downloadQuantXInteractiveHtml } from '@/lib/exportStaticHtml'
 import { QK } from '@/lib/queryKeys'
@@ -470,6 +470,78 @@ function QualityPanel({ data }: { data: any }) {
   return <div className="grid gap-4"><div><h3 className="mb-2 text-xs font-semibold">数据来源</h3><GenericRows rows={data.sources || []} /></div><div><h3 className="mb-2 text-xs font-semibold">Market Facts</h3><GenericRows rows={data.facts || []} /></div><div className="grid gap-3 xl:grid-cols-2"><div className="rounded border border-border p-3 text-xs"><div>发布状态：{data.status}</div><div>标准事实：{data.fact_summary?.present_partition_count ?? '--'}/{data.fact_summary?.expected_partition_count ?? '--'}</div><div>Review：{data.view?.schema_version ?? '--'} · canonical {data.view?.canonical_count ?? '--'} · derived {data.view?.derived_count ?? '--'}</div><div>多日：{data.multiday?.schema_version ?? '--'}</div></div><div className="rounded border border-border p-3 text-xs"><div>对账：{data.reconciliation?.status ?? '--'} · 缺口 {data.reconciliation?.gap_count ?? '--'}</div><div className="mt-1 text-orange-300">{(data.warnings || []).join('；') || '无警告'}</div><div className="mt-1 text-red-300">{(data.errors || []).join('；') || '无错误'}</div></div></div></div>
 }
 
+const CANDIDATE_ACTION_LABELS: Record<QuantXCandidate['action_status'], string> = {
+  focus: '重点观察',
+  wait_confirmation: '等待确认',
+  wait_divergence: '等待分歧',
+  context_only: '仅作锚点',
+}
+
+function CandidateFunnelPanel({ data }: { data: QuantXReviewData['sections']['s5'] }) {
+  const navigate = useNavigate()
+  const [stage, setStage] = useState('final')
+  const [detailed, setDetailed] = useState(false)
+  const [candidateQuery, setCandidateQuery] = useState('')
+  const funnel = data.candidate_funnel
+  if (!funnel) return <div className="py-10 text-center text-xs text-muted">当前日期没有可构建的候选漏斗</div>
+
+  const rows = stage === 'final'
+    ? data.candidates
+    : stage === 'anchors'
+      ? data.market_anchors
+      : funnel.audit_rows.filter(row => {
+        if (stage === 'setup') return row.setup_type != null
+        if (stage === 'risk') return row.setup_type != null && !['wait_divergence', 'context_only'].includes(row.action_status)
+        return true
+      })
+  const stageButtons = [
+    ...funnel.stages.map(item => ({ key: item.key, label: item.label, count: item.passed_count })),
+    { key: 'anchors', label: '市场锚点', count: data.market_anchors.length },
+  ]
+  const normalizedQuery = candidateQuery.trim().toLowerCase()
+  const visibleRows = rows.filter(row => !normalizedQuery || [row.code, row.name, row.theme, row.setup_label].some(value => value.toLowerCase().includes(normalizedQuery))).slice(0, 100)
+
+  return <div data-testid="quantx-candidate-funnel" className="space-y-3">
+    <div className="grid gap-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(250px,.75fr)]">
+      <div className="rounded border border-border/70 bg-base/30 p-2.5">
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div><div className="text-xs font-semibold">{funnel.regime.label}</div><p className="mt-0.5 text-[10px] leading-4 text-muted">{funnel.regime.policy}</p></div>
+          <span className="shrink-0 rounded bg-accent/15 px-2 py-1 font-mono text-[10px] text-accent">最终 {data.candidates.length}/10</span>
+        </div>
+        <div className="grid grid-cols-4 gap-1 text-center text-[9px]">
+          {Object.entries(funnel.regime.weights).map(([key, value]) => <div key={key} className="rounded bg-elevated/60 px-1 py-1.5"><span className="block text-muted">{{ logic: '逻辑', strength: '强度', setup: '形态', execution: '可执行' }[key] || key}</span><b className="font-mono">{value}%</b></div>)}
+        </div>
+      </div>
+      <div className="rounded border border-border/70 bg-base/30 p-2.5">
+        <div className="mb-1.5 text-[10px] font-medium">四类机会分布</div>
+        <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+          {[['momentum_leader', '强势前排'], ['divergence_acceptance', '分歧承接'], ['healthy_pullback', '健康回调'], ['early_breakout', '低位启动']].map(([key, label]) => <div key={key} className="flex items-center justify-between rounded bg-elevated/50 px-2 py-1.5"><span>{label}</span><b className="font-mono">{funnel.branch_counts[key] || 0}</b></div>)}
+        </div>
+      </div>
+    </div>
+
+    <div className="grid gap-1 sm:grid-cols-5">
+      {stageButtons.map((item, index) => <button key={item.key} type="button" data-testid={`quantx-candidate-stage-${item.key}`} onClick={() => setStage(item.key)} className={cn('relative rounded border px-2 py-2 text-left transition-colors', stage === item.key ? 'border-accent/60 bg-accent/10' : 'border-border/60 bg-base/25 hover:bg-elevated/60')}>
+        <span className="block text-[9px] text-muted">{item.key === 'anchors' ? '独立观察' : `第 ${index + 1} 层`}</span><span className="mt-0.5 block truncate text-[10px] font-medium">{item.label}</span><b className="mt-1 block font-mono text-sm">{item.count}</b>
+      </button>)}
+    </div>
+
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-[10px] text-muted">点击漏斗层查看保留与淘汰原因；一字板和 20/30cm 封板不占最终名额。</p>
+      <div className="flex items-center gap-1.5"><input value={candidateQuery} onChange={event => setCandidateQuery(event.target.value)} placeholder="搜索代码、名称或题材" className="w-40 rounded border border-border bg-base/40 px-2 py-1 text-[10px] outline-none focus:border-accent/50" /><button type="button" data-testid="quantx-candidate-detail-toggle" onClick={() => setDetailed(value => !value)} className={cn('shrink-0 rounded border px-2 py-1 text-[10px]', detailed ? 'border-accent/50 bg-accent/10 text-accent' : 'border-border text-muted')}>{detailed ? '收起详细' : '详细模式'}</button></div>
+    </div>
+
+    {rows.length > visibleRows.length && <div className="text-[9px] text-muted">当前层共 {rows.length} 只，为保持页面流畅仅展示前 100 只；可用搜索精确定位。</div>}
+    {!visibleRows.length ? <div className="rounded border border-dashed border-border py-8 text-center text-xs text-muted">该层没有匹配候选</div> : <div className="grid gap-2 xl:grid-cols-2">
+      {visibleRows.map(row => <button key={`${stage}-${row.code}`} type="button" data-testid="quantx-candidate-card" data-action={row.action_status} onClick={() => navigate(`/stock-analysis?symbol=${encodeURIComponent(row.code)}&name=${encodeURIComponent(row.name)}`)} className="rounded border border-border/70 bg-base/25 p-2.5 text-left transition-colors hover:border-accent/40 hover:bg-elevated/60">
+        <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5"><b className="text-xs">{row.name || row.code}</b><span className="font-mono text-[9px] text-muted">{row.code}</span><span className="rounded bg-elevated px-1.5 py-0.5 text-[9px]">{row.setup_label}</span><span className={cn('rounded px-1.5 py-0.5 text-[9px]', row.action_status === 'focus' ? 'bg-red-500/10 text-red-300' : row.action_status === 'wait_confirmation' ? 'bg-orange-500/10 text-orange-300' : 'bg-muted/10 text-muted')}>{CANDIDATE_ACTION_LABELS[row.action_status]}</span></div><div className="mt-1 truncate text-[10px] text-muted" title={row.reason}>{row.theme} · {row.reason}</div></div><b className="font-mono text-base text-accent">{row.score ?? '--'}</b></div>
+        {row.eliminated_reason && <div className="mt-2 rounded bg-orange-500/5 px-2 py-1 text-[9px] text-orange-300">未进入最终池：{row.eliminated_reason}</div>}
+        {detailed && <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-[9px] leading-4 text-muted"><div><b className="text-foreground">确认：</b>{row.confirmation}</div><div><b className="text-foreground">失效：</b>{row.invalidation}</div><div><b className="text-foreground">路径：</b>{row.stage_path.join(' → ')}</div>{row.component_scores && <div className="grid grid-cols-4 gap-1 pt-1">{Object.entries(row.component_scores).map(([key, value]) => <span key={key} className="rounded bg-elevated/60 px-1 py-1 text-center">{key} {value}</span>)}</div>}{row.risk_tags.length > 0 && <div className="text-orange-300">风险：{row.risk_tags.join('；')}</div>}</div>}
+      </button>)}
+    </div>}
+  </div>
+}
+
 function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthLevel, onBreadthLevel }: { tab: DeepTab; review: QuantXReviewData; multiday?: QuantXMultidaySnapshot; tables?: Record<string, any>; quality?: any; breadth: any[]; breadthLevel: 1 | 2; onBreadthLevel: (level: 1 | 2) => void }) {
   const { s1, s2, s3, s4, s5 } = review.sections
   if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel></div>
@@ -485,7 +557,7 @@ function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthL
     </div>
     <div className="grid gap-3 xl:grid-cols-2"><Panel title="行业流入 / 流出"><SectorFlowChart topIn={s4.sector_flow.top_in} topOut={s4.sector_flow.top_out} /></Panel><Panel title="涨跌幅 × 净流入"><SectorScatterChart data={s4.sector_treemap} /></Panel></div>
   </div>
-  if (tab === 'watch') return <div className="grid gap-3 xl:grid-cols-[1.35fr_1fr]"><Panel title="完整关注名单"><GenericRows rows={s5.candidates} columns={['code', 'name', 'limit_times', 'reason', 'score', 'priority']} /></Panel><Panel testId="quantx-decision-zone" title="决断区" hint="仓位 · 场景 · 次日动作"><DecisionRail data={review} /></Panel></div>
+  if (tab === 'watch') return <div className="grid gap-3"><Panel title="候选漏斗与最终关注池" hint="市场状态自适应 · 最终严格不超过10只"><CandidateFunnelPanel data={s5} /></Panel><Panel testId="quantx-decision-zone" title="决断区" hint="仓位 · 场景 · 次日动作"><DecisionRail data={review} /></Panel></div>
   if (tab === 'data') return <CompleteDataPanel data={tables} />
   return <QualityPanel data={quality} />
 }

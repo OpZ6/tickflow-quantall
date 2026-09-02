@@ -154,7 +154,7 @@ def _rule_candidates(repo: MarketFactRepository, trade_date: date) -> list[dict[
             "industry": item.get("industry"),
             "source": item.get("candidate_type") or "deterministic_rule_screen",
         }
-        for item in candidates.head(40).to_dicts()
+        for item in candidates.sort(["candidate_type", "symbol"]).to_dicts()
         if item.get("symbol")
     ]
 

@@ -4259,7 +4259,22 @@ export interface QuantXReviewDataV2 {
       sector_treemap: Array<{ name: string; value: number | null; pct_chg: number | null }>
     }
     s5: {
-      candidates: Array<{ code: string; name: string; limit_times: number | null; reason: string; score: number | null; priority: string | null }>
+      candidates: QuantXCandidate[]
+      candidate_funnel: {
+        algorithm_version: string
+        regime: {
+          key: 'strong_attack' | 'strong_divergence' | 'neutral_rotation' | 'weak_defense'
+          label: string
+          policy: string
+          weights: Record<'logic' | 'strength' | 'setup' | 'execution', number>
+          evidence: Record<string, number | boolean>
+        }
+        universe_count: number
+        stages: Array<{ key: string; label: string; input_count: number; passed_count: number; eliminated_count: number }>
+        branch_counts: Record<string, number>
+        audit_rows: QuantXCandidate[]
+      } | null
+      market_anchors: QuantXCandidate[]
     }
     s6: {
       position: { band: string; action: string } | null
@@ -4287,6 +4302,29 @@ export interface QuantXReviewDataV2 {
     fallback_fields: string[]
     implicit_cache_fields: string[]
   }
+}
+
+export interface QuantXCandidate {
+  code: string
+  name: string
+  theme: string
+  setup_type: 'momentum_leader' | 'divergence_acceptance' | 'healthy_pullback' | 'early_breakout' | null
+  setup_label: string
+  score: number | null
+  component_scores: Record<'logic' | 'strength' | 'setup' | 'execution', number> | null
+  action_status: 'focus' | 'wait_confirmation' | 'wait_divergence' | 'context_only'
+  reason: string
+  confirmation: string
+  invalidation: string
+  risk_tags: string[]
+  source_signals: string[]
+  board_height: number
+  limit_class_pct: number
+  pct_chg: number | null
+  active_days: number
+  stage: string
+  eliminated_reason: string
+  stage_path: string[]
 }
 
 export type QuantXReviewData = QuantXReviewDataV2
