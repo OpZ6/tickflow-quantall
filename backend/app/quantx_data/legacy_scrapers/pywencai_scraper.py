@@ -536,7 +536,12 @@ def _compute_new_high_from_tushare() -> dict:
         }
 
 
-def run(trade_date: str = TRADE_DATE, output_dir: str = OUTPUT_DIR) -> str:
+def run(
+    trade_date: str = TRADE_DATE,
+    output_dir: str = OUTPUT_DIR,
+    *,
+    allow_slow_new_high_fallback: bool = False,
+) -> str:
     global TRADE_DATE, OUTPUT_DIR
     TRADE_DATE = trade_date
     OUTPUT_DIR = output_dir
@@ -553,9 +558,12 @@ def run(trade_date: str = TRADE_DATE, output_dir: str = OUTPUT_DIR) -> str:
         "ma_ratios": fetch_ma_ratios(),
     }
 
-    # D8 degraded fallback: when iwencai is blocked (401/403 anti-bot), compute
-    # 100-day highs from tushare daily klines and attach eastmoney F10 concepts.
-    if result["new_high_100d"].get("status") != "ok":
+    # This network-heavy fallback is opt-in: running it in the critical source
+    # process can discard yesterday_perf when the process timeout is exhausted.
+    if (
+        allow_slow_new_high_fallback
+        and result["new_high_100d"].get("status") != "ok"
+    ):
         print("  [pywencai] 百日新高 iwencai unavailable, trying tushare fallback...")
         fallback = _compute_new_high_from_tushare()
         if fallback.get("status") == "ok":

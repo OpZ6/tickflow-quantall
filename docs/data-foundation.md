@@ -34,6 +34,8 @@
 
 `sector_breadth_daily` 同时保存 `sw_level1` 与 `sw_level2`。乐咕乐股宽度响应包含滚动历史时，日流水线必须将最近 30 个交易日展开为独立事实分区，而不是只落目标日；每个分区仍按 `(trade_date, dimension, sector_id)` 唯一。历史修复使用 `scripts/backfill_sector_breadth_history.py`：默认仅预检，`--apply` 前备份被替换分区到 `data/.fact_backups/`，再通过 `FactPublication` 原子发布。
 
+`limit_event_daily.limit_reason` 保存事件来源给出的短理由；`limit_ladder_daily.theme_reason` 保存题材级催化，`interpretation` 保存个股级涨停解读。三者缺失时保持空字符串，不得由展示层补写推测性理由。历史低版本分区通过 union-by-name 兼容读取，新采集分区分别使用事件 schema v2 与梯队 schema v3。
+
 以 `backend/app/market_facts/registry.py` 为唯一机器可读权威。文档列表仅用于导航。
 
 ## 3. DatasetSpec 必备内容

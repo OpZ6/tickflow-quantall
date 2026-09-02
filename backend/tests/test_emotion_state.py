@@ -261,6 +261,39 @@ class TestCrashSignals:
 # ---- compute() 端到端 ----
 
 class TestCompute:
+    def test_zhangtingke_ladder_drives_crash_height_when_pywencai_failed(self, tmp_path):
+        trade_date = "20260825"
+        data_dir = tmp_path / trade_date
+        data_dir.mkdir()
+        payloads = {
+            "pywencai.json": {"trade_date": trade_date},
+            "duanxianxia.json": {
+                "sentiment": {"涨停家数": "80", "今日封板率": "75%"},
+                "pool_stats": {"跌停": {"today": "3"}},
+            },
+            "tushare.json": {
+                "trade_date": trade_date,
+                "daily_market": {"down_count": 1000},
+                "suspended_stocks": {},
+            },
+            "zhangtingke.json": {
+                "trade_date": trade_date,
+                "ladder_by_height": {"6": [{"code": "002084", "name": "海鸥住工"}]},
+                "ladder_stocks": [],
+            },
+        }
+        for name, data in payloads.items():
+            (data_dir / name).write_text(
+                json.dumps(data, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+        result = compute(data_dir, tmp_path)
+
+        leader_signal = result["crash_signals"]["signals"][1]
+        assert leader_signal["evidence"].startswith("最高6板")
+        assert result["limit_ladder"]["source"] == "zhangtingke"
+
     def test_e2e(self, tmp_path):
         trade_date = "20260825"
         data_dir = tmp_path / trade_date

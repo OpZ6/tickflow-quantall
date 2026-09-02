@@ -184,7 +184,8 @@ class MarketFactRepository:
         ]
         if not parts:
             return self._empty(dataset_id)
-        return pl.read_parquet(sorted(parts)).sort("trade_date")
+        frames = [pl.read_parquet(path) for path in sorted(parts)]
+        return pl.concat(frames, how="diagonal_relaxed").sort("trade_date")
 
     def available_dates(self, dataset_id: DatasetId) -> list[date]:
         root = self.data_dir / dataset_id.value

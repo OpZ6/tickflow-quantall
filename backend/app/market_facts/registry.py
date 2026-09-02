@@ -180,7 +180,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         DatasetId.LIMIT_EVENT_DAILY: DatasetSpec(
             dataset_id=DatasetId.LIMIT_EVENT_DAILY,
             description="Daily stock limit-up, limit-down and broken-board events",
-            schema_version=1,
+            schema_version=2,
             primary_key=("trade_date", "symbol", "event_type"),
             partition_keys=("trade_date",),
             required_columns=(
@@ -200,6 +200,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                     "name": pl.String,
                     "event_type": pl.String,
                     "board_height": pl.UInt32,
+                    "limit_reason": pl.String,
                 }
             ),
             field_units=MappingProxyType({}),
@@ -207,7 +208,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         DatasetId.LIMIT_LADDER_DAILY: DatasetSpec(
             dataset_id=DatasetId.LIMIT_LADDER_DAILY,
             description="Daily consecutive limit-up ladder membership",
-            schema_version=2,
+            schema_version=3,
             primary_key=("trade_date", "board_height", "symbol"),
             partition_keys=("trade_date",),
             required_columns=("trade_date", "board_height", "symbol", "exchange"),
@@ -221,6 +222,8 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                     "source_code": pl.String,
                     "name": pl.String,
                     "theme_name": pl.String,
+                    "theme_reason": pl.String,
+                    "interpretation": pl.String,
                     "turnover_pct": pl.Float64,
                     "amount_yi": pl.Float64,
                 }
@@ -521,7 +524,11 @@ ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
         ),
         DatasetId.SCREENING_CANDIDATE_DAILY: SourceRoute(
             DatasetId.SCREENING_CANDIDATE_DAILY,
-            ("quantx_rule_screen_v1", "pywencai"),
+            (
+                "quantx_rule_screen_v1",
+                "pywencai",
+                "tickflow_enriched_aggregate",
+            ),
         ),
     }
 )

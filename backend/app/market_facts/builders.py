@@ -464,6 +464,7 @@ def _event_rows(
                 "name": str(row.get("name") or ""),
                 "event_type": event_type,
                 "board_height": board_height,
+                "limit_reason": str(row.get("reason") or "").strip(),
                 **_metadata(
                     source=source,
                     source_record_id=f"{source}:{trade_date}:{event_type}:{symbol}",
@@ -907,6 +908,8 @@ def _build_limit_ladder(
                 "source_code": str(raw_code or symbol),
                 "name": str(item.get("name") or ""),
                 "theme_name": str(item.get("theme_name") or ""),
+                "theme_reason": str(item.get("theme_reason") or "").strip(),
+                "interpretation": str(item.get("interpretation") or "").strip(),
                 "turnover_pct": _number(item.get("turnover_pct")),
                 "amount_yi": _number(item.get("amount_yi")),
                 **_metadata(
@@ -1202,7 +1205,27 @@ def _build_screening_candidates(
         if isinstance(pywencai.get("new_high_100d"), dict)
         else {}
     )
-    for item in _records(new_high, "stocks", "records", "rows"):
+    new_high_records = _records(new_high, "stocks", "records", "rows")
+    new_high_source = "pywencai"
+    new_high_observed_at = ingested_at
+    new_high_quality = "observed"
+    new_high_is_fallback = False
+    new_high_algorithm = "pywencai-new-high-v1"
+    if not new_high_records:
+        tickflow = sources.get("tickflow_enriched_aggregate") or {}
+        local_new_high = (
+            tickflow.get("new_high_100d")
+            if isinstance(tickflow.get("new_high_100d"), dict)
+            else {}
+        )
+        new_high_records = _records(local_new_high, "stocks", "records", "rows")
+        if new_high_records:
+            new_high_source = "tickflow_local_kline"
+            new_high_observed_at = _observed_at(tickflow) or ingested_at
+            new_high_quality = "derived"
+            new_high_is_fallback = True
+            new_high_algorithm = "tickflow-close-high-100d-v1"
+    for item in new_high_records:
         symbol = _stock_code(item.get("code") or item.get("ts_code"))
         if not symbol:
             continue
@@ -1221,15 +1244,18 @@ def _build_screening_candidates(
                 "industry": str(item.get("industry") or ""),
                 "rules_matched": ["new_high_100d"],
                 "included": True,
-                "algorithm_version": "pywencai-new-high-v1",
+                "algorithm_version": new_high_algorithm,
                 "input_generation": run_id,
                 **_metadata(
-                    source="pywencai",
-                    source_record_id=f"pywencai:new_high_100d:{trade_date}:{symbol}",
-                    observed_at=ingested_at,
+                    source=new_high_source,
+                    source_record_id=(
+                        f"{new_high_source}:new_high_100d:{trade_date}:{symbol}"
+                    ),
+                    observed_at=new_high_observed_at,
                     ingested_at=ingested_at,
                     run_id=run_id,
-                    quality_level="observed",
+                    is_fallback=new_high_is_fallback,
+                    quality_level=new_high_quality,
                 ),
             }
         )

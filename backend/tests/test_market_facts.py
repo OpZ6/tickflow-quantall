@@ -72,6 +72,7 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
                         "code": "000001",
                         "name": "甲",
                         "limit_times": 2,
+                        "reason": "人工智能",
                     }
                 ],
                 "themes": [{"name": "人工智能", "count": 1}],
@@ -102,6 +103,8 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
                     "name": "甲",
                     "limit_times": 2,
                     "theme_name": "人工智能",
+                    "theme_reason": "行业催化",
+                    "interpretation": "公司接入大模型",
                     "turnover_pct": 12.34,
                     "amount_yi": 8.76,
                 }
@@ -250,7 +253,8 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         expected_version = {
             DatasetId.MARKET_BREADTH_DAILY: 2,
             DatasetId.MARKET_LIQUIDITY_DAILY: 3,
-            DatasetId.LIMIT_LADDER_DAILY: 2,
+            DatasetId.LIMIT_EVENT_DAILY: 2,
+            DatasetId.LIMIT_LADDER_DAILY: 3,
         }.get(dataset_id, 1)
         assert spec.schema_version == expected_version
         assert "trade_date" in spec.required_columns
@@ -360,9 +364,12 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
     ]
     assert events["source"].unique().to_list() == ["pywencai"]
     assert events["is_fallback"].to_list() == [False, False, False]
+    assert events.filter(pl.col("event_type") == "limit_up")["limit_reason"].item() == "人工智能"
     ladder = by_id[DatasetId.LIMIT_LADDER_DAILY].frame.row(0, named=True)
     assert ladder["turnover_pct"] == 12.34
     assert ladder["amount_yi"] == 8.76
+    assert ladder["theme_reason"] == "行业催化"
+    assert ladder["interpretation"] == "公司接入大模型"
 
     themes = by_id[DatasetId.THEME_OBSERVATION_DAILY].frame
     assert set(themes["source"].to_list()) == {"ths_hot", "pywencai", "deepq"}
@@ -543,6 +550,88 @@ def test_tickflow_adapter_derives_returns_from_previous_partition(tmp_path) -> N
         {"symbol": "600000.SH", "pct_chg": -10.0, "amount_yi": 0.8},
         {"symbol": "300001.SZ", "pct_chg": None, "amount_yi": 0.5},
     ]
+
+
+def test_tickflow_adapter_derives_new_highs_from_local_close_history(tmp_path) -> None:
+    table = tmp_path / "kline_daily_enriched"
+    for day in range(1, 23):
+        partition = table / f"date=2026-07-{day:02d}"
+        partition.mkdir(parents=True)
+        pl.DataFrame(
+            {
+                "symbol": ["000001.SZ", "600000.SH", "300001.SZ"],
+                "raw_close": [float(day), 50.0, float(day)],
+                "amount": [100_000_000.0] * 3,
+            }
+        ).write_parquet(partition / "part.parquet")
+
+    current = table / "date=2026-07-23"
+    current.mkdir(parents=True)
+    pl.DataFrame(
+        {
+            "symbol": ["000001.SZ", "600000.SH", "300001.SZ", "688001.SH"],
+            "raw_close": [22.0, 49.0, 23.0, 10.0],
+            "amount": [100_000_000.0] * 4,
+        }
+    ).write_parquet(current / "part.parquet")
+    instruments = tmp_path / "instruments"
+    instruments.mkdir()
+    pl.DataFrame(
+        {
+            "symbol": ["000001.SZ", "600000.SH", "300001.SZ", "688001.SH"],
+            "name": ["平安银行", "浦发银行", "创业样本", "新股样本"],
+        }
+    ).write_parquet(instruments / "instruments.parquet")
+
+    payload = load_tickflow_market_aggregate(tmp_path, "20260723")
+
+    assert payload is not None
+    assert payload["new_high_100d"] == {
+        "status": "ok",
+        "source": "tickflow_local_kline",
+        "count": 2,
+        "lookback_sessions": 100,
+        "minimum_history_sessions": 21,
+        "stocks": [
+            {"code": "000001.SZ", "name": "平安银行", "pct_chg": 0.0},
+            {"code": "300001.SZ", "name": "创业样本", "pct_chg": 4.54545455},
+        ],
+    }
+
+
+def test_screening_candidates_fall_back_to_tickflow_new_highs() -> None:
+    sources = _sources()
+    sources["pywencai"]["new_high_100d"] = {
+        "status": "unavailable",
+        "stocks": [],
+    }
+    sources["tickflow_enriched_aggregate"] = {
+        "trade_date": "20260825",
+        "scraped_at": "2026-08-25T16:10:00+08:00",
+        "new_high_100d": {
+            "status": "ok",
+            "source": "tickflow_local_kline",
+            "stocks": [
+                {"code": "000001.SZ", "name": "平安银行", "pct_chg": 3.2}
+            ],
+        },
+    }
+
+    batches = build_initial_fact_batches("20260825", sources, "run-fallback")
+    candidates = next(
+        batch.frame
+        for batch in batches
+        if batch.dataset_id == DatasetId.SCREENING_CANDIDATE_DAILY
+    )
+    row = candidates.filter(pl.col("candidate_type") == "new_high_100d").row(
+        0, named=True
+    )
+
+    assert row["symbol"] == "000001"
+    assert row["source"] == "tickflow_local_kline"
+    assert row["quality_level"] == "derived"
+    assert row["is_fallback"] is True
+    assert row["algorithm_version"] == "tickflow-close-high-100d-v1"
 
 
 def test_fact_publication_is_idempotent_and_repository_reads_canonical_data(tmp_path) -> None:
@@ -734,6 +823,38 @@ def test_repository_returns_typed_empty_frames_for_missing_partitions(tmp_path) 
     assert breadth.schema[get_dataset(DatasetId.MARKET_BREADTH_DAILY).primary_key[0]] == pl.Date
     assert events.is_empty()
     assert events.schema["symbol"] == pl.String
+
+
+def test_repository_range_reads_mixed_schema_versions(tmp_path) -> None:
+    root = tmp_path / DatasetId.LIMIT_LADDER_DAILY.value
+    old_partition = root / "date=2026-08-31"
+    new_partition = root / "date=2026-09-01"
+    old_partition.mkdir(parents=True)
+    new_partition.mkdir(parents=True)
+    pl.DataFrame(
+        {
+            "trade_date": [date(2026, 8, 31)],
+            "symbol": ["000001"],
+            "board_height": [1],
+        }
+    ).write_parquet(old_partition / "part.parquet")
+    pl.DataFrame(
+        {
+            "trade_date": [date(2026, 9, 1)],
+            "symbol": ["000002"],
+            "board_height": [2],
+            "theme_reason": ["产业催化"],
+        }
+    ).write_parquet(new_partition / "part.parquet")
+
+    result = MarketFactRepository(tmp_path).get_range(
+        DatasetId.LIMIT_LADDER_DAILY,
+        date(2026, 8, 31),
+        date(2026, 9, 1),
+    )
+
+    assert result["symbol"].to_list() == ["000001", "000002"]
+    assert result["theme_reason"].to_list() == [None, "产业催化"]
 
 
 def test_data_source_management_api_exposes_contracts_without_secrets(tmp_path) -> None:

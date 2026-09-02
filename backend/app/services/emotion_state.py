@@ -144,6 +144,23 @@ def _max_board_from_ladder(ladder: dict) -> int:
     return max(boards) if boards else 0
 
 
+def _with_zhangtingke_ladder(py: dict, ztk: dict, trade_date: str) -> dict:
+    """Use the published ladder fallback when PyWencai has no current ladder."""
+    py_limit = py.get("limit_up", {}) if isinstance(py, dict) else {}
+    if isinstance(py_limit, dict) and py_limit.get("ladder"):
+        return py
+    if ztk.get("trade_date") != trade_date or not ztk.get("ladder_by_height"):
+        return py
+
+    merged = dict(py) if isinstance(py, dict) else {}
+    merged_limit = dict(py_limit) if isinstance(py_limit, dict) else {}
+    merged_limit["ladder"] = ztk["ladder_by_height"]
+    if not merged_limit.get("stocks") and ztk.get("ladder_stocks"):
+        merged_limit["stocks"] = ztk["ladder_stocks"]
+    merged["limit_up"] = merged_limit
+    return merged
+
+
 def _dx_fallback(py: dict, dx: dict) -> dict:
     """pywencai 数据异常时 (limit_up=0 but dx>0),用 duanxianxia 值替代。"""
     dx_sent = dx.get("sentiment", {}) if isinstance(dx, dict) else {}
@@ -816,8 +833,8 @@ def compute(data_dir: Path, history_dir: Path | None = None) -> dict:
     ztk = _load_json(str(data_dir / "zhangtingke.json"))
     ll = _load_json(str(data_dir / "legulegu.json"))
 
-    py = raw_py
     trade_date = str(tu.get("trade_date") or raw_py.get("trade_date") or data_dir.name)
+    py = _with_zhangtingke_ladder(raw_py, ztk, trade_date)
 
     height_trend = _build_height_trend(history_dir, trade_date)
     advance_stats = _calc_advance_stats(py, dx)

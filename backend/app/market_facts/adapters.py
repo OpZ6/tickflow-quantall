@@ -1,4 +1,5 @@
 """Adapters from TickFlow's existing canonical stores to market facts."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -6,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+
+_NEW_HIGH_LOOKBACK_SESSIONS = 100
+_NEW_HIGH_MINIMUM_HISTORY_SESSIONS = 21
 
 
 def has_tickflow_market_partition(data_root: Path, trade_date: str) -> bool:
@@ -31,6 +35,104 @@ def load_published_fact_evidence(data_root: Path, trade_date: str) -> dict[str, 
         "source": "tickflow_published_fact",
         "scraped_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "input_table": "market_breadth_daily",
+    }
+
+
+def _derive_new_high_100d(
+    data_root: Path,
+    table_root: Path,
+    iso_date: str,
+    current: pl.DataFrame,
+    daily_rows: pl.DataFrame,
+) -> dict[str, Any] | None:
+    close_column = next(
+        (name for name in ("raw_close", "close") if name in current.columns),
+        None,
+    )
+    if close_column is None or "symbol" not in current.columns:
+        return None
+
+    previous_partitions = sorted(
+        (
+            path
+            for path in table_root.glob("date=*")
+            if path.is_dir() and path.name.removeprefix("date=") < iso_date
+        ),
+        reverse=True,
+    )[:_NEW_HIGH_LOOKBACK_SESSIONS]
+    history_frames: list[pl.DataFrame] = []
+    for partition in previous_partitions:
+        paths = sorted(partition.glob("*.parquet"))
+        if not paths:
+            continue
+        history = pl.read_parquet(paths)
+        history_close_column = next(
+            (name for name in ("raw_close", "close") if name in history.columns),
+            None,
+        )
+        if history_close_column is None or "symbol" not in history.columns:
+            continue
+        history_frames.append(
+            history.select(
+                pl.col("symbol").cast(pl.String),
+                pl.col(history_close_column)
+                .cast(pl.Float64, strict=False)
+                .alias("history_close"),
+            ).drop_nulls(["symbol", "history_close"])
+        )
+    if not history_frames:
+        return None
+
+    history_stats = pl.concat(history_frames).group_by("symbol").agg(
+        pl.len().alias("history_sessions"),
+        pl.col("history_close").max().alias("previous_high_close"),
+    )
+    candidates = (
+        current.select(
+            pl.col("symbol").cast(pl.String),
+            pl.col(close_column)
+            .cast(pl.Float64, strict=False)
+            .alias("current_close"),
+        )
+        .join(history_stats, on="symbol", how="left")
+        .join(daily_rows.select("symbol", "pct_chg"), on="symbol", how="left")
+        .filter(
+            (pl.col("history_sessions") >= _NEW_HIGH_MINIMUM_HISTORY_SESSIONS)
+            & (pl.col("current_close") >= pl.col("previous_high_close"))
+        )
+    )
+
+    instruments_path = Path(data_root) / "instruments" / "instruments.parquet"
+    if instruments_path.is_file():
+        instruments = pl.read_parquet(instruments_path)
+        if {"symbol", "name"}.issubset(instruments.columns):
+            candidates = candidates.join(
+                instruments.select(
+                    pl.col("symbol").cast(pl.String),
+                    pl.col("name").cast(pl.String),
+                ).unique("symbol"),
+                on="symbol",
+                how="left",
+            )
+    if "name" not in candidates.columns:
+        candidates = candidates.with_columns(pl.lit("").alias("name"))
+
+    stocks = (
+        candidates.select(
+            pl.col("symbol").alias("code"),
+            pl.col("name").fill_null(""),
+            pl.col("pct_chg").round(8),
+        )
+        .sort("code")
+        .to_dicts()
+    )
+    return {
+        "status": "ok",
+        "source": "tickflow_local_kline",
+        "count": len(stocks),
+        "lookback_sessions": _NEW_HIGH_LOOKBACK_SESSIONS,
+        "minimum_history_sessions": _NEW_HIGH_MINIMUM_HISTORY_SESSIONS,
+        "stocks": stocks,
     }
 
 
@@ -131,6 +233,11 @@ def load_tickflow_market_aggregate(data_root: Path, trade_date: str) -> dict[str
             "daily": rows.to_dicts(),
             "input_table": table,
         }
+        new_high_100d = _derive_new_high_100d(
+            Path(data_root), table_root, iso_date, frame, rows
+        )
+        if new_high_100d is not None:
+            payload["new_high_100d"] = new_high_100d
         if previous_trade_date is not None:
             payload["previous_trade_date"] = previous_trade_date
         return payload
