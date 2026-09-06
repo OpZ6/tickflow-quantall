@@ -42,6 +42,9 @@ dependencies = [
     "akshare>=1.18",
     "playwright>=1.62",
     "pywencai>=0.13",
+    # Built-in TDX provider. Keep it in the managed environment so `uv sync`
+    # does not remove a dependency previously installed from plugin metadata.
+    "eltdx==0.5.1",
     "platformdirs>=4.0",          # 桌面版用户数据目录 (跨平台持久可写)
     "winotify>=1.1; sys_platform == 'win32'",  # Windows 系统通知 (进操作中心)
     "plyer>=2.1",                 # 系统通知跨平台兜底 (macOS/Linux)
