@@ -1,0 +1,11 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-structure-v1.json",
+  "experiment": "vcp-five-year-cycle2-breadth-volume200-v1",
+  "purpose": "cycle2_parameter_stability",
+  "hypothesis": "Use a two-times reference-volume confirmation as the strict boundary for rejecting false breakouts.",
+  "backtest": {
+    "params": {
+      "breakout_volume_ratio_min": 2.0
+    }
+  }
+}

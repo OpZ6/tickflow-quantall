@@ -1101,7 +1101,11 @@ _benchmark_cache: dict[str, tuple[float, pl.DataFrame | None]] = {}
 _BENCHMARK_CACHE_TTL = 600.0
 
 
-def load_benchmark_momentum(data_dir: Path) -> pl.DataFrame | None:
+def load_benchmark_momentum(
+    data_dir: Path,
+    *,
+    force_refresh: bool = False,
+) -> pl.DataFrame | None:
     """读取指数日K, 计算各基准指数的滚动 N 日涨跌幅。
 
     返回长表: date, bench_exchange, bench_close, bench_mom3d, bench_mom10d, bench_mom30d。
@@ -1114,7 +1118,11 @@ def load_benchmark_momentum(data_dir: Path) -> pl.DataFrame | None:
     now = _time.monotonic()
     key = str(Path(data_dir).resolve())
     cached = _benchmark_cache.get(key)
-    if cached is not None and now - cached[0] < _BENCHMARK_CACHE_TTL:
+    if (
+        not force_refresh
+        and cached is not None
+        and now - cached[0] < _BENCHMARK_CACHE_TTL
+    ):
         return cached[1]
 
     frame: pl.DataFrame | None = None
@@ -1195,7 +1203,10 @@ def attach_deviation_columns(df: pl.DataFrame, data_dir: Path) -> pl.DataFrame:
     """
     if df.is_empty():
         return df
-    bench = load_benchmark_momentum(data_dir)
+    # This cold path rebuilds the repository's latest enriched frame. Index
+    # daily data may have been published moments after an earlier warmup cached
+    # the previous trading day, so the normal 10-minute cache is unsafe here.
+    bench = load_benchmark_momentum(data_dir, force_refresh=True)
     dev_cols = [f"deviate_{n}d" for n in DEVIATION_WINDOWS]
     if bench is None or bench.is_empty():
         return df.with_columns([pl.lit(None, dtype=pl.Float64).alias(c) for c in dev_cols])

@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration8-a-share-dual-regime-staged-profit-lock-v1.json",
+  "experiment": "vcp-iteration9-a-share-dual-regime-contraction-rank-v1",
+  "purpose": "prefer_the_cleanest_contraction_when_entry_signals_compete_for_limited_slots",
+  "hypothesis": "When several VCP breakouts compete on the same day, the pattern whose last contraction is smallest relative to its first contraction should receive priority because this feature has a stable directional relationship with forward outcomes across all three descriptive eras.",
+  "backtest": {
+    "params": {
+      "contraction_strength_rank_weight": 0.25
+    }
+  },
+  "development_note": "The feature direction was selected from already-opened candidate labels. The single moderate weight is a mechanism test, not a parameter sweep or untouched validation."
+}

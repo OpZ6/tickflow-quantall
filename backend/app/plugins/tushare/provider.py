@@ -2,12 +2,12 @@
 
 通过 tushare SDK 拉 A 股日K/除权/指数/财务/资金流。
 归一化到项目内部 schema(normalizer.py),与 TickFlow/stock-sdk provider 同台路由。
-Token 从环境变量 TUSHARE_TOKEN 读;依赖用延迟 import(函数内),未安装不阻断启动。
+凭证从 TUSHARE_MIRROR_TOKEN/TUSHARE_MIRROR_API_URL 或 TUSHARE_TOKEN 读取;
+依赖用延迟 import(函数内),未安装不阻断启动。
 """
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -18,6 +18,7 @@ from app.data_providers.normalizer import (
     normalize_adj_factors,
     normalize_daily,
 )
+from app.plugins.tushare.client import build_tushare_client
 from app.tickflow.rate_limits import chunked
 
 logger = logging.getLogger(__name__)
@@ -64,13 +65,8 @@ def _prep_dates(raw):
 
 
 def _get_pro():
-    """创建 Tushare pro 客户端。token 从环境变量读。"""
-    token = os.environ.get("TUSHARE_TOKEN", "").strip()
-    if not token:
-        raise RuntimeError("Tushare token 未配置:设置 TUSHARE_TOKEN 环境变量")
-    import tushare as ts
-
-    return ts.pro_api(token, timeout=_TIMEOUT)
+    """创建保持原 Tushare 方法契约的 mirror-first 客户端。"""
+    return build_tushare_client(timeout=_TIMEOUT)
 
 
 _TUSHARE_FINANCIAL_API: dict[str, str] = {

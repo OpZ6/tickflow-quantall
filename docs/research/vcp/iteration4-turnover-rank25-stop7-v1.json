@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration4-turnover-rank25-v1.json",
+  "experiment": "vcp-iteration4-turnover-rank25-stop7-v1",
+  "purpose": "iteration4_exit_risk_alignment",
+  "hypothesis": "A 7% fixed stop aligned with the pre-declared true-breakout label avoids exiting normal VCP shakeouts between 5% and 7%, and the recovered winners outweigh the larger loss per failed trade.",
+  "backtest": {
+    "overrides": {
+      "stop_loss": -0.07
+    }
+  },
+  "trial_note": "Only the fixed stop changes from the turnover-rank control. The 7% level was defined by the frozen candidate label before this portfolio run."
+}

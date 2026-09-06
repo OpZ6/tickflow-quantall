@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-first-cross-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-volume150-v1",
+  "purpose": "cycle2_parameter_stability",
+  "hypothesis": "Test 1.50 volume confirmation after the first-cross mechanism has removed late repeated entries.",
+  "backtest": {"params": {"breakout_volume_ratio_min": 1.5}}
+}

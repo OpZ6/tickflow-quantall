@@ -1,0 +1,10 @@
+{
+  "base_protocol": "iteration7-a-share-first-pivot-time20-retro-v1.json",
+  "experiment": "vcp-iteration7-a-share-first-pivot-time20-ma60-retro-v1",
+  "purpose": "reduce_ma20_whipsaw_before_the_20_session_outcome_window_retro",
+  "backtest": {
+    "params": {
+      "exit_ma_days": 60
+    }
+  }
+}

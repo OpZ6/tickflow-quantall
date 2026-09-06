@@ -174,11 +174,13 @@ def test_get_index_daily(mock_get_pro):
 
 def test_availability_no_token(monkeypatch):
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    monkeypatch.delenv("TUSHARE_MIRROR_TOKEN", raising=False)
     ok, _ = bridge.availability()
     assert ok is False
 
 
 def test_availability_with_token(monkeypatch):
+    monkeypatch.delenv("TUSHARE_MIRROR_TOKEN", raising=False)
     monkeypatch.setenv("TUSHARE_TOKEN", "test-token")
     ok, msg = bridge.availability()
     # tushare 已装(测试依赖)时 ok=True; 否则 False 但原因含"未安装"
@@ -186,6 +188,28 @@ def test_availability_with_token(monkeypatch):
         assert msg == "ok"
     else:
         assert "tushare" in msg
+
+
+def test_availability_with_mirror_token_only(monkeypatch):
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    monkeypatch.setenv("TUSHARE_MIRROR_TOKEN", "mirror-token")
+    monkeypatch.setenv("TUSHARE_MIRROR_API_URL", "https://mirror.example")
+
+    ok, msg = bridge.availability()
+
+    assert ok is True
+    assert msg == "ok"
+
+
+def test_availability_rejects_mirror_without_url(monkeypatch):
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    monkeypatch.setenv("TUSHARE_MIRROR_TOKEN", "mirror-token")
+    monkeypatch.delenv("TUSHARE_MIRROR_API_URL", raising=False)
+
+    ok, msg = bridge.availability()
+
+    assert ok is False
+    assert "TUSHARE_MIRROR_API_URL" in msg
 
 
 # ---- config / datasets ----

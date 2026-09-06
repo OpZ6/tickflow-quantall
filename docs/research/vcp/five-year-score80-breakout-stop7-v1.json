@@ -1,0 +1,11 @@
+{
+  "base_protocol": "five-year-score80-breakout-v1.json",
+  "experiment": "vcp-five-year-score80-breakout-stop7-v1",
+  "purpose": "training_parameter_stability",
+  "hypothesis": "Relax the account hard stop to 7% and test whether normal VCP volatility is being cut off before the MA20 exit can act.",
+  "backtest": {
+    "overrides": {
+      "stop_loss": -0.07
+    }
+  }
+}

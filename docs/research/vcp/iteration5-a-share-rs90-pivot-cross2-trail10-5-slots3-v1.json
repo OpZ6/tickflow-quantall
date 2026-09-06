@@ -1,0 +1,10 @@
+{
+  "base_protocol": "iteration5-a-share-rs90-pivot-cross2-trail10-5-v1.json",
+  "experiment": "vcp-iteration5-a-share-rs90-pivot-cross2-trail10-5-slots3-v1",
+  "purpose": "iteration5_a_share_capital_concentration",
+  "hypothesis": "Because the filtered strategy has positive expectancy but only 4.45% average exposure with ten equal slots, three equal slots should deploy more capital per rare high-quality setup and raise annualized return while keeping development maximum drawdown below 20%.",
+  "backtest": {
+    "max_positions": 3
+  },
+  "trial_note": "Only portfolio slot count changes relative to the clean-pivot trailing protocol. Signal generation, entry ranking, exits, costs, stock universe and development interval remain frozen."
+}

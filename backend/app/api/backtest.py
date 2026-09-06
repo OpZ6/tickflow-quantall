@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import threading
 from dataclasses import asdict
 from datetime import date, timedelta
@@ -344,6 +345,91 @@ class StrategyBacktestRequest(BaseModel):
     asset_type: str = "stock"
     minute_fill: bool = False
     regime_filter: dict | None = None
+
+
+_RESEARCH_PATH_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _read_research_json(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.warning("invalid research backtest artifact: %s", path)
+        return None
+
+
+def _research_run_dir(research_key: str, run_id: str):
+    """Resolve a research run without allowing callers to escape data/research."""
+    if not _RESEARCH_PATH_SEGMENT.fullmatch(research_key) or not _RESEARCH_PATH_SEGMENT.fullmatch(run_id):
+        raise HTTPException(status_code=404, detail="研究回测不存在")
+    research_root = (settings.data_dir / "research").resolve()
+    run_dir = (research_root / research_key / "runs" / run_id).resolve()
+    if research_root not in run_dir.parents or not run_dir.is_dir():
+        raise HTTPException(status_code=404, detail="研究回测不存在")
+    return run_dir
+
+
+@router.get("/strategy/research-runs")
+def strategy_research_runs(strategy_id: str | None = None, limit: int = 50):
+    """List completed, reproducible strategy research runs stored under data/research."""
+    research_root = settings.data_dir / "research"
+    items: list[dict] = []
+    if not research_root.is_dir():
+        return {"items": items}
+
+    safe_limit = min(max(limit, 1), 200)
+    for research_dir in research_root.iterdir():
+        runs_dir = research_dir / "runs"
+        if not research_dir.is_dir() or not runs_dir.is_dir():
+            continue
+        for run_dir in runs_dir.iterdir():
+            if not run_dir.is_dir() or not (run_dir / "result.json").is_file():
+                continue
+            status = _read_research_json(run_dir / "status.json") or {}
+            if status.get("status") != "completed":
+                continue
+            protocol = _read_research_json(run_dir / "protocol.json") or {}
+            result = _read_research_json(run_dir / "result.json") or {}
+            config = result.get("config") or protocol.get("backtest") or {}
+            stats = result.get("stats") or {}
+            run_strategy_id = config.get("strategy_id")
+            if strategy_id and run_strategy_id != strategy_id:
+                continue
+            items.append({
+                "research_key": research_dir.name,
+                # The directory id is the immutable artifact locator. Engine run_id
+                # may be a shorter hash and cannot be used to resolve the folder.
+                "run_id": run_dir.name,
+                "result_id": result.get("run_id"),
+                "phase": status.get("phase"),
+                "started_at": status.get("started_at"),
+                "finished_at": status.get("finished_at"),
+                "experiment": protocol.get("experiment") or run_dir.name,
+                "purpose": protocol.get("purpose"),
+                "strategy_id": run_strategy_id,
+                "start": config.get("start"),
+                "end": config.get("end"),
+                "stats": {
+                    key: stats.get(key)
+                    for key in (
+                        "total_return", "annual_return", "max_drawdown", "sharpe",
+                        "sortino", "calmar", "win_rate", "profit_factor", "n_trades",
+                        "avg_pnl", "avg_win", "avg_loss", "best", "worst",
+                        "avg_holding_days", "avg_exposure", "max_exposure",
+                    )
+                },
+            })
+    items.sort(key=lambda item: (item.get("started_at") or "", item["run_id"]), reverse=True)
+    return {"items": items[:safe_limit]}
+
+
+@router.get("/strategy/research-runs/{research_key}/{run_id}")
+def strategy_research_run(research_key: str, run_id: str):
+    """Load one immutable research result in the normal strategy result schema."""
+    result = _read_research_json(_research_run_dir(research_key, run_id) / "result.json")
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=404, detail="研究回测结果不可用")
+    return result
 
 
 def _guard_minute_strategy_backtest(

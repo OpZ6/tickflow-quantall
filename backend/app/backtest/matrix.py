@@ -3506,6 +3506,8 @@ class MatrixStrategyPipeline:
         params: dict,
         config: MatrixPipelineConfig,
         timing_ms: dict[str, float] | None = None,
+        *,
+        precomputed_signals: SignalMatrix | None = None,
     ) -> SignalMatrix:
         with _activate_valid_bar_index(market.valid_bars):
             return self._run_with_valid_bars(
@@ -3514,6 +3516,7 @@ class MatrixStrategyPipeline:
                 params,
                 config,
                 timing_ms,
+                precomputed_signals,
             )
 
     def _run_with_valid_bars(
@@ -3523,9 +3526,10 @@ class MatrixStrategyPipeline:
         params: dict,
         config: MatrixPipelineConfig,
         timing_ms: dict[str, float] | None,
+        precomputed_signals: SignalMatrix | None = None,
     ) -> SignalMatrix:
         strategy_started = time.perf_counter()
-        signals = strategy.compute_signals(market, params)
+        signals = precomputed_signals if precomputed_signals is not None else strategy.compute_signals(market, params)
         validate_signal_matrix(signals, market.shape)
         if timing_ms is not None:
             timing_ms["strategy_signals"] = round(

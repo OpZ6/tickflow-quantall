@@ -1,0 +1,17 @@
+{
+  "base_protocol": "iteration6-a-share-relative-breadth-regime-v1.json",
+  "experiment": "vcp-iteration6-a-share-relative-turnover-attention-v1",
+  "purpose": "iteration6_distribution_adaptive_stock_attention",
+  "hypothesis": "Replacing the fixed 3% turnover floor with the signal day's cross-sectional 70th turnover percentile should preserve high-attention A-share breakouts while adapting across boards, capitalization and market regimes.",
+  "backtest": {
+    "params": {
+      "turnover_market_percentile_min": 70.0
+    },
+    "overrides": {
+      "basic_filter": {
+        "turnover_min": 0.0
+      }
+    }
+  },
+  "trial_note": "This is the only market-turnover percentile tested in this mechanism round. Market regime, individual VCP filters, exits, costs, ten slots, universe and the 2021-2023 development interval remain frozen."
+}

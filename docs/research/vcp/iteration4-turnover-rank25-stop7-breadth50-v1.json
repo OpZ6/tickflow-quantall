@@ -1,0 +1,13 @@
+{
+  "base_protocol": "iteration4-turnover-rank25-stop7-v1.json",
+  "experiment": "vcp-iteration4-turnover-rank25-stop7-breadth50-v1",
+  "purpose": "iteration4_market_confirmation",
+  "hypothesis": "Requiring at least half of the point-in-time stock universe to trade above MA20 avoids deploying a breakout portfolio in broadly weak markets while leaving confirmed broad advances unrestricted.",
+  "backtest": {
+    "params": {
+      "market_breadth_ma20_min": 0.5,
+      "market_breadth_ma20_max": 1.0
+    }
+  },
+  "trial_note": "This is a one-sided, pre-declared market confirmation rule. No upper band or breadth-duration grid is tested in this mechanism round."
+}

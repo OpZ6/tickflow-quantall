@@ -1,0 +1,15 @@
+{
+  "base_protocol": "iteration7-a-share-dual-regime-slots5-recent-diagnostic-v1.json",
+  "experiment": "vcp-iteration8-a-share-dual-regime-branch-exits-recent-v1",
+  "purpose": "use_exit_behavior_matched_to_each_vcp_market_state_recent_diagnostic",
+  "backtest": {
+    "overrides": {
+      "entry_risk_profiles": {
+        "signal_quants_vcp_broad_advance": {
+          "trailing_take_profit_activate_pct": 0.2,
+          "trailing_take_profit_drawdown_pct": 0.1
+        }
+      }
+    }
+  }
+}

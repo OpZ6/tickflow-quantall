@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration5-a-share-stop5-v1.json",
+  "experiment": "vcp-iteration5-a-share-stop5-roe-rank20-v1",
+  "purpose": "iteration5_a_share_fundamental_quality_ranking",
+  "hypothesis": "Blending 20% point-in-time ROE percentile into the existing VCP and turnover score should prioritize profitable companies when simultaneous breakouts compete for portfolio slots without introducing a survivorship or announcement-date lookahead.",
+  "backtest": {
+    "params": {
+      "roe_rank_weight": 0.20
+    }
+  },
+  "trial_note": "Only point-in-time ROE ranking changes relative to the stop5 protocol. Financial observations are selected strictly before the signal date; entry thresholds, exits, costs, slots and the development interval remain frozen."
+}

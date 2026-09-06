@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration4-early-recovery-turnover3-target10-v1.json",
+  "experiment": "vcp-iteration4-recovery-turnover3-target10-v1",
+  "purpose": "iteration4_candidate_supply",
+  "hypothesis": "Removing only the five-day breadth-improvement condition roughly doubles eligible VCP setups while the 30%-50% recovery band, 3% turnover floor and label-aligned exits preserve positive expectancy.",
+  "backtest": {
+    "params": {
+      "market_breadth_rising_days": 0
+    }
+  },
+  "trial_note": "All other entry, exit, cost, pool and position settings are frozen. This run tests candidate supply at the original 10-slot sizing."
+}

@@ -1,0 +1,28 @@
+{
+  "base_protocol": "iteration5-a-share-rs90-pivot-cross2-trail10-5-v1.json",
+  "experiment": "vcp-iteration5-a-share-fixed-breadth-retro-validation-v1",
+  "purpose": "iteration5_fixed_breadth_retro_validation",
+  "universe_date": "2017-11-14",
+  "data_directory": "research/vcp/datasets/ten-year-20160905-v1",
+  "data_start": "2016-09-05",
+  "evaluation_start": "2017-11-15",
+  "evaluation_end": "2026-09-04",
+  "phases": {
+    "validation": {
+      "start": "2017-11-15",
+      "end": "2020-12-31"
+    }
+  },
+  "acceptance_gates": {
+    "minimum_trades": 20,
+    "total_return_min": 0.0,
+    "max_drawdown_floor": -0.15,
+    "win_rate_min": 0.40,
+    "mean_payoff_ratio_min": 1.50,
+    "monetary_profit_factor_min": 1.20,
+    "sharpe_min": 0.50,
+    "equal_weight_market_excess_min": 0.0
+  },
+  "validation_policy": "The fixed 30%-50% candidate and gates were frozen before the 2017-2020 interval was loaded. Failure rejects it; no fixed breadth threshold may be retuned from this interval.",
+  "data_limitations": "Current/local-history union does not prove complete delisted-stock coverage. Adjustment events begin 2016-10-06; evaluation starts after more than 252 subsequent trading sessions."
+}

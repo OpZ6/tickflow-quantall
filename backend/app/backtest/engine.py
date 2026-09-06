@@ -62,6 +62,8 @@ class MatcherConfig:
     trailing_stop_pct: float | None = None
     trailing_take_profit_activate_pct: float | None = None
     trailing_take_profit_drawdown_pct: float | None = None
+    entry_risk_profiles: dict[str, dict[str, float | None]] | None = None
+    profit_lock_steps: list[dict[str, float]] | None = None
     max_hold_days: int | None = None
     max_positions: int = 10
     max_exposure_pct: float = 1.0
@@ -94,6 +96,39 @@ class MatcherConfig:
         return self._commission_pct() + stamp + self.slippage_bps / 10000.0
 
 
+def _entry_risk_value(config: MatcherConfig, pos: dict, key: str, fallback):
+    profiles = config.entry_risk_profiles or {}
+    profile = profiles.get(str(pos.get("entry_signal_id") or ""), {})
+    return profile.get(key, fallback)
+
+
+def _profit_lock_lines(
+    config: MatcherConfig,
+    entry_price: float,
+    peak_price: float,
+) -> list[tuple[float, str]]:
+    """Build staged, causal profit-protection lines from the prior observed peak."""
+    if entry_price <= 0 or peak_price <= entry_price:
+        return []
+    peak_return = peak_price / entry_price - 1
+    lines: list[tuple[float, str]] = []
+    for step in config.profit_lock_steps or []:
+        activate = step.get("activate_pct")
+        if activate is None or peak_return < abs(float(activate)):
+            continue
+        floor_return = step.get("floor_return_pct")
+        if floor_return is not None:
+            lines.append(
+                (entry_price * (1 + float(floor_return)), "staged_profit_lock")
+            )
+        drawdown = step.get("trailing_drawdown_pct")
+        if drawdown is not None:
+            lines.append(
+                (peak_price * (1 - abs(float(drawdown))), "staged_profit_lock")
+            )
+    return lines
+
+
 @dataclass
 class TradeRecord:
     symbol: str
@@ -103,7 +138,7 @@ class TradeRecord:
     exit_price: float
     pnl_pct: float
     duration: int
-    exit_reason: str  # "signal" | "stop_loss" | "take_profit" | "trailing_stop" | "trailing_take_profit" | "max_hold" | "end"
+    exit_reason: str  # "signal" | "stop_loss" | "take_profit" | "trailing_stop" | "trailing_take_profit" | "staged_profit_lock" | "max_hold" | "end"
     # 退出优先级 (高→低): pending_exit(历史挂单) > 风控(止损/移动止损/移动止盈) > signal(卖点) > max_hold(到期) > end
     name: str = ""
     shares: float = 0.0
@@ -945,11 +980,18 @@ class BacktestEngine:
                 lines.append((entry_price * (1 - abs(config.stop_loss_pct)), "stop_loss"))
             if config.trailing_stop_pct is not None:
                 lines.append((peak_price * (1 - abs(config.trailing_stop_pct)), "trailing_stop"))
-            activate = config.trailing_take_profit_activate_pct
-            drawdown = config.trailing_take_profit_drawdown_pct
+            activate = _entry_risk_value(
+                config, pos, "trailing_take_profit_activate_pct",
+                config.trailing_take_profit_activate_pct,
+            )
+            drawdown = _entry_risk_value(
+                config, pos, "trailing_take_profit_drawdown_pct",
+                config.trailing_take_profit_drawdown_pct,
+            )
             if activate is not None and drawdown is not None and peak_price > entry_price:
                 if peak_price / entry_price - 1 >= abs(float(activate)):
                     lines.append((peak_price * (1 - abs(float(drawdown))), "trailing_take_profit"))
+            lines.extend(_profit_lock_lines(config, entry_price, peak_price))
             valid_lines = [(line, reason) for line, reason in lines if _valid_price(line)]
             if valid_lines:
                 stop_price, reason = max(valid_lines, key=lambda item: item[0])
@@ -1367,13 +1409,20 @@ class BacktestEngine:
             if config.trailing_stop_pct is not None and peak_price > 0:
                 risk_lines.append((peak_price * (1 - abs(config.trailing_stop_pct)), "trailing_stop"))
 
-            activate_pct = getattr(config, "trailing_take_profit_activate_pct", None)
-            drawdown_pct = getattr(config, "trailing_take_profit_drawdown_pct", None)
+            activate_pct = _entry_risk_value(
+                config, pos, "trailing_take_profit_activate_pct",
+                config.trailing_take_profit_activate_pct,
+            )
+            drawdown_pct = _entry_risk_value(
+                config, pos, "trailing_take_profit_drawdown_pct",
+                config.trailing_take_profit_drawdown_pct,
+            )
             if activate_pct is not None and drawdown_pct is not None and peak_price > entry_price:
                 peak_profit = peak_price / entry_price - 1
                 if peak_profit >= abs(float(activate_pct)):
                     # 回撤止盈触发线: 相对峰值价回撤 drawdown 个点 (纯峰值口径)
                     risk_lines.append((peak_price * (1 - abs(float(drawdown_pct))), "trailing_take_profit"))
+            risk_lines.extend(_profit_lock_lines(config, entry_price, peak_price))
 
             risk_lines = [(line, reason) for line, reason in risk_lines if _valid_price(line)]
             # 止损/移损/回撤止盈: 价格跌破风控线触发 (取最高优先级线)
@@ -1995,11 +2044,18 @@ class BacktestEngine:
                     risk_lines.append((entry_price * (1 - abs(config.stop_loss_pct)), "stop_loss"))
                 if config.trailing_stop_pct is not None:
                     risk_lines.append((peak_price * (1 - abs(config.trailing_stop_pct)), "trailing_stop"))
-                activate = config.trailing_take_profit_activate_pct
-                drawdown = config.trailing_take_profit_drawdown_pct
+                activate = _entry_risk_value(
+                    config, pos, "trailing_take_profit_activate_pct",
+                    config.trailing_take_profit_activate_pct,
+                )
+                drawdown = _entry_risk_value(
+                    config, pos, "trailing_take_profit_drawdown_pct",
+                    config.trailing_take_profit_drawdown_pct,
+                )
                 if activate is not None and drawdown is not None and peak_price > entry_price:
                     if peak_price / entry_price - 1 >= abs(float(activate)):
                         risk_lines.append((peak_price * (1 - abs(float(drawdown))), "trailing_take_profit"))
+                risk_lines.extend(_profit_lock_lines(config, entry_price, peak_price))
                 valid_lines = [(line, reason) for line, reason in risk_lines if _valid_price(line)]
                 if valid_lines:
                     stop_price, reason = max(valid_lines, key=lambda item: item[0])
@@ -2535,8 +2591,14 @@ class BacktestEngine:
                 if config.trailing_stop_pct is not None and peak_price > 0:
                     risk_lines.append((peak_price * (1 - abs(config.trailing_stop_pct)), "trailing_stop"))
 
-                activate_pct = getattr(config, "trailing_take_profit_activate_pct", None)
-                drawdown_pct = getattr(config, "trailing_take_profit_drawdown_pct", None)
+                activate_pct = _entry_risk_value(
+                    config, pos, "trailing_take_profit_activate_pct",
+                    config.trailing_take_profit_activate_pct,
+                )
+                drawdown_pct = _entry_risk_value(
+                    config, pos, "trailing_take_profit_drawdown_pct",
+                    config.trailing_take_profit_drawdown_pct,
+                )
                 if activate_pct is not None and drawdown_pct is not None and peak_price > entry_price:
                     peak_profit = peak_price / entry_price - 1
                     if peak_profit >= abs(float(activate_pct)):
@@ -2544,6 +2606,7 @@ class BacktestEngine:
                         # 启动门槛用成本基准的浮盈率, 触发线用峰值基准, 与 trailing_stop 同口径
                         take_profit_line = peak_price * (1 - abs(float(drawdown_pct)))
                         risk_lines.append((take_profit_line, "trailing_take_profit"))
+                risk_lines.extend(_profit_lock_lines(config, entry_price, peak_price))
 
                 # 止损/移损/回撤止盈: 价格跌破风控线触发
                 risk_lines = [(line, reason) for line, reason in risk_lines if _valid_price(line)]

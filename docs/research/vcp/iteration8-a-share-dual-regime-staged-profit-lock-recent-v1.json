@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration8-a-share-dual-regime-staged-profit-lock-v1.json",
+  "experiment": "vcp-iteration8-a-share-dual-regime-staged-profit-lock-recent-v1",
+  "purpose": "recent_stress_diagnostic_for_staged_profit_protection",
+  "phases": {
+    "train": {
+      "start": "2024-01-02",
+      "end": "2026-06-30"
+    }
+  },
+  "development_note": "This recent interval was previously exposed. It is diagnostic only and cannot serve as independent validation."
+}

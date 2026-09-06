@@ -986,6 +986,8 @@ class StrategyBacktestService:
         t0 = time.perf_counter()
         run_id = uuid.uuid4().hex[:10]
         result_policy = result_policy or BacktestResultPolicy()
+        requested_start = config.start
+        requested_end = config.end
 
         def _err(msg: str) -> StrategyBacktestResult:
             return StrategyBacktestResult(
@@ -1045,6 +1047,11 @@ class StrategyBacktestService:
         )
         if trailing_take_profit_activate is not None and trailing_take_profit_drawdown is not None:
             trailing_take_profit_drawdown = min(trailing_take_profit_drawdown, trailing_take_profit_activate)
+        profit_lock_steps = self._override_value(
+            overrides,
+            "profit_lock_steps",
+            s.meta.get("profit_lock_steps"),
+        )
         max_hold_days = self._override_value(overrides, "max_hold_days", s.max_hold_days)
         score_min, score_max = self._normalize_score_range(
             overrides.get("score_min"),
@@ -1236,6 +1243,8 @@ class StrategyBacktestService:
             trailing_stop_pct=trailing_stop,
             trailing_take_profit_activate_pct=trailing_take_profit_activate,
             trailing_take_profit_drawdown_pct=trailing_take_profit_drawdown,
+            entry_risk_profiles=overrides.get("entry_risk_profiles"),
+            profit_lock_steps=profit_lock_steps,
             max_hold_days=max_hold_days,
             max_positions=config.max_positions,
             max_exposure_pct=config.max_exposure_pct,
@@ -1540,6 +1549,51 @@ class StrategyBacktestService:
             timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
             del panel, sim_panel, sim_entry_mask, sim_exit_mask
 
+        requested_labels = [
+            label[:10]
+            for label in market_matrix.timestamp_labels
+            if requested_start.isoformat() <= label[:10] <= requested_end.isoformat()
+        ]
+        data_rows = np.any(
+            np.isfinite(market_matrix.close) & (market_matrix.close > 0), axis=1
+        )
+        entry_rows = np.any(market_matrix.entry != 0, axis=1)
+        data_labels = [
+            label[:10]
+            for label, present in zip(
+                market_matrix.timestamp_labels, data_rows, strict=True
+            )
+            if present and requested_start.isoformat() <= label[:10] <= requested_end.isoformat()
+        ]
+        entry_labels = [
+            label[:10]
+            for label, present in zip(
+                market_matrix.timestamp_labels, entry_rows, strict=True
+            )
+            if present and requested_start.isoformat() <= label[:10] <= requested_end.isoformat()
+        ]
+        coverage_stats = {
+            "requested_start": requested_start.isoformat(),
+            "requested_end": requested_end.isoformat(),
+            "data_start": data_labels[0] if data_labels else None,
+            "data_end": data_labels[-1] if data_labels else None,
+            "entry_start": entry_labels[0] if entry_labels else None,
+            "entry_end": entry_labels[-1] if entry_labels else None,
+            "requested_trading_days": len(requested_labels),
+            "data_trading_days": len(data_labels),
+            "entry_trading_days": len(entry_labels),
+            "data_day_coverage": (
+                round(len(data_labels) / len(requested_labels), 4)
+                if requested_labels
+                else 0.0
+            ),
+            "range_clipped": bool(
+                not data_labels
+                or (date.fromisoformat(data_labels[0]) - requested_start).days > 7
+                or (requested_end - date.fromisoformat(data_labels[-1])).days > 7
+            ),
+        }
+
         t_sim = time.perf_counter()
 
         # 撮合 — 两条生产路径共享同一只读 MarketMatrix。
@@ -1587,6 +1641,14 @@ class StrategyBacktestService:
         result.stats["matrix_data_cache_hit"] = matrix_data_cache_hit
         result.stats["matrix_data_cache_status"] = matrix_data_cache_status
         result.stats["matrix_data_cache_timing_ms"] = dict(matrix_data_cache_timing_ms)
+        trade_entry_dates = sorted(
+            str(trade.entry_date)[:10]
+            for trade in result.trades
+            if getattr(trade, "entry_date", None)
+        )
+        coverage_stats["first_trade"] = trade_entry_dates[0] if trade_entry_dates else None
+        coverage_stats["last_trade"] = trade_entry_dates[-1] if trade_entry_dates else None
+        result.stats["coverage"] = coverage_stats
         if prepared is not None:
             result.stats["shared_market_data_bytes"] = prepared.market_data.nbytes
             result.stats["shared_prepare_timing_ms"] = prepared.prepare_timing_ms
@@ -1610,6 +1672,7 @@ class StrategyBacktestService:
             "trailing_stop": trailing_stop,
             "trailing_take_profit_activate": trailing_take_profit_activate,
             "trailing_take_profit_drawdown": trailing_take_profit_drawdown,
+            "profit_lock_steps": profit_lock_steps,
             "max_hold_days": max_hold_days,
             "full_horizon_days": full_horizon_days,
             "score_min": score_min,

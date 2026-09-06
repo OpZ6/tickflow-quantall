@@ -302,8 +302,21 @@ export function ScreenerTable({
       }
       case 'signals': {
         const signals = getSignals(r)
+        const vcpLabels: Record<string, string> = {
+          executable: r.vcp_setup === 'cheat' ? 'VCP 提前试探' : 'VCP 放量突破',
+          wait_breakout: 'VCP 待突破', wait_support: 'VCP 待量能/支撑确认',
+          watch: 'VCP 观察', extended_do_not_chase: 'VCP 超出追价区',
+        }
+        const vcpLabel = vcpLabels[r.vcp_status]
         return (
           <td key={col.id} className="px-3 py-2">
+            {vcpLabel && (
+              <div className="mb-1 text-xs" data-testid="vcp-candidate-state"
+                title={`${r.vcp_leg_count} 段收缩 · ${r.vcp_scale} · 仅为策略状态，不代表成交`}>
+                <span className={r.vcp_status === 'executable' ? 'text-accent' : 'text-amber-400'}>{vcpLabel}</span>
+                <span className="ml-1 text-muted">枢轴 {fmtPrice(r.vcp_pivot)}</span>
+              </div>
+            )}
             {signals.length > 0 ? (
               <div className="flex flex-wrap gap-0.5">
                 {signals.slice(0, 3).map((s) => (
@@ -315,9 +328,9 @@ export function ScreenerTable({
                   <span className="text-[10px] text-muted">+{signals.length - 3}</span>
                 )}
               </div>
-            ) : (
+            ) : !vcpLabel ? (
               <span className="text-muted text-xs">—</span>
-            )}
+            ) : null}
           </td>
         )
       }

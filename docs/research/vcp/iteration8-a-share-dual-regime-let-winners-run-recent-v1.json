@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration7-a-share-dual-regime-slots5-recent-diagnostic-v1.json",
+  "experiment": "vcp-iteration8-a-share-dual-regime-let-winners-run-recent-v1",
+  "purpose": "let_confirmed_vcp_leaders_compound_recent_diagnostic",
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": 0.2,
+      "trailing_take_profit_drawdown": 0.1
+    }
+  },
+  "development_note": "The recent interval remains exposed diagnostic data. This exit rule is accepted only if its behavior is also supported by the 2017-2023 development interval and later forward observation."
+}

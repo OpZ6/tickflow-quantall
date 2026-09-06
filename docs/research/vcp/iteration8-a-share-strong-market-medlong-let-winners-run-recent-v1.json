@@ -1,0 +1,11 @@
+{
+  "base_protocol": "iteration7-a-share-strong-market-medlong-vcp-recent-v1.json",
+  "experiment": "vcp-iteration8-a-share-strong-market-medlong-let-winners-run-recent-v1",
+  "purpose": "main_trend_vcp_with_wider_profit_protection_recent_diagnostic",
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": 0.2,
+      "trailing_take_profit_drawdown": 0.1
+    }
+  }
+}

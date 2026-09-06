@@ -1,0 +1,11 @@
+{
+  "base_protocol": "five-year-score80-v1.json",
+  "experiment": "vcp-five-year-score80-breakout-v1",
+  "purpose": "training_mechanism_test",
+  "hypothesis": "At score >= 80, use only the canonical pivot breakout entry because the early cheat entry has negative training contribution and weaker confirmation.",
+  "backtest": {
+    "params": {
+      "allow_cheat": false
+    }
+  }
+}

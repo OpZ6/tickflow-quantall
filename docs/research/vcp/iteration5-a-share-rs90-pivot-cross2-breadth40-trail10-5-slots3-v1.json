@@ -1,0 +1,10 @@
+{
+  "base_protocol": "iteration5-a-share-rs90-pivot-cross2-breadth40-trail10-5-v1.json",
+  "experiment": "vcp-iteration5-a-share-rs90-pivot-cross2-breadth40-trail10-5-slots3-v1",
+  "purpose": "iteration5_a_share_quality_backed_concentration",
+  "hypothesis": "With the early-breadth candidate showing 51.85% wins, 2.14 monetary profit factor and 2.41% drawdown at ten slots, three equal slots should raise annualized return while keeping development drawdown below 10% and yearly returns positive.",
+  "backtest": {
+    "max_positions": 3
+  },
+  "trial_note": "Only portfolio slot count changes relative to the early-breadth trailing protocol. Signal quality, entry ranking, exits, costs, universe and development interval remain frozen."
+}

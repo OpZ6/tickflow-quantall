@@ -1,0 +1,17 @@
+{
+  "base_protocol": "iteration7-a-share-strong-market-medlong-vcp-retro-v1.json",
+  "experiment": "vcp-iteration8-a-share-strong-market-medlong-let-winners-run-continuous-v1",
+  "purpose": "main_trend_vcp_with_wider_profit_protection_continuous",
+  "phases": {
+    "train": {
+      "start": "2017-11-15",
+      "end": "2023-12-29"
+    }
+  },
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": 0.2,
+      "trailing_take_profit_drawdown": 0.1
+    }
+  }
+}

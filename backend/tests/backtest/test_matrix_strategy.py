@@ -19,6 +19,7 @@ from app.backtest.matrix import (
     RealtimeMarketDataMatrix,
     apply_time_masks,
     build_market_data_matrix,
+    build_market_matrix_from_signals,
     build_matrix_score,
     load_market_data_matrix_from_parquet,
     make_signal_matrix,
@@ -319,13 +320,19 @@ def test_builtin_matrix_strategies_use_their_declared_formula_modules():
         path for path in strategy_dir.glob("*.py") if not path.name.startswith("_")
     )
 
-    # 19 个上游内置策略 + Quantall 注册的 4 个正式形态策略。
-    assert len(strategy_files) == 23
+    # Every non-helper builtin is independently loadable, including the five
+    # versioned Quants migration strategies.
+    assert len(strategy_files) == 31
     for strategy_path in strategy_files:
         strategy = StrategyEngine._load_file(strategy_path)
         assert strategy.execution_backend == "matrix_native"
         assert strategy.matrix_strategy is not None
-        assert strategy.matrix_strategy.__class__.__module__ == strategy_path.stem
+        assert strategy.matrix_strategy.__class__.__module__ in {
+            strategy_path.stem,
+            "_quants_legacy_patterns",
+            "_quants_high_tight_flag",
+            "_quants_vcp",
+        }
         assert strategy.filter_fn is None
         assert strategy.filter_history_fn is None
 
@@ -790,7 +797,7 @@ def test_registered_builtin_matrix_strategies_share_one_cache_profile():
         if s.execution_backend != "minute_filter"
     )
 
-    assert len(strategies) == 23
+    assert len(strategies) == 31
     assert all(strategy.execution_backend == "matrix_native" for strategy in strategies)
     assert profile.warmup_bars > 0
     assert profile.forward_bars == max(int(strategy.max_hold_days or 0) for strategy in strategies)
@@ -956,6 +963,27 @@ def test_signal_matrix_validation_rejects_mutable_strategy_output():
     )
     with pytest.raises(ValueError, match="read-only"):
         validate_signal_matrix(invalid, (2, 1))
+
+
+def test_migrated_strategy_entries_fill_on_next_bar_open():
+    panel = pl.DataFrame({
+        "symbol": ["000001.SZ"] * 3,
+        "name": ["A"] * 3,
+        "date": [date(2024, 1, 1), date(2024, 1, 2), date(2024, 1, 3)],
+        "open": [10.0, 11.5, 12.0],
+        "high": [10.2, 11.8, 12.2],
+        "low": [9.8, 11.2, 11.8],
+        "close": [10.0, 11.6, 12.1],
+        "volume": [1000.0, 1200.0, 1300.0],
+    })
+    market = build_market_data_matrix(panel)
+    entry = np.zeros(market.shape, dtype=np.uint8)
+    entry[1, 0] = 1
+    signals = make_signal_matrix(market.shape, entry=entry, entry_signal_ids=("signal_quants_vcp_breakout",))
+    delayed = build_market_matrix_from_signals(market, signals, entry_delay_bars=1)
+    assert delayed.entry[:, 0].tolist() == [0, 0, 1]
+    assert delayed.entry_signal_time[:, 0].tolist() == [-1, -1, 1]
+    assert delayed.open[2, 0] == pytest.approx(12.0)
 
 
 def test_matrix_pipeline_applies_asset_pool_before_cross_sectional_scoring():

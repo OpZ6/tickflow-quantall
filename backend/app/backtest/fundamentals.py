@@ -56,12 +56,19 @@ def load_fundamental_snapshot(data_dir: Path | None) -> pl.DataFrame | None:
     except Exception as exc:
         logger.warning("读取财务指标快照失败: %s", exc)
         return None
-    needed = {"symbol", "announce_date"} | {
-        spec["column"] for spec in FUNDAMENTAL_FACTORS.values()
-    }
-    if not needed.issubset(frame.columns):
-        logger.warning("财务指标快照缺少列: %s", sorted(needed - set(frame.columns)))
+    identity = {"symbol", "announce_date"}
+    if not identity.issubset(frame.columns):
+        logger.warning("financial snapshot missing identity columns: %s", sorted(identity - set(frame.columns)))
         return None
+    metric_columns = {spec["column"] for spec in FUNDAMENTAL_FACTORS.values()}
+    missing_metrics = sorted(metric_columns - set(frame.columns))
+    if missing_metrics:
+        # Providers may expose a useful subset of the canonical metrics. Keep
+        # those observations usable and represent unavailable factors as null.
+        frame = frame.with_columns(
+            [pl.lit(None, dtype=pl.Float64).alias(name) for name in missing_metrics]
+        )
+    needed = identity | metric_columns
     snapshot = (
         frame.select(sorted(needed))
         .filter(
@@ -160,12 +167,12 @@ def build_fundamental_matrices(
         FUNDAMENTAL_FACTORS[name]["column"]: np.full(shape, np.nan, dtype=np.float32)
         for name in requested
     }
-    announce_text = snapshot["announce_date"].str.slice(0, 10)
+    announce_values = snapshot["_announce"].to_list()
     for row_index, symbol in enumerate(snapshot["symbol"].to_list()):
         column_index = asset_index.get(symbol)
         if column_index is None:
             continue
-        announce = announce_text[row_index]
+        announce = announce_values[row_index]
         if announce is None:
             continue
         # 公告日之后 (严格大于) 的首个时间行索引

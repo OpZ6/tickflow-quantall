@@ -610,6 +610,8 @@ class MonitorRuleEngine:
                     continue
                 if getattr(strategy, "execution_backend", "polars_expr") != "matrix_native":
                     continue
+                if getattr(strategy, "meta", {}).get("realtime_supported") is False:
+                    continue
                 overrides = {}
                 if self._data_dir:
                     overrides = _strategy_config.load_override(self._data_dir, sid)
@@ -1100,6 +1102,8 @@ class MonitorRuleEngine:
         except Exception:
             return []
         if s is None:
+            return []
+        if getattr(s, "meta", {}).get("realtime_supported") is False:
             return []
 
         # 运行策略选股: 复用当前 enriched DataFrame 跳过数据加载

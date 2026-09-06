@@ -1,0 +1,10 @@
+{
+  "base_protocol": "iteration3-confirm2-v1.json",
+  "experiment": "vcp-iteration3-confirm2-stop5-v1",
+  "purpose": "iteration3_structural_development",
+  "hypothesis": "A 5% initial stop gives a confirmed VCP breakout room for ordinary post-breakout volatility while still failing fast.",
+  "backtest": {
+    "params": {"plan_stop_pct": 0.05},
+    "overrides": {"stop_loss": -0.05}
+  }
+}

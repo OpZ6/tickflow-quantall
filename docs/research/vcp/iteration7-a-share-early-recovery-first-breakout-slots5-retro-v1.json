@@ -1,0 +1,8 @@
+{
+  "base_protocol": "iteration7-a-share-early-recovery-first-breakout-retro-v1.json",
+  "experiment": "vcp-iteration7-a-share-early-recovery-first-breakout-slots5-retro-v1",
+  "purpose": "balanced_portfolio_risk_budget_for_sparse_vcp_signals_retro",
+  "backtest": {
+    "max_positions": 5
+  }
+}

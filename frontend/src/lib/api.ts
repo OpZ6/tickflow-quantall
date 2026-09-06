@@ -765,6 +765,12 @@ export interface StrategyDetail {
   trailing_stop: number | null
   trailing_take_profit_activate: number | null
   trailing_take_profit_drawdown: number | null
+  profit_lock_steps?: Array<{
+    activate_pct: number
+    floor_return_pct?: number
+    trailing_drawdown_pct?: number
+  }> | null
+  recommended_max_positions?: number | null
   max_hold_days: number | null
   display_limit?: number
   order_by: string
@@ -1447,6 +1453,21 @@ export interface StrategyBacktestResult {
   }
   elapsed_ms: number
   error: string | null
+}
+
+export interface ResearchBacktestRunSummary {
+  research_key: string
+  run_id: string
+  result_id?: string | null
+  phase?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+  experiment: string
+  purpose?: string | null
+  strategy_id?: string | null
+  start?: string | null
+  end?: string | null
+  stats: Record<string, any>
 }
 
 // ===== Settings =====
@@ -3115,6 +3136,19 @@ export const api = {
       method: 'DELETE',
     }),
 
+  researchBacktestRuns: (strategyId?: string | null, limit = 50) => {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (strategyId) params.set('strategy_id', strategyId)
+    return request<{ items: ResearchBacktestRunSummary[] }>(
+      `/api/backtest/strategy/research-runs?${params}`,
+    )
+  },
+
+  researchBacktestRun: (researchKey: string, runId: string) =>
+    request<StrategyBacktestResult>(
+      `/api/backtest/strategy/research-runs/${encodeURIComponent(researchKey)}/${encodeURIComponent(runId)}`,
+    ),
+
   strategyBacktestRun: (payload: {
     strategy_id: string
     symbols?: string[] | null
@@ -3923,6 +3957,7 @@ export interface PipelineJob {
     index_daily_rows?: number
     minute_rows: number
     skipped_stages?: string[]
+    quantx?: { trade_date: string; status: string } | null
   } | null
   error: string | null
 }

@@ -1,0 +1,12 @@
+{
+  "base_protocol": "five-year-cycle2-v1.json",
+  "experiment": "vcp-five-year-cycle2-breadth-v1",
+  "purpose": "cycle2_mechanism_test",
+  "hypothesis": "VCP breakouts work best during broad recovery, so allow new entries only when 30% to 50% of the point-in-time universe closes above its own MA20. The close signal is filled at the next open.",
+  "backtest": {
+    "params": {
+      "market_breadth_ma20_min": 0.3,
+      "market_breadth_ma20_max": 0.5
+    }
+  }
+}

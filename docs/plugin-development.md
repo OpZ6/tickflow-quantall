@@ -266,6 +266,12 @@ uv run --extra dev python -m ruff check app/plugins/<your_plugin>/ tests/test_<y
   - `bridge.py` — Python↔Node 桥接 + availability 检测
   - `bridge.mjs` — Node 端(并发池、重试、SDK 解析)
   - `provider.py` — Provider 实现(归一化、分批、错误降级)
+- **`backend/app/plugins/tushare/`** — Tushare-compatible Python 插件
+  - 业务层继续使用原有 `pro.<api>()` 方法和既有 provider 数据集契约,不感知实际端点
+  - `TUSHARE_MIRROR_TOKEN` + `TUSHARE_MIRROR_API_URL` 配置 mirror 主源;
+    `TUSHARE_TOKEN` 配置原 Tushare 备用源
+  - mirror 网络异常会先重试一次;单次接口失败后才回退原 Tushare
+  - `client.py` 同时供标准 provider 和 QuantX 兼容采集入口使用,避免两条链路路由不一致
 
 ## 路由机制(无需关心, 仅参考)
 

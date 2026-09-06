@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -22,6 +23,27 @@ logger = logging.getLogger(__name__)
 # ── 进程级历史数据缓存 (避免 run_all 每次重新扫描 parquet + 计算指标) ──
 _history_cache: dict[tuple[str, date, int], tuple[float, pl.DataFrame]] = {}
 _HISTORY_CACHE_TTL = 120.0  # 秒
+
+
+def _history_scan_start(target_date: date, lookback_days: int, warmup: int = 60) -> date:
+    """Return a conservative calendar start for a trading-bar history request.
+
+    A-share daily rows contain roughly 240 trading sessions per year.  The old
+    180-calendar-day cap silently reduced every long-window strategy to about
+    125 bars whenever the repository history cache missed.  VCP needs 252 bars
+    for its trend template and RS ranks, so that cap made the whole universe
+    ineligible.  Keep enough calendar room for the requested bars plus indicator
+    warmup.  The retained frame also keeps that warmup because strategies use
+    per-symbol valid-bar offsets and suspended stocks can have fewer rows than
+    the market's global trading calendar.
+    """
+    calendar_days = max(180, math.ceil((max(lookback_days, 1) + warmup) * 1.6))
+    return target_date - timedelta(days=calendar_days)
+
+
+def _history_retained_days(lookback_days: int, warmup: int = 60) -> int:
+    """Trading-calendar rows retained for per-symbol valid-bar calculations."""
+    return max(lookback_days, 1) + max(warmup, 0)
 
 
 @dataclass
@@ -250,7 +272,7 @@ class ScreenerService:
         )
 
         warmup = 60
-        start = target_date - timedelta(days=min((lookback_days + warmup) * 2, 180))
+        start = _history_scan_start(target_date, lookback_days, warmup)
 
         enriched_dir = self.repo.store.data_dir / self._enriched_dirname
         read_cols = ["symbol", "date", "open", "high", "low", "close", "volume",
@@ -292,8 +314,9 @@ class ScreenerService:
         # 不能用 timedelta(days=N) (自然日), 否则周末/节假日会让窗口偏少, 与回测不一致。
         if "date" in df_full.columns:
             trading_dates = df_full["date"].unique().sort()
-            if len(trading_dates) > lookback_days:
-                lookback_start = trading_dates[-(lookback_days + 1)]
+            retained_days = _history_retained_days(lookback_days, warmup)
+            if len(trading_dates) > retained_days:
+                lookback_start = trading_dates[-(retained_days + 1)]
             else:
                 lookback_start = trading_dates[0]
             df_full = df_full.filter(pl.col("date") >= lookback_start)

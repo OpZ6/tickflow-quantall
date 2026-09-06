@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+from datetime import date
+
 import polars as pl
 import pytest
 
@@ -33,6 +35,33 @@ def test_manual_pipeline_publishes_dependent_quantx(monkeypatch) -> None:
 
     assert calls == ["main", "quantx"]
     assert result["quantx"] == {"trade_date": "20260827", "status": "complete"}
+
+
+def test_dependent_quantx_uses_latest_persisted_session(monkeypatch, tmp_path) -> None:
+    class Store:
+        data_dir = tmp_path
+
+    class Repo:
+        store = Store()
+
+        @staticmethod
+        def latest_enriched_date(asset_type="stock"):
+            assert asset_type == "stock"
+            return date(2026, 9, 3)
+
+    calls = []
+    state = type("State", (), {"repo": Repo()})()
+    monkeypatch.setattr(daily_pipeline, "_get_app_state", lambda: state)
+    monkeypatch.setattr(
+        "app.quantx_data.scheduler.run_scheduled",
+        lambda data_root, *, trade_date=None: calls.append((data_root, trade_date))
+        or {"trade_date": trade_date},
+    )
+
+    result = daily_pipeline._run_quantx_after_pipeline()
+
+    assert calls == [(tmp_path, "20260903")]
+    assert result == {"trade_date": "20260903"}
 
 # ── JobStore 单飞 ────────────────────────────────────────────────────────
 

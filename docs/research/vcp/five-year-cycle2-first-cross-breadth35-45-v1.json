@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-first-cross-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-breadth35-45-v1",
+  "purpose": "cycle2_regime_stability",
+  "hypothesis": "Test the centered 35%-45% breadth band for a stable recovery-regime plateau.",
+  "backtest": {"params": {"market_breadth_ma20_min": 0.35, "market_breadth_ma20_max": 0.45}}
+}

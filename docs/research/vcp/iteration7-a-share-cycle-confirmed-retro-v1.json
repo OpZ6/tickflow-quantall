@@ -1,0 +1,17 @@
+{
+  "base_protocol": "iteration7-a-share-cycle-confirmed-vcp-v1.json",
+  "experiment": "vcp-iteration7-a-share-cycle-confirmed-retro-v1",
+  "purpose": "cross_cycle_development_check_on_pre_2021_history",
+  "universe_date": "2016-10-06",
+  "data_directory": "research/vcp/datasets/ten-year-20160905-v1",
+  "data_start": "2016-09-05",
+  "evaluation_start": "2017-11-15",
+  "evaluation_end": "2026-09-04",
+  "phases": {
+    "train": {
+      "start": "2017-11-15",
+      "end": "2020-12-31"
+    }
+  },
+  "development_note": "This interval was opened only after iteration6 candidates failed their frozen retro checks. It is now development data and cannot serve as untouched validation for iteration7."
+}

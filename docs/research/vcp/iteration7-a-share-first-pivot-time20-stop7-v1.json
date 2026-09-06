@@ -1,0 +1,11 @@
+{
+  "base_protocol": "iteration7-a-share-first-pivot-time20-ma60-v1.json",
+  "experiment": "vcp-iteration7-a-share-first-pivot-time20-stop7-v1",
+  "purpose": "test_classic_vcp_risk_distance_on_first_pivot_breakouts",
+  "hypothesis": "A 7 percent account stop better accommodates normal A-share post-breakout volatility than 5 percent while the first-pivot rule removes stale entries.",
+  "backtest": {
+    "overrides": {
+      "stop_loss": -0.07
+    }
+  }
+}

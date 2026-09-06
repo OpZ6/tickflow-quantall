@@ -216,6 +216,12 @@ def _strategy_detail(
         "trailing_stop": getattr(s, "trailing_stop", None),
         "trailing_take_profit_activate": getattr(s, "trailing_take_profit_activate", None),
         "trailing_take_profit_drawdown": getattr(s, "trailing_take_profit_drawdown", None),
+        "profit_lock_steps": (
+            overrides.get("profit_lock_steps", s.meta.get("profit_lock_steps"))
+            if overrides
+            else s.meta.get("profit_lock_steps")
+        ),
+        "recommended_max_positions": s.meta.get("recommended_max_positions"),
         "max_hold_days": overrides.get("max_hold_days", s.max_hold_days) if overrides else s.max_hold_days,
         "order_by": s.meta.get("order_by", "score"),
         "descending": s.meta.get("descending", True),

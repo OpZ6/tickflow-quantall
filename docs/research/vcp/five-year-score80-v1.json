@@ -1,0 +1,11 @@
+{
+  "base_protocol": "five-year-v1.json",
+  "experiment": "vcp-five-year-score80-v1",
+  "purpose": "training_mechanism_test",
+  "hypothesis": "Require technical score >= 80 to retain only stronger contraction quality and RS combinations. The threshold was motivated by training diagnostics and must not be judged on holdout yet.",
+  "backtest": {
+    "overrides": {
+      "score_min": 80.0
+    }
+  }
+}

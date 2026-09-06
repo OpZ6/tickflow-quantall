@@ -1314,7 +1314,9 @@ class StrategyEngine:
         from app.backtest.matrix import (
             MatrixPipelineConfig,
             MatrixStrategyPipeline,
+            build_basic_filter_mask,
             build_market_data_matrix,
+            build_matrix_score,
         )
 
         source_panel = context.history
@@ -1347,6 +1349,21 @@ class StrategyEngine:
                 count=len(market.symbols),
             )
 
+        target_ids = [i for i, label in enumerate(market.timestamp_labels) if label[:10] == str(as_of)]
+        if not target_ids:
+            return StrategyResult(as_of=as_of, strategy_id=strategy_id)
+        target_time = target_ids[-1]
+        if strategy.meta.get("completed_daily_only"):
+            from app.market_time import cn_now
+
+            now = cn_now()
+            if as_of > now.date() or (as_of == now.date() and (now.hour, now.minute) < (15, 10)):
+                raise ValueError("该策略仅使用已完成日线, 请在收盘数据更新后运行或选择历史交易日")
+        snapshot_fn = getattr(strategy.matrix_strategy, "screen_snapshot", None)
+        snapshot_signals, candidate_details = None, None
+        if callable(snapshot_fn):
+            snapshot_signals, candidate_details = snapshot_fn(market, params, target_time)
+
         signals = MatrixStrategyPipeline().run(
             strategy.matrix_strategy,
             market,
@@ -1359,15 +1376,8 @@ class StrategyEngine:
                 descending=bool(strategy.meta.get("descending", True)),
                 asset_mask=asset_mask,
             ),
+            precomputed_signals=snapshot_signals,
         )
-        target_ids = [
-            time_id
-            for time_id, label in enumerate(market.timestamp_labels)
-            if label[:10] == str(as_of)
-        ]
-        if not target_ids:
-            return StrategyResult(as_of=as_of, strategy_id=strategy_id)
-        target_time = target_ids[-1]
         entry_active = signals.entry[target_time]
         exit_active = signals.exit[target_time]
         if asset_mask is not None:
@@ -1385,7 +1395,21 @@ class StrategyEngine:
             signals.exit_signal_ids,
             market.symbols,
         )
-        selected_assets = np.flatnonzero(entry_active != 0)
+        candidate_mask = entry_active.astype(bool)
+        candidate_scores = signals.score
+        if candidate_details is not None:
+            candidate_mask = np.array([symbol in candidate_details for symbol in market.symbols])
+            candidate_mask &= build_basic_filter_mask(market, basic_filter)[target_time]
+            if asset_mask is not None:
+                candidate_mask &= asset_mask
+            universe = np.zeros(market.shape, dtype=bool)
+            universe[target_time] = candidate_mask
+            candidate_scores = build_matrix_score(
+                market, universe, scoring, strategy.meta.get("order_by"),
+                bool(strategy.meta.get("descending", True)), fallback=snapshot_signals.score,
+                directions=effective_scoring_directions(overrides),
+            )
+        selected_assets = np.flatnonzero(candidate_mask)
         if selected_assets.size == 0:
             return StrategyResult(
                 as_of=as_of,
@@ -1406,8 +1430,9 @@ class StrategyEngine:
             row = row_by_symbol.get(symbol)
             if row is None:
                 continue
-            score = float(signals.score[target_time, int(asset_id)])
-            ranked.append((score, {**row, "score": score}))
+            score = float(candidate_scores[target_time, int(asset_id)])
+            details = (candidate_details or {}).get(symbol, {})
+            ranked.append((score, {**row, **details, "score": score}))
         ranked.sort(
             key=lambda item: item[0],
             reverse=bool(strategy.meta.get("descending", True)),

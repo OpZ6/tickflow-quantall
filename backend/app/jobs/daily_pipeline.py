@@ -834,9 +834,14 @@ def _run_quantx_after_pipeline() -> dict | None:
     if data_root is None:
         logger.info("dependent QuantX run skipped: application repository unavailable")
         return None
+    latest = repo.latest_enriched_date("stock")
+    if latest is None:
+        logger.info("dependent QuantX run skipped: no enriched partition available")
+        return None
+
     from app.quantx_data.scheduler import run_scheduled
 
-    result = run_scheduled(data_root)
+    result = run_scheduled(data_root, trade_date=latest.strftime("%Y%m%d"))
     logger.info("dependent QuantX result: %s", result)
     return result
 
@@ -1120,7 +1125,9 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
                             hour=sched["hour"], minute=sched["minute"],
                             timezone="Asia/Shanghai"),
         id="daily_pipeline",
-        misfire_grace_time=3600,
+        # A sleeping laptop can miss the configured post-close time by hours.
+        # Keep the run eligible until the next session instead of dropping it.
+        misfire_grace_time=86400,
         replace_existing=True,
     )
 

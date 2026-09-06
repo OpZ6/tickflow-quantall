@@ -12,7 +12,11 @@ from types import SimpleNamespace
 import polars as pl
 import pytest
 
-from app.services.screener import ScreenerService
+from app.services.screener import (
+    ScreenerService,
+    _history_retained_days,
+    _history_scan_start,
+)
 from app.strategy.engine import StrategyDef, StrategyEngine
 
 
@@ -85,6 +89,18 @@ def test_required_history_bars_takes_max_of_static_and_param():
         _filter_history_strategy("custom_both", lookback_days=8, param_default=22)
     )
     assert engine.required_history_bars(["custom_both"]) == 22
+
+
+def test_history_scan_start_covers_long_trading_bar_window():
+    """252 日策略在缓存 miss 时不能再被 180 个自然日截断。"""
+    target = date(2026, 9, 4)
+    start = _history_scan_start(target, 261, warmup=60)
+    assert (target - start).days >= 500
+
+
+def test_history_retains_warmup_for_per_symbol_valid_bars():
+    """全市场交易日窗口须给停牌/缺失记录的个股保留有效 K 线缓冲。"""
+    assert _history_retained_days(261, warmup=60) == 321
 
 
 def test_build_strategy_context_loads_history_for_param_lookback(tmp_path, monkeypatch):

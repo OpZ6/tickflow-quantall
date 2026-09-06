@@ -1,0 +1,11 @@
+{
+  "base_protocol": "iteration7-a-share-dual-regime-slots5-recent-diagnostic-v1.json",
+  "experiment": "vcp-iteration8-a-share-dual-regime-balanced-trailing-recent-v1",
+  "purpose": "single_predeclared_midpoint_exit_recent_diagnostic",
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": 0.15,
+      "trailing_take_profit_drawdown": 0.075
+    }
+  }
+}

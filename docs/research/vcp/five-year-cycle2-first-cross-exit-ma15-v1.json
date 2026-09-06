@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-first-cross-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-exit-ma15-v1",
+  "purpose": "cycle2_exit_parameter_stability",
+  "hypothesis": "Test MA15 as the midpoint between fast failure recognition and the MA20 baseline.",
+  "backtest": {"params": {"exit_ma_days": 15}}
+}

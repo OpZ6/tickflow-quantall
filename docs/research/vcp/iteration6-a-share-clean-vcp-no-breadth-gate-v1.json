@@ -1,0 +1,14 @@
+{
+  "base_protocol": "iteration5-a-share-rs90-pivot-cross2-trail10-5-v1.json",
+  "experiment": "vcp-iteration6-a-share-clean-vcp-no-breadth-gate-v1",
+  "purpose": "iteration6_market_regime_ablation",
+  "hypothesis": "If RS90 leadership, signal-day turnover and a clean final pivot contain durable VCP edge, removing the narrow 30%-50% rising-breadth gate should increase opportunity count while retaining positive expectancy under the frozen 5% stop and 10%/5% profit protection.",
+  "backtest": {
+    "params": {
+      "market_breadth_ma20_min": 0.0,
+      "market_breadth_ma20_max": 1.0,
+      "market_breadth_rising_days": 0
+    }
+  },
+  "trial_note": "This is a market-regime mechanism ablation on development data. Individual-stock filters, exits, costs, ten slots, universe and the 2021-2023 development interval remain frozen."
+}

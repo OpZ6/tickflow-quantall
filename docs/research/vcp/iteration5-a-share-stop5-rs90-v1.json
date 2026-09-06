@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration5-a-share-stop5-v1.json",
+  "experiment": "vcp-iteration5-a-share-stop5-rs90-v1",
+  "purpose": "iteration5_a_share_leadership_filter",
+  "hypothesis": "Raising the relative-strength floor from the broad VCP default of 85 to 90 should restrict purchases to clearer market leaders; in the development candidate set this retained 63 of 98 gated setups and improved 20-day mean return and large-winner incidence.",
+  "backtest": {
+    "params": {
+      "rs_min": 90.0
+    }
+  },
+  "trial_note": "Only the relative-strength entry floor changes relative to the stop5 protocol. Exit rules, costs, slots, stock universe and the development interval remain frozen."
+}

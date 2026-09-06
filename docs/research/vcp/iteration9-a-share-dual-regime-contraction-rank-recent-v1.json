@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration9-a-share-dual-regime-contraction-rank-v1.json",
+  "experiment": "vcp-iteration9-a-share-dual-regime-contraction-rank-recent-v1",
+  "purpose": "recent_stress_diagnostic_for_contraction_quality_ranking",
+  "phases": {
+    "train": {
+      "start": "2024-01-02",
+      "end": "2026-06-30"
+    }
+  },
+  "development_note": "This interval is already exposed and is diagnostic only. It must not be used to tune the ranking weight."
+}

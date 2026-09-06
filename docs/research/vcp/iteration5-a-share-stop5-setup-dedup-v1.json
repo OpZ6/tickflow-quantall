@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration5-a-share-stop5-v1.json",
+  "experiment": "vcp-iteration5-a-share-stop5-setup-dedup-v1",
+  "purpose": "iteration5_a_share_stale_breakout_suppression",
+  "hypothesis": "Allowing only the first executable signal for each symbol, pivot date and VCP scale should prevent failed or stale bases from being repurchased as fresh breakouts, reducing stop-loss clustering without narrowing the stock universe.",
+  "backtest": {
+    "params": {
+      "deduplicate_setups": true
+    }
+  },
+  "trial_note": "Only same-setup repeat entries are suppressed relative to the stop5 protocol. VCP detection, first entry eligibility, exits, costs, slots and the development interval remain frozen."
+}

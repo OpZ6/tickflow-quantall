@@ -1,0 +1,23 @@
+{
+  "base_protocol": "iteration5-a-share-rs90-pivot-cross2-breadth40-trail10-5-slots3-v1.json",
+  "experiment": "vcp-iteration5-a-share-candidate-validation-v1",
+  "purpose": "iteration5_a_share_frozen_candidate_validation",
+  "phases": {
+    "validation": {
+      "start": "2024-01-01",
+      "end": "2025-09-04"
+    }
+  },
+  "acceptance_gates": {
+    "minimum_trades": 10,
+    "total_return_min": 0.0,
+    "max_drawdown_floor": -0.15,
+    "win_rate_min": 0.40,
+    "mean_payoff_ratio_min": 1.50,
+    "monetary_profit_factor_min": 1.20,
+    "sharpe_min": 0.50,
+    "equal_weight_market_excess_min": 0.0
+  },
+  "validation_policy": "All strategy parameters and gates were frozen before this interval was opened. A failed gate rejects this candidate; validation results must not be used to retune the same candidate.",
+  "holdout_note": "2025-09-05 onward remains outside this validation. It has prior engineering exposure and is diagnostic rather than a fully clean confirmatory holdout."
+}

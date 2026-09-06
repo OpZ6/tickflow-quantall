@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration3-confirm2-stop7-v1.json",
+  "experiment": "vcp-iteration3-confirm2-stop7-trail10-5-v1",
+  "purpose": "iteration3_structural_development",
+  "hypothesis": "After a confirmed breakout gains 10%, a 5% peak drawdown protects the demonstrated excursion while preserving room before activation.",
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": 0.10,
+      "trailing_take_profit_drawdown": 0.05
+    }
+  }
+}

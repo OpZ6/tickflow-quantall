@@ -1,0 +1,13 @@
+{
+  "base_protocol": "five-year-score80-breakout-stop3-v1.json",
+  "experiment": "vcp-five-year-candidate-v1",
+  "purpose": "frozen_validation_candidate",
+  "selection_basis": "Frozen after training only: score 80 retained materially more trades than score 82, breakout-only removed the negative cheat contribution, and the 3% hard stop produced the best return and monetary profit factor across the bounded 3/5/7% stop neighborhood.",
+  "validation_gate": {
+    "minimum_trades": 25,
+    "minimum_total_return": 0.0,
+    "minimum_monetary_profit_factor": 1.0,
+    "maximum_drawdown_floor": -0.15,
+    "decision": "All four conditions must pass. Validation results must not be used to retune this candidate. Holdout remains sealed."
+  }
+}

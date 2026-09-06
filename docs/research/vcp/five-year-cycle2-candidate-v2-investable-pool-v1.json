@@ -1,0 +1,16 @@
+{
+  "base_protocol": "five-year-cycle2-first-cross-breadth30-35-v1.json",
+  "experiment": "vcp-five-year-cycle2-candidate-v2-investable-pool-v1",
+  "purpose": "candidate_v2_pre_holdout_investability_check",
+  "hypothesis": "A capacity-derived point-in-time filter should preserve the candidate while avoiding entries whose 100,000 yuan target slot exceeds 0.5% of signal-day turnover.",
+  "backtest": {
+    "overrides": {
+      "basic_filter": {
+        "enabled": true,
+        "price_min": 3.0,
+        "amount_min": 20000000.0
+      }
+    }
+  },
+  "pool_note": "The 20 million yuan floor is derived once from a 100,000 yuan target slot divided by a 0.5% participation cap. Price and amount are evaluated point-in-time. Current names, current shares and current ST labels are not used."
+}

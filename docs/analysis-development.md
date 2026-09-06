@@ -18,6 +18,8 @@
 
 输入不存在时先走 `data-foundation.md`，不要从页面或 service 临时抓取供应商接口。
 
+Quants 迁移策略使用稳定 ID 与真实形态名称，当前按核心语义验收，见[策略核心迁移验收](spec/quants-strategy-core-acceptance-20260905.md)。`quants_growth_trend_legacy_v1` 仅保留兼容读取，使用 `research_only` 排除默认列表；不应将其描述为原版 V2 的完全复刻。迁移策略只计算已完成日 K。回调低吸的 `watch` 是观察候选，不能映射为自动买入；缺少真实 `net_mf_amount`（万元）时必须明确不可计算，不得以价量估算替代资金流。
+
 ## 2. 标准开发链
 
 ```text

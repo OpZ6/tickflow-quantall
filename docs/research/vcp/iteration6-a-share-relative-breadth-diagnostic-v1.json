@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration6-a-share-relative-breadth-regime-v1.json",
+  "experiment": "vcp-iteration6-a-share-relative-breadth-diagnostic-v1",
+  "purpose": "iteration6_distribution_adaptive_coverage_diagnostic",
+  "phases": {
+    "validation": {
+      "start": "2024-01-01",
+      "end": "2025-09-04"
+    }
+  },
+  "interpretation": "Diagnostic only. This adaptive regime was designed after the fixed-band candidates exposed the interval, so results may assess signal coverage and failure mode but cannot qualify the strategy or drive threshold tuning."
+}

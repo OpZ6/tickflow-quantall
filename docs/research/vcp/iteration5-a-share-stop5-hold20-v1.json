@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration5-a-share-stop5-v1.json",
+  "experiment": "vcp-iteration5-a-share-stop5-hold20-v1",
+  "purpose": "iteration5_a_share_shorter_holding_cycle",
+  "hypothesis": "After tightening the initial stop to 5%, reducing the maximum holding period from 40 to 20 trading days should recycle capital from stale A-share breakouts while retaining the strategy's positively skewed winners through the existing MA20 exit.",
+  "backtest": {
+    "overrides": {
+      "max_hold_days": 20
+    }
+  },
+  "trial_note": "Only maximum holding time changes relative to the stop5 protocol. Entry filters, MA20 signal exit, costs, ten slots and the development interval remain frozen."
+}

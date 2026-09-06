@@ -1,0 +1,13 @@
+{
+  "base_protocol": "iteration7-a-share-first-pivot-breakout-v1.json",
+  "experiment": "vcp-iteration7-a-share-early-recovery-first-breakout-v1",
+  "purpose": "trade_first_vcp_breakouts_during_low_breadth_recovery",
+  "hypothesis": "A-share VCP follow-through is strongest when less than 30 percent of stocks are above MA20 but breadth has risen over five sessions, identifying early participation expansion rather than a mature crowded advance.",
+  "backtest": {
+    "params": {
+      "market_breadth_ma20_min": 0.0,
+      "market_breadth_ma20_max": 0.3,
+      "market_equal_weight_return_lookback": 0
+    }
+  }
+}

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -40,6 +40,17 @@ def test_parse_yyyymmdd_nan():
 
 def test_parse_yyyymmdd_invalid():
     assert _parse_yyyymmdd("invalid") is None
+
+
+def test_parse_yyyymmdd_duckdb_date():
+    assert _parse_yyyymmdd(date(2026, 8, 21)) == date(2026, 8, 21)
+
+
+def test_parse_yyyymmdd_iso_string_and_timestamp():
+    expected = date(2026, 8, 21)
+    assert _parse_yyyymmdd("2026-08-21") == expected
+    assert _parse_yyyymmdd(datetime(2026, 8, 21, 15, 0)) == expected
+    assert _parse_yyyymmdd(pd.Timestamp("2026-08-21")) == expected
 
 
 # ---- _write_date_partitions ----

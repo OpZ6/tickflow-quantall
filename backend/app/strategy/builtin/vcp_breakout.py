@@ -7,6 +7,8 @@ from app.backtest.matrix import MarketDataMatrix, SignalMatrix, make_signal_matr
 
 META = {
     "id": "vcp_breakout",
+    "research_only": True,
+    "strategy_role": "research_baseline",
     "name": "VCP 突破",
     "version": "1.0.0",
     "description": "中期基底内短期波动与量能收缩, 放量突破前高",

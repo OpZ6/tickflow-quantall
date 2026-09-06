@@ -1,0 +1,88 @@
+{
+  "experiment": "vcp-forward-v1-registered-default-parity",
+  "purpose": "verify_registered_forward_strategy_matches_the_frozen_research_candidate",
+  "hypothesis": "Four equal slots allocate about 25 percent per selected leader and about 1.25 percent initial account risk at a 5 percent stop, improving capital use without relying on leverage or admitting weaker candidates.",
+  "universe_date": "2016-10-06",
+  "sample_size": 0,
+  "backtest": {
+    "strategy_id": "vcp_leader_breakout",
+    "symbols": null,
+    "start": "2021-09-06",
+    "end": "2024-09-04",
+    "params": {
+      "trend_filter": true,
+      "rs_min": 85.0,
+      "distance_high_max": 0.12,
+      "min_legs": 2,
+      "plan_stop_pct": 0.03,
+      "allow_cheat": false,
+      "require_pivot_cross": false,
+      "deduplicate_setups": false,
+      "market_breadth_ma20_min": 0.0,
+      "market_breadth_ma20_max": 1.0,
+      "market_breadth_rising_days": 0,
+      "market_equal_weight_return_lookback": 0,
+      "market_equal_weight_return_min": 0.0,
+      "prebreakout_pivot_closes_max": 20,
+      "a_share_dual_regime": true,
+      "short_scale_enabled": true,
+      "contraction_strength_rank_weight": 0.25
+    },
+    "overrides": {
+      "basic_filter": {
+        "enabled": true,
+        "price_min": 3.0,
+        "amount_min": 20000000.0,
+        "turnover_min": 0.0,
+        "exclude_st": false,
+        "exclude_new_days": 0
+      },
+      "stop_loss": -0.05,
+      "take_profit": null,
+      "trailing_stop": null,
+      "trailing_take_profit_activate": null,
+      "trailing_take_profit_drawdown": null,
+      "max_hold_days": 40
+    },
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.0005,
+    "slippage_bps": 10.0,
+    "max_positions": 4,
+    "max_exposure_pct": 1.0,
+    "initial_capital": 1000000.0,
+    "position_sizing": "equal",
+    "mode": "position",
+    "asset_type": "stock",
+    "minute_fill": false,
+    "regime_filter": null
+  },
+  "data_directory": "research/vcp/datasets/ten-year-20160905-v1",
+  "universe_mode": "historical_union",
+  "data_start": "2016-09-05",
+  "evaluation_start": "2017-11-15",
+  "evaluation_end": "2026-09-04",
+  "phases": {
+    "train": {
+      "start": "2017-11-15",
+      "end": "2023-12-29"
+    },
+    "validation": {
+      "start": "2024-09-05",
+      "end": "2025-09-04"
+    },
+    "holdout": {
+      "start": "2025-09-05",
+      "end": "2026-09-04"
+    },
+    "baseline": {
+      "start": "2021-09-06",
+      "end": "2026-09-04"
+    }
+  },
+  "holdout_note": "The 2026 July-August engineering pilot was inspected before this split; this holdout is not completely unseen. Confirmatory evidence also requires subsequent forward observation.",
+  "development_note": "This is one risk-budget comparison on already-opened data, not a position-count sweep or independent validation.",
+  "parity_note": "Profit lock steps are deliberately absent from overrides and must come from registered strategy metadata."
+}

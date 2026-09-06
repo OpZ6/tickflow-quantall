@@ -1,0 +1,80 @@
+{
+  "candidate": "vcp_recovery_breakout_v1",
+  "production_strategy_id": "vcp_recovery_breakout",
+  "tested_strategy_id": "quants_vcp_legacy_v1",
+  "holdout_range": {
+    "start": "2025-09-05",
+    "end": "2026-06-30"
+  },
+  "holdout_run_id": "20260906T003318629495Z",
+  "preholdout_evaluation": "candidate-v2-preholdout-evaluation.json",
+  "checks": [
+    {
+      "name": "closed_trades",
+      "actual": 24,
+      "operator": ">=",
+      "threshold": 15,
+      "passed": true
+    },
+    {
+      "name": "total_return",
+      "actual": 0.0155,
+      "operator": ">",
+      "threshold": 0,
+      "passed": true
+    },
+    {
+      "name": "monetary_profit_factor",
+      "actual": 1.1687078829227084,
+      "operator": ">=",
+      "threshold": 1.1,
+      "passed": true
+    },
+    {
+      "name": "max_drawdown",
+      "actual": -0.0548,
+      "operator": ">=",
+      "threshold": -0.12,
+      "passed": true
+    },
+    {
+      "name": "timing_violations",
+      "actual": 0,
+      "operator": "==",
+      "threshold": 0,
+      "passed": true
+    }
+  ],
+  "passed": false,
+  "decision": "research_only_not_live_qualified",
+  "concentration_observation": {
+    "largest_winner": 64722.59,
+    "net_pnl_without_largest_winner": -49209.06,
+    "top5_share_of_gross_profit": 1.0,
+    "interpretation": "Holdout profitability depends on a small number of trend winners; this was not a frozen rejection gate and must constrain rollout size."
+  },
+  "production_parity": {
+    "development_run_id": "20260906T003905759346Z",
+    "reference_run_id": "20260906T002822311043Z",
+    "trades_equal": true,
+    "equity_curve_equal": true,
+    "performance_stats_equal_ignoring_timing": true
+  },
+  "methodology_audit": {
+    "run_id": "20260906T003744660590Z",
+    "description": "Development-only removal of injected current-name/current-share filters; defined after holdout and not used as independent validation."
+  },
+  "absolute_return_gates_passed": true,
+  "benchmark_audit": "candidate-v2-benchmark-analysis.json",
+  "trade_quality_audit": "candidate-v2-trade-quality-analysis.json",
+  "live_qualification": {
+    "qualified": false,
+    "reason": "Frozen acceptance gates omitted benchmark excess and capital utilization. Holdout raw excess was negative versus every tested broad index and all-stock equal weight; daily Alpha was not statistically established.",
+    "average_exposure": 0.07849278350515464,
+    "strategy_return": 0.01551354,
+    "all_stock_equal_weight_return": 0.0592696432,
+    "csi_all_share_return": 0.1611000189,
+    "csi500_return": 0.3062540344,
+    "max_absolute_alpha_t_stat": 0.1478866972
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "base_protocol": "five-year-score80-breakout-v1.json",
+  "experiment": "vcp-five-year-score80-breakout-liquid-v1",
+  "purpose": "training_mechanism_test",
+  "hypothesis": "Apply the point-in-time daily liquidity pool to the score-80 breakout-only candidate and test whether pool quality adds value after signal quality is controlled.",
+  "backtest": {
+    "overrides": {
+      "basic_filter": {
+        "enabled": true,
+        "price_min": 3.0,
+        "price_max": 200.0,
+        "amount_min": 50000000.0
+      }
+    }
+  }
+}

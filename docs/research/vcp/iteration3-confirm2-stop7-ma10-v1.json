@@ -1,0 +1,7 @@
+{
+  "base_protocol": "iteration3-confirm2-stop7-v1.json",
+  "experiment": "vcp-iteration3-confirm2-stop7-ma10-v1",
+  "purpose": "iteration3_structural_development",
+  "hypothesis": "A 7% initial pattern-failure stop plus a close below the 10-day average exits stalled breakouts before the current MA20 rule.",
+  "backtest": {"params": {"exit_ma_days": 10}}
+}

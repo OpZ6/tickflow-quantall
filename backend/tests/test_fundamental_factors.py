@@ -153,6 +153,29 @@ def test_snapshot_requires_announce_date(tmp_path: Path):
     assert load_fundamental_snapshot(tmp_path) is None
 
 
+def test_load_snapshot_preserves_available_subset_and_nulls_missing_metrics(tmp_path: Path):
+    out = tmp_path / "financials" / "metrics"
+    out.mkdir(parents=True)
+    pl.DataFrame({
+        "symbol": ["600000.SH"],
+        "announce_date": [date(2026, 4, 25)],
+        "roe": [12.5],
+    }).write_parquet(out / "part.parquet")
+
+    snapshot = load_fundamental_snapshot(tmp_path)
+
+    assert snapshot is not None
+    assert snapshot["roe"].item() == 12.5
+    assert snapshot["bps"].item() is None
+    assert snapshot["net_margin"].item() is None
+    market = build_market_data_matrix(
+        _daily_panel(date(2026, 4, 24), 4, ("600000.SH",))
+    )
+    roe = build_fundamental_matrices(market, snapshot, ["roe_latest"])["roe_latest"]
+    assert np.isnan(roe[1, 0])  # announcement date remains unavailable
+    assert roe[2, 0] == 12.5
+
+
 def test_fundamental_factor_names_are_catalogued():
     from app.backtest.factor import FACTOR_COLUMNS
 

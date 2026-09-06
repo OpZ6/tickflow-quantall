@@ -1,0 +1,15 @@
+{
+  "base_protocol": "five-year-cycle2-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-no-breadth-v1",
+  "purpose": "cycle2_mechanism_ablation",
+  "hypothesis": "Ablate the 30%-50% breadth gate while retaining breakout-only, first-cross entry, 3% hard stop and MA20 exit to measure the gate's independent value.",
+  "backtest": {
+    "params": {
+      "allow_cheat": false,
+      "require_pivot_cross": true
+    },
+    "overrides": {
+      "stop_loss": -0.03
+    }
+  }
+}

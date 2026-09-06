@@ -1,0 +1,10 @@
+{
+  "base_protocol": "iteration9-a-share-dual-regime-contraction-rank-v1.json",
+  "experiment": "vcp-iteration9-a-share-dual-regime-contraction-rank-slots4-v1",
+  "purpose": "increase_capital_use_with_bounded_concentration_after_improving_signal_priority",
+  "hypothesis": "Four equal slots allocate about 25 percent per selected leader and about 1.25 percent initial account risk at a 5 percent stop, improving capital use without relying on leverage or admitting weaker candidates.",
+  "backtest": {
+    "max_positions": 4
+  },
+  "development_note": "This is one risk-budget comparison on already-opened data, not a position-count sweep or independent validation."
+}

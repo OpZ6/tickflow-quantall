@@ -1,0 +1,7 @@
+{
+  "base_protocol": "iteration3-breadth25-60-v1.json",
+  "experiment": "vcp-iteration3-confirm2-v1",
+  "purpose": "iteration3_structural_development",
+  "hypothesis": "Two consecutive closes above the pivot reject one-day failed breakouts while retaining enough opportunities.",
+  "backtest": {"params": {"breakout_confirmation_days": 2}}
+}

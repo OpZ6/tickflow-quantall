@@ -34,6 +34,9 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 
 ## 支持文档
 
+- [VCP 研究记录](research/vcp/README.md)：交易闭环配置、独立运行归档、首轮诊断和正式优化的数据前置条件。
+
+- [Quants 策略核心迁移验收](spec/quants-strategy-core-acceptance-20260905.md)：当前名称、V2 默认排除、核心语义回归证据与数据限制；用户已将要求调整为核心思路一致。原[完整迁移计划](spec/quants-strategy-migration-execution-plan.md)保留作历史参考。
 - [stock-chart-workbench.md](stock-chart-workbench.md)：个股分析唯一 K 线实例、统一行情 API、20+38 指标、缠论/价位/五类经典形态/正式结构策略/派生事件/画线和验证契约。
 - [quantx-data-pipeline.md](quantx-data-pipeline.md)：QuantX 运行、重试、重算和故障诊断手册。
 - [quantx-single-day-canonical-view-plan.md](quantx-single-day-canonical-view-plan.md)：QuantX 单日富图表从兼容 JSON 迁移到权威事实与确定性 ViewBuilder 的分批执行计划和验收清单。

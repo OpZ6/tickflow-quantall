@@ -1,0 +1,10 @@
+{
+  "base_protocol": "iteration7-a-share-cycle-confirmed-retro-v1.json",
+  "experiment": "vcp-iteration7-a-share-cycle-confirmed-dedup-retro-v1",
+  "purpose": "remove_repeat_entries_from_the_same_vcp_base_retro_check",
+  "backtest": {
+    "params": {
+      "deduplicate_setups": true
+    }
+  }
+}

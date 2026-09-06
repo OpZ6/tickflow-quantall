@@ -1,0 +1,88 @@
+{
+  "development": {
+    "run_id": "20260906T002822311043Z",
+    "trades": 90,
+    "wins": 14,
+    "losses": 76,
+    "win_rate": 0.15555555555555556,
+    "average_winner_return": 0.34326792857142857,
+    "median_winner_return": 0.258708,
+    "average_loser_return": -0.03655828947368417,
+    "median_trade_return": -0.033003,
+    "return_payoff_ratio": 9.389605846261594,
+    "monetary_profit_factor": 1.6632375648075526,
+    "average_trade_return": 0.022525788888888915,
+    "max_trade": {
+      "symbol": "300533.SZ",
+      "entry_date": "2023-03-22",
+      "exit_date": "2023-05-23",
+      "pnl_pct": 1.208161,
+      "pnl_amount": 124023.21,
+      "duration": 40,
+      "exit_reason": "max_hold"
+    },
+    "min_trade": {
+      "symbol": "603360.SH",
+      "entry_date": "2023-03-31",
+      "exit_date": "2023-04-03",
+      "pnl_pct": -0.107484,
+      "pnl_amount": -11057.75,
+      "duration": 1,
+      "exit_reason": "stop_loss"
+    },
+    "total_return": 0.2003,
+    "annual_return": 0.0486,
+    "max_drawdown": -0.0993,
+    "sharpe": 0.61,
+    "avg_exposure": 0.0738,
+    "net_without_largest_winner": 76317.97000000002
+  },
+  "holdout": {
+    "run_id": "20260906T003318629495Z",
+    "trades": 24,
+    "wins": 4,
+    "losses": 20,
+    "win_rate": 0.16666666666666666,
+    "average_winner_return": 0.28451125,
+    "median_winner_return": 0.298396,
+    "average_loser_return": -0.04677735,
+    "median_trade_return": -0.033003,
+    "return_payoff_ratio": 6.082243863750297,
+    "monetary_profit_factor": 1.1687078829227084,
+    "average_trade_return": 0.008437416666666664,
+    "max_trade": {
+      "symbol": "688485.SH",
+      "entry_date": "2025-12-19",
+      "exit_date": "2026-02-25",
+      "pnl_pct": 0.695337,
+      "pnl_amount": 64722.59,
+      "duration": 40,
+      "exit_reason": "max_hold"
+    },
+    "min_trade": {
+      "symbol": "920857.BJ",
+      "entry_date": "2025-12-16",
+      "exit_date": "2025-12-17",
+      "pnl_pct": -0.105253,
+      "pnl_amount": -10187.84,
+      "duration": 1,
+      "exit_reason": "stop_loss"
+    },
+    "total_return": 0.0155,
+    "annual_return": 0.0202,
+    "max_drawdown": -0.0548,
+    "sharpe": 0.32,
+    "avg_exposure": 0.0785,
+    "net_without_largest_winner": -49209.06
+  },
+  "combined_trade_sample": {
+    "trades": 114,
+    "wins": 18,
+    "win_rate": 0.15789473684210525,
+    "average_winner_return": 0.33021088888888894,
+    "average_loser_return": -0.03868726041666661,
+    "return_payoff_ratio": 8.535390858191471,
+    "median_trade_return": -0.033003,
+    "max_trade_return": 1.208161
+  }
+}

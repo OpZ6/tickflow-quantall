@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-first-cross-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-breadth32-37-v1",
+  "purpose": "cycle2_regime_stability",
+  "hypothesis": "Shift the early-recovery band upward to 32%-37% to test sensitivity to the exact 30% lower boundary.",
+  "backtest": {"params": {"market_breadth_ma20_min": 0.32, "market_breadth_ma20_max": 0.37}}
+}

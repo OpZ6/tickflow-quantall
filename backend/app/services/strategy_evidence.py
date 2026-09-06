@@ -86,6 +86,7 @@ def enrich_and_persist_strategy_result(
         for name, role in (("ma20", "support"), ("boll_upper", "trigger"), ("recent_high", "trigger")):
             if row.get(name) is not None:
                 levels.append({"role": role, "label": name, "value": float(row[name])})
+        detail = row.get("strategy_evidence") or {}
         events.append({
             "strategy_id": strategy_id,
             "strategy_version": strategy_version,
@@ -99,11 +100,11 @@ def enrich_and_persist_strategy_result(
             "source_run_id": source_run_id,
             "provenance": provenance,
             "input_fingerprint": input_fingerprint,
-            "reason_codes": signals or [f"strategy_{event_type}"],
-            "metrics": _row_metrics(row, params, signals),
-            "anchors": [{"date": result.as_of.isoformat(), "role": event_type, "ohlc": {key: row.get(key) for key in ("open", "high", "low", "close")}}],
-            "levels": levels,
-            "pattern_refs": [],
+            "reason_codes": list(dict.fromkeys((signals or [f"strategy_{event_type}"]) + detail.get("reason_codes", []))),
+            "metrics": _row_metrics(row, params, signals) + detail.get("metrics", []),
+            "anchors": [{"date": result.as_of.isoformat(), "role": event_type, "ohlc": {key: row.get(key) for key in ("open", "high", "low", "close")}}, *detail.get("anchors", [])],
+            "levels": levels + detail.get("levels", []),
+            "pattern_refs": detail.get("pattern_refs", []),
             "observed_at": datetime.now(),
         })
 

@@ -1,0 +1,11 @@
+{
+  "base_protocol": "iteration7-a-share-cycle-confirmed-vcp-v1.json",
+  "experiment": "vcp-iteration7-a-share-cycle-confirmed-dedup-v1",
+  "purpose": "remove_repeat_entries_from_the_same_vcp_base",
+  "hypothesis": "One trade per detected pivot and scale should prevent repeated exposure to the same failed setup without changing source VCP detection.",
+  "backtest": {
+    "params": {
+      "deduplicate_setups": true
+    }
+  }
+}
