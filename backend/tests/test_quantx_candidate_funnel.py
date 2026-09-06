@@ -26,6 +26,7 @@ def _prices(specs: dict[str, dict[str, float]]) -> pl.DataFrame:
                     "close": close,
                     "amount": 100_000_000.0 * spec.get("amount_ratio", 1.0),
                     "turnover_rate": spec.get("turnover", 4.0),
+                    "total_shares": spec.get("total_shares", 1_000_000_000.0),
                 }
             )
     return pl.DataFrame(rows)
@@ -187,3 +188,51 @@ def test_same_input_is_deterministic() -> None:
         _prices({"000030": {"pct": 2.0}}),
     )
     assert build_candidate_funnel_from_frames(*args) == build_candidate_funnel_from_frames(*args)
+
+
+def test_tradability_gate_filters_amount_turnover_trend_and_market_cap() -> None:
+    symbols = ["000040", "000041", "000042", "000043", "000044", "000045"]
+    result = build_candidate_funnel_from_frames(
+        DAY,
+        _state(heat=70, short=72, trend=65, up_ratio=60),
+        _candidates([{"symbol": symbol, "pct_chg": 5.0} for symbol in symbols]),
+        _limits(symbols),
+        _ladder([(symbol, f"题材{index}", 2) for index, symbol in enumerate(symbols)]),
+        _prices(
+            {
+                "000040": {"pct": 5.0, "wick": 0.0},
+                "000041": {"pct": 5.0, "wick": 0.0, "amount_ratio": 0.5},
+                "000042": {"pct": 5.0, "wick": 0.0, "turnover": 0.5},
+                "000043": {"pct": -5.0, "wick": 0.0, "slope": 0.0},
+                "000044": {"pct": 5.0, "wick": 0.0, "total_shares": 100_000_000.0},
+                "000045": {"pct": 5.0, "wick": 0.0, "total_shares": 30_000_000_000.0},
+            }
+        ),
+    )
+
+    assert [row["code"] for row in result["candidates"]] == ["000040"]
+    eliminated = {
+        row["code"]: row["eliminated_reason"] for row in result["audit_rows"]
+    }
+    assert "成交额" in eliminated["000041"]
+    assert "换手率" in eliminated["000042"]
+    assert "均线" in eliminated["000043"]
+    assert "市值" in eliminated["000044"]
+    assert "市值" in eliminated["000045"]
+
+
+def test_tradability_gate_rejects_incomplete_moving_average_history() -> None:
+    prices = _prices({"000050": {"pct": 5.0, "wick": 0.0}}).filter(
+        pl.col("date") >= DAY - timedelta(days=9)
+    )
+    result = build_candidate_funnel_from_frames(
+        DAY,
+        _state(heat=70, short=72, trend=65, up_ratio=60),
+        _candidates([{"symbol": "000050", "pct_chg": 5.0}]),
+        _limits(["000050"]),
+        _ladder([("000050", "短历史", 2)]),
+        prices,
+    )
+
+    assert result["candidates"] == []
+    assert "缺少20日均线" in result["audit_rows"][0]["eliminated_reason"]

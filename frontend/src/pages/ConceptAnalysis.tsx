@@ -23,6 +23,7 @@ import { storage } from '@/lib/storage'
 import { fmtBigNum, fmtPct, priceColorClass } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import { resolveDimension, type DimensionGroup, type StockRow } from '@/lib/analysis-adapter'
+import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
 
 const KEYWORDS = ['concept', '概念', 'theme', '题材', '板块']
 const CANDIDATE_FIELDS = ['concept', '概念', 'theme', '题材', '板块', 'concept_name', '概念名称']
@@ -234,6 +235,7 @@ function statSort(mode: SortMode) {
 }
 
 export function ConceptAnalysis() {
+  const marketRefresh = usePipelineRefresh()
   const [fieldConfig, setFieldConfig] = useState<AnalysisFieldConfig>(loadConfig)
   const [showConfig, setShowConfig] = useState(false)
   const [search, setSearch] = useState('')
@@ -376,12 +378,12 @@ export function ConceptAnalysis() {
               <Repeat className="h-3.5 w-3.5" />涨幅RPS轮动分析
             </button>
             <button
-              onClick={() => { rowsQuery.refetch(); marketQuery.refetch() }}
-              disabled={rowsQuery.isFetching || marketQuery.isFetching}
+              onClick={marketRefresh.refresh}
+              disabled={marketRefresh.isRefreshing}
               className="p-1.5 text-muted hover:bg-surface disabled:opacity-50"
               title="刷新"
             >
-              <RefreshCw className={cn('h-4 w-4', (rowsQuery.isFetching || marketQuery.isFetching) && 'animate-spin')} />
+              <RefreshCw className={cn('h-4 w-4', marketRefresh.isRefreshing && 'animate-spin')} />
             </button>
             <button onClick={() => setShowConfig(true)} className="p-1.5 text-muted hover:bg-surface hover:text-accent" title="配置数据源">
               <Settings2 className="h-4 w-4" />

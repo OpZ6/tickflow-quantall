@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Activity,
@@ -37,6 +37,7 @@ import { quantxApi, type QuantXCandidate, type QuantXMultidaySnapshot, type Quan
 import { cn } from '@/lib/cn'
 import { downloadQuantXInteractiveHtml } from '@/lib/exportStaticHtml'
 import { QK } from '@/lib/queryKeys'
+import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
 import {
   AdvanceRateChart,
   CongestionGauge,
@@ -263,11 +264,12 @@ function DecisionRail({ data }: { data: QuantXReviewData }) {
 
 function EmotionCalendar({ data, records, multiday, date }: { data: QuantXReviewData; records: Array<{ trade_date: string; metrics: Record<string, number | string | boolean | null> }>; multiday?: QuantXMultidaySnapshot; date: string }) {
   const [calendarScore, setCalendarScore] = useState<CalendarScoreKey>('market_heat_score')
-  const dates = records.slice(-20).map(row => row.trade_date)
+  const trendRecords = records.filter(row => row.trade_date <= date).slice(-20)
+  const dates = trendRecords.map(row => row.trade_date)
   const scores = {
-    heat: records.slice(-20).map(row => num(row.metrics.market_heat_score) ?? 0),
-    short: records.slice(-20).map(row => num(row.metrics.short_term_sentiment_score) ?? 0),
-    trend: records.slice(-20).map(row => num(row.metrics.trend_sentiment_score) ?? 0),
+    heat: trendRecords.map(row => num(row.metrics.market_heat_score) ?? 0),
+    short: trendRecords.map(row => num(row.metrics.short_term_sentiment_score) ?? 0),
+    trend: trendRecords.map(row => num(row.metrics.trend_sentiment_score) ?? 0),
   }
   return (
     <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,.9fr)]">
@@ -566,7 +568,7 @@ function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthL
 export function QuantXDashboard() {
   const { date: routeDate } = useParams()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
+  const pipelineRefresh = usePipelineRefresh()
   const [windowSize, setWindowSize] = useState<WindowSize>(20)
   const [breadthLevel, setBreadthLevel] = useState<1 | 2>(1)
   const [utilityOpen, setUtilityOpen] = useState({ data: false, quality: false })
@@ -588,21 +590,12 @@ export function QuantXDashboard() {
   const advancedQuery = useQuery({ queryKey: QK.quantxAdvanced(date), queryFn: () => quantxApi.getAdvanced(date), enabled: Boolean(date), retry: false, staleTime: 30_000 })
   const tablesQuery = useQuery({ queryKey: QK.quantxTables(date), queryFn: () => quantxApi.getTables(date), enabled: Boolean(date) && utilityOpen.data, retry: false, staleTime: 30_000 })
   const qualityQuery = useQuery({ queryKey: QK.quantxObservability(date), queryFn: () => quantxApi.getObservability(date), enabled: Boolean(date) && utilityOpen.quality, retry: false, staleTime: 30_000 })
-  const refresh = useMutation({
-    mutationFn: () => quantxApi.runData(date, { force: true }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: QK.quantxCatalog }),
-        queryClient.invalidateQueries({ queryKey: QK.quantxReview(date) }),
-        queryClient.invalidateQueries({ queryKey: QK.quantxMultiday(date) }),
-        queryClient.invalidateQueries({ queryKey: QK.quantxAdvanced(date) }),
-        queryClient.invalidateQueries({ queryKey: QK.quantxTables(date) }),
-        queryClient.invalidateQueries({ queryKey: QK.quantxObservability(date) }),
-      ])
-      toast(`QuantX ${date} 数据已刷新`, 'success')
-    },
-    onError: (error: Error) => toast(`QuantX 刷新失败：${error.message}`, 'error'),
-  })
+  useEffect(() => {
+    const refreshedDate = pipelineRefresh.job?.result?.quantx?.trade_date
+    if (pipelineRefresh.job?.status === 'succeeded' && refreshedDate && refreshedDate !== date) {
+      navigate(`/quantx/${refreshedDate}`, { replace: true })
+    }
+  }, [date, navigate, pipelineRefresh.job])
 
   const goDate = (target: string) => navigate(`/quantx/${target}`)
   const exportReport = async () => {
@@ -631,7 +624,7 @@ export function QuantXDashboard() {
   if (review.data_foundation.canonical_fields.length === 0) {
     return (
       <div className="mx-auto max-w-[1720px] px-3 pb-16 md:px-4">
-        <DashboardHeader date={date} dates={dates} refreshing={refresh.isPending} coverage="标准事实为空" onDate={goDate} onRefresh={() => refresh.mutate()} />
+        <DashboardHeader date={date} dates={dates} refreshing={pipelineRefresh.isRefreshing} coverage="标准事实为空" onDate={goDate} onRefresh={pipelineRefresh.refresh} />
         <div data-testid="quantx-dashboard-empty" className="mt-8 rounded-xl border border-border py-20 text-center text-sm text-muted">该交易日没有可用的标准事实数据</div>
       </div>
     )
@@ -643,7 +636,7 @@ export function QuantXDashboard() {
 
   return (
     <div className="mx-auto max-w-[1720px] overflow-x-clip px-3 pb-16 md:px-4" data-testid="quantx-unified-dashboard">
-      <DashboardHeader date={date} dates={dates} refreshing={refresh.isPending} exporting={exporting} portable={portable} coverage={coverage} onDate={goDate} onRefresh={() => refresh.mutate()} onExport={portable ? undefined : () => void exportReport()} />
+      <DashboardHeader date={date} dates={dates} refreshing={pipelineRefresh.isRefreshing} exporting={exporting} portable={portable} coverage={coverage} onDate={goDate} onRefresh={pipelineRefresh.refresh} onExport={portable ? undefined : () => void exportReport()} />
       <div className="mt-2 space-y-3">
         <MetricRibbon data={review} />
         <AnalysisDomainSection testId="quantx-domain-conclusion" title="今日市场结论" hint="先看市场方向、主线与风险，再进入各分析域验证" sequence="当前结论 → 今日行动" icon={<Zap className="h-4 w-4" />}>

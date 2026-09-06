@@ -16,6 +16,7 @@ import { useCapabilities, usePreferences } from '@/lib/useSharedQueries'
 import { SealedBadge } from '@/components/SealedBadge'
 import { useDialogBackdrop } from '@/lib/useDialogBackdrop'
 import type { ExtColumnDisplayConfig } from '@/lib/watchlist-columns'
+import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
 
 // ===== Ext 字段配置 =====
 
@@ -1479,6 +1480,7 @@ function ExtConfigDialog({ fields, onSave, onClose }: {
 // ===== 主页面 =====
 
 export function LimitUpLadder() {
+  const marketRefresh = usePipelineRefresh()
   const [asOf, setAsOf] = useState('')
   const [direction, setDirection] = useState<Direction>(() => storage.limitLadderDirection.get('up'))
   const [sealMode, setSealMode] = useState<'vol' | 'amount'>(() => storage.limitLadderSealMode.get('vol'))
@@ -1567,7 +1569,7 @@ export function LimitUpLadder() {
 
   const extColumnsParam = useMemo(() => buildExtColumnsParam(extFields), [extFields])
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading } = useQuery({
     // key 必须拍平 (spread 展开): key[0] 为字符串 'limit-ladder' 才能被 SSE 前缀失效
     // 命中实现实时刷新, depth_updated 事件 (invalidate ['limit-ladder']) 也才能匹配本查询。
     // 嵌套数组 key 会导致前者靠 String() 侥幸命中、后者永远失配。
@@ -1769,11 +1771,11 @@ export function LimitUpLadder() {
               <Settings2 className="h-3.5 w-3.5" />
             </button>
             <button
-              onClick={() => refetch()}
-              disabled={isFetching}
+              onClick={marketRefresh.refresh}
+              disabled={marketRefresh.isRefreshing}
               className="p-1.5 hover:bg-surface text-muted disabled:opacity-50"
             >
-              <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${marketRefresh.isRefreshing ? 'animate-spin' : ''}`} />
             </button>
           </div>
         }

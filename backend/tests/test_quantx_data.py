@@ -14,6 +14,7 @@ from app.api.quantx_data import router as quantx_data_router
 from app.market_facts.registry import DatasetId
 from app.market_facts.repository import MarketFactRepository
 from app.quantx_data import collectors
+from app.quantx_data import scheduler as quantx_scheduler
 from app.quantx_data.catalog import build_catalog, load_tables
 from app.quantx_data.migration import migrate_quantx_history
 from app.quantx_data.multiday import (
@@ -28,7 +29,7 @@ from app.quantx_data.new_high_clusters import (
     build_new_high_clusters,
 )
 from app.quantx_data.pipeline import run_pipeline
-from app.quantx_data.scheduler import _trade_date_today
+from app.quantx_data.scheduler import _trade_date_today, run_scheduled
 from app.services.ext_data import ExtConfig, ExtConfigStore, ExtField
 
 SOURCE_NAMES = (
@@ -202,6 +203,18 @@ def test_scheduler_uses_canonical_calendar_and_local_partition_evidence(tmp_path
         partition / "part.parquet"
     )
     assert _trade_date_today(root, today=date(2026, 8, 27)) == "20260827"
+
+
+def test_scheduled_publication_requires_a_local_market_partition(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        quantx_scheduler,
+        "run_pipeline",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("pipeline must not run without a local market partition")
+        ),
+    )
+
+    assert run_scheduled(tmp_path, trade_date="20260904") is None
 
 
 def test_pipeline_is_idempotent_and_catalog_uses_pipeline_status(tmp_path):
@@ -623,6 +636,34 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
                 }
             )
 
+        def get_daily_batch(self, symbols, start, end, columns=None):
+            rows = []
+            for symbol in symbols:
+                for offset in range(25):
+                    close = 10.0 + offset * 0.05
+                    rows.append(
+                        {
+                            "symbol": symbol,
+                            "date": end - timedelta(days=24 - offset),
+                            "open": close - 0.1,
+                            "high": close + 0.1,
+                            "low": close - 0.2,
+                            "close": close,
+                            "volume": 10_000_000.0,
+                            "amount": 120_000_000.0,
+                            "turnover_rate": 2.0,
+                        }
+                    )
+            return pl.DataFrame(rows)
+
+        def get_instruments(self):
+            return pl.DataFrame(
+                {
+                    "symbol": ["000001.SZ", "300002.SZ"],
+                    "total_shares": [1_000_000_000.0, 1_000_000_000.0],
+                }
+            )
+
     app = FastAPI()
     app.include_router(quantx_router)
     app.state.repo = FakeIndexRepository(tmp_path)
@@ -684,7 +725,7 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert len(response.json()["sections"]["s5"]["candidates"]) <= 10
     assert response.json()["sections"]["s5"]["candidate_funnel"][
         "algorithm_version"
-    ] == "quantx-candidate-funnel-v1"
+    ] == "quantx-candidate-funnel-v2"
     assert "sections.s5.candidate_funnel" in response.json()["data_foundation"][
         "derived_fields"
     ]

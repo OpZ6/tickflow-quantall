@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from datetime import date
 
 import polars as pl
 
+from app.plugins.tushare.client import credentials_configured
 from app.plugins.tushare.provider import TushareProvider
 
 
 @dataclass
 class _Config:
     name: str = "local_financial"
-    display_name: str = "本地财务（AkShare + Tushare）"
+    display_name: str = "本地财务 (AkShare + Tushare)"
     datasets: dict = field(default_factory=lambda: {"financial": None})
     builtin: bool = True
 
@@ -29,15 +29,18 @@ class LocalFinancialProvider:
         self._detail.close()
 
     def financial_mode(self) -> str:
-        if os.environ.get("TUSHARE_TOKEN", "").strip():
+        if credentials_configured():
             return "standard_on_demand"
         return "overview_only"
 
     def get_financials(
         self, table: str, symbols: list[str], latest_only: bool = True
     ) -> pl.DataFrame:
-        if not os.environ.get("TUSHARE_TOKEN", "").strip():
-            raise RuntimeError("详细财报需要设置 TUSHARE_TOKEN；全市场概览仍可独立更新")
+        if not credentials_configured():
+            raise RuntimeError(
+                "详细财报需要设置 TUSHARE_MIRROR_TOKEN 或 TUSHARE_TOKEN; "
+                "全市场概览仍可独立更新"
+            )
         return self._detail.get_financials(table, symbols, latest_only=latest_only)
 
     def get_financial_overview(self, report_period: date | None = None) -> pl.DataFrame:

@@ -585,7 +585,6 @@ function rankNav(rank?: OverviewMarket['concept_rank']): NavItem[] {
 export function Dashboard() {
   const qc = useQueryClient()
   const [selectedDate, setSelectedDate] = useState<string | undefined>()
-  const [manualFetching, setManualFetching] = useState(false)
   const [previewStock, setPreviewStock] = useState<{
     symbol: string
     name?: string
@@ -676,8 +675,7 @@ export function Dashboard() {
   // 同步完成后刷新看板数据
   useEffect(() => {
     if (fetchSucceeded) {
-      qc.invalidateQueries({ queryKey: QK.dataStatus })
-      qc.invalidateQueries({ queryKey: QK.overviewMarket(undefined) })
+      qc.invalidateQueries()
     }
   }, [fetchSucceeded, qc])
 
@@ -695,14 +693,9 @@ export function Dashboard() {
     }).catch(() => { /* 查询失败不阻塞, 用户仍可手动点击获取 */ })
   }, [hasNoData, fetchJobId])
 
-  // 手动刷新: 先重建后端 Polars 缓存(解决跨天残留), 再重新拉看板数据
+  // 手动更新必须运行完整数据管道；单纯重读缓存无法生成新的交易日。
   const handleRefresh = () => {
-    setManualFetching(true)
-    api.refreshCache()
-      .then(() => qc.invalidateQueries({ queryKey: ['overview-market'] }))
-      .finally(() => {
-        overview.refetch().finally(() => setManualFetching(false))
-      })
+    startFetch.mutate()
   }
 
   if (overview.isLoading && !data) {
@@ -803,10 +796,10 @@ export function Dashboard() {
           <span className={indexRealtime ? 'text-accent' : 'text-warning'}>{realtimeLabel}</span>
           <button
             onClick={handleRefresh}
-            disabled={manualFetching}
+            disabled={isFetching}
             className="inline-flex items-center gap-1 rounded-btn border border-border bg-elevated px-2 py-1 text-[11px] text-secondary transition-colors hover:text-foreground disabled:opacity-50"
           >
-            <RefreshCw className={`h-3 w-3 ${manualFetching ? 'animate-spin' : ''}`} />重载
+            <RefreshCw className={`h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />更新数据
           </button>
         </div>
       </div>

@@ -6,7 +6,6 @@ so importing optional adapters never fails when a token is not configured.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -24,12 +23,9 @@ INDEXES = {
 
 
 def _client():
-    token = os.environ.get("TUSHARE_TOKEN", "").strip()
-    if not token:
-        raise RuntimeError("TUSHARE_TOKEN is not configured")
-    import tushare as ts
+    from app.plugins.tushare.client import build_tushare_client
 
-    return ts.pro_api(token, timeout=30)
+    return build_tushare_client(timeout=30)
 
 
 def _frame_records(frame: pd.DataFrame | None) -> list[dict[str, Any]]:

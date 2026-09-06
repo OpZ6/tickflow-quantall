@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import polars as pl
+import pytest
 
 from app.indicators.pipeline import (
     attach_deviation_columns,
@@ -22,6 +23,8 @@ from app.services.abnormal_moves import (
     is_st_name,
     rule_for,
 )
+from app.strategy import monitor_rules
+from app.strategy.monitor import MonitorRuleEngine
 
 
 def _write_index_daily(tmp_path, rows: list[tuple[str, date, float]]) -> None:
@@ -60,6 +63,32 @@ def test_attach_deviation_columns_math(tmp_path) -> None:
     assert "momentum_3d" in out.columns  # 就地补算
     last = out.sort("date").row(-1, named=True)
     assert abs(last["deviate_3d"] - 0.0) < 1e-9
+
+
+def test_attach_deviation_columns_refreshes_stale_benchmark_cache(tmp_path) -> None:
+    days = [date(2026, 8, 11) + timedelta(days=i) for i in range(31)]
+    initial_days = days[:-1]
+    _write_index_daily(
+        tmp_path,
+        [("000001.SH", day, 100.0 + i) for i, day in enumerate(initial_days)],
+    )
+    stale = load_benchmark_momentum(tmp_path)
+    assert stale["date"].max() == initial_days[-1]
+
+    latest = days[-1]
+    _write_index_daily(tmp_path, [("000001.SH", latest, 130.0)])
+    stock = pl.DataFrame({
+        "symbol": ["600000.SH"] * len(days),
+        "date": days,
+        "close": [10.0 + i for i in range(len(days))],
+    })
+
+    out = attach_deviation_columns(stock, tmp_path)
+
+    latest_row = out.filter(pl.col("date") == latest)
+    assert latest_row["deviate_3d"][0] is not None
+    refreshed = load_benchmark_momentum(tmp_path)
+    assert refreshed["date"].max() == latest
 
 
 def test_attach_deviation_columns_missing_benchmark(tmp_path) -> None:
@@ -357,12 +386,36 @@ def test_build_overview_negative_side_stricter_threshold() -> None:
     assert main.thresholds[30] == (2.00, 0.70)
 
 
+def test_build_overview_drops_cached_empty_snapshot_when_repo_frame_changes() -> None:
+    with _hist_cache_lock:
+        _hist_cache.clear()
+
+    class _MutableRepo:
+        def __init__(self) -> None:
+            self.df = pl.DataFrame()
+
+        def get_enriched_latest(self):
+            return self.df, date.today()
+
+    repo = _MutableRepo()
+    first = build_overview(repo, None, min_closeness=0.0)
+    assert first["rows"] == []
+
+    repo.df = pl.DataFrame({
+        "symbol": ["600000.SH"],
+        "name": ["A"],
+        "close": [10.0],
+        "change_pct": [0.0],
+        "deviate_3d": [0.19],
+        "deviate_10d": [None],
+        "deviate_30d": [None],
+    })
+    second = build_overview(repo, None, min_closeness=0.5)
+
+    assert [row["symbol"] for row in second["rows"]] == ["600000.SH"]
+
+
 # ── 监控规则接入 (type=abnormal) ────────────────────────
-
-import pytest
-
-from app.strategy import monitor_rules
-from app.strategy.monitor import MonitorRuleEngine
 
 
 def _ab_rule(**overrides) -> dict:

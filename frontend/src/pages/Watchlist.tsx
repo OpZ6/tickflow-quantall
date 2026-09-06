@@ -29,6 +29,7 @@ import {
 import { WatchlistGroupCards } from '@/components/WatchlistGroupCards'
 import { WatchlistGroupStatsBar } from '@/components/WatchlistGroupStatsBar'
 import { ExtensionSlot } from '@/extensions/ExtensionSlot'
+import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
 
 // 分时列开放排序 (StockDataTable 实例级白名单; 表头眼睛/刷新按钮已 stopPropagation)
 const INTRADAY_SORTABLE_KEYS = new Set(['intraday'])
@@ -658,6 +659,7 @@ const StockCard = React.memo(function StockCard({
 
 export function Watchlist() {
   const qc = useQueryClient()
+  const marketRefresh = usePipelineRefresh()
   const [viewMode, setViewMode] = useState<'table' | 'card'>(() => {
     return (storage.watchlistView.get('table') as 'table' | 'card')
   })
@@ -1467,12 +1469,12 @@ export function Watchlist() {
               <Settings2 className="h-4 w-4" />
             </button>
             <button
-              onClick={() => enriched.refetch()}
-              disabled={enriched.isFetching}
+              onClick={marketRefresh.refresh}
+              disabled={marketRefresh.isRefreshing}
               className="inline-flex items-center justify-center h-8 w-8 rounded-btn bg-elevated hover:bg-elevated/80 text-secondary hover:text-foreground transition-colors duration-150 ease-smooth disabled:opacity-50"
               title="刷新"
             >
-              <RefreshCw className={`h-4 w-4 ${enriched.isFetching ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${marketRefresh.isRefreshing ? 'animate-spin' : ''}`} />
             </button>
             {allSymbols.length > 0 && (
               <>

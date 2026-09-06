@@ -119,12 +119,16 @@ def _status_of(closeness: float) -> str:
 def _hist_snapshot(repo: Any) -> dict[str, Any]:
     """enriched 最新日的偏离列快照 (60s 进程内缓存)。"""
     now = time.monotonic()
+    df, cache_date = repo.get_enriched_latest()
     with _hist_cache_lock:
         cached = _hist_cache.get("data")
-        if cached is not None and now - cached["_ts"] < _HIST_CACHE_TTL:
+        if (
+            cached is not None
+            and cached.get("_frame") is df
+            and now - cached["_ts"] < _HIST_CACHE_TTL
+        ):
             return cached
 
-    df, cache_date = repo.get_enriched_latest()
     rows: dict[str, dict[str, Any]] = {}
     if not df.is_empty() and "symbol" in df.columns:
         cols = ["symbol", *[c for c in ("name", "close", "change_pct",
@@ -139,7 +143,12 @@ def _hist_snapshot(repo: Any) -> dict[str, Any]:
                 "deviate_10d": r.get("deviate_10d"),
                 "deviate_30d": r.get("deviate_30d"),
             }
-    payload = {"_ts": now, "rows": rows, "cache_date": cache_date.isoformat() if cache_date else None}
+    payload = {
+        "_ts": now,
+        "_frame": df,
+        "rows": rows,
+        "cache_date": cache_date.isoformat() if cache_date else None,
+    }
     with _hist_cache_lock:
         _hist_cache["data"] = payload
     return payload

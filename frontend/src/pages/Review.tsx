@@ -27,6 +27,7 @@ import { MarkdownRenderer } from '@/components/financials/MarkdownRenderer'
 import { toast } from '@/components/Toast'
 import { usePreferences } from '@/lib/useSharedQueries'
 import { useReviewState } from '@/lib/useReviewStore'
+import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
 import {
   startReviewGeneration, resetReview, isReviewGenerating,
   type ReviewPhase,
@@ -71,6 +72,7 @@ function fmtArchivedAt(iso: string): string {
 
 export function Review() {
   const qc = useQueryClient()
+  const marketRefresh = usePipelineRefresh()
   // 复盘日期:当前固定取最新交易日(后续如需日期选择可改回 useState)
   const asOf: string | undefined = undefined
   const [focus, setFocus] = useState('')
@@ -236,12 +238,12 @@ export function Review() {
         right={
           <div className="flex items-center gap-1">
             <button
-              onClick={() => { marketQuery.refetch() }}
-              disabled={marketQuery.isFetching}
+              onClick={marketRefresh.refresh}
+              disabled={marketRefresh.isRefreshing}
               className="inline-flex items-center gap-1 rounded-btn border border-border bg-elevated px-2 py-1 text-[11px] text-secondary transition-colors hover:text-foreground disabled:opacity-50"
               title="刷新市场数据"
             >
-              <RefreshCw className={cn('h-3 w-3', marketQuery.isFetching && 'animate-spin')} />刷新
+              <RefreshCw className={cn('h-3 w-3', marketRefresh.isRefreshing && 'animate-spin')} />更新数据
             </button>
             <button
               onClick={openSchedule}

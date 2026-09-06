@@ -308,7 +308,9 @@ function LadderMatrix({ data }: { data: Record<string, any> }) {
   const [detailMode, setDetailMode] = useState<'compact' | 'detailed'>('compact')
   const members = (data.members || []) as LadderMember[]
   const themes = (data.matrix?.themes || []) as LadderTheme[]
-  const heights = (data.matrix?.heights || []) as number[]
+  const reportedHeights = (data.matrix?.heights || []) as number[]
+  const maxHeight = Math.max(0, ...reportedHeights)
+  const heights = Array.from({ length: maxHeight }, (_, index) => maxHeight - index)
   const coverage = data.coverage || {}
   const cells = useMemo(() => {
     const result = new Map<string, LadderMember[]>()

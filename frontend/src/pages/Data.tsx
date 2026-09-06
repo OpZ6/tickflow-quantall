@@ -292,6 +292,7 @@ export function Data() {
       // 侧边栏指数查询挂在 Layout 常驻不重挂载 (refetchOnWindowFocus 已关),
       // 不失效会一直显示同步前的旧值; 自选相关查询在页面正打开时同理。
       if (job.data.status === 'succeeded') {
+        qc.invalidateQueries()
         qc.invalidateQueries({ queryKey: QK.indexQuotes })
         qc.invalidateQueries({ queryKey: ['index-daily'] })
         qc.invalidateQueries({ queryKey: ['watchlist-enriched'] })

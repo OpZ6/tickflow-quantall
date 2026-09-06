@@ -12,9 +12,14 @@ import polars as pl
 from app.market_facts.registry import DatasetId
 from app.market_facts.repository import MarketFactRepository
 
-ALGORITHM_VERSION = "quantx-candidate-funnel-v1"
+ALGORITHM_VERSION = "quantx-candidate-funnel-v2"
 FINAL_POOL_LIMIT = 10
 THEME_LIMIT = 2
+MIN_DAILY_AMOUNT = 100_000_000.0
+MIN_TURNOVER_RATE_PCT = 1.5
+MIN_MARKET_CAP = 2_000_000_000.0
+MAX_MARKET_CAP = 300_000_000_000.0
+REQUIRED_MA_WINDOWS = (20,)
 
 SETUP_LABELS = {
     "momentum_leader": "强势前排",
@@ -132,7 +137,11 @@ def _price_features(rows: list[dict[str, Any]]) -> dict[str, Any]:
     close = closes[-1]
     previous = closes[-2] if len(closes) > 1 else close
     pct = (close / previous - 1) * 100 if previous else 0.0
-    ma20 = sum(closes[-20:]) / min(20, len(closes))
+    moving_averages = {
+        window: sum(closes[-window:]) / window if len(closes) >= window else None
+        for window in (5, 10, 20)
+    }
+    ma20 = moving_averages[20]
     prior_ma20_values = closes[-25:-5]
     prior_ma20 = (
         sum(prior_ma20_values) / len(prior_ma20_values)
@@ -149,16 +158,27 @@ def _price_features(rows: list[dict[str, Any]]) -> dict[str, Any]:
     high = _number(latest.get("high"), close) or close
     low = _number(latest.get("low"), close) or close
     position = (close - low) / (high - low) if high > low else 1.0
+    total_shares = _number(latest.get("total_shares"))
     return {
         "available": True,
         "pct_chg": round(pct, 2),
         "close": close,
+        "ma5": moving_averages[5],
+        "ma10": moving_averages[10],
         "ma20": ma20,
-        "ma20_slope_pct": round((ma20 / prior_ma20 - 1) * 100, 2) if prior_ma20 else 0.0,
+        "ma20_slope_pct": (
+            round((ma20 / prior_ma20 - 1) * 100, 2)
+            if ma20 is not None and prior_ma20
+            else 0.0
+        ),
         "drawdown_20d_pct": round((close / high20 - 1) * 100, 2) if high20 else 0.0,
         "amount_ratio": round(amount_ratio, 2) if amount_ratio is not None else None,
+        "amount": _number(latest.get("amount")),
+        "volume": _number(latest.get("volume")),
         "close_position": round(position, 3),
         "turnover_rate": _number(latest.get("turnover_rate")),
+        "total_shares": total_shares,
+        "market_cap": close * total_shares if total_shares is not None else None,
         "one_word_shape": high > 0 and abs(high - low) / high <= 0.001,
     }
 
@@ -169,6 +189,34 @@ def _limit_class(code: str) -> int:
     if code.startswith(("4", "8", "92")):
         return 30
     return 10
+
+
+def _tradability_failures(features: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    amount = _number(features.get("amount"))
+    turnover_rate = _number(features.get("turnover_rate"))
+    close = _number(features.get("close"))
+    market_cap = _number(features.get("market_cap"))
+
+    if amount is None:
+        failures.append("缺少当日成交额")
+    elif amount < MIN_DAILY_AMOUNT:
+        failures.append("当日成交额低于1亿元")
+    if turnover_rate is None:
+        failures.append("缺少换手率")
+    elif turnover_rate < MIN_TURNOVER_RATE_PCT:
+        failures.append("换手率低于1.5%")
+    for window in REQUIRED_MA_WINDOWS:
+        moving_average = _number(features.get(f"ma{window}"))
+        if close is None or moving_average is None:
+            failures.append(f"缺少{window}日均线")
+        elif close < moving_average:
+            failures.append(f"收盘价未站上{window}日均线")
+    if market_cap is None:
+        failures.append("缺少总市值")
+    elif market_cap < MIN_MARKET_CAP or market_cap > MAX_MARKET_CAP:
+        failures.append("总市值不在20亿至3000亿元范围")
+    return failures
 
 
 def _setup_type(
@@ -311,6 +359,7 @@ def build_candidate_funnel_from_frames(
         limit_pct = _limit_class(code)
         one_word = event_type == "limit_up" and bool(features.get("one_word_shape"))
         high_limit_consensus = event_type == "limit_up" and limit_pct >= 20
+        tradability_failures = _tradability_failures(features) if setup is not None else []
         theme = str(ladder_row.get("theme_name") or latest.get("industry") or "独立逻辑")
         interpretation = str(
             ladder_row.get("interpretation")
@@ -338,6 +387,10 @@ def build_candidate_funnel_from_frames(
             risk_tags.append(f"{limit_pct}cm封板一致性风险")
             action_status = "wait_divergence"
             eliminated_reason = "高弹性封板等待分歧确认，不直接进入次日可执行池"
+        elif tradability_failures:
+            risk_tags.extend(tradability_failures)
+            action_status = "context_only"
+            eliminated_reason = "基础可交易性未通过：" + "；".join(tradability_failures)
         elif setup is None:
             action_status = "context_only"
             eliminated_reason = "尚未形成强势前排、分歧承接、健康回调或低位启动形态"
@@ -387,7 +440,12 @@ def build_candidate_funnel_from_frames(
             "features": features,
             "stage": "risk_gate" if eliminated_reason else "scored",
             "eliminated_reason": eliminated_reason,
-            "stage_path": ["候选并集", "形态识别"] + ([] if setup is None else ["风险门禁", "市场自适应评分"]),
+            "stage_path": ["候选并集", "形态识别"] + (
+                []
+                if setup is None
+                else ["量价趋势市值门禁"]
+                + ([] if eliminated_reason else ["市场自适应评分"])
+            ),
         }
         audit_rows.append(row)
         if one_word or high_limit_consensus:
@@ -417,12 +475,19 @@ def build_candidate_funnel_from_frames(
     stage_counts = [
         ("universe", "候选并集", len(history_by_code), len(history_by_code)),
         ("setup", "四类形态识别", len(history_by_code), sum(row["setup_type"] is not None for row in audit_rows)),
-        ("risk", "可交易性与一致性门禁", sum(row["setup_type"] is not None for row in audit_rows), len(ranked)),
+        ("risk", "量价趋势市值与一致性门禁", sum(row["setup_type"] is not None for row in audit_rows), len(ranked)),
         ("final", "市场自适应评分与分散", len(ranked), len(finalists)),
     ]
     return {
         "algorithm_version": ALGORITHM_VERSION,
         "regime": regime,
+        "tradability_policy": {
+            "minimum_amount_yi": MIN_DAILY_AMOUNT / 100_000_000,
+            "minimum_turnover_rate_pct": MIN_TURNOVER_RATE_PCT,
+            "required_moving_averages": list(REQUIRED_MA_WINDOWS),
+            "market_cap_min_yi": MIN_MARKET_CAP / 100_000_000,
+            "market_cap_max_yi": MAX_MARKET_CAP / 100_000_000,
+        },
         "universe_count": len(history_by_code),
         "stages": [
             {"key": key, "label": label, "input_count": input_count, "passed_count": passed, "eliminated_count": max(0, input_count - passed)}
@@ -467,8 +532,15 @@ def build_candidate_funnel(
                 sorted(latest_identity.values()),
                 trade_day - timedelta(days=120),
                 trade_day,
-                ["symbol", "date", "open", "high", "low", "close", "amount", "turnover_rate"],
+                ["symbol", "date", "open", "high", "low", "close", "volume", "amount", "turnover_rate"],
             )
+            if not prices.is_empty() and hasattr(klines, "get_instruments"):
+                instruments = klines.get_instruments()
+                if not instruments.is_empty() and {"symbol", "total_shares"} <= set(instruments.columns):
+                    shares = instruments.select("symbol", "total_shares").unique(
+                        subset=["symbol"], keep="last"
+                    )
+                    prices = prices.join(shares, on="symbol", how="left")
         except Exception:
             prices = pl.DataFrame()
     return build_candidate_funnel_from_frames(
