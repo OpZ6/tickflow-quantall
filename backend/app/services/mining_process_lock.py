@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import BinaryIO
 
@@ -18,7 +19,8 @@ class MiningProcessLock:
         if self._stream is not None:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        stream = self._path.open("a+b")
+        descriptor = os.open(self._path, os.O_RDWR | os.O_CREAT, 0o600)
+        stream = os.fdopen(descriptor, "r+b")
         try:
             stream.seek(0, os.SEEK_END)
             if stream.tell() == 0:
@@ -26,6 +28,7 @@ class MiningProcessLock:
                 stream.flush()
             os.set_inheritable(stream.fileno(), False)
             _try_lock_file(stream)
+            _write_owner_record(stream)
         except BaseException:
             stream.close()
             raise
@@ -37,9 +40,26 @@ class MiningProcessLock:
             return
         self._stream = None
         try:
-            _unlock_file(stream)
+            _clear_owner_record(stream)
         finally:
-            stream.close()
+            try:
+                _unlock_file(stream)
+            finally:
+                stream.close()
+
+
+def _write_owner_record(stream: BinaryIO) -> None:
+    record = f"\npid={os.getpid()}\nacquired_at={time.time():.6f}\n".encode("ascii")
+    stream.seek(1)
+    stream.write(record)
+    stream.truncate()
+    stream.flush()
+
+
+def _clear_owner_record(stream: BinaryIO) -> None:
+    stream.seek(1)
+    stream.truncate()
+    stream.flush()
 
 
 def _try_lock_file(stream: BinaryIO) -> None:
@@ -47,13 +67,20 @@ def _try_lock_file(stream: BinaryIO) -> None:
         import msvcrt
 
         stream.seek(0)
-        try:
-            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError as exc:
-            raise MiningProcessLockError(
-                "another application process already owns mining for this data directory"
-            ) from exc
-        return
+        last_error: OSError | None = None
+        # uvicorn --reload can briefly overlap the old and new worker during
+        # startup. Give the old process a short window to release its lock.
+        for _ in range(10):
+            try:
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                return
+            except OSError as exc:
+                last_error = exc
+                time.sleep(0.1)
+        raise MiningProcessLockError(
+            "another application process already owns mining for this data directory"
+        ) from last_error
 
     import fcntl
 
