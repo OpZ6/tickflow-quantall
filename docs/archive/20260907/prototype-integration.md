@@ -95,11 +95,11 @@ OpenClarr 原型还列出了形态识别、信号面板、买卖点回测、多�
 
 ## 6. QuantX / Quants / QuantT / 主面板协同
 
-四者的源码边界、版本化 sidecar 契约、主线与形态交集评分、真实交易反馈回路，详见 [Quantall 协同接入与本地财务方案](system-integration-and-local-financials.md)。本次只完成分析设计，没有修改三个兄弟应用，也没有直接读取或写入它们的生产数据库。
+四者的源码边界、版本化 sidecar 契约、主线与形态交集评分、真实交易反馈回路，详见 [Quantall 协同接入与本地财务方案](../../system-integration-and-local-financials.md)。本次只完成分析设计，没有修改三个兄弟应用，也没有直接读取或写入它们的生产数据库。
 
 ## 7. 财务分析本地化
 
-当前后端已经支持声明 `financial` 数据集的 custom provider，并会绕过 TickFlow Expert 的 `Cap.FINANCIAL` 门槛；现有财务 Parquet、API、页面和 AI 分析链路均可复用。stock-sdk 不提供该数据集。所需本地适配服务、字段契约、候选来源与质量门禁同样记录在 [Quantall 协同接入与本地财务方案](system-integration-and-local-financials.md)。本次未在未经验证的免费上游之上制造“可用”实现。
+当前后端已经支持声明 `financial` 数据集的 custom provider，并会绕过 TickFlow Expert 的 `Cap.FINANCIAL` 门槛；现有财务 Parquet、API、页面和 AI 分析链路均可复用。stock-sdk 不提供该数据集。所需本地适配服务、字段契约、候选来源与质量门禁同样记录在 [Quantall 协同接入与本地财务方案](../../system-integration-and-local-financials.md)。本次未在未经验证的免费上游之上制造“可用”实现。
 
 ## 8. 验证清单
 

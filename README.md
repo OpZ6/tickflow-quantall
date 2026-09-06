@@ -48,7 +48,7 @@
 | 🔍 **选股引擎**   | 25 个内置策略 + 分钟策略 + 自定义信号 + AI 生成,Polars 毫秒级扫全 A 股 | [strategy.md](./docs/strategy.md) |
 | 📊 **指标流水线** | MA/EMA/MACD/RSI/KDJ/布林/量比等 68 列指标与信号,一次扫表落盘 enriched Parquet    | [features.md](./docs/features.md) |
 | 🧪 **回测研究**   | 因子/策略/分钟回测 + 财务快照因子(点时口径),T+1/费用/滑点约束,评分策略附带因子归因 | [features.md](./docs/features.md) |
-| 🔬 **因子平台**   | DSL 自定义因子(编辑器 25 算子点选/试算/版本) + 检验/组合,与策略双向联动(一键生成策略/触发器引用因子/回测归因) | [factor-platform-plan.md](./docs/factor-platform-plan.md) |
+| 🔬 **因子平台**   | DSL 自定义因子(编辑器 25 算子点选/试算/版本) + 检验/组合,与策略双向联动(一键生成策略/触发器引用因子/回测归因) | [历史方案](./docs/archive/20260907/factor-platform-plan.md) |
 | ⛏️ **因子挖掘**   | 嵌套样本外搜索多因子排名组合,与自有策略对照,候选库显式发布、永不自动上线 | [mining.md](./docs/mining.md) |
 | 🌡️ **市场环境**   | 情绪周期 6 阶段(连板梯队驱动)+ 概念/行业主线排名,与 5 档环境分并存    | [market-phase.md](./docs/market-phase.md) |
 | 🚨 **异动监控**   | 竞价/盘中/偏移三类异动一页覆盖:同花顺风向标 + 当日信号聚合 + 交易所偏离值口径 | — |
@@ -348,8 +348,8 @@ PORT=3018                      # 服务端口
 | [docs/configuration.md](./docs/configuration.md)                                                   | 所有 `.env` 配置项详解(数据源、AI、服务、密码、数据目录)             |
 | [docs/features.md](./docs/features.md)                                                             | 各功能模块详细说明(选股/指标/回测/监控/个股分析/数据扩展)            |
 | [docs/custom-data-source.md](./docs/custom-data-source.md)                                         | 自定义数据源接入、能力路由契约、YAML 配置与 mock 联调示例            |
-| [docs/prototype-integration.md](./docs/prototype-integration.md)                                   | 缠论、全指标、市场实验室与两个参考图的接入记录                       |
-| [docs/data-source-alternatives.md](./docs/data-source-alternatives.md)                             | TickFlow 免费替代源与 stock-sdk 详细检查                             |
+| [docs/archive/20260907/prototype-integration.md](./docs/archive/20260907/prototype-integration.md) | 缠论、全指标、市场实验室与两个参考图的历史接入记录 |
+| [docs/archive/20260907/data-source-alternatives.md](./docs/archive/20260907/data-source-alternatives.md) | TickFlow 免费替代源与 stock-sdk 历史检查 |
 | [docs/system-integration-and-local-financials.md](./docs/system-integration-and-local-financials.md) | QuantX/Quants/QuantT/主面板协同契约与 custom 财务源方案             |
 | [docs/strategy.md](./docs/strategy.md)                                                             | 策略体系(18 内置策略 + 三种扩展方式 + 文件结构)                      |
 | [docs/mining.md](./docs/mining.md)                                                                 | 因子与策略挖掘口径、防泄漏、任务隔离和发布边界                       |

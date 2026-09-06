@@ -11,7 +11,7 @@
 | 集成分支 | `sync/upstream-v0.2.3` |
 | 明确排除 | `v0.2.3` 之后的 `upstream/main` 提交 |
 
-本次同步保留 Quantall 的 QuantX、市场实验室、Market Facts、本地全市场历史财务、统一 K 线和策略证据链、Quants/VCP 策略及数据源优先级，并接入稳定版的因子平台、全量分钟路由、指数补充、流式增强历史重建和因子归因。逐文件冲突决策与验证结果见 [`upstream-v0.2.3-integration.md`](upstream-v0.2.3-integration.md)。
+本次同步保留 Quantall 的 QuantX、市场实验室、Market Facts、本地全市场历史财务、统一 K 线和策略证据链、Quants/VCP 策略及数据源优先级，并接入稳定版的因子平台、全量分钟路由、指数补充、流式增强历史重建和因子归因。逐文件冲突决策与验证结果见历史归档 [`upstream-v0.2.3-integration.md`](archive/20260907/upstream-v0.2.3-integration.md)。
 
 状态：权威升级流程。目标是持续跟踪 `shy3130/tick-stock-panel`，同时保留 Quantall 的 QuantX、实验室和自有功能。
 

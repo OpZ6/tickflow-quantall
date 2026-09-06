@@ -1,10 +1,10 @@
 # QuantX 独立更新与渐进收口审计（2026-08-28）
 
-> 文档角色：当前代码与本地数据的审计快照，不是架构权威入口。当前契约仍以 [`architecture.md`](architecture.md)、[`data-foundation.md`](data-foundation.md) 和 [`quantx-data-pipeline.md`](quantx-data-pipeline.md) 为准。
+> 文档角色：当前代码与本地数据的审计快照，不是架构权威入口。当前契约仍以 [`architecture.md`](../../architecture.md)、[`data-foundation.md`](../../data-foundation.md) 和 [`quantx-data-pipeline.md`](../../quantx-data-pipeline.md) 为准。
 >
 > 审计范围：只审计 QuantX 背后的确定性数据表格、采集、处理、存储、API、React 展示和调度；不包含 LLM 分析、Review Editor、研究报告、知识反思、HTML/PDF/PNG 报告流水线。
 
-> **完成后增量结论（2026-08-28 17:05 CST）：** 下文第 1-12 节保留的是改造前审计快照，其中“未实证”“部分完成”和 958/962 数字不得再作为当前状态引用。后续执行已完成 20260828 无同日快照联网发布（job `d5e4c8c7d0`、run `20260828-f3cc36bd88fb`），12 个外部来源均为 fresh，13/13 当日事实已发布，单日 V2、多日和 catalog 可读取。公开 V1 JSON 回退已关闭；数据页已提供来源、事实、质量、血缘与刷新操作。纳入新日期后覆盖现为 972/975，剩余 3 个缺口均有 accepted-gap 原因，未接受缺口为 0。当前结论是：**TickFlow-Quantall 已通过独立更新实证，仍允许预期的第三方数据服务和本仓库运行时依赖，不存在旧 QuantX 目录或服务依赖。** 完整执行证据见 [`quantx-single-day-canonical-view-plan.md`](quantx-single-day-canonical-view-plan.md)。
+> **完成后增量结论（2026-08-28 17:05 CST）：** 下文第 1-12 节保留的是改造前审计快照，其中“未实证”“部分完成”和 958/962 数字不得再作为当前状态引用。后续执行已完成 20260828 无同日快照联网发布（job `d5e4c8c7d0`、run `20260828-f3cc36bd88fb`），12 个外部来源均为 fresh，13/13 当日事实已发布，单日 V2、多日和 catalog 可读取。公开 V1 JSON 回退已关闭；数据页已提供来源、事实、质量、血缘与刷新操作。纳入新日期后覆盖现为 972/975，剩余 3 个缺口均有 accepted-gap 原因，未接受缺口为 0。当前结论是：**TickFlow-Quantall 已通过独立更新实证，仍允许预期的第三方数据服务和本仓库运行时依赖，不存在旧 QuantX 目录或服务依赖。** 完整执行证据见 [`quantx-single-day-canonical-view-plan.md`](../../quantx-single-day-canonical-view-plan.md)。
 
 ## 1. 结论
 

@@ -70,7 +70,7 @@
 
 ## 🔬 因子平台(Factors)
 
-`/factors` 一级页,检验 / 因子库 / 编辑器 / 组合四个 tab,与策略线双向联动。设计与阶段规划见 [factor-platform-plan.md](./factor-platform-plan.md)。
+`/factors` 一级页,检验 / 因子库 / 编辑器 / 组合四个 tab,与策略线双向联动。历史设计方案见 [factor-platform-plan.md](./archive/20260907/factor-platform-plan.md)。
 
 **因子编辑器**:写 DSL 公式(如 `rank(-ts_sum(change_pct, 5))`)→ 校验语法(错误点击定位到字符)→ 试算 40 日 IC → 保存草稿。辅助输入:全部 25 个算子按「时序/截面/工具」分组点击插入(悬停显示签名与参数约束)、79 个可用字段双语 chip 点击插入、「从模板开始」下拉含经典模板与**我的因子**(导入已保存公式作为起点,非初始公式替换前有确认)。保存为草稿态,完整检验通过后在因子库激活。
 

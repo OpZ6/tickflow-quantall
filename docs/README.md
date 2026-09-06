@@ -36,7 +36,7 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 
 - [VCP 研究记录](research/vcp/README.md)：交易闭环配置、独立运行归档、首轮诊断和正式优化的数据前置条件。
 
-- [Quants 策略核心迁移验收](spec/quants-strategy-core-acceptance-20260905.md)：当前名称、V2 默认排除、核心语义回归证据与数据限制；用户已将要求调整为核心思路一致。原[完整迁移计划](spec/quants-strategy-migration-execution-plan.md)保留作历史参考。
+- [Quants 策略核心迁移验收](spec/quants-strategy-core-acceptance-20260905.md)：当前名称、V2 默认排除、核心语义回归证据与数据限制；用户已将要求调整为核心思路一致。原完整迁移计划已移入 [`archive/20260907/`](archive/20260907/)。
 - [stock-chart-workbench.md](stock-chart-workbench.md)：个股分析唯一 K 线实例、统一行情 API、20+38 指标、缠论/价位/五类经典形态/正式结构策略/派生事件/画线和验证契约。
 - [quantx-data-pipeline.md](quantx-data-pipeline.md)：QuantX 运行、重试、重算和故障诊断手册。
 - [quantx-single-day-canonical-view-plan.md](quantx-single-day-canonical-view-plan.md)：QuantX 单日富图表从兼容 JSON 迁移到权威事实与确定性 ViewBuilder 的分批执行计划和验收清单。
@@ -50,11 +50,7 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 
 下列文件保留追溯价值，但不是当前架构入口：
 
-- `architecture-and-extension.md/html`：2026-08-26 架构快照，已由 `architecture.md` 取代。
-- `tickflow-unification-master-plan.md`：从 Quantall prototype 迁移到独立仓库的历史总规划。
-- `quantx-unified-data-foundation-plan.md`：Market Facts 建设计划与逐阶段实施证据。
-- [`quantx-independent-update-audit-20260828.md`](quantx-independent-update-audit-20260828.md)：2026-08-28 的 QuantX 目录独立、联网更新、Market Facts 覆盖和 JSON 兼容剩余审计快照。
-- `prototype-integration.md`：原型阶段记录。
+- `archive/20260907/`：已归档的架构快照、迁移计划、数据源比较、QuantX 审计、原型记录和 v0.2.3 同步记录。
 
 历史文件不得指导新代码路径；如与当前权威文档冲突，以当前源码、测试和六份权威文档为准。
 

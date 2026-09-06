@@ -1,6 +1,6 @@
 # Quants Strategy Migration Status Addendum
 
-Historical snapshot, superseded by [core acceptance](quants-strategy-core-acceptance-20260905.md). The price-volume money-flow fallback described below has since been removed: V5 requires real `net_mf_amount` and remains observation-only. Earlier audit/build counts below are not the current acceptance results.
+Historical snapshot, superseded by [core acceptance](../../spec/quants-strategy-core-acceptance-20260905.md). The price-volume money-flow fallback described below has since been removed: V5 requires real `net_mf_amount` and remains observation-only. Earlier audit/build counts below are not the current acceptance results.
 
 The current checkout now contains independently loadable versioned migration IDs:
 

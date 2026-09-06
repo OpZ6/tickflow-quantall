@@ -28,7 +28,7 @@ Quants 权威入口为 `configs/strategies/*.yaml`，实际 detector 路由在 `
 
 3018 服务的 `GET /api/strategies` 返回 22 个可见策略，均为 `builtin`、`matrix_native`，`load_errors=[]`。四个相关策略已正常加载，当前没有看到另一套通过 custom/ai/composite 注册的原版完整移植。另有源码中的隐藏研究策略 `factor_rank_research`，不在普通列表的 22 项之内。
 
-TickFlow 当前实现的共同入口是 [价格结构计算](../../backend/app/strategy/builtin/_price_structure.py)，正式接入方式见 [策略引擎](../../backend/app/strategy/engine.py)；历史迁移规划不是实现证据。
+TickFlow 当前实现的共同入口是 [价格结构计算](../../../backend/app/strategy/builtin/_price_structure.py)，正式接入方式见 [策略引擎](../../../backend/app/strategy/engine.py)；历史迁移规划不是实现证据。
 
 ## 3. 主要差异与缺陷
 
@@ -43,7 +43,7 @@ TickFlow 当前实现的共同入口是 [价格结构计算](../../backend/app/s
 - 输出等待突破、提前试探、放量突破、等待支撑、超出追价区等状态。
 - 优化 detector 的缩量比例为最近 10 根均量 / 最多 50 根均量；突破量比采用当前量 / 前 19 根均量。
 
-TickFlow [VCP](../../backend/app/strategy/builtin/vcp_breakout.py) 的默认计算：
+TickFlow [VCP](../../../backend/app/strategy/builtin/vcp_breakout.py) 的默认计算：
 
 - 40 根基底的最高/最低价构成深度，要求 8%–45%。
 - 最近 10 根振幅不超过基底振幅的 65%。
@@ -100,7 +100,7 @@ TickFlow 已有 `strategy_signal_events`，保存策略版本、参数指纹、�
 
 交易规则同样不同。TickFlow VCP 是跌破 MA20 的 exit，加默认 8% 止损和最长 30 根持有；高旗为 10%/30 根。原版 V1 优化 detector 的 entry 对象内写有 trigger×0.97 止损，YAML 又有 3.5% 首破止损等配置，需按实际水合和分析链分别确认。不能将这些入场计划直接当成已经完成成交检验的账户规则。
 
-证据：[事件仓库](../../backend/app/services/strategy_signal_events.py)、[证据补全](../../backend/app/services/strategy_evidence.py)，以及 Quants `docs/signal_tracking.md`、`ppgu/strategy_analysis.py`。
+证据：[事件仓库](../../../backend/app/services/strategy_signal_events.py)、[证据补全](../../../backend/app/services/strategy_evidence.py)，以及 Quants `docs/signal_tracking.md`、`ppgu/strategy_analysis.py`。
 
 ### 3.5 原版自身也需要口径审计
 
@@ -120,7 +120,7 @@ VCP 的 `_strict_contraction_suffix` 允许跳过中间扩张段，在没有找�
 2. **Tushare 成交额路径缺少单位转换。** 原版 normalizer 不缩放 daily.amount，loader 将其直接写入 amount_raw；迁移脚本也只是改名。Tushare daily 的成交额单位是千元，TickFlow 的金额过滤以元计。内存紧凑日期样本 `amount_raw=10000` 输出仍为 `amount=10000`，而这一 Tushare 数值表示 1000 万元。修复时必须按来源显式映射，不能将未经来源识别的混合数据一律乘 1000。[Tushare 官方字段说明](https://tushare.pro/document/2?doc_id=27)
 3. 该脚本导出的只是 daily/adj_factor/moneyflow，没有迁移策略 YAML、pattern、候选排序、信号案例或实验版本。
 
-证据位置：[迁移脚本](../../scripts/migrate_from_quants.py) 的 `_parse_yyyymmdd` 与 `export_daily`；Quants `ppgu/data_sources/normalizers.py:150`、`loaders.py:224`、`sql/warehouse.sql:87,163`。
+证据位置：[迁移脚本](../../../scripts/migrate_from_quants.py) 的 `_parse_yyyymmdd` 与 `export_daily`；Quants `ppgu/data_sources/normalizers.py:150`、`loaders.py:224`、`sql/warehouse.sql:87,163`。
 
 ### 3.7 TickFlow 新股排除参数未进入矩阵过滤
 
@@ -128,7 +128,7 @@ VCP 的 `_strict_contraction_suffix` 允许跳过中间扩张段，在没有找�
 
 最低预热要求不等于按上市日排除新股，也不能证明该参数生效。未来应明确字段来源和按交易日或自然日计算的约定，再补真实的过滤与边界测试。
 
-证据位置：[矩阵公共过滤](../../backend/app/backtest/matrix.py) `3637` 行起。
+证据位置：[矩阵公共过滤](../../../backend/app/backtest/matrix.py) `3637` 行起。
 
 ### 3.8 普通 walk-forward 不能直接作为正式防过拟合验收
 
@@ -145,11 +145,11 @@ VCP 的 `_strict_contraction_suffix` 允许跳过中间扩张段，在没有找�
 
 现有挖掘可以把已注册 VCP 当比较基线，但其运行时对 existing_strategy 取固定策略参数，对 factor_rank 搜索因子组合。这不等于已经支持 VCP 全部形态参数的嵌套优化。
 
-证据：[普通步进优化](../../backend/app/backtest/walkforward.py)、[嵌套挖掘](../../backend/app/backtest/mining.py)、[挖掘回测适配](../../backend/app/backtest/mining_runtime.py)。
+证据：[普通步进优化](../../../backend/app/backtest/walkforward.py)、[嵌套挖掘](../../../backend/app/backtest/mining.py)、[挖掘回测适配](../../../backend/app/backtest/mining_runtime.py)。
 
 ## 4. 同输入实验与既有测试
 
-复现脚本：[compare_strategies.py](../../artifacts/strategy-audit-20260905/compare_strategies.py)。只使用合成行情和内存数据库；脚本拦截迁移写入边界，不输出任何生产分区。
+复现脚本：[compare_strategies.py](../../../artifacts/strategy-audit-20260905/compare_strategies.py)。只使用合成行情和内存数据库；脚本拦截迁移写入边界，不输出任何生产分区。
 
 | 样本 | Quants detector | TickFlow entry | 含义 |
 | --- | --- | --- | --- |

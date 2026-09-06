@@ -4,7 +4,7 @@
   09:10 盘前 — 同步个股维表 instruments (全量覆盖)
   16:30 盘后 — 日K同步 + 增量除权因子 + enriched 计算 + 刷新视图
     (默认 16:30: None/Free 档当日日K盘后约1-2小时才可用;付费档盘中实时已落盘,
-     收盘即刻可用。旧默认 15:30 会让免费档当天K线静默缺失。见 docs/data-source-timeline.md)
+     收盘即刻可用。旧默认 15:30 会让免费档当天K线静默缺失。见 docs/archive/20260907/data-source-timeline.md)
 
 盘后同步策略:
   日 K: QuoteService 交易时段已实时落盘 → 有数据时跳过 batch,首次拉 1 年区间

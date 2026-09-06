@@ -6,7 +6,7 @@
 >
 > 当前阶段：Batch 1-9 已完成、验证并发布
 >
-> 关联审计：[`quantx-independent-update-audit-20260828.md`](quantx-independent-update-audit-20260828.md)
+> 关联历史审计：[`quantx-independent-update-audit-20260828.md`](archive/20260907/quantx-independent-update-audit-20260828.md)
 >
 > 当前权威契约：[`architecture.md`](architecture.md)、[`data-foundation.md`](data-foundation.md)、[`analysis-development.md`](analysis-development.md)
 

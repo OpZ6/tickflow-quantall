@@ -554,7 +554,7 @@ def get_pipeline_schedule() -> dict:
 
     默认 16:30: None/Free 档当日日 K 经 free-api 盘后约 1-2 小时(约 16:00-17:00)
     才可用;付费档盘中实时已落盘,收盘后即刻可用,16:30 仅多等片刻不影响当日结果。
-    更早的默认(旧 15:30)会让免费档当天 K 线静默缺失。见 docs/data-source-timeline.md。
+    更早的默认(旧 15:30)会让免费档当天 K 线静默缺失。见 docs/archive/20260907/data-source-timeline.md。
     """
     d = load().get("pipeline_schedule", {"hour": 16, "minute": 30})
     return {"hour": d.get("hour", 16), "minute": d.get("minute", 30)}

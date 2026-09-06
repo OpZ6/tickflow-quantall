@@ -1,6 +1,6 @@
 # TickFlow 大一统迁移总规划
 
-> 历史状态：本文记录从 Quantall prototype 迁移到独立仓库的阶段计划，不代表当前目录、完成状态或开发契约。文中“与上游脱钩”等判断已经失效；当前项目继续跟踪 TickFlow 上游，升级决策与操作以 [`upstream-sync.md`](upstream-sync.md) 为准。当前开发从 [`README.md`](README.md) 进入。
+> 历史状态：本文记录从 Quantall prototype 迁移到独立仓库的阶段计划，不代表当前目录、完成状态或开发契约。文中“与上游脱钩”等判断已经失效；当前项目继续跟踪 TickFlow 上游，升级决策与操作以 [`upstream-sync.md`](../../upstream-sync.md) 为准。当前开发从 [`README.md`](../../../README.md) 进入。
 
 > 本文档曾是 quantall 能力迁移到 TickFlow 的阶段规划，仅用于追溯当时的目标、判断和进度，不再指导当前开发。
 >
@@ -42,7 +42,7 @@
 
 ### 1.3 TickFlow 上游关系（历史判断，已废止）
 
-> 以下内容仅保留用于解释早期决策，不是当前策略。当前策略见 [`upstream-sync.md`](upstream-sync.md)。
+> 以下内容仅保留用于解释早期决策，不是当前策略。当前策略见 [`upstream-sync.md`](../../upstream-sync.md)。
 
 TickFlow 是 `github.com/shy3130/tickflow-stock-panel` 的 fork。**本规划执行后跟上游脱钩**:TickFlow 成为你自己的项目,保留 LICENSE 致谢,不再 merge 上游。理由:内置大量 quantall 能力后,核心文件改动过多,merge 冲突成本 > 上游更新收益。
 
@@ -371,11 +371,11 @@ TickFlow 是 `github.com/shy3130/tickflow-stock-panel` 的 fork。**本规划执
 
 ## 9. 相关文档
 
-- [`PROJECT_ANALYSIS.md`](../PROJECT_ANALYSIS.md):TickFlow 源码审计,迁移起点的事实依据
+- [`PROJECT_ANALYSIS.md`](../../../PROJECT_ANALYSIS.md):TickFlow 源码审计,迁移起点的事实依据
 - [`architecture-and-extension.md`](./architecture-and-extension.md):TickFlow 架构与扩展开发指南
-- [`architecture-and-extension.html`](./architecture-and-extension.html):同内容 HTML 报告
-- [`system-integration-and-local-financials.md`](./system-integration-and-local-financials.md):历史 sidecar 契约(本规划执行后失效,改为内置)
-- [`CONTRIBUTING.md`](../CONTRIBUTING.md):TickFlow 贡献与审查规范
+- [`architecture-and-extension.html`](../../architecture-and-extension.html):同内容 HTML 报告
+- [`system-integration-and-local-financials.md`](../../system-integration-and-local-financials.md):历史 sidecar 契约(本规划执行后失效,改为内置)
+- [`CONTRIBUTING.md`](../../../CONTRIBUTING.md):TickFlow 贡献与审查规范
 - [`docs/trading-system.md`](../../../docs/trading-system.md):quantall 交易系统总览(本规划完成后更新为 TickFlow 视角)
 - [`docs/A股短线与情绪流体系完整梳理报告.md`](../../../docs/A股短线与情绪流体系完整梳理报告.md):情绪流知识体系,批次 6 假设库的理论基础
 

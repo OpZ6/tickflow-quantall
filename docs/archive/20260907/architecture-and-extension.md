@@ -1,6 +1,6 @@
 # TickFlow 架构与扩展开发指南
 
-> 历史状态：这是 2026-08-26 的详细架构快照，不再作为当前开发入口。当前分层和扩展选择以 [`architecture.md`](architecture.md) 与 [`README.md`](README.md) 为准。
+> 历史状态：这是 2026-08-26 的详细架构快照，不再作为当前开发入口。当前分层和扩展选择以 [`architecture.md`](../../architecture.md) 与 [`README.md`](../../../README.md) 为准。
 
 > 面向二次开发者:在你打算基于 TickFlow 底座做大量后续开发之前,先读这份文档。
 >

@@ -2,7 +2,7 @@
 
 更新日期：2026-09-05。
 
-状态：历史完整对齐计划。用户于 2026-09-05 将目标调整为“核心思路一致，不追求 100% 还原”；当前实现和实际验证见[核心迁移验收](quants-strategy-core-acceptance-20260905.md)。以下严格对账任务保留作参考，未执行项不视为已通过，也不再作为本轮完成门槛。
+状态：历史完整对齐计划。用户于 2026-09-05 将目标调整为“核心思路一致，不追求 100% 还原”；当前实现和实际验证见[核心迁移验收](../../spec/quants-strategy-core-acceptance-20260905.md)。以下严格对账任务保留作参考，未执行项不视为已通过，也不再作为本轮完成门槛。
 
 ## 1. 目标与范围
 
@@ -23,7 +23,7 @@
 
 - [2026-09-05 审计报告](quants-strategy-parity-and-vcp-research-plan-20260905.md)：保留当次源码检查和实验的证据快照，不将其历史测试数当成本计划验收结果。
 - 本计划：任务分解、依赖、交付与完成标准；原审计中的后续研究细节仅作背景，不自动纳入当前实施范围。
-- [开发入口](../README.md)、[架构](../architecture.md)、[数据底座](../data-foundation.md)、[分析开发](../analysis-development.md)、[二次开发](../secondary-development.md)：当前实施约束。开始每批代码任务前重新确认源码与契约。
+- [开发入口](../../README.md)、[架构](../../architecture.md)、[数据底座](../../data-foundation.md)、[分析开发](../../analysis-development.md)、[二次开发](../../secondary-development.md)：当前实施约束。开始每批代码任务前重新确认源码与契约。
 
 ## 2. 基线定义与策略清单
 
@@ -282,7 +282,7 @@ VCP 独立通过全部迁移门槛后，可另行启动其优化任务，不必�
 
 源码参考位置：Quants `ppgu/strategy_registry.py`、`ppgu/screen.py`、`ppgu/build_factors.py`、`ppgu/patterns/`、`ppgu/strategy_analysis.py`、`configs/strategies/` 和对应测试。
 
-TickFlow 接入参考：[策略引擎](../../backend/app/strategy/engine.py)、[现有价格结构](../../backend/app/strategy/builtin/_price_structure.py)、[矩阵计算](../../backend/app/backtest/matrix.py)、[派生事件](../../backend/app/services/strategy_signal_events.py)、[迁移脚本](../../scripts/migrate_from_quants.py)。这些是需要核查的现有边界，不表示必须修改每个文件。
+TickFlow 接入参考：[策略引擎](../../../backend/app/strategy/engine.py)、[现有价格结构](../../../backend/app/strategy/builtin/_price_structure.py)、[矩阵计算](../../../backend/app/backtest/matrix.py)、[派生事件](../../../backend/app/services/strategy_signal_events.py)、[迁移脚本](../../../scripts/migrate_from_quants.py)。这些是需要核查的现有边界，不表示必须修改每个文件。
 
 第一批实施只安排 M00–M02：冻结实际行为、定义数据对照、建立独立验证工具。随后实施 VCP 与必要公共接线，再逐个迁移其他策略。不要先改五个 detector 再寻找验收标准。
 

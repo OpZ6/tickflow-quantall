@@ -1,6 +1,6 @@
 # QuantX 统一数据底座与数据源管理实施规划
 
-> 实施记录：本文保留 Goal、迁移证据和阶段审计。当前数据契约以 [`data-foundation.md`](data-foundation.md) 为准，运行方式以 [`quantx-data-pipeline.md`](quantx-data-pipeline.md) 为准。
+> 实施记录：本文保留 Goal、迁移证据和阶段审计。当前数据契约以 [`data-foundation.md`](../../data-foundation.md) 为准，运行方式以 [`quantx-data-pipeline.md`](../../quantx-data-pipeline.md) 为准。
 
 ## 1. Goal
 
@@ -594,11 +594,11 @@ POST /api/data-runs/backfill
 
 ## 16. 相关文档
 
-- [`quantx-data-pipeline.md`](quantx-data-pipeline.md)：当前独立 QuantX 数据流水线；
+- [`quantx-data-pipeline.md`](../../quantx-data-pipeline.md)：当前独立 QuantX 数据流水线；
 - [`architecture-and-extension.md`](architecture-and-extension.md)：TickFlow 当前架构与扩展边界；
 - [`tickflow-unification-master-plan.md`](tickflow-unification-master-plan.md)：更大范围的 Quantall/TickFlow 能力迁移规划；
-- [`custom-data-source.md`](custom-data-source.md)：现有自定义 HTTP 数据源契约；
-- [`plugin-development.md`](plugin-development.md)：数据源插件开发约定。
+- [`custom-data-source.md`](../../custom-data-source.md)：现有自定义 HTTP 数据源契约；
+- [`plugin-development.md`](../../plugin-development.md)：数据源插件开发约定。
 
 ## 17. 实施记录
 
