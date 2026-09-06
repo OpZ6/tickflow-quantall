@@ -24,6 +24,11 @@ def _preferences_path(monkeypatch, tmp_path):
 
 def test_promote_provider_keeps_existing_fallbacks(monkeypatch, tmp_path):
     path = _preferences_path(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        preferences,
+        "_allowed_data_providers",
+        lambda: {"tickflow", "fuyao", "tdx"},
+    )
     path.write_text(
         json.dumps({
             "realtime_data_provider": "fuyao",

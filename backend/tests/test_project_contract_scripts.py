@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -9,11 +10,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess[str]:
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     return subprocess.run(
         [sys.executable, str(REPO_ROOT / "scripts" / script), *args],
         cwd=REPO_ROOT,
+        env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 

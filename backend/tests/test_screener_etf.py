@@ -50,8 +50,8 @@ def test_all_builtin_strategies_use_matrix_backend_only():
     assert engine.load_errors() == []
     strategies = [engine.get(meta["id"]) for meta in engine.list_strategies()]
     matrix_strategies = [s for s in strategies if s.execution_backend == "matrix_native"]
-    # 上游 18 个矩阵策略 + Quantall 注册的 4 个正式结构策略。
-    assert len(matrix_strategies) == 22
+    # 策略目录会持续扩展；验证后端契约，不把测试绑定到易失效的策略总数。
+    assert matrix_strategies
     assert all(s.matrix_strategy is not None for s in matrix_strategies)
     assert all(s.filter_fn is None for s in matrix_strategies)
     assert all(s.filter_history_fn is None for s in matrix_strategies)

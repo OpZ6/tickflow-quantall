@@ -117,7 +117,7 @@ def test_preview_endpoint_is_read_only_and_does_not_run_the_screener(tmp_path):
             timeframe="1d",
             start_date=history["date"][0],
             end_date=history["date"][-1],
-            strategy_ids=["vcp_breakout"],
+            strategy_ids=["cup_handle_breakout"],
         ),
         request,
     )
