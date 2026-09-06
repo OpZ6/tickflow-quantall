@@ -69,6 +69,7 @@ export const QK = {
   // Backtest
   backtestStatus:       ['backtest-status'] as const,
   factorColumns:        ['backtest-factor-columns'] as const,
+  factorLibrary:        (assetType: string) => ['factors-library', assetType] as const,
   miningRuns:           ['backtest-mining-runs'] as const,
   miningAvailability:   (assetType: string, profile: string, start: string, end: string) =>
                           ['backtest-mining-availability', assetType, profile, start, end] as const,
@@ -101,15 +102,16 @@ export const QK = {
                            ['kline-chart', symbol, assetType, interval, adjustment, range, start, end, layers, strategies, sourceRunId, paramsFingerprint, warmupBars, indicatorWarmups] as const,
   strategyChartPreview: (symbol: string, assetType: string, timeframe: string, start: string, end: string, strategyIds: string, inputFingerprint: string) =>
                            ['strategy-chart-preview', symbol, assetType, timeframe, start, end, strategyIds, inputFingerprint] as const,
+  klineLatest:          (symbol: string) => ['kline-latest', symbol] as const,
   stockLevels:          (symbol: string, days?: number) => ['stock-levels', symbol, days ?? 120] as const,
   klineMinute:          (symbol: string, date: string) =>
                              ['kline-minute', symbol, date] as const,
   klineMinuteRange:     (symbol: string, days: number) =>
                              ['kline-minute-range', symbol, days] as const,
   indexDaily:           (symbol: string, start: string, end: string) =>
-                           ['index-daily', symbol, start, end] as const,
+                             ['index-daily', symbol, start, end] as const,
   indexMinute:          (symbol: string, date: string) =>
-                           ['index-minute', symbol, date] as const,
+                             ['index-minute', symbol, date] as const,
 
   // Schema
   extDataSchemaAll:     ['ext-data-schema-all'] as const,
@@ -122,6 +124,8 @@ export const QK = {
   // Monitor (监控规则 + 触发记录)
   monitorRules:         ['monitor-rules'] as const,
   monitorRuleOptions:   ['monitor-rule-options'] as const,
+  lots:                 ['lots'] as const,
+  lotsKline:            (symbols: string) => ['lots-kline', symbols] as const,
   alerts:               (source?: string) => ['alerts', source ?? ''] as const,
 
   // AI 大盘复盘

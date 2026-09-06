@@ -9,6 +9,7 @@ import copy
 import json
 import logging
 import re
+import threading
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -54,25 +55,27 @@ def load() -> dict:
     return copy.deepcopy(_cache)
 
 
+_SAVE_LOCK = threading.Lock()
+
+
 def save(updates: dict) -> dict:
-    """合并写入。返回新内容。"""
-    current = load()
-    current.update(updates)
-    _path().write_text(
-        json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8",
-    )
-    _invalidate_cache()
+    """合并写入。返回新内容。
+
+    锁内 read-modify-write: FastAPI 同步端点跑线程池, 并行 PUT 各自基于旧快照
+    写盘会互相覆盖 (实测: 压缩总开关并行写分时/日K两键, 后写者把先写者覆盖)。
+    """
+    with _SAVE_LOCK:
+        current = load()
+        current.update(updates)
+        _path().write_text(
+            json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8",
+        )
+        _invalidate_cache()
     return current
 
 
 def get_realtime_quotes_enabled() -> bool:
     return load().get("realtime_quotes_enabled", False)
-
-
-def get_indices_nav_pinned() -> bool:
-    """侧栏指数报价卡片是否固定显示。默认 True（常驻）。
-    关闭后，卡片跟随实时行情开关（仅实时开时显示）。"""
-    return load().get("indices_nav_pinned", True)
 
 
 def get_watchlist_groups_in_nav() -> bool:
@@ -197,7 +200,7 @@ def get_minute_sync_segment_days() -> int:
 # 全天修复轮 (intraday.batch 28 块爆发) 的 rpm 安全与间隔无关, 由轮次
 # 调度 max(间隔, 单轮完成) 天然防重叠。
 _MINUTE_REFRESH_INTERVAL_MIN = 3
-_MINUTE_REFRESH_INTERVAL_MAX = 300
+_MINUTE_REFRESH_INTERVAL_MAX = 120
 
 
 def get_minute_refresh_enabled() -> bool:
@@ -206,7 +209,7 @@ def get_minute_refresh_enabled() -> bool:
 
 
 def get_minute_refresh_interval() -> int:
-    """盘中分钟增量刷新间隔(秒)。默认 6,范围 [3, 300]。"""
+    """盘中分钟增量刷新间隔(秒)。默认 6,范围 [3, 120]。"""
     return max(
         _MINUTE_REFRESH_INTERVAL_MIN,
         min(_MINUTE_REFRESH_INTERVAL_MAX, int(load().get("minute_refresh_interval", 6))),
@@ -250,6 +253,20 @@ def get_data_source_long_job_timeout_s() -> int:
     except (TypeError, ValueError):
         timeout_s = LONG_JOB_TIMEOUT_S
     return max(DATA_SOURCE_JOB_TIMEOUT_MIN_S, timeout_s)
+
+
+def get_minute_batch_compress() -> bool:
+    """分时批量响应是否启用 gzip 传输压缩。默认开启 (公网部署传输是大头);
+    本机/内网可关闭省服务端 CPU。每次请求即时读取, 开关保存后立即生效。
+    """
+    raw = load().get("minute_batch_compress", True)
+    return bool(raw)
+
+
+def get_daily_batch_compress() -> bool:
+    """日K批量响应是否启用 gzip 传输压缩 (与分时各自独立配置)。默认开启。"""
+    raw = load().get("daily_batch_compress", True)
+    return bool(raw)
 
 
 def _allowed_data_providers() -> set[str]:
@@ -331,6 +348,11 @@ def get_minute_data_provider() -> str:
     return provider if provider in _allowed_data_providers() else "tickflow"
 
 
+def get_full_minute_data_provider() -> str:
+    provider = str(load().get("full_minute_data_provider", "tickflow") or "tickflow").lower()
+    return provider if provider in _allowed_data_providers() else "tickflow"
+
+
 def get_depth5_data_provider() -> str:
     provider = str(load().get("depth5_data_provider", "tickflow") or "tickflow").lower()
     return provider if provider in _allowed_data_providers() else "tickflow"
@@ -349,8 +371,8 @@ def get_financial_provider() -> str:
 # ===== 盘后管道拉取内容开关 (A股 / ETF / 指数 独立控制) =====
 
 def get_pipeline_pull_a_share() -> bool:
-    """A 股日K固定拉取。"""
-    return True
+    """是否拉取 A 股日K。默认 True。"""
+    return load().get("pipeline_pull_a_share", True)
 
 
 def get_pipeline_pull_etf() -> bool:
@@ -494,7 +516,7 @@ def set_mainline_filter_config(cfg: dict) -> dict:
     return get_mainline_filter_config()
 
 
-_PIPELINE_PULL_KEYS = ("pipeline_pull_etf", "pipeline_pull_index")
+_PIPELINE_PULL_KEYS = ("pipeline_pull_a_share", "pipeline_pull_etf", "pipeline_pull_index")
 
 
 def get_pipeline_pull_types() -> dict:
@@ -741,10 +763,9 @@ SSE_REFRESH_PAGES_DEFAULT = {
     "limit-ladder": False,
 }
 
-SIDEBAR_INDEX_SYMBOLS_DEFAULT = ["000001.SH", "399001.SZ", "399006.SZ", "000680.SH"]
-
 
 # ===== 盘中实时行情范围 (独立于盘后管道范围) =====
+# 指数不在其中: 展示层固定核心四只 (app.services.index_const), 不开放配置。
 
 
 def get_realtime_pull_stock() -> bool:
@@ -756,32 +777,11 @@ def get_realtime_pull_etf() -> bool:
     return load().get("realtime_pull_etf", False)
 
 
-def get_realtime_pull_index() -> bool:
-    return load().get("realtime_pull_index", True)
-
-
-def get_realtime_index_mode() -> str:
-    mode = str(load().get("realtime_index_mode", "core") or "core").lower()
-    return mode if mode in {"core", "all"} else "core"
-
-
-def get_realtime_index_symbols() -> list[str]:
-    stored = load().get("realtime_index_symbols", SIDEBAR_INDEX_SYMBOLS_DEFAULT)
-    if isinstance(stored, str):
-        import re
-        stored = [s.strip() for s in re.split(r"[,\s]+", stored) if s.strip()]
-    return [str(s) for s in stored if str(s).strip()]
-
-
 def set_realtime_quote_scope(cfg: dict) -> dict:
     updates = {}
-    for key in ("realtime_pull_stock", "realtime_pull_etf", "realtime_pull_index"):
+    for key in ("realtime_pull_stock", "realtime_pull_etf"):
         if key in cfg and cfg[key] is not None:
             updates[key] = bool(cfg[key])
-    if "realtime_index_mode" in cfg and cfg["realtime_index_mode"] in {"core", "all"}:
-        updates["realtime_index_mode"] = cfg["realtime_index_mode"]
-    if "realtime_index_symbols" in cfg and cfg["realtime_index_symbols"] is not None:
-        updates["realtime_index_symbols"] = cfg["realtime_index_symbols"]
     if updates:
         save(updates)
     return get_realtime_quote_scope()
@@ -791,9 +791,6 @@ def get_realtime_quote_scope() -> dict:
     return {
         "realtime_pull_stock": get_realtime_pull_stock(),
         "realtime_pull_etf": get_realtime_pull_etf(),
-        "realtime_pull_index": get_realtime_pull_index(),
-        "realtime_index_mode": get_realtime_index_mode(),
-        "realtime_index_symbols": get_realtime_index_symbols(),
     }
 
 
@@ -810,13 +807,6 @@ def set_sse_refresh_pages(pages: dict[str, bool]) -> dict[str, bool]:
     """保存页面 SSE 刷新配置。"""
     save({"sse_refresh_pages": pages})
     return get_sse_refresh_pages()
-
-
-def get_sidebar_index_symbols() -> list[str]:
-    """返回左侧菜单显示的指数代码。"""
-    stored = load().get("sidebar_index_symbols", SIDEBAR_INDEX_SYMBOLS_DEFAULT)
-    allowed = set(SIDEBAR_INDEX_SYMBOLS_DEFAULT)
-    return [s for s in stored if s in allowed]
 
 
 def get_strategy_monitor_enabled() -> bool:
@@ -980,9 +970,6 @@ def set_realtime_monitor_config(cfg: dict) -> dict:
         updates["strategy_monitor_enabled"] = cfg["strategy_monitor_enabled"]
     if "strategy_monitor_ids" in cfg:
         updates["strategy_monitor_ids"] = cfg["strategy_monitor_ids"]
-    if "sidebar_index_symbols" in cfg:
-        allowed = set(SIDEBAR_INDEX_SYMBOLS_DEFAULT)
-        updates["sidebar_index_symbols"] = [s for s in cfg["sidebar_index_symbols"] if s in allowed]
     if "screener_auto_run" in cfg:
         updates["screener_auto_run"] = bool(cfg["screener_auto_run"])
     if "minute_intraday_refresh" in cfg:
@@ -995,7 +982,7 @@ def set_realtime_monitor_config(cfg: dict) -> dict:
     if "minute_refresh_enabled" in cfg:
         updates["minute_refresh_enabled"] = bool(cfg["minute_refresh_enabled"])
     if "minute_refresh_interval" in cfg:
-        # clamp 到 [3, 300], 与 getter 一致, 防前端传越界值
+        # clamp 到 [3, 120], 与 getter 一致, 防前端传越界值
         updates["minute_refresh_interval"] = max(
             _MINUTE_REFRESH_INTERVAL_MIN,
             min(_MINUTE_REFRESH_INTERVAL_MAX, int(cfg["minute_refresh_interval"])))
@@ -1016,7 +1003,6 @@ def get_realtime_monitor_config() -> dict:
         "sse_refresh_pages": get_sse_refresh_pages(),
         "strategy_monitor_enabled": get_strategy_monitor_enabled(),
         "strategy_monitor_ids": get_strategy_monitor_ids(),
-        "sidebar_index_symbols": get_sidebar_index_symbols(),
         "screener_auto_run": get_screener_auto_run(),
         "minute_intraday_refresh": get_minute_intraday_refresh(),
         "minute_intraday_refresh_interval": get_minute_intraday_refresh_interval(),

@@ -23,11 +23,13 @@ from app.api import (
     data,
     data_sources,
     ext_data,
+    factors,
     financials,
     indices,
     intraday,
     kline,
     market_lab,
+    lots,
     market_recap,
     mining,
     monitor_rules,
@@ -115,6 +117,15 @@ async def _application_lifespan(app: FastAPI):
     from app.market_facts.repository import MarketFactRepository
 
     app.state.market_facts = MarketFactRepository(store.data_dir)
+    # 自定义/复合因子载入注册表 (P3); 单个失败只跳过该因子 (fail-隔离)
+    from app.factors.store import load_into_registry
+
+    try:
+        loaded_factors = load_into_registry(store.data_dir)
+        if loaded_factors:
+            logger.info("custom factors loaded: %s", len(loaded_factors))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("custom factors load failed: %s", exc)
     from app.services.mining_manager import MiningJobManager
 
     mining_manager = MiningJobManager(store.data_dir)
@@ -470,6 +481,7 @@ app.include_router(kline.router)
 app.include_router(watchlist.router)
 app.include_router(screener.router)
 app.include_router(backtest.router)
+app.include_router(factors.router)
 app.include_router(mining.router)
 app.include_router(intraday.router)
 app.include_router(indices.router)
@@ -491,6 +503,7 @@ app.include_router(settings_api.router)
 app.include_router(strategy.router)
 app.include_router(signals.router)
 app.include_router(monitor_rules.router)
+app.include_router(lots.router)
 app.include_router(alerts.router)
 app.include_router(rps.router)
 app.include_router(quantx.router)

@@ -2,16 +2,16 @@
 
 > **稳定 Tag 硬约束（2026-08-31 起）**：Quantall 每次上游合并只允许选择上游已发布的稳定 Tag；禁止直接合并 `upstream/main`、功能分支或未打 Tag 的单独提交。若最新稳定 Tag 不满足需求，停止合并并由维护者决定是否等待下一稳定版本。
 
-## 最新同步记录（2026-08-31）
+## 最新同步记录（2026-09-06）
 
 | 项目 | 值 |
 | --- | --- |
-| 同步目标 | `v0.2.2` |
-| Tag commit | `80ecb6e409ef4e19a328442653b8b199f629506e` |
-| 集成分支 | `sync/upstream-v0.2.2` |
-| 明确排除 | `v0.2.2` 之后的 `upstream/main` 提交 |
+| 同步目标 | `v0.2.3` |
+| Tag commit | `e0cd625ef455bd1ca1fcf36a8748813e53bdea09` |
+| 集成分支 | `sync/upstream-v0.2.3` |
+| 明确排除 | `v0.2.3` 之后的 `upstream/main` 提交 |
 
-本次同步保留 Quantall 的 QuantX、市场实验室、本地全市场历史财务、统一 K 线和策略证据链，并接入稳定版的能力路由矩阵、fuyao、分钟策略/回测、交易日探针及异动增强。
+本次同步保留 Quantall 的 QuantX、市场实验室、Market Facts、本地全市场历史财务、统一 K 线和策略证据链、Quants/VCP 策略及数据源优先级，并接入稳定版的因子平台、全量分钟路由、指数补充、流式增强历史重建和因子归因。逐文件冲突决策与验证结果见 [`upstream-v0.2.3-integration.md`](upstream-v0.2.3-integration.md)。
 
 状态：权威升级流程。目标是持续跟踪 `shy3130/tick-stock-panel`，同时保留 Quantall 的 QuantX、实验室和自有功能。
 
