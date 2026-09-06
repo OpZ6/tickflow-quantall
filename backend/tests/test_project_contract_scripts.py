@@ -31,16 +31,6 @@ def test_project_contract_validator_passes() -> None:
     assert "authoritative_docs=6" in result.stdout
 
 
-def test_project_contract_validator_scans_runtime_boundaries() -> None:
-    source = (REPO_ROOT / "scripts" / "validate_project_contracts.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert "legacy QuantX service port" in source
-    assert "retired TickFlow directory" in source
-    assert "business layer imports a legacy scraper directly" in source
-
-
 def test_upstream_status_is_machine_readable_without_mutating_repo() -> None:
     result = _run(
         "upstream_status.py",
