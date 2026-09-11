@@ -1,0 +1,30 @@
+{
+  "experiment": "point-in-time-financial-coverage-2016-2022-v1",
+  "decision": "insufficient_for_cross_sectional_backtest",
+  "scope": [
+    "data/financials/income/part.parquet",
+    "data/financials/metrics/part.parquet"
+  ],
+  "training_period": ["2016-01-01", "2022-12-30"],
+  "income": {
+    "total_rows": 10459,
+    "total_symbols": 5215,
+    "training_observable_rows": 17,
+    "training_observable_symbols": 1,
+    "rows_with_raw_ann_date": 32,
+    "symbols_with_raw_ann_date": 1
+  },
+  "metrics": {
+    "total_rows": 11156,
+    "total_symbols": 5554,
+    "training_observable_rows": 28,
+    "training_observable_symbols": 1
+  },
+  "interpretation": "Historical report periods for thousands of symbols were observed in 2026 and cannot be moved backward into 2016-2022. Only one symbol has genuinely historical announcement-time coverage, so the tables cannot support a cross-sectional quality or growth backtest.",
+  "stopped_actions": [
+    "static_financial_history_as_point_in_time_data",
+    "quality_or_growth_threshold_design",
+    "full_market_financial_backfill_as_part_of_strategy_iteration"
+  ],
+  "next_action": "Select a distinct mechanism that uses the already causal daily price, volume and amount history."
+}

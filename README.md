@@ -55,7 +55,7 @@
 | 📡 **监控中心**   | 四类监控(策略/个股信号/价格/异动),多条件 AND/OR + 语音播报 + 飞书推送  | [features.md](./docs/features.md) |
 | 📈 **个股分析**   | 统一多周期 K 线 + 20/38 指标 + 11 类价位 + 缠论/形态/画线 + AI 分析   | [stock-chart-workbench.md](./docs/stock-chart-workbench.md) |
 | 🏆 **连板梯队**   | 连板层级统计 + 概念涨幅轮动 + 盘后 AI 复盘(龙虎榜/盘前风向标注入) + 炸板/翘板预警 | [features.md](./docs/features.md) |
-| 🧰 **数据扩展**   | 数据源插件化(TickFlow/TDX/fuyao/stock-sdk + YAML 自定义源),扩展字段配成一级页面同台分析 | [custom-data-source.md](./docs/custom-data-source.md) |
+| 🧰 **数据扩展**   | 数据源插件化(TickFlow/TDX/fuyao/tushare/stock-sdk/local_financial + YAML 自定义源),扩展字段配成一级页面同台分析 | [custom-data-source.md](./docs/custom-data-source.md) |
 
 <details>
 <summary><b>📦 主要页面与功能</b></summary>
@@ -156,7 +156,7 @@
 flowchart TB
     subgraph DATA["数据源层 · 插件化"]
         direction LR
-        D1["TickFlow SDK"] ~~~ D2["TDX<br/>eltdx"] ~~~ D3["fuyao<br/>同花顺 REST"] ~~~ D4["stock-sdk"] ~~~ D5["YAML 自定义源"]
+        D1["TickFlow SDK"] ~~~ D2["TDX<br/>eltdx"] ~~~ D3["fuyao<br/>同花顺 REST"] ~~~ D4["stock-sdk"] ~~~ D5["tushare<br/>mirror 优先"] ~~~ D6["local_financial<br/>AkShare+Tushare"] ~~~ D7["YAML 自定义源"]
     end
 
     subgraph ROUTE["能力路由层"]
@@ -217,8 +217,8 @@ flowchart TB
     class G1,G2,G3 res
     class C1,C2 calc
     class ST1,ST2,ST3 store
-    class D1,D2,D3,D4 data
-    class D5 pluginSlot
+    class D1,D2,D3,D4,D5,D6 data
+    class D7 pluginSlot
     class R route
     class X1,X2,X3,X4 ext
 
@@ -250,7 +250,7 @@ flowchart TB
 | **后端**     | FastAPI · Pydantic v2 · APScheduler · sse-starlette                                               |
 | **数据**     | Polars(计算)· DuckDB(查询)· Parquet(存储)                                                         |
 | **回测**     | 自研仓位模拟引擎(T+1/费用/滑点/分钟回放)· vectorbt(部分路径)                                       |
-| **数据源**   | [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 官方 SDK · TDX(eltdx,分钟/实时/五档) · fuyao(同花顺 REST) · 插件化扩展(stock-sdk · YAML 自定义源) |
+| **数据源**   | [TickFlow](https://tickflow.org/auth/register?ref=V3KDKGXPEA) 官方 SDK · TDX(eltdx,分钟/实时/五档) · fuyao(同花顺 REST) · tushare-compatible(mirror 优先) · local_financial(AkShare + Tushare) · 插件化扩展(stock-sdk · YAML 自定义源) |
 | **AI**(可选) | OpenAI 兼容接口(DeepSeek / 通义 / Ollama 等)                                                      |
 | **前端**     | React 18 · Vite · TypeScript · Tailwind · Tanstack Query · [Lightweight Charts](https://www.tradingview.com/lightweight-charts/)(TradingView 开源) · ECharts · dnd-kit |
 | **部署**     | Docker 两阶段构建,前端 dist 拷进后端镜像,**单容器**                                               |
@@ -270,7 +270,7 @@ cp .env.example .env       # 按需填 TICKFLOW_API_KEY(留空 = None 模式)
 
 自动检查 / 下载依赖、释放端口、同时起前后端。后端 → <http://localhost:3018> · 前端 → <http://localhost:3011>。
 
-Windows 也可双击根目录 `update-all.cmd`：脚本会启动尚未运行的后端、检查应有交易日期，数据落后时一次执行 A 股/指数/ETF/指标/市场环境和 QuantX 更新。强制重跑使用 `update-all.cmd -Force`；分钟 K 另加 `-EnableMinuteK`。如需工作日 18:30 自动检查并在电脑错过时间后补跑，执行：
+Windows 也可双击根目录 `update-all.cmd`：脚本会启动尚未运行的后端，并从交易日 16:30 起检查当天数据；数据落后时一次执行 A 股/指数/ETF/指标/市场环境和 QuantX 更新。强制重跑使用 `update-all.cmd -Force`；分钟 K 另加 `-EnableMinuteK`。如需工作日 18:30 自动检查并在电脑错过时间后补跑，执行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install_update_task.ps1
@@ -298,7 +298,7 @@ CODEX_CLI_VERSION=0.144.3 docker compose up --build
 
 > Codex CLI 模式允许 TickFlow 容器读取本机 Codex 登录凭据，仅应在受信任的本机环境启用。凭据目录以只读方式挂载，不会写入镜像。
 
-镜像已内置 **stock-sdk** 数据源插件(Node 运行时 + 依赖),开箱即用。
+> ⚠️ **stock-sdk** 数据源插件抓取第三方财经网站接口,存在版权与反爬风险;**Docker 默认不打包**。如需镜像内置该插件(Node 运行时 + 依赖),构建时传 `--build-arg INCLUDE_STOCKSDK=1`,详见 [docs/deployment.md](./docs/deployment.md)。
 
 > 📖 Docker 进阶、GitHub Actions 自构建、老 CPU 兼容、访问密码设置等见 [docs/deployment.md](./docs/deployment.md)。
 
@@ -407,6 +407,8 @@ fork同时请点个star哦,欢迎 Issue 和 PR。
 数据源插件 [stock-sdk](https://stock-sdk.linkdiary.cn) 遵循其各自的 ISC 协议。
 
 TDX 插件使用 MIT 许可的 [eltdx](https://github.com/electkismet/eltdx) 连接公共行情服务器。公共服务器的可用性、数据许可与使用限制由部署者自行确认；五档仅为 L1 快照，不代表逐笔或委托队列 L2 数据。
+
+内置插件 [tushare](https://tushare.pro) 为 Tushare-compatible 源(mirror 优先、原 Tushare 备用),使用前请遵守相应服务条款。内置插件 [local_financial](backend/app/plugins/local_financial/) 组合 AkShare(东财公开接口)与 Tushare 适配,实际数据版权与使用限制归属各原始来源,请自行确认。
 
 ## 社区
 

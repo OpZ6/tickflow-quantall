@@ -1,0 +1,39 @@
+{
+  "experiment": "production-vcp-first-breakout-overlap-train-2016-2022-v1",
+  "research_role": "explanatory_reanalysis_of_already_inspected_training_evidence",
+  "question": "Does VCP add investable selection value specifically when it coincides with a fresh generic 20-session breakout opportunity?",
+  "mechanism_hypothesis": "A fresh close above the prior 20-session high identifies the demand event that makes a valid VCP actionable; later or repeated VCP signals dilute the candidate set.",
+  "vcp_source_run": "20260909T030431101979Z",
+  "generic_opportunity_source": "data/research/vcp/gate-funnel/production-vcp-gate-funnel-train-2016-2022-v1/opportunities.parquet",
+  "training_period": ["2016-01-04", "2022-12-30"],
+  "purge_rule": "Keep only records whose 40-session label_end_date is no later than 2022-12-30.",
+  "overlap_key": ["symbol", "signal_date"],
+  "cohorts": {
+    "vcp_first_breakout_overlap": "Production VCP trades matching a generic opportunity classified as selected_by_vcp by symbol and signal date.",
+    "vcp_non_overlap": "Other production VCP trades in the purged training set.",
+    "same_day_generic_control": "For each overlap record, the equal-weight mean of non-selected generic opportunities on that signal date."
+  },
+  "metrics": [
+    "average_40d_alpha",
+    "positive_alpha_years",
+    "mfe_20pct_rate",
+    "mfe_50pct_rate",
+    "mfe_100pct_rate",
+    "overlap_minus_non_overlap_alpha",
+    "overlap_minus_same_day_control_alpha"
+  ],
+  "freeze_gates": {
+    "minimum_overlap_candidates": 75,
+    "minimum_average_40d_alpha": 0.0,
+    "minimum_positive_alpha_years": 5,
+    "minimum_overlap_minus_non_overlap_alpha": 0.01,
+    "minimum_overlap_minus_same_day_control_alpha": 0.01,
+    "minimum_mfe_50pct_rate_enrichment_vs_same_day_control": 1.2
+  },
+  "decision_rule": "Passing all gates permits one frozen first-breakout event implementation followed by the untouched temporal test beginning 2023-03-08. It does not independently validate the strategy because the underlying training evidence was already inspected.",
+  "constraints": [
+    "Do not scan breakout windows, cooldowns, thresholds, or holding horizons.",
+    "Do not treat gate-funnel signal-logic matches that fail the production strategy's basic filters as production VCP trades.",
+    "Do not inspect temporal-test outcomes before the entry rule is frozen."
+  ]
+}

@@ -56,6 +56,7 @@ class MatcherConfig:
     fees_pct: float = 0.0002
     commission_pct: float | None = None
     stamp_tax_pct: float | None = None
+    stamp_tax_policy: Literal["fixed", "a_share_historical"] = "fixed"
     slippage_bps: float = 5.0
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
@@ -90,9 +91,17 @@ class MatcherConfig:
         # 买入腿: 佣金 + 滑点。
         return self._commission_pct() + self.slippage_bps / 10000.0
 
-    def sell_cost_pct(self) -> float:
+    def sell_cost_pct(self, on_date: date | str | None = None) -> float:
         # 卖出腿: 佣金 + 印花税 + 滑点。印花税未设时为 0 (向后兼容)。
-        stamp = self.stamp_tax_pct if self.stamp_tax_pct is not None else 0.0
+        if self.stamp_tax_policy == "a_share_historical":
+            if on_date is None:
+                raise ValueError("a_share_historical stamp tax requires an exit date")
+            exit_date = on_date if isinstance(on_date, date) else date.fromisoformat(str(on_date)[:10])
+            if exit_date < date(2008, 9, 19):
+                raise ValueError("a_share_historical stamp tax supports exits from 2008-09-19")
+            stamp = 0.0005 if exit_date >= date(2023, 8, 28) else 0.001
+        else:
+            stamp = self.stamp_tax_pct if self.stamp_tax_pct is not None else 0.0
         return self._commission_pct() + stamp + self.slippage_bps / 10000.0
 
 
@@ -175,6 +184,7 @@ class SimulationOptions:
     include_trades: bool = True
     include_per_symbol_stats: bool = True
     include_return_distribution: bool = True
+    include_execution_rejections: bool = False
 
 
 def _resolve_signal_id(panel: pl.DataFrame, idx: int, signal_ids: list[str] | None) -> str | None:
@@ -780,11 +790,12 @@ class BacktestEngine:
                     if exit_triggered:
                         exit_price = float(sym_exit_prices[i])
                         pnl_pct = (exit_price - entry_price) / entry_price if entry_price > 0 else 0.0
-                        fee_cost = config.buy_cost_pct() + config.sell_cost_pct()
-                        pnl_pct -= fee_cost
-
                         e_date = sym_dates[entry_idx]
                         x_date = sym_dates[i]
+                        fee_cost = config.buy_cost_pct() + config.sell_cost_pct(
+                            x_date.item() if hasattr(x_date, "item") else x_date
+                        )
+                        pnl_pct -= fee_cost
                         trades.append(TradeRecord(
                             symbol=str(sym),
                             entry_date=e_date.item() if hasattr(e_date, "item") else e_date,
@@ -869,7 +880,6 @@ class BacktestEngine:
         entry_prices = self._resolve_entry_prices(matrix, config)
         exit_prices = matrix.open if config.exit_fill == "open_t+1" else matrix.close
         buy_cost_pct = config.buy_cost_pct()
-        sell_cost_pct = config.sell_cost_pct()
         trades: list[TradeRecord] = []
         execution_stats = {
             "buy_invalid_price": 0,
@@ -1053,6 +1063,7 @@ class BacktestEngine:
             )
             shares = 100.0
             entry_value = shares * pos["entry_price"] * (1 + buy_cost_pct)
+            sell_cost_pct = config.sell_cost_pct(matrix.timestamp_labels[time_id])
             exit_value = shares * exit_price * (1 - sell_cost_pct)
             pnl_amount = exit_value - entry_value
             trades.append(TradeRecord(
@@ -1318,7 +1329,6 @@ class BacktestEngine:
             rows.append(i)
 
         buy_cost_pct = config.buy_cost_pct()
-        sell_cost_pct = config.sell_cost_pct()
         score_min = getattr(config, "score_min", None)
         score_max = getattr(config, "score_max", None)
         trades: list[TradeRecord] = []
@@ -1462,6 +1472,7 @@ class BacktestEngine:
                 exit_price = _refill_price(idx, "sell", float(exit_prices[idx]))
             shares = 100.0
             entry_value = shares * float(pos["entry_price"]) * (1 + buy_cost_pct)
+            sell_cost_pct = config.sell_cost_pct(self._date_str(panel_dates[idx]))
             exit_value = shares * exit_price * (1 - sell_cost_pct)
             pnl_amount = exit_value - entry_value
             pnl_pct = pnl_amount / entry_value if entry_value > 0 else 0.0
@@ -1782,7 +1793,6 @@ class BacktestEngine:
         entry_prices = self._resolve_entry_prices(matrix, config)
         exit_prices = matrix.open if config.exit_fill == "open_t+1" else matrix.close
         buy_cost_pct = config.buy_cost_pct()
-        sell_cost_pct = config.sell_cost_pct()
         cash = float(config.initial_capital)
         peak = cash
         max_positions = max(int(config.max_positions), 0)
@@ -1938,6 +1948,7 @@ class BacktestEngine:
             exit_price = float(override) if override is not None else _refill_price(
                 time_id, asset_id, "sell", float(exit_prices[time_id, asset_id])
             )
+            sell_cost_pct = config.sell_cost_pct(matrix.timestamp_labels[time_id])
             exit_value = pos["shares"] * exit_price * (1 - sell_cost_pct)
             cash += exit_value
             pnl_amount = exit_value - pos["entry_value"]
@@ -2002,10 +2013,30 @@ class BacktestEngine:
                     signal_id,
                     next_open=minute_trigger,
                 )
-                _count(blocked)
+                _reject(blocked, time_id, asset_id, signal_date=signal_date)
                 return False
             _sell(time_id, asset_id, reason, signal_date, sold_today, override)
             return True
+
+        execution_rejections: list[dict] = []
+
+        def _reject(
+            reason: str, time_id: int, asset_id: int,
+            *, signal_date: str | None = None, counted: bool = True,
+        ) -> None:
+            if counted:
+                _count(reason)
+            if options.include_execution_rejections:
+                side = "buy" if reason.startswith("buy_") else "sell"
+                source_time = int(matrix.entry_signal_time[time_id, asset_id])
+                execution_rejections.append({
+                    "date": matrix.timestamp_labels[time_id][:10],
+                    "symbol": matrix.symbols[asset_id],
+                    "side": side,
+                    "reason": reason,
+                    "signal_date": signal_date or _signal_date(source_time, matrix.timestamp_labels[time_id][:10]),
+                    "counted_in_execution_stats": counted,
+                })
 
         for time_id, date_label in enumerate(matrix.timestamp_labels):
             date_text = date_label[:10]
@@ -2098,34 +2129,40 @@ class BacktestEngine:
                 for asset_id in np.flatnonzero(matrix.entry[time_id]):
                     asset = int(asset_id)
                     if asset in positions:
+                        _reject("buy_already_held", time_id, asset, counted=False)
                         continue
                     if asset in sold_today:
-                        _count("buy_same_day_reentry")
+                        _reject("buy_same_day_reentry", time_id, asset)
                         continue
                     ok, blocked = _can_buy(time_id, asset)
                     if not ok:
-                        _count(blocked)
+                        _reject(blocked, time_id, asset)
                         continue
                     score = _matrix_entry_score(matrix, time_id, asset)
                     if config.score_min is not None and score < config.score_min:
-                        _count("buy_score_filter")
+                        _reject("buy_score_filter", time_id, asset)
                         continue
                     if config.score_max is not None and score > config.score_max:
-                        _count("buy_score_filter")
+                        _reject("buy_score_filter", time_id, asset)
                         continue
                     candidates.append((asset, score))
                 candidates.sort(key=lambda item: item[1], reverse=True)
                 slots = max_positions - len(positions)
                 if slots <= 0:
-                    execution_stats["buy_no_slot"] += len(candidates)
+                    for asset, _ in candidates:
+                        _reject("buy_no_slot", time_id, asset)
                 elif candidates:
                     selected = candidates[:slots]
+                    if options.include_execution_rejections:
+                        for asset, _ in candidates[slots:]:
+                            _reject("buy_rank_cutoff", time_id, asset, counted=False)
                     market_value_before = _market_value()
                     equity_before = cash + market_value_before
                     target_value = equity_before * max_exposure_pct / max_positions
                     exposure_capacity = equity_before * max_exposure_pct - market_value_before
                     if equity_before <= 0 or exposure_capacity <= 0 or max_exposure_pct <= 0:
-                        execution_stats["buy_exposure"] += len(selected)
+                        for asset, _ in selected:
+                            _reject("buy_exposure", time_id, asset)
                     else:
                         weights = np.repeat(1 / len(selected), len(selected))
                         if config.position_sizing == "score_weight":
@@ -2135,14 +2172,14 @@ class BacktestEngine:
                         total_budget = min(cash, exposure_capacity, target_value * len(selected))
                         for (asset_id, entry_score), weight in zip(selected, weights):
                             if len(positions) >= max_positions:
-                                _count("buy_no_slot")
+                                _reject("buy_no_slot", time_id, asset_id)
                                 break
                             market_value = _market_value()
                             equity = cash + market_value
                             capacity = equity * max_exposure_pct - market_value
                             allocation = min(total_budget * float(weight), target_value, cash, capacity)
                             if allocation <= 0:
-                                _count("buy_exposure")
+                                _reject("buy_exposure", time_id, asset_id)
                                 continue
                             entry_price = _refill_price(
                                 time_id, asset_id, "buy", float(entry_prices[time_id, asset_id])
@@ -2150,13 +2187,13 @@ class BacktestEngine:
                             shares = np.floor(allocation / (entry_price * (1 + buy_cost_pct)) / 100) * 100
                             entry_value = shares * entry_price * (1 + buy_cost_pct)
                             if shares <= 0:
-                                _count("buy_lot_size")
+                                _reject("buy_lot_size", time_id, asset_id)
                                 continue
                             if entry_value > cash + 1e-6:
-                                _count("buy_cash")
+                                _reject("buy_cash", time_id, asset_id)
                                 continue
                             if entry_value > capacity + 1e-6:
-                                _count("buy_exposure")
+                                _reject("buy_exposure", time_id, asset_id)
                                 continue
                             cash -= entry_value
                             positions[asset_id] = {
@@ -2227,6 +2264,9 @@ class BacktestEngine:
         stats["pending_exit_positions"] = sum(1 for pos in positions.values() if pos.get("pending_exit_reason"))
         stats["market_matrix_shape"] = [time_count, asset_count]
         stats["market_matrix_bytes"] = matrix.nbytes
+        if options.include_execution_rejections:
+            stats["execution_rejections"] = execution_rejections
+            stats["execution_rejection_scope"] = "portfolio_matrix_attempts"
         return SimResult(
             equity_curve=equity_curve if options.include_curves else [],
             drawdown_curve=drawdown_curve if options.include_curves else [],
@@ -2332,7 +2372,6 @@ class BacktestEngine:
             return self._empty_result()
 
         buy_cost_pct = config.buy_cost_pct()
-        sell_cost_pct = config.sell_cost_pct()
         cash = float(config.initial_capital)
         peak = cash
         max_positions = max(int(config.max_positions), 0)
@@ -2492,6 +2531,7 @@ class BacktestEngine:
                 exit_price = float(exit_price_override)
             else:
                 exit_price = _refill_price(idx, "sell", float(exit_prices[idx]))
+            sell_cost_pct = config.sell_cost_pct(self._date_str(panel_dates[idx]))
             exit_value = pos["shares"] * exit_price * (1 - sell_cost_pct)
             cash += exit_value
             pnl_amount = exit_value - pos["entry_value"]

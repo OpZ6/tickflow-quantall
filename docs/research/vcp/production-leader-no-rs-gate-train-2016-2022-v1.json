@@ -1,0 +1,21 @@
+{
+  "base_protocol": "production-leader-full-candidate-ledger-2016-2026-v1.json",
+  "experiment": "production-leader-no-rs-gate-train-2016-2022-v1",
+  "purpose": "test_rs_as_descriptor_instead_of_hard_vcp_rejection",
+  "hypothesis": "The trend template already requires positive 63, 126 and 252-session returns, aligned moving averages and proximity to the annual high. A fixed cross-sectional RS85 veto may unnecessarily exclude valid VCPs; remove the veto entirely rather than tuning its percentile.",
+  "single_change": "rs_min: 85 -> 0",
+  "backtest": {
+    "start": "2016-01-04",
+    "end": "2022-12-30",
+    "params": {"rs_min": 0.0}
+  },
+  "acceptance": {
+    "minimum_incremental_trades": 100,
+    "minimum_incremental_average_excess_return_held": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "years_evaluated": 7,
+    "minimum_incremental_mfe_20pct_rate": 0.2
+  },
+  "evaluation_priority": "Use incremental-trade SH/SZ equal-weight Alpha, year stability and market-outcome strata. Absolute return and winner count are diagnostic only.",
+  "stop_rule": "Run the frozen 2023-2026 temporal test only if every training gate passes. Do not try RS80, RS75, RS70, alternate RS windows or ranking weights from either result."
+}

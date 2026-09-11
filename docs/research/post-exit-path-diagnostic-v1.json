@@ -1,0 +1,10 @@
+{
+  "experiment": "post-exit-path-diagnostic-v1",
+  "runs": {"vcp": "20260909T135940874097Z", "cup-handle": "20260909T133226351846Z"},
+  "population": "Signal exits strictly before their archived 40-bar endpoint.",
+  "data": "Read only referenced enriched partitions after verifying size and mtime_ns before and after reading; these references are not immutable content snapshots.",
+  "window": "Strictly after exit date through the archived horizon end date. Exclude exit-day high/low because fill time versus intraday extrema is not resolved.",
+  "measure": "Minimum subsequent low relative to recorded exit fill; first subsequent close above that fill; first daily low at or below 90 percent of that fill. Same-bar touches have unknown intraday ordering.",
+  "threshold": "10 percent is a descriptive severity label, not a proposed stop or searched parameter.",
+  "scope": "Outcome diagnostics only, no strategy changes, no temporal testing, no promotion."
+}

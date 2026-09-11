@@ -372,6 +372,68 @@ def test_direct_parquet_matrix_reports_actionable_error_when_enriched_is_empty(t
         )
 
 
+def test_direct_parquet_matrix_uses_causal_share_history_instead_of_latest_snapshot(tmp_path):
+    market_root = tmp_path / "kline_daily_enriched"
+    days = (date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4))
+    for current in days:
+        partition = market_root / f"date={current.isoformat()}"
+        partition.mkdir(parents=True)
+        pl.DataFrame({
+            "symbol": ["000001.SZ"],
+            "date": [current],
+            "open": [10.0],
+            "high": [10.0],
+            "low": [10.0],
+            "close": [10.0],
+            "volume": [1_000.0],
+        }).write_parquet(partition / "part.parquet")
+    shares_path = tmp_path / "financials" / "shares" / "part.parquet"
+    shares_path.parent.mkdir(parents=True)
+    pl.DataFrame({
+        "symbol": ["000001.SZ", "000001.SZ"],
+        "effective_date": [days[0], days[2]],
+        "total_shares": [100.0, 200.0],
+        "float_shares": [80.0, 160.0],
+    }).write_parquet(shares_path)
+    instruments = pl.DataFrame({
+        "symbol": ["000001.SZ"],
+        "name": ["测试"],
+        "total_shares": [999.0],
+        "float_shares": [888.0],
+    })
+    cache_root = tmp_path / "matrix_cache"
+
+    market = load_market_data_matrix_from_parquet(
+        market_root,
+        days[0],
+        days[-1],
+        field_columns={"total_shares", "float_shares"},
+        instruments=instruments,
+        cache_root=cache_root,
+    )
+
+    np.testing.assert_array_equal(market.field("total_shares")[:, 0], [100.0, 100.0, 200.0])
+    np.testing.assert_array_equal(market.field("float_shares")[:, 0], [80.0, 80.0, 160.0])
+    assert market.cache_status == "built"
+
+    pl.DataFrame({
+        "symbol": ["000001.SZ", "000001.SZ", "000001.SZ"],
+        "effective_date": [days[0], days[1], days[2]],
+        "total_shares": [100.0, 150.0, 200.0],
+        "float_shares": [80.0, 120.0, 160.0],
+    }).write_parquet(shares_path)
+    refreshed = load_market_data_matrix_from_parquet(
+        market_root,
+        days[0],
+        days[-1],
+        field_columns={"total_shares", "float_shares"},
+        instruments=instruments,
+        cache_root=cache_root,
+    )
+    np.testing.assert_array_equal(refreshed.field("total_shares")[:, 0], [100.0, 150.0, 200.0])
+    assert refreshed.cache_status == "built"
+
+
 def test_direct_parquet_matrix_matches_panel_builder_and_reuses_mmap(tmp_path):
     market_root = tmp_path / "kline_daily_enriched"
     days = (date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4))
@@ -672,6 +734,35 @@ def test_matrix_cache_cancellation_removes_staging_output(tmp_path, monkeypatch)
 
     assert list(cache_root.glob("v*-*")) == []
     assert list(cache_root.glob(".*.tmp")) == []
+
+
+def test_matrix_cache_publish_replaces_partial_windows_target(tmp_path, monkeypatch):
+    temporary = tmp_path / ".cache.tmp"
+    target = tmp_path / "cache"
+    temporary.mkdir()
+    (temporary / "matrix.bin").write_bytes(b"complete")
+    (temporary / "manifest.json").write_text("{}", encoding="utf-8")
+    real_replace = matrix_module.os.replace
+    calls = 0
+
+    def partial_then_block(src, dst):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            target.mkdir()
+            (target / "matrix.bin").write_bytes(b"partial")
+            raise PermissionError(5, "blocked")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(matrix_module.os, "replace", partial_then_block)
+    monkeypatch.setattr(matrix_module.time, "sleep", lambda _seconds: None)
+
+    matrix_module._publish_matrix_cache(temporary, target)
+
+    assert calls == 2
+    assert (target / "manifest.json").exists()
+    assert (target / "matrix.bin").read_bytes() == b"complete"
+    assert not temporary.exists()
 
 
 def test_matrix_cache_can_be_cancelled_before_scan(tmp_path):
@@ -983,6 +1074,45 @@ def test_migrated_strategy_entries_fill_on_next_bar_open():
     assert delayed.entry[:, 0].tolist() == [0, 0, 1]
     assert delayed.entry_signal_time[:, 0].tolist() == [-1, -1, 1]
     assert delayed.open[2, 0] == pytest.approx(12.0)
+
+
+def test_delayed_entry_cannot_fill_outside_formal_time_mask():
+    panel = pl.DataFrame({
+        "symbol": ["000001.SZ"] * 3,
+        "name": ["A"] * 3,
+        "date": [date(2024, 1, 1), date(2024, 1, 2), date(2024, 1, 3)],
+        "open": [10.0, 11.0, 12.0],
+        "high": [10.2, 11.2, 12.2],
+        "low": [9.8, 10.8, 11.8],
+        "close": [10.0, 11.0, 12.0],
+        "volume": [1000.0, 1000.0, 1000.0],
+    })
+    market = build_market_data_matrix(panel)
+    entry = np.zeros(market.shape, dtype=np.uint8)
+    entry[1, 0] = 1
+    signals = make_signal_matrix(market.shape, entry=entry, entry_signal_ids=("entry",))
+
+    # Position replay already slices its time axis to start..as_of. An all-true
+    # fill mask must preserve actual T+1 entries and their signal provenance.
+    original = build_market_matrix_from_signals(market, signals, entry_delay_bars=1)
+    position = build_market_matrix_from_signals(
+        market, signals, entry_delay_bars=1,
+        entry_fill_time_mask=np.ones(market.shape[0], dtype=bool),
+    )
+    assert position.entry[:, 0].tolist() == [0, 0, 1]
+    for field in ("entry", "entry_signal_time", "entry_signal_code", "open", "exit"):
+        np.testing.assert_array_equal(getattr(original, field), getattr(position, field))
+
+    delayed = build_market_matrix_from_signals(
+        market,
+        signals,
+        entry_delay_bars=1,
+        entry_fill_time_mask=np.array([True, True, False]),
+    )
+
+    assert delayed.entry[:, 0].tolist() == [0, 0, 0]
+    assert delayed.entry_signal_time[:, 0].tolist() == [-1, -1, -1]
+    assert delayed.entry_signal_code[:, 0].tolist() == [-1, -1, -1]
 
 
 def test_matrix_pipeline_applies_asset_pool_before_cross_sectional_scoring():

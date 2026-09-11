@@ -229,7 +229,7 @@ def _stock_returns(
     get_enriched_range = getattr(repo, "get_enriched_range", None)
     if callable(get_enriched_range):
         frame = get_enriched_range(dates[0], dates[-1], columns=sorted(required))
-    if frame is None:
+    if frame is None or not required.issubset(frame.columns):
         frame = _read_range(root, "kline_daily_enriched", dates[0], dates[-1])
     if frame.is_empty() or not required.issubset(frame.columns):
         return pl.DataFrame()
@@ -1146,6 +1146,9 @@ def _rotation_clock(daily: pl.DataFrame) -> dict[str, Any]:
 
 
 def _density(returns: pl.DataFrame, end: date) -> dict[str, Any]:
+    required = {"date", "return", "turnover_rate"}
+    if returns.is_empty() or not required.issubset(returns.columns):
+        return {}
     latest = returns.filter(pl.col("date") == end).drop_nulls(["return", "turnover_rate"])
     if latest.is_empty():
         return {}

@@ -1,0 +1,35 @@
+{
+  "experiment": "vcp-stabilize-entry-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "../docs/research/vcp/stabilize-entry-v1.json",
+  "training_2016_2022": {
+    "signals": 321,
+    "filled": 247,
+    "missed": 73,
+    "blocked": 1,
+    "baseline": {
+      "n_trades": 321,
+      "win_rate": 0.267913,
+      "profit_factor": 3.94,
+      "avg_pnl": 0.0124,
+      "avg_win": 0.150736,
+      "avg_loss": 0.038225
+    },
+    "variant": {
+      "n_trades": 247,
+      "win_rate": 0.299595,
+      "profit_factor": 2.71,
+      "avg_pnl": 0.005378,
+      "avg_win": 0.131021,
+      "avg_loss": 0.048366
+    },
+    "delta": {
+      "avg_pnl": -0.007022,
+      "win_rate": 0.031682,
+      "profit_factor": -1.23
+    },
+    "rule": "drop"
+  },
+  "rule": "drop",
+  "gaps": []
+}

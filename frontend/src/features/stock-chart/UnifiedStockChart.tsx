@@ -8,7 +8,7 @@ import {
   type ChartMarker, type ChartPriceLine, type OHLC,
 } from '@/components/EChartsCandlestick'
 import type { LevelType, PriceLevel } from '@/components/stock-analysis/AnalysisKChart'
-import { api, type AnnotationEvidence, type ChartAdjustment, type ChartInterval, type ChartLayerCategory, type ChartRangeName, type StrategyDetail } from '@/lib/api'
+import { api, type AnnotationEvidence, type ChanlunOfficialResponse, type ChartAdjustment, type ChartInterval, type ChartLayerCategory, type ChartRangeName, type StrategyDetail } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import { setParams } from '@/lib/indicator-params'
@@ -96,6 +96,11 @@ function storedTemplateSnapshot(template: ChartIndicatorTemplate, layout: StockC
 }
 
 const ALL_LAYER_CATEGORIES: ChartLayerCategory[] = ['pattern', 'strategy', 'event', 'plan']
+
+// ZenChart 官方图层上游不可用时, 会话内短暂停发该请求, 避免每只股票都等待
+// 一次上游失败 (实测约 3.5s); 到期后自动允许重试。
+const ZEN_OFFICIAL_FAILURE_TTL_MS = 5 * 60_000
+let zenOfficialDownUntil = 0
 
 export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
@@ -368,7 +373,12 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
     setHistoryNotice('')
     historyPreviousOldestRef.current = undefined
   }, [historyContext, layout.range])
-  const layerKey = ALL_LAYER_CATEGORIES.join(',')
+  // 图层按需加载: 指标中心关闭时只请求已启用图层所属的类别; 打开时请求全部,
+  // 以便发现并开启尚未启用的图层。避免每次图表加载都计算全部 annotation layers。
+  const requestedLayerCategories = layerManagerOpen
+    ? ALL_LAYER_CATEGORIES
+    : ALL_LAYER_CATEGORIES.filter(category => enabledLayerIdsArray.some(id => id.split('.')[0] === category))
+  const layerKey = requestedLayerCategories.join(',')
   const strategyKey = requestedStrategyIds.join(',')
   const exactSourceRunId = strategyScope === 'source' ? strategyContext?.sourceRunId : undefined
   const exactParamsFingerprint = strategyScope === 'source' ? strategyContext?.paramsFingerprint : undefined
@@ -387,7 +397,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
       symbol, interval: layout.interval, adjustment: layout.adjustment, range: layout.range,
       ...(requestedStart ? { startDate: requestedStart } : {}),
       ...(requestEnd ? { endDate: requestEnd } : {}),
-      layers: ALL_LAYER_CATEGORIES,
+      layers: requestedLayerCategories,
       strategyIds: requestedStrategyIds,
       sourceRunId: exactSourceRunId,
       paramsFingerprint: exactParamsFingerprint,
@@ -539,7 +549,14 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   })
   const officialQuery = useQuery({
     queryKey: ['stock-chart', 'official', symbol, layout.interval],
-    queryFn: () => api.chanlunOfficial(symbol.split('.')[0], layout.interval === '1d' ? 'D1' : layout.interval.toUpperCase(), Math.min(1000, rows.length)),
+    queryFn: async () => {
+      if (Date.now() < zenOfficialDownUntil) {
+        return { available: false, detail: '官方图层服务暂不可用, 已暂停请求' } as ChanlunOfficialResponse
+      }
+      const result = await api.chanlunOfficial(symbol.split('.')[0], layout.interval === '1d' ? 'D1' : layout.interval.toUpperCase(), Math.min(1000, rows.length))
+      if (!result?.available) zenOfficialDownUntil = Date.now() + ZEN_OFFICIAL_FAILURE_TTL_MS
+      return result
+    },
     enabled: chanlunConfig.visible && chanlunConfig.showOfficial && layout.interval === '1d', retry: false, staleTime: 300_000,
   })
   const timeIndex = useMemo(() => buildTimeIndex(rows), [rows])

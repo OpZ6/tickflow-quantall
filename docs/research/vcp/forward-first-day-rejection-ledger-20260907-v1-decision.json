@@ -1,0 +1,37 @@
+{
+  "decision": "accept_rejection_ledger_for_frozen_vcp_daily_forward_scope",
+  "strategy_id": "vcp_leader_breakout",
+  "strategy_version": "forward-v1",
+  "as_of": "2026-09-07",
+  "existing_snapshot": "data/research/vcp/forward/forward-v1/2026-09-07.json",
+  "existing_snapshot_rewritten": false,
+  "screening_trace_scope": "matrix_snapshot_candidate_pipeline",
+  "reason_semantics": "first_failed_detector_gate",
+  "universe_symbols": 5838,
+  "candidate_count": 0,
+  "entry_signal_count": 0,
+  "detector_reason_counts": {
+    "trend_ma_alignment": 5138,
+    "invalid_close": 289,
+    "near_52_week_high": 169,
+    "positive_returns": 121,
+    "rs_threshold": 42,
+    "market_regime": 79
+  },
+  "entered_vcp_structure_detection": 0,
+  "interpretation": "All symbols failed before VCP structure detection under the frozen strategy on this date. The zero-candidate result is explained by the strategy gates and is not evidence that the production daily dataset is unprepared.",
+  "coverage": {
+    "close_snapshot_queue": true,
+    "detector_first_failed_gate": true,
+    "basic_pool_and_display_flow": true,
+    "portfolio_matrix_execution_rejections": true,
+    "pending_last_day_signal_is_execution_result": false,
+    "other_strategy_or_simulation_paths": false
+  },
+  "guardrails": {
+    "strategy_changed": false,
+    "threshold_changed": false,
+    "historical_snapshot_rewritten": false,
+    "candidate_state_claimed_as_fill": false
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "experiment": "leader-universe-market-gate-v2",
+  "layer": 2,
+  "prior": "docs/research/leader-universe-market-gate-v1-decision.md",
+  "hypothesis_source": "v1 showed frozen 63/126/252 blended RS>=85 is worse than same-day eligible names at 5/10/20 days (date-EW net excess vs unselected -0.21%/-0.30%/-0.98%). Mechanism: accumulated relative strength marks stocks that already used the swing. Replacement: current relative demand, signal-day close-to-close vs the same-day SH/SZ equal-weight market. Reuse shipped market_outperformance_allowed. Gate and eligibility unchanged.",
+  "distinct_from_failed_representations": "Not a RS percentile scan, not inverted RS (mean reversion), not 趋势模板, not 距年高, not VCP/cup/flag. Difference from v1: universe event is same-day market outperformance instead of trailing RS percentile. Difference from sequence-1 detectors: still no pattern detector. One mechanism change.",
+  "exposure": "Training 2016-01-01 through 2022-12-31. Fills and 5/10/20-day labels must not cross 2022-12-31. 2023+ is exposure only if computed. Not a clean holdout.",
+  "gate": {
+    "id": "a_share_dual_regime",
+    "include_middle_expansion_regime": false,
+    "unchanged_from": "v1"
+  },
+  "universe": {
+    "id": "same_day_market_outperformance",
+    "definition": "On a gate-open day, eligible SH/SZ stocks whose causal close-to-close return beats that day's SH/SZ equal-weight close-to-close. Reuse shipped market_outperformance_allowed. Missing prior close is not in the universe.",
+    "not_used": ["rs_min", "rs_lookbacks", "trend_filter", "distance_high_max"]
+  },
+  "eligibility": {
+    "unchanged_from": "v1",
+    "boards": "SH/SZ suffixes only",
+    "exclude_st": "Instrument name contains ST / *ST / 退",
+    "listing_age": "Market-session age > 30",
+    "price": "3 <= raw_close <= 300",
+    "amount_min": 20000000
+  },
+  "selected": "Gate open AND eligible AND same-day market outperformance.",
+  "windows": {
+    "diagnostic": 5,
+    "primary": [10, 20],
+    "definition": "Same as v1: T+1 open entry; scheduled exit is the open of the 5th / 10th / 20th subsequent market session. Limit-up, suspension or missing bar voids the signal (no roll). Labels past 2022-12-31 are incomplete."
+  },
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "contrasts": {
+    "vs_market": "Same-window SH/SZ equal-weight open-to-open. Geometric excess. Signal-day equal-weight (mean of daily means).",
+    "vs_same_day_unselected": "On the same gate-open days, eligible stocks that did not beat the same-day market. Real same-day set, not unavailable_not_in_frozen_inputs."
+  },
+  "pass_fail": {
+    "pass": "Training 10-day and 20-day date-EW net excess vs market are not systematically negative, AND the same two windows vs same-day unselected are not systematically negative.",
+    "fail": "This is the one allowed rewrite of the universe. If still systematically negative vs market at 10/20 days, stop the selector and mark the goal 阻塞. Do not scan a threshold on the outperformance gap, do not add a pattern detector, do not also rewrite the gate in the same round.",
+    "not_claimed": "No live qualification, no clean 2023-2026 OOS, no parameter search."
+  },
+  "outputs": [
+    "docs/research/leader-universe-market-gate-v2.json",
+    "docs/research/leader-universe-market-gate-v2-analysis.json",
+    "docs/research/leader-universe-market-gate-v2-decision.md"
+  ]
+}

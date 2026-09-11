@@ -1,0 +1,28 @@
+{
+  "protocol": "production-leader-relative-breakout-train-2016-2022-v1.json",
+  "run_id": "20260909T042740400153Z",
+  "decision": "stop_without_temporal_test",
+  "temporal_test_allowed": false,
+  "incremental_results": {
+    "executed_trades": 453,
+    "average_absolute_return": -0.002641267,
+    "average_equal_weight_excess_return_held": 0.000708161,
+    "positive_alpha_years": 3,
+    "mfe_at_least_20pct_count": 133,
+    "mfe_at_least_20pct_rate": 0.293598234,
+    "average_40_session_excess_return": 0.010497051,
+    "by_40_session_market_outcome": {
+      "down": {"trades": 129, "average_excess_return_held": 0.003215337},
+      "sideways": {"trades": 229, "average_excess_return_held": 0.001655396},
+      "up": {"trades": 95, "average_excess_return_held": -0.004979655}
+    }
+  },
+  "gates": {
+    "minimum_incremental_trades": {"required": 100, "actual": 453, "passed": true},
+    "minimum_incremental_average_excess_return_held": {"required": 0.0, "actual": 0.000708161, "passed": true},
+    "minimum_positive_alpha_years": {"required": 4, "actual": 3, "passed": false},
+    "minimum_incremental_mfe_20pct_rate": {"required": 0.2, "actual": 0.293598234, "passed": true}
+  },
+  "interpretation": "Same-day market outperformance raises selectivity but does not create stable alpha across training years. The widened existing-detector branch is exhausted and must not receive outperformance margins, alternate windows, RS thresholds or exit variants.",
+  "evidence": "data/research/vcp/runs/20260909T042740400153Z/trade-path-analysis.json"
+}

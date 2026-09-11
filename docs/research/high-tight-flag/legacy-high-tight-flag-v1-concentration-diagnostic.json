@@ -1,0 +1,30 @@
+{
+  "source": "data/research/vcp/runs/20260909T101658309142Z/trade-path-analysis.json",
+  "role": "Exploratory diagnostic only; v1 test exposure remains, not a substitute for v2",
+  "selection": "evaluation_horizon_complete and evaluation_horizon_end_date <= 2022-12-31 and exit_date <= 2022-12-31",
+  "excluded_boundary_rows": 4,
+  "trades": 1265,
+  "unique_signal_days": 741,
+  "unique_symbols": 747,
+  "largest_signal_day_trades": 13,
+  "top_five_symbols_trade_share": 0.0332015810,
+  "mean_held_alpha": -0.0110650491,
+  "mean_40_session_alpha": -0.0243085190,
+  "equal_signal_day_mean_40_session_alpha": -0.0194926814,
+  "equal_symbol_mean_40_session_alpha": -0.0525412647,
+  "aggregation": "Mean of within-group arithmetic mean horizon Alpha; descriptive reweighting, not a portfolio or independent samples",
+  "mfe_50pct_rate": 0.0932806324,
+  "positive_horizon_alpha_years": [2020],
+  "exit_groups": {
+    "stop_loss": {"trades": 730, "held_alpha": -0.0784849392, "horizon_alpha": -0.1124763759},
+    "signal": {"trades": 458, "held_alpha": 0.0335363945, "horizon_alpha": 0.0531607514},
+    "max_hold": {"trades": 77, "held_alpha": 0.3628188291, "horizon_alpha": 0.3507773219}
+  },
+  "interpretation": [
+    "Negative average fixed-horizon Alpha survives both date and symbol reweighting; neither weighting choice reverses the conclusion.",
+    "Large winner paths exist, but their presence alone does not establish selection advantage.",
+    "Stopped trades remain negative at the fixed horizon, providing no aggregate support for simply loosening stops or holding everything longer.",
+    "Exit groups are defined by future outcomes. Their difference is not a causal effect and cannot be converted into an entry filter."
+  ],
+  "next_action": "Finish the existing v2 run and analyze its boundary-safe ledger. If the pattern persists, investigate pre-entry structure or applicability from causal evidence, without threshold searches or deleting losing exit groups."
+}

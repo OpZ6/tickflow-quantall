@@ -1,0 +1,105 @@
+{
+  "protocol": "docs\\research\\vcp\\production-vcp-first-breakout-overlap-train-2016-2022-v1.json",
+  "research_role": "explanatory_reanalysis_of_already_inspected_training_evidence",
+  "purged_vcp_candidates": 473,
+  "signal_logic_matches": 117,
+  "signal_logic_matches_not_in_production_vcp_trades": 2,
+  "overlap": {
+    "candidates": 115,
+    "average_40d_alpha": 0.03185095465809714,
+    "positive_alpha_years": 6,
+    "years_present": 7,
+    "mfe_20pct_rate": 0.4260869565217391,
+    "mfe_50pct_rate": 0.06956521739130435,
+    "mfe_100pct_rate": 0.0,
+    "by_signal_year": {
+      "2016": {
+        "candidates": 10,
+        "average_40d_alpha": 0.024980970906849632
+      },
+      "2017": {
+        "candidates": 35,
+        "average_40d_alpha": 0.05097695147120827
+      },
+      "2018": {
+        "candidates": 9,
+        "average_40d_alpha": 0.062333986700310665
+      },
+      "2019": {
+        "candidates": 29,
+        "average_40d_alpha": 0.02958884026140244
+      },
+      "2020": {
+        "candidates": 23,
+        "average_40d_alpha": 0.028978543470154806
+      },
+      "2021": {
+        "candidates": 2,
+        "average_40d_alpha": 0.0008609506104324538
+      },
+      "2022": {
+        "candidates": 7,
+        "average_40d_alpha": -0.06549341054250099
+      }
+    }
+  },
+  "non_overlap": {
+    "candidates": 358,
+    "average_40d_alpha": -0.010913129743466666,
+    "positive_alpha_years": 3,
+    "years_present": 7,
+    "mfe_20pct_rate": 0.3435754189944134,
+    "mfe_50pct_rate": 0.061452513966480445,
+    "mfe_100pct_rate": 0.008379888268156424,
+    "by_signal_year": {
+      "2016": {
+        "candidates": 41,
+        "average_40d_alpha": -0.04274257844691334
+      },
+      "2017": {
+        "candidates": 85,
+        "average_40d_alpha": 0.04227359774851867
+      },
+      "2018": {
+        "candidates": 16,
+        "average_40d_alpha": -0.05728275898351815
+      },
+      "2019": {
+        "candidates": 113,
+        "average_40d_alpha": -0.026788735721453714
+      },
+      "2020": {
+        "candidates": 79,
+        "average_40d_alpha": -0.031337206505584345
+      },
+      "2021": {
+        "candidates": 19,
+        "average_40d_alpha": 0.031227367495759613
+      },
+      "2022": {
+        "candidates": 5,
+        "average_40d_alpha": 0.015652014264116998
+      }
+    }
+  },
+  "comparisons": {
+    "overlap_minus_non_overlap_40d_alpha": 0.042764084401563804,
+    "same_day_control_average_40d_alpha": -0.01622741028829536,
+    "overlap_minus_same_day_control_40d_alpha": 0.048078364946392504,
+    "same_day_control_mfe_50pct_rate": 0.05331994051528407,
+    "mfe_50pct_rate_enrichment_vs_same_day_control": 1.3046754501041427
+  },
+  "freeze_checks": {
+    "minimum_overlap_candidates": true,
+    "minimum_average_40d_alpha": true,
+    "minimum_positive_alpha_years": true,
+    "minimum_overlap_minus_non_overlap_alpha": true,
+    "minimum_overlap_minus_same_day_control_alpha": true,
+    "minimum_mfe_50pct_rate_enrichment_vs_same_day_control": true
+  },
+  "passed_freeze_gates": true,
+  "maximum_vcp_label_end_date": "2022-12-09",
+  "temporal_test_inspected": false,
+  "decision": "freeze_one_first_breakout_entry_rule",
+  "interpretation": "This reanalysis may freeze one event rule, but only the untouched temporal test can accept or reject it."
+}

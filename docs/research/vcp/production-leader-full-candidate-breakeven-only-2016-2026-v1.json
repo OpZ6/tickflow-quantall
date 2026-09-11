@@ -1,0 +1,18 @@
+{
+  "base_protocol": "production-leader-full-candidate-ledger-2016-2026-v1.json",
+  "experiment": "production-leader-full-candidate-breakeven-only-2016-2026-v1",
+  "purpose": "separate_breakeven_protection_from_right_tail_trailing_exit",
+  "question": "Can the 10 percent breakeven protection retain failed-breakout defense while MA20, rather than the 20 percent trailing lock, carries confirmed leaders?",
+  "single_change": "Retain the 10 percent activation to entry-price protection and remove only the 20 percent peak-drawdown profit-lock step.",
+  "backtest": {
+    "overrides": {
+      "profit_lock_steps": [
+        {
+          "activate_pct": 0.1,
+          "floor_return_pct": 0.0
+        }
+      ]
+    }
+  },
+  "stop_rule": "Accept or reject this structural split as written. Do not scan activation, floor or drawdown percentages on the exposed interval."
+}

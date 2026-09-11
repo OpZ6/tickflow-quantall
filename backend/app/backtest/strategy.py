@@ -472,9 +472,9 @@ def _basic_filter_dependencies(config: dict) -> set[str]:
     if any(config.get(key) is not None for key in ("turnover_min", "turnover_max")):
         dependencies.add("turnover_rate")
     if any(config.get(key) is not None for key in ("market_cap_min", "market_cap_max")):
-        dependencies.add("total_shares")
+        dependencies.update(("total_shares", "raw_close"))
     if any(config.get(key) is not None for key in ("float_cap_min", "float_cap_max")):
-        dependencies.add("float_shares")
+        dependencies.update(("float_shares", "raw_close"))
     if config.get("exclude_st"):
         dependencies.add("name")
     return dependencies
@@ -559,6 +559,7 @@ class StrategyBacktestConfig:
     fees_pct: float = 0.0002
     commission_pct: float | None = None
     stamp_tax_pct: float | None = None
+    stamp_tax_policy: Literal["fixed", "a_share_historical"] = "fixed"
     slippage_bps: float = 5.0
     max_positions: int = 10
     max_exposure_pct: float = 1.0
@@ -608,6 +609,7 @@ class BacktestResultPolicy:
     include_return_distribution: bool = True
     include_benchmark: bool = True
     include_strategy_info: bool = True
+    include_execution_rejections: bool = False
 
     @classmethod
     def optimizer_trial(cls, objective: str) -> BacktestResultPolicy:
@@ -629,6 +631,7 @@ class BacktestResultPolicy:
             include_trades=self.include_trades,
             include_per_symbol_stats=self.include_per_symbol_stats,
             include_return_distribution=self.include_return_distribution,
+            include_execution_rejections=self.include_execution_rejections,
         )
 
     def select_stats(self, stats: dict) -> dict:
@@ -1319,6 +1322,7 @@ class StrategyBacktestService:
             fees_pct=config.fees_pct,
             commission_pct=config.commission_pct,
             stamp_tax_pct=config.stamp_tax_pct,
+            stamp_tax_policy=config.stamp_tax_policy,
             slippage_bps=config.slippage_bps,
             stop_loss_pct=stop_loss,
             take_profit_pct=take_profit,
@@ -1430,6 +1434,11 @@ class StrategyBacktestService:
                 exit_delay_bars=1 if matcher_config.exit_fill == "open_t+1" else 0,
                 reference_price=reference_price,
                 minute_exit_trigger=matcher_config.exit_fill == "signal_next_minute",
+                entry_fill_time_mask=self._matrix_date_range_mask(
+                    sim_market_data.timestamp_labels,
+                    config.start,
+                    config.end,
+                ),
             )
             timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
             del sim_market_data, sim_signal_matrix
@@ -1548,6 +1557,11 @@ class StrategyBacktestService:
                 exit_delay_bars=1 if matcher_config.exit_fill == "open_t+1" else 0,
                 reference_price=reference_price,
                 minute_exit_trigger=matcher_config.exit_fill == "signal_next_minute",
+                entry_fill_time_mask=self._matrix_date_range_mask(
+                    sim_market_data.timestamp_labels,
+                    config.start,
+                    config.end,
+                ),
             )
             timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
             del sim_market_data, sim_signal_matrix
@@ -1963,6 +1977,7 @@ class StrategyBacktestService:
             fees_pct=config.fees_pct,
             commission_pct=config.commission_pct,
             stamp_tax_pct=config.stamp_tax_pct,
+            stamp_tax_policy=config.stamp_tax_policy,
             slippage_bps=config.slippage_bps,
             stop_loss_pct=stop_loss,
             take_profit_pct=take_profit,
@@ -2575,6 +2590,7 @@ class StrategyBacktestService:
             "fees_pct": c.fees_pct,
             "commission_pct": c.commission_pct,
             "stamp_tax_pct": c.stamp_tax_pct,
+            "stamp_tax_policy": c.stamp_tax_policy,
             "slippage_bps": c.slippage_bps,
             "max_positions": c.max_positions,
             "max_exposure_pct": c.max_exposure_pct,

@@ -1,0 +1,31 @@
+{
+  "experiment": "vcp-breakout-low-holds-prior-low-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "kept": 380,
+  "undercut": 94,
+  "missing": 0,
+  "baseline": {
+    "n_trades": 474,
+    "win_rate": 0.274262,
+    "profit_factor": 3.56,
+    "avg_pnl": 0.009139,
+    "avg_win": 0.129955,
+    "avg_loss": 0.036518
+  },
+  "variant": {
+    "n_trades": 380,
+    "win_rate": 0.281579,
+    "profit_factor": 3.95,
+    "avg_pnl": 0.014486,
+    "avg_win": 0.145603,
+    "avg_loss": 0.036904
+  },
+  "delta": {
+    "avg_pnl": 0.005347,
+    "win_rate": 0.007317,
+    "profit_factor": 0.39
+  },
+  "rule": "keep",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\breakout-low-holds-prior-low-v1.json",
+  "gaps": []
+}

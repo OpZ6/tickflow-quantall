@@ -13,7 +13,10 @@ from pathlib import Path
 
 import polars as pl
 
-from app.jobs.daily_pipeline import _prune_partial_enriched_partitions
+from app.jobs.daily_pipeline import (
+    _classify_missing_enriched_dates,
+    _prune_partial_enriched_partitions,
+)
 
 
 def _write_partition(base: Path, day: str, symbols: list[str]) -> None:
@@ -60,3 +63,38 @@ def test_enriched_date_without_daily_is_left_alone(tmp_path) -> None:
 
     assert _prune_partial_enriched_partitions(daily, enriched) == []
     assert (enriched / f"date={date.today()}").exists()
+
+
+def test_intentionally_filtered_halt_row_is_not_partial(tmp_path) -> None:
+    daily = tmp_path / "kline_daily"
+    enriched = tmp_path / "kline_daily_enriched"
+    day = "2026-09-02"
+    daily_part = daily / f"date={day}"
+    daily_part.mkdir(parents=True)
+    pl.DataFrame(
+        {
+            "symbol": ["active", "halted"],
+            "open": [10.0, 0.0],
+            "high": [10.0, 0.0],
+            "volume": [100.0, 0.0],
+            "amount": [1000.0, 0.0],
+        }
+    ).write_parquet(daily_part / "part.parquet")
+    _write_partition(enriched, day, ["active"])
+
+    assert _prune_partial_enriched_partitions(daily, enriched) == []
+    assert (enriched / f"date={day}").exists()
+
+
+def test_pruned_middle_partition_requires_full_rebuild() -> None:
+    daily = ["2026-01-05", "2026-01-06", "2026-01-07"]
+    enriched = ["2026-01-05", "2026-01-07"]
+
+    assert _classify_missing_enriched_dates(daily, enriched) == (True, False)
+
+
+def test_only_trailing_dates_use_incremental_rebuild() -> None:
+    daily = ["2026-01-05", "2026-01-06", "2026-01-07"]
+    enriched = ["2026-01-05", "2026-01-06"]
+
+    assert _classify_missing_enriched_dates(daily, enriched) == (False, True)

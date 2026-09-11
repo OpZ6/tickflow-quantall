@@ -1,0 +1,19 @@
+{
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "production-leader-no-dual-regime-2016-2026-v1",
+  "purpose": "single_factor_market_stage_ablation",
+  "hypothesis": "Removing the A-share dual-regime gate admits materially more VCP candidates but degrades failed-breakout frequency or portfolio drawdown, demonstrating whether the stage filter contributes useful selectivity.",
+  "single_change": "a_share_dual_regime: true -> false",
+  "diagnostic_rule": {
+    "minimum_candidate_increase": 0.25,
+    "minimum_stop_loss_share_deterioration": 0.03,
+    "minimum_drawdown_deterioration": 0.03,
+    "interpretation": "The stage filter is supported if candidate count rises by at least 25 percent and either quality deterioration threshold is met. The ablation is not a promotion candidate."
+  },
+  "backtest": {
+    "params": {
+      "a_share_dual_regime": false
+    }
+  },
+  "development_note": "Single-factor market-stage ablation against run 20260907T123519390606Z on the same fully exposed 2016-2026 interval."
+}

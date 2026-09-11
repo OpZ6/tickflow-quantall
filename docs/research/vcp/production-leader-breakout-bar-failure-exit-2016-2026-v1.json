@@ -1,0 +1,27 @@
+{
+  "experiment": "production-leader-breakout-bar-failure-exit-2016-2026-v1",
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "purpose": "exit_method_mechanism_test",
+  "hypothesis": "The completed breakout bar records the demand expansion that justified next-open entry. If a later completed close falls below that bar's low, this specific demand event has failed and exiting next open should remove no-follow losses without treating a normal pivot retest as failure.",
+  "unique_change": "Keep the frozen candidate stream, entry, ranking, market regime, 5% hard stop, MA20 exit, 40-bar maximum hold, staged profit locks, costs and four-position portfolio. Add a next-open exit after a later completed close falls below the corresponding breakout signal bar low.",
+  "causal_contract": "The boundary uses only the already-completed signal bar. The signal bar cannot trigger its own exit. A later completed close emits the exit and the simulator fills only on the next tradable open with existing T+1 rules.",
+  "success_gate": {
+    "minimum_trades": 250,
+    "maximum_timing_violations": 0,
+    "minimum_average_loss_reduction": 0.005,
+    "minimum_average_win_retention_ratio": 0.9,
+    "minimum_matched_trade_mean_change": 0.0,
+    "maximum_drawdown_deterioration": 0.03
+  },
+  "baseline_reference": {
+    "run_id": "20260907T123519390606Z",
+    "average_loss": 0.0409,
+    "average_win": 0.1645,
+    "max_drawdown": -0.2592
+  },
+  "stop_condition": "Run once. If matched expectancy or winner retention fails, stop the breakout-bar boundary and do not add low-price buffers, ATR offsets, confirmation days or intraday variants on this exposed interval.",
+  "backtest": {
+    "strategy_id": "vcp_breakout_bar_failure_exit"
+  },
+  "development_note": "The entire interval is exposed development data. This is a method diagnosis, not independent validation or live qualification."
+}

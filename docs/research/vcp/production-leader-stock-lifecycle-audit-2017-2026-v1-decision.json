@@ -1,0 +1,48 @@
+{
+  "experiment": "production-leader-stock-lifecycle-audit-2017-2026-v1",
+  "decision": "stop_stock_lifecycle_filter_direction",
+  "reason": "No pre-registered lifecycle feature combined a stable yearly direction with a broadly ordered quintile outcome profile. The apparent binary-label association of prior run-up did not carry into continuous 40-day returns.",
+  "sample": {
+    "input_candidate_rows": 3774,
+    "unique_symbol_scale_pivot_setups": 3771,
+    "date_range": ["2017-11-15", "2026-06-30"],
+    "calendar_years": 10,
+    "true_breakout_rate": 0.3760275789
+  },
+  "key_results": {
+    "prior_runup_63_before_base": {
+      "pairwise_probability": 0.531,
+      "years_above_0_5": 8,
+      "years_below_0_5": 2,
+      "spearman_return_40d": -0.046,
+      "quintile_true_breakout_rate_range": [0.357, 0.384],
+      "quintile_return_40d_medians": [-0.025, -0.006, -0.018, -0.030, -0.063]
+    },
+    "prior_return_126d": {
+      "pairwise_probability": 0.540,
+      "years_above_0_5": 4,
+      "years_below_0_5": 6,
+      "spearman_return_40d": -0.056
+    },
+    "prior_unique_setups_365d_groups": {
+      "0": {"n": 2672, "true_breakout_rate": 0.379, "return_40d_median": -0.033},
+      "1": {"n": 797, "true_breakout_rate": 0.366, "return_40d_median": -0.015},
+      "2_plus": {"n": 302, "true_breakout_rate": 0.374, "return_40d_median": 0.005}
+    },
+    "other_features": {
+      "base_days_pairwise_probability": 0.497,
+      "base_depth_pairwise_probability": 0.529,
+      "distance_to_252d_high_pairwise_probability": 0.508,
+      "prior_unique_setups_365d_pairwise_probability": 0.496,
+      "days_since_prior_unique_setup_pairwise_probability": 0.514
+    }
+  },
+  "guardrails": {
+    "strategy_changed": false,
+    "threshold_selected": false,
+    "portfolio_backtest_run": false,
+    "future_columns_used_only_as_labels": true
+  },
+  "evidence": "data/research/vcp/analysis/stock-lifecycle-2017-2026-v1.json",
+  "next_action": "Keep the existing trend template unchanged. Do not add base-count, prior-run-up, base-age, or distance-to-high gates. Move to a different explanatory level rather than combining these weak variables into a score."
+}

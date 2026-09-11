@@ -1,0 +1,57 @@
+{
+  "experiment": "legacy-high-tight-flag-full-candidate-train-2016-2022-v2",
+  "decision": "retain_candidate_pool_stop_default_executable_representation",
+  "run_id": "20260909T130617820559Z",
+  "strategy_id": "quants_high_tight_flag_legacy_v1",
+  "training_result": {
+    "trades": 1245,
+    "average_excess_return_held": -0.010858,
+    "average_40d_excess_return": -0.02259,
+    "positive_40d_alpha_years": 1,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 483,
+    "mfe_20pct_rate": 0.387952,
+    "mfe_50pct_count": 117,
+    "mfe_100pct_count": 23,
+    "stop_loss_share": 0.578313
+  },
+  "training_checks": {
+    "minimum_trades_40": true,
+    "nonnegative_average_excess_return_held": false,
+    "nonnegative_average_40d_alpha": false,
+    "minimum_four_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_25": true,
+    "minimum_mfe_50pct_count_10": true
+  },
+  "market_outcome_40d_alpha": {
+    "down": -0.015592,
+    "sideways": -0.037645,
+    "up": -0.001874
+  },
+  "boundary_correction": {
+    "v1_run_id": "20260909T101658309142Z",
+    "v1_trades": 1269,
+    "v2_trades": 1245,
+    "v1_exposed_labels": "through 2023-02-17",
+    "v2_last_trade": "2022-09-30",
+    "v2_training_data_end": "2022-12-31",
+    "all_paths_complete_before_cutoff": true,
+    "conclusion": "The final-signal purge removed 24 cross-boundary or late-label trades; the negative fixed-horizon Alpha and the single positive year are unchanged."
+  },
+  "interpretation": [
+    "With the history-truncation fix and the training-boundary purge enforced, the exact legacy multiscale pool still produced 1245 independent executable candidates; the prior 202-trade simplified representation remains invalid as a substitute.",
+    "The boundary-corrected ledger retains a material right tail (483 paths above 20 percent MFE, 117 above 50 percent, 23 above 100 percent), but fixed-40-day Alpha is negative overall, positive in only 2020 among seven years, and negative or statistically negligible in every market-outcome bucket.",
+    "Exit tuning cannot repair the negative fixed-horizon selection Alpha. The pool remains useful as a broad candidate generator, but its default executable status is not promoted to a complete strategy.",
+    "The corrected v2 run does not change the v1 decision; the earlier boundary exposure did not create the negative result."
+  ],
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "pole gain thresholds",
+    "flag depth thresholds",
+    "breakout volume thresholds",
+    "chase and stop percentages",
+    "test-period or market-regime selection from these results"
+  ],
+  "next_action": "Keep the legacy multiscale flag pool as a candidate source only. Any new trade rule must first audit the detector's scale and setup-stage composition on training candidates and register one structural entry hypothesis that explains the negative bulk while preserving right-tail recall.",
+  "evidence": "data/research/vcp/runs/20260909T130617820559Z/trade-path-analysis.json"
+}

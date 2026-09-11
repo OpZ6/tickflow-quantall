@@ -6,9 +6,9 @@ param(
     [ValidateRange(1, 30)]
     [int]$MinuteDays = 5,
     [ValidateRange(0, 23)]
-    [int]$ReadyHour = 18,
+    [int]$ReadyHour = 16,
     [ValidateRange(0, 59)]
-    [int]$ReadyMinute = 0,
+    [int]$ReadyMinute = 30,
     [ValidateRange(1, 30)]
     [int]$PollSeconds = 2,
     [ValidateRange(5, 240)]
@@ -93,6 +93,66 @@ function Invoke-JsonPut([string]$Path, [hashtable]$Body) {
         -Body ($Body | ConvertTo-Json -Compress)
 }
 
+function Get-DataFreshnessGaps {
+    param(
+        [psobject]$DataStatus,
+        [DateTime]$ExpectedDate,
+        [psobject]$QuantxCatalog,
+        [switch]$IncludeMinuteK
+    )
+
+    $required = [ordered]@{
+        daily          = $DataStatus.daily.latest_date
+        enriched       = $DataStatus.enriched.latest_date
+        index_daily    = $DataStatus.index_daily.latest_date
+        index_enriched = $DataStatus.index_enriched.latest_date
+        etf_daily      = $DataStatus.etf_daily.latest_date
+        etf_enriched   = $DataStatus.etf_enriched.latest_date
+        adj_factor     = $DataStatus.adj_factor.latest_date
+        instruments    = $DataStatus.instruments.latest_as_of
+    }
+    if ($IncludeMinuteK) {
+        $required.minute = $DataStatus.minute.latest_date
+    }
+
+    $gaps = @()
+    foreach ($entry in $required.GetEnumerator()) {
+        if (-not $entry.Value) {
+            $gaps += "$($entry.Key)=missing"
+            continue
+        }
+
+        try {
+            $actualDate = [DateTime]::ParseExact(
+                [string]$entry.Value,
+                'yyyy-MM-dd',
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+        } catch {
+            $gaps += "$($entry.Key)=invalid:$($entry.Value)"
+            continue
+        }
+
+        if ($actualDate.Date -lt $ExpectedDate.Date) {
+            $gaps += "$($entry.Key)=$($actualDate.ToString('yyyy-MM-dd'))"
+        }
+    }
+
+    $expectedQuantxDate = $ExpectedDate.ToString('yyyyMMdd')
+    $published = if ($QuantxCatalog) {
+        @($QuantxCatalog.records) | Where-Object {
+            $_.trade_date -eq $expectedQuantxDate -and $_.stage -in @('complete', 'degraded')
+        } | Select-Object -First 1
+    } else {
+        $null
+    }
+    if (-not $published) {
+        $gaps += "quantx=$expectedQuantxDate missing_or_unpublished"
+    }
+
+    return $gaps
+}
+
 try {
     Start-BackendIfNeeded
 
@@ -100,11 +160,25 @@ try {
     $expectedDate = Get-ExpectedDataDate $now
     $dataStatus = Invoke-RestMethod -Uri "$BaseUrl/api/data/status" -TimeoutSec 30
     $latestText = $dataStatus.enriched.latest_date
-    $latestDate = if ($latestText) { [DateTime]::ParseExact($latestText, 'yyyy-MM-dd', $null) } else { $null }
+    $freshnessGaps = @()
+    if (-not $Force) {
+        $quantxCatalog = $null
+        try {
+            $quantxCatalog = Invoke-RestMethod -Uri "$BaseUrl/api/quantx-data/catalog" -TimeoutSec 30
+        } catch {
+            Write-Step 'QuantX catalog unavailable; full update will run to repair freshness.'
+        }
+        $freshnessGaps = @(Get-DataFreshnessGaps `
+            -DataStatus $dataStatus `
+            -ExpectedDate $expectedDate `
+            -QuantxCatalog $quantxCatalog `
+            -IncludeMinuteK:$EnableMinuteK)
+    }
 
     Write-Step "China time: $($now.ToString('yyyy-MM-dd HH:mm:ss'))"
-    Write-Step "Expected data date: $($expectedDate.ToString('yyyy-MM-dd')); current enriched: $latestText"
-    if (-not $Force -and $latestDate -and $latestDate.Date -ge $expectedDate.Date) {
+    $gapText = if ($Force) { 'force requested' } elseif ($freshnessGaps.Count) { $freshnessGaps -join ', ' } else { 'none' }
+    Write-Step "Expected data date: $($expectedDate.ToString('yyyy-MM-dd')); current enriched: $latestText; stale datasets: $gapText"
+    if (-not $Force -and $freshnessGaps.Count -eq 0) {
         Write-Host '[update-all] Data is current. Use -Force to run again.' -ForegroundColor Green
         exit 0
     }

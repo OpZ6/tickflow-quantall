@@ -1,0 +1,24 @@
+{
+  "base_protocol": "production-leader-no-rs-no-ma-exit-train-2016-2022-v1.json",
+  "experiment": "production-leader-relative-breakout-train-2016-2022-v1",
+  "purpose": "test_market_relative_breakout_confirmation_in_the_broadened_pool",
+  "hypothesis": "A valid VCP breakout should express stock-specific demand on the signal day. In the broadened no-RS pool, require the stock's close-to-close return to exceed the same-day SH/SZ equal-weight return.",
+  "single_change_from_parent": "require_signal_day_market_outperformance: false -> true",
+  "backtest": {
+    "params": {
+      "rs_min": 0.0,
+      "disable_signal_exit": true,
+      "require_signal_day_market_outperformance": true
+    },
+    "start": "2016-01-04",
+    "end": "2022-12-30"
+  },
+  "acceptance": {
+    "minimum_incremental_trades": 100,
+    "minimum_incremental_average_excess_return_held": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "years_evaluated": 7,
+    "minimum_incremental_mfe_20pct_rate": 0.2
+  },
+  "stop_rule": "Run one frozen 2023-2026 temporal test only if every training gate passes. Do not add an outperformance margin, lookback, rank, weight or RS threshold."
+}

@@ -1,0 +1,18 @@
+{
+  "experiment": "vcp-breakout-close-upper-half-v1",
+  "thought": "VCP breakout bar should close in the upper half of its range (demand into the close). Selection, signal-day visible.",
+  "hypothesis": "Keeping fills whose (close-low)/(high-low) >= 0.5 on entry_signal_date raises independent avg_pnl vs all 474 original-exit trades.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "n": 474,
+    "exits": "original only"
+  },
+  "change": {
+    "id": "breakout_close_location_ge_0_5",
+    "definition": "Keep if signal-day (close-low)/(high-low) >= 0.5. Zero range, missing bar: not kept, no roll. Do not scan 0.5."
+  },
+  "pass_fail": {
+    "pass": "training avg_pnl not below 474-trade baseline. If keep, also report 2023-2026 completed fills.",
+    "fail": "Drop. Next still VCP (entry 回踩/企稳 or another sell)."
+  }
+}

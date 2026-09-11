@@ -1,0 +1,51 @@
+{
+  "experiment": "production-leader-failed-retrigger-2016-2026-v1",
+  "baseline_run": "20260907T123519390606Z",
+  "excluded_diagnostic_run": {
+    "run_id": "20260907T134851862381Z",
+    "reason": "The research wrapper omitted the baseline turnover_min=0.0 declaration, so it loaded one fewer matrix field. The numerical result matched the corrected run but is excluded from the formal comparison."
+  },
+  "experiment_run": "20260907T135221128740Z",
+  "decision": "retain_as_secondary_mechanism_do_not_replace_breakout",
+  "reason": "Waiting for a same-pivot recovery sharply reduced stop-outs, but it selected only a small subset and materially truncated the right tail that drives the frozen VCP baseline. The method is evidence for a secondary re-entry path, not a replacement for direct breakout entry.",
+  "comparison": {
+    "baseline": {
+      "entry_candidates": 837,
+      "trades": 298,
+      "stop_loss_share": 0.4262,
+      "win_rate": 0.2987,
+      "avg_win": 0.1645,
+      "avg_loss": 0.0409,
+      "best_trade": 1.2163,
+      "profit_factor": 4.02,
+      "annual_return": 0.1377,
+      "max_drawdown": -0.2592,
+      "avg_exposure": 0.2714
+    },
+    "failed_breakout_retrigger": {
+      "entry_candidates": 82,
+      "trades": 74,
+      "stop_loss_share": 0.2162,
+      "win_rate": 0.3108,
+      "avg_win": 0.0685,
+      "avg_loss": 0.0288,
+      "best_trade": 0.2813,
+      "profit_factor": 2.38,
+      "annual_return": 0.0010,
+      "max_drawdown": -0.2231,
+      "avg_exposure": 0.0678
+    },
+    "stop_loss_share_change": -0.2100,
+    "candidate_retention": 0.0980,
+    "avg_win_change": -0.0960
+  },
+  "gate_results": {
+    "minimum_trades_30": "pass",
+    "maximum_timing_violations_0": "pass",
+    "minimum_stop_loss_share_reduction_0_05": "pass",
+    "positive_mean_win_loss_asymmetry": "pass"
+  },
+  "method_interpretation": "A failed breakout can regain validity after observable supply contraction, but waiting for this sequence forfeits most immediate expansion and cannot carry the primary VCP mandate by itself.",
+  "stop_rule_applied": "Do not tune the 18-bar observation window, 3-30 bar recovery window, pivot bands, range, or volume thresholds on this exposed interval.",
+  "next_action": "Keep direct breakout as the primary entry. Move to one exit-method experiment that exits no-follow failures from observable pivot behavior earlier while leaving the staged profit path unchanged for leaders."
+}

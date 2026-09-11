@@ -1,0 +1,24 @@
+{
+  "purpose": "Restore original full-prefix validation before the v2 baseline",
+  "finding": "The 420-bar wrapper truncation forgot older invalid OHLCV, changing cup and pullback results.",
+  "fix": "Keep full valid-close prefix in snapshot and historical signal paths; retain once-per-asset indices and compiled cup continuity guard.",
+  "verification": {
+    "pytest": "30 passed: test_quants_migration_acceptance.py and test_research_training_boundary.py",
+    "regression": "Six cases: cup/pullback crossed with early NaN open, zero low, zero volume in 500-bar histories. Valid control enters; invalid prefix rejects both snapshot and historical entries.",
+    "original_source_run": "20260909T101658310492Z",
+    "detector_comparison": "240 exact dict matches versus original source.zip; float32/float64, lengths 421/600/1000, 40 random histories per combination, seed 20260909. Finite synthetic histories, not exhaustive proof.",
+    "lint_note": "Existing Chinese strategy-name parentheses trigger eight RUF001 diagnostics; no name changes made."
+  },
+  "launched_v2_runs": {
+    "cup": "20260909T130607455208Z",
+    "high_tight_flag": "20260909T130617820559Z"
+  },
+  "v2_outcome": {
+    "high_tight_flag_run": "20260909T130617820559Z",
+    "high_tight_flag_decision": "docs/research/high-tight-flag/legacy-high-tight-flag-full-candidate-train-2016-2022-v2-decision.json",
+    "cup_run": "20260909T133226351846Z",
+    "cup_decision": "docs/research/cup-handle/legacy-cup-handle-full-candidate-train-2016-2022-v2-decision.json",
+    "interrupted_cup_v2_relaunch_note": "20260909T130607455208Z was marked interrupted because no process, progress, result, or error log existed; a clean relaunch 20260909T133226351846Z completed.",
+    "next": "Both v2 ledgers are analyzed under the training cutoff. The truncation fix did not create positive selection Alpha in either pool; both remain candidate-pool-only representations."
+  }
+}

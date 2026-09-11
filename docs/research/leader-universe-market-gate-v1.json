@@ -1,0 +1,58 @@
+{
+  "experiment": "leader-universe-market-gate-v1",
+  "layer": 2,
+  "hypothesis_source": "Direction contract 2026-09-10 plus production-leader dual-regime ablation (run 20260907T124708165810Z): removing a_share_dual_regime collapsed the bundled leader path (annualized -22.59%, drawdown -93.73%). Sequence-1 autopsy stopped the five default pattern streams as selectors. This round tests only 'which days, which leaders' as a daily 选股名单, not a pattern detector.",
+  "distinct_from_failed_representations": "Not a 形态检测器, not a monthly factor, not a decoration of wide VCP / cup-handle / high-tight-flag / launch-pullback. Difference from vcp_leader_breakout: drop 趋势模板, 距年高, VCP structure, market-cap, scoring and exits. Difference from sequence-1 autopsy: build a same-day eligible-not-in-universe book instead of marking unavailable_not_in_frozen_inputs. Frozen thresholds 0.30 / 0.70 / 63 / RS85 are not scanned.",
+  "exposure": "Training 2016-01-01 through 2022-12-31. Fills and 5/10/20-day labels must not cross 2022-12-31. 2023+ is exposure only if computed. Not a clean holdout.",
+  "gate": {
+    "id": "a_share_dual_regime",
+    "include_middle_expansion_regime": false,
+    "early_recovery": "MA20 breadth < 0.30 and higher than five market sessions earlier",
+    "broad_advance": "MA20 breadth >= 0.70 and 63-session SH/SZ equal-weight return >= 0",
+    "fields": "Signal-day and earlier daily closes only. Reuse shipped market_breadth_allowed."
+  },
+  "universe": {
+    "rs": "Frozen vcp_leader_breakout cross-section: 0.4*63d + 0.2*126d + 0.4*252d close-to-close, average-tie percentile on that day's valid closes. Reuse shipped trend_context with trend_filter=false.",
+    "rs_min": 85.0,
+    "definition": "On a gate-open day, stocks with RS percentile >= 85 that also pass 可交易资格."
+  },
+  "eligibility": {
+    "boards": "SH/SZ suffixes only",
+    "exclude_st": "Instrument name contains ST / *ST / 退, same token rule as shipped build_basic_filter_mask. Historical ST facts are not a published 2016-2022 snapshot; current names are the production proxy.",
+    "listing_age": "Market-session age > 30 (exclude_new_days=30 means age > 30). Age is the count of market-calendar dates in [listing_date, signal_date] using instruments.listing_date and the observed SH/SZ bar calendar. Missing listing_date uses a lower bound of observed valid bars > 30. Weekend-inclusive fact calendars do not cover 2016-2022.",
+    "price": "3 <= raw_close <= 300 (unadjusted tradable price)",
+    "amount_min": 20000000,
+    "not_in_this_gun": ["market_cap", "distance_to_high", "trend_template", "VCP", "cup_handle", "flag"]
+  },
+  "selected": "Gate open AND in universe AND eligible.",
+  "windows": {
+    "diagnostic": 5,
+    "primary": [10, 20],
+    "definition": "Signal at session t close; buy next market open t+1; scheduled exit is the open of the 5th / 10th / 20th subsequent market session after entry. Limit-up, suspension or missing bar on the buy session voids the signal (no roll). Limit-down, suspension or missing bar on the scheduled exit makes that window incomplete (no roll). Labels past 2022-12-31 are incomplete."
+  },
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical",
+    "formula": "net = (exit_open / entry_open) * (1 - sell_cost_pct(exit_date)) / (1 + buy_cost_pct) - 1"
+  },
+  "contrasts": {
+    "vs_market": "Same-window SH/SZ equal-weight observed-price open-to-open (entry oc, intervening cc, exit co). Geometric excess (1+stock)/(1+market)-1. Primary aggregation is signal-day equal-weight: mean of daily means, not pooled.",
+    "vs_same_day_unselected": "On the same gate-open signal days, eligible stocks that are not in the RS>=85 universe. This is a real same-day set, not unavailable_not_in_frozen_inputs. Report date-EW of (selected daily mean net minus unselected daily mean net) and date-EW unselected net excess vs market.",
+    "aggregation": "Primary: signal-day equal-weight of net excess. Appendix: pooled trade mean."
+  },
+  "pass_fail": {
+    "pass": "Training 10-day and 20-day date-EW net excess vs market are not systematically negative, AND the same two windows vs same-day unselected are not systematically negative. Not a composite score.",
+    "fail": "Rewrite only the gate event or only the universe definition (one mechanism), then re-contrast once. Do not scan 0.30/0.70/63/RS85, do not add a pattern detector.",
+    "blocked": "After that one rewrite the 10/20-day date-EW net excess is still systematically negative vs market, or required daily-bar fields cannot be redefined. Stop this selector; mark the goal 阻塞, not an excellent strategy.",
+    "not_claimed": "No live qualification, no clean 2023-2026 OOS, no parameter search, no 仓位/资金曲线."
+  },
+  "halt": "If kline_daily_enriched partitions for 2015-01-05 through 2022-12-31 are missing or empty, write a gap list and publish no invented numbers.",
+  "bar_source": "data/kline_daily_enriched date partitions; instruments.parquet for names and listing_date.",
+  "outputs": [
+    "docs/research/leader-universe-market-gate-v1.json",
+    "docs/research/leader-universe-market-gate-v1-analysis.json",
+    "docs/research/leader-universe-market-gate-v1-decision.md"
+  ]
+}

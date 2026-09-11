@@ -1,0 +1,36 @@
+{
+  "experiment": "production-leader-next-open-chase-audit-2016-2026-v1",
+  "decision": "stop",
+  "reason": "Reapplying the existing 2.5 percent chase boundary to the actual next open removed worse trades overall, but the relation reversed in two of the three pre-registered eras.",
+  "baseline_run": "20260908T143326722024Z",
+  "evidence": {
+    "trades": 303,
+    "rejected": {
+      "trades": 30,
+      "entry_years": 9,
+      "average_pnl": 0.0013037333,
+      "win_rate": 0.2666666667,
+      "stop_loss_share": 0.6
+    },
+    "retained": {
+      "trades": 273,
+      "average_pnl": 0.0194641832,
+      "win_rate": 0.3113553114,
+      "stop_loss_share": 0.4065934066
+    },
+    "era_direction": {
+      "2016-2018": false,
+      "2019-2022": false,
+      "2023-2026": true
+    }
+  },
+  "gate_results": {
+    "rejected_trades_min_20": true,
+    "rejected_entry_years_min_5": true,
+    "rejected_average_pnl_below_retained": true,
+    "rejected_stop_loss_share_above_retained": true,
+    "three_fixed_eras_all_directional": false
+  },
+  "stopped_variants": ["adjacent chase percentages", "gap-size buckets", "combination with another entry filter"],
+  "next_action": "Keep actual-open handling unchanged. Test one complete exit-mechanism ablation on the repaired frozen baseline rather than another entry threshold."
+}

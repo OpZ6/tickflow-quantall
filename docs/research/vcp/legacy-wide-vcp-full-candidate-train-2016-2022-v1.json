@@ -1,0 +1,43 @@
+{
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "legacy-wide-vcp-full-candidate-train-2016-2022-v1",
+  "purpose": "Measure the exact registered wide VCP defaults independently of portfolio slots and leader-only gates",
+  "hypothesis": "The wide multiscale VCP candidate stream may capture market-relative expansion outside the leader representation; measure fixed-horizon selection quality separately from default exits.",
+  "training_data_end": "2022-12-31",
+  "backtest": {
+    "strategy_id": "quants_vcp_legacy_v1",
+    "start": "2016-01-04",
+    "end": "2022-10-11",
+    "params": null,
+    "overrides": {},
+    "mode": "full"
+  },
+  "universe_suffixes": [".SH", ".SZ"],
+  "analysis": {
+    "evaluation_horizon_bars": 40,
+    "early_path_bars": [5, 10, 20],
+    "large_winner_mfe_thresholds": [0.2, 0.5, 1.0]
+  },
+  "research_role": "Descriptive training baseline; no automatic temporal-test promotion or parameter selection",
+  "required_outputs": [
+    "Signal counts, executable fills and rejection reasons under original defaults; full mode removes portfolio competition, not execution constraints.",
+    "40-session market-relative return and actual-exit return reported separately, with yearly sample sizes and Alpha.",
+    "MFE 20/50/100 percent counts and rates, signal-date concentration and repeated-symbol concentration.",
+    "Any later cup/flag overlap comparison uses the common training interval and identifies signal-date overlap separately from repeated-stock overlap. Winner counts alone are not recall without a common opportunity denominator."
+  ],
+  "decision_rules": {
+    "selection_supported": "At least 100 complete paths, positive mean 40-session market-relative return and positive means in at least four training years; otherwise descriptive evidence only.",
+    "exit_research": "If selection is supported but default realized Alpha is nonpositive, identify the responsible exit paths before proposing one structural change.",
+    "failure": "Retain all evidence; do not remove RS, trend, scale or exit thresholds by searching this result.",
+    "temporal_test": "Not authorized by this descriptive protocol. Prior 2023-2026 exposure remains recorded; a clean holdout cannot be reconstructed by renaming dates."
+  },
+  "evidence_gap": {
+    "existing_default_run": "20260908T034433432997Z",
+    "existing_mode": "position",
+    "existing_max_positions": 4,
+    "registered_full_mode_runs_found": 0,
+    "legacy_candidate_script": "scripts/analyze_vcp_breakout_candidates.py sets RS85, distance-high and entry overrides; its full mode is not the original default stream.",
+    "gate_funnel_script": "scripts/analyze_vcp_gate_funnel.py uses vcp_leader_breakout, not the wide defaults."
+  },
+  "execution": "Queue after either active cup or flag v2 run finishes; at most two concurrent research runs. No new data acquisition."
+}

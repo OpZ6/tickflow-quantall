@@ -16,7 +16,9 @@ import polars as pl
 
 from app.data_providers.normalizer import (
     normalize_adj_factors,
-    normalize_daily,
+)
+from app.data_providers.normalizer import (
+    normalize_daily as normalize_provider_daily,
 )
 from app.plugins.tushare.client import build_tushare_client
 from app.tickflow.rate_limits import chunked
@@ -59,7 +61,7 @@ def _prep_dates(raw):
 
         raw = raw.copy()
         for col in _DATE_COLS:
-            if col in raw.columns and raw[col].dtype == object:
+            if col in raw.columns and pd.api.types.is_string_dtype(raw[col].dtype):
                 raw[col] = pd.to_datetime(raw[col], format="%Y%m%d", errors="coerce").dt.date
     return raw
 
@@ -67,6 +69,22 @@ def _prep_dates(raw):
 def _get_pro():
     """创建保持原 Tushare 方法契约的 mirror-first 客户端。"""
     return build_tushare_client(timeout=_TIMEOUT)
+
+
+def _normalize_tushare_daily(raw, default_symbol: str | None = None) -> pl.DataFrame:
+    """Map Tushare daily units to the internal contract.
+
+    Tushare reports ``vol`` in lots and ``amount`` in thousand yuan.  TickFlow
+    stores daily ``volume`` in lots and ``amount`` in yuan.
+    """
+    df = normalize_provider_daily(
+        raw,
+        default_symbol=default_symbol,
+        source="tushare",
+    )
+    if not df.is_empty() and "amount" in df.columns:
+        df = df.with_columns((pl.col("amount") * 1_000.0).alias("amount"))
+    return df
 
 
 _TUSHARE_FINANCIAL_API: dict[str, str] = {
@@ -230,7 +248,7 @@ class TushareProvider:
                 logger.warning("Tushare daily 拉取失败(%d symbols): %s", len(chunk), e)
                 raw = None
             raw = _prep_dates(raw)
-            df = normalize_daily(raw, source=self.name)
+            df = _normalize_tushare_daily(raw)
             if not df.is_empty():
                 frames.append(df)
             if on_chunk_done:
@@ -246,7 +264,7 @@ class TushareProvider:
             logger.warning("Tushare daily by_date 拉取失败: %s", e)
             return pl.DataFrame()
         raw = _prep_dates(raw)
-        return normalize_daily(raw, source=self.name)
+        return _normalize_tushare_daily(raw)
 
     # ---- adj_factor ----
     def get_adj_factors(
@@ -378,7 +396,7 @@ class TushareProvider:
                 logger.warning("Tushare index_daily 拉取失败(%s): %s", sym, e)
                 raw = None
             raw = _prep_dates(raw)
-            df = normalize_daily(raw, default_symbol=sym, source=self.name)
+            df = _normalize_tushare_daily(raw, default_symbol=sym)
             if not df.is_empty():
                 frames.append(df)
         return pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()

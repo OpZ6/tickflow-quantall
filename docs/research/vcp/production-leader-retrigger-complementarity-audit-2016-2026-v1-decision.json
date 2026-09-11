@@ -1,0 +1,45 @@
+{
+  "experiment": "production-leader-retrigger-complementarity-audit-2016-2026-v1",
+  "decision": "stop_no_p3_portfolio_promotion",
+  "reason": "The retrigger branch is causally downstream of the same frozen breakout stream. Its low daily-return correlation is accompanied by only 6.77 percent average exposure, prolonged standalone drawdown and material capital conflicts with the four-position primary portfolio. It does not establish an independent or economically useful diversification source.",
+  "inputs": {
+    "primary_run": "20260908T024521089151Z",
+    "secondary_run": "20260908T050534093286Z",
+    "market_days": 2546,
+    "primary_trades": 290,
+    "secondary_trades": 74,
+    "timing_violations": 0
+  },
+  "results": {
+    "daily_return_correlation_all_days": 0.198106,
+    "daily_return_correlation_union_exposed_days": 0.20071,
+    "primary_avg_exposure": 0.2656,
+    "secondary_avg_exposure": 0.0677,
+    "both_exposed_days": 334,
+    "exposed_day_jaccard": 0.268273,
+    "combined_exposure_above_100pct_days": 242,
+    "maximum_combined_exposure": 1.9991,
+    "secondary_entries_primary_eod_four_positions": 29,
+    "secondary_entries_primary_eod_exposure_at_least_99pct": 23,
+    "secondary_symbols_ever_traded_by_primary": 38,
+    "secondary_trades_with_same_symbol_concurrent_primary_trade": 18,
+    "secondary_trades_with_prior_same_symbol_primary_exit_within_60_market_sessions": 20,
+    "primary_days_at_or_below_minus_10pct_drawdown": 978,
+    "secondary_days_at_or_below_minus_10pct_drawdown": 1579,
+    "both_at_or_below_minus_10pct_drawdown_days": 336,
+    "secondary_top_five_winner_share_of_gross_positive_pnl": 0.527176
+  },
+  "interpretation": [
+    "Return correlation near 0.20 does not prove diversification because the secondary branch is inactive much more often and is derived from the same setups.",
+    "A naive overlay would exceed 100 percent combined end-of-day exposure on 242 days; 29 of 74 secondary fills coincide with a primary end-of-day four-position book. These are descriptive conflict proxies, not a simulated combined portfolio.",
+    "The retrigger branch remains useful for explaining failed-breakout recovery, but its current evidence does not justify separate capital, a combined backtest or an additional forward strategy clock."
+  ],
+  "stop_rule_applied": "Do not search combined weights, position counts, conflict priorities, recovery parameters or portfolio allocation on this exposed interval. Keep the implementation and evidence frozen as a secondary diagnostic branch; keep forward-v1 focused on the primary breakout strategy.",
+  "next_action": "Continue the frozen primary forward observation. Reopen the retrigger branch only for genuinely unseen forward outcomes or a new causal fact, not because of low historical correlation.",
+  "evidence": [
+    "docs/research/vcp/production-leader-retrigger-complementarity-audit-2016-2026-v1.json",
+    "data/research/vcp/analysis/leader-retrigger-complementarity-2016-2026-v1.json",
+    "data/research/vcp/runs/20260908T024521089151Z/result.json",
+    "data/research/vcp/runs/20260908T050534093286Z/result.json"
+  ]
+}

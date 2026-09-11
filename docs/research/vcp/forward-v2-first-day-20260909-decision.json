@@ -1,0 +1,27 @@
+{
+  "experiment": "forward-v2-first-day-20260909",
+  "decision": "retain_frozen_rules_append_observation_only",
+  "snapshot": "data/research/vcp/forward/forward-v2/2026-09-09.json",
+  "observed_at_utc": "2026-09-09T15:53:26.590268+00:00",
+  "counts": {"candidates": 0, "entry_signal_hits": 0, "exit_signal_hits": 410, "closed_trades": 0, "open_positions": 0},
+  "first_failed_detector_gate_counts": {
+    "trend_ma_alignment": 5189,
+    "invalid_close": 290,
+    "positive_returns": 100,
+    "rs_threshold": 32,
+    "market_regime": 99,
+    "near_52_week_high": 130
+  },
+  "interpretation": "All 99 stocks that reached the market-regime gate were rejected by that frozen gate. No stock reached an executable structure. The 410 exit signals are cross-sectional rule hits, not 410 portfolio sells.",
+  "collection_level": "candidate_signal_only",
+  "qualification_use": "does_not_count_as_complete_P4_execution_evidence",
+  "code_comparison_to_frozen_archive": {
+    "reference_run": "20260908T143326722024Z",
+    "engine_equal": true,
+    "detector_and_definition": "New optional research switches exist but are false under frozen defaults; original strategy version remains forward-v2. Source bytes are not identical.",
+    "matrix_and_service": "Cache publication logic and entry execution date masking changed since archive. No replay was invoked on this zero-entry first day; future execution observations need separate version/parity accounting.",
+    "full_execution_parity_verified": false
+  },
+  "next_action": "Append the next completed market date when its production partition is available; do not overwrite this snapshot, tune on this observation, or describe it as clean holdout qualification.",
+  "known_limits": ["Historical ST/name and listing-age gaps remain as declared by snapshot.", "No executed forward trade yet.", "Calendar date advancing alone does not establish completed market data."]
+}

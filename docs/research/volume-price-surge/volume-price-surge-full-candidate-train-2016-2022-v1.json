@@ -1,0 +1,37 @@
+{
+  "base_protocol": "../vcp/production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "volume-price-surge-full-candidate-train-2016-2022-v1",
+  "purpose": "establish_the_frozen_full_candidate_alpha_and_right_tail_baseline_for_volume_price_surge",
+  "hypothesis": "An MA20 breakout with above-average volume and a bullish close captures continued demand drift that persists beyond the breakout bar.",
+  "training_data_end": "2022-12-31",
+  "backtest": {
+    "strategy_id": "volume_price_surge",
+    "start": "2016-01-04",
+    "end": "2022-10-11",
+    "params": null,
+    "overrides": {},
+    "mode": "full"
+  },
+  "universe_suffixes": [".SH", ".SZ"],
+  "analysis": {
+    "evaluation_horizon_bars": 40,
+    "early_path_bars": [5, 10, 20],
+    "large_winner_mfe_thresholds": [0.2, 0.5, 1.0]
+  },
+  "training_gate": {
+    "minimum_trades": 100,
+    "minimum_average_excess_return_held": 0.0,
+    "minimum_average_40d_excess_return": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "minimum_mfe_20pct_rate": 0.2,
+    "minimum_mfe_50pct_count": 10
+  },
+  "temporal_test_period": ["2023-01-03", "2026-09-09"],
+  "constraints": [
+    "Use the registered builtin defaults without parameter overrides.",
+    "Execute every executable candidate independently with T+1 fills and frozen costs.",
+    "Use future bars only as post-signal labels for Alpha and path analysis.",
+    "Do not inspect the temporal test unless every training gate passes.",
+    "A failed baseline rejects this representation without adjacent parameter searches."
+  ]
+}

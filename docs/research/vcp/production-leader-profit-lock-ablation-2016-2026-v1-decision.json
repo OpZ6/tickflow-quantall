@@ -1,0 +1,34 @@
+{
+  "experiment": "production-leader-profit-lock-ablation-2016-2026-v1",
+  "decision": "retain_staged_profit_lock",
+  "baseline_run": "20260908T143326722024Z",
+  "ablation_run": "20260909T022022863079Z",
+  "comparison": {
+    "staged_profit_lock": {
+      "trades": 303,
+      "annual_return": 0.118,
+      "max_drawdown": -0.2377,
+      "sharpe": 0.74,
+      "average_trade_pnl": 0.0177
+    },
+    "no_staged_profit_lock": {
+      "trades": 266,
+      "annual_return": 0.1118,
+      "max_drawdown": -0.2796,
+      "sharpe": 0.64,
+      "average_trade_pnl": 0.0206
+    },
+    "years_with_higher_no_lock_average_trade_pnl": 5,
+    "years_evaluated": 11
+  },
+  "gate_results": {
+    "minimum_trades_250": true,
+    "no_lock_annual_return_higher": false,
+    "no_lock_sharpe_higher": false,
+    "maximum_drawdown_deterioration_at_most_0_03": false,
+    "minimum_six_years_with_higher_average_trade_pnl": false
+  },
+  "interpretation": "Removing profit protection increased average winner size but lengthened holding, blocked more later candidates and worsened portfolio return, drawdown and Sharpe. The staged lock adds portfolio-level value on the frozen development history.",
+  "stopped_variants": ["profit-lock activation thresholds", "profit floors", "trailing percentages"],
+  "next_action": "Keep the staged profit lock unchanged. Test one progressive-entry method that starts at half target size and adds only after causal post-breakout confirmation."
+}

@@ -1,0 +1,88 @@
+{
+  "experiment": "production-leader-failed-retrigger-current-execution-replay-2016-2026-v1",
+  "run_id": "20260908T050534093286Z",
+  "comparison_baseline_run": "20260908T024521089151Z",
+  "decision": "accept_replay_keep_secondary_mechanism_frozen",
+  "reason": "The current causal replay preserves every old retrigger trade's symbol, signal date, entry date, exit date and exit reason. Historical stamp tax slightly lowers returns, while the method still cuts stop-loss frequency by selecting a small subset and forfeiting most of the primary breakout right tail.",
+  "execution_contract": {
+    "matching": "open_t+1",
+    "stamp_tax_policy": "a_share_historical",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10.0,
+    "max_positions": 4,
+    "position_sizing": "equal",
+    "timing_violations": 0,
+    "requested_trading_days": 2546,
+    "data_day_coverage": 1.0
+  },
+  "comparison": {
+    "current_primary_breakout": {
+      "entry_candidates": 837,
+      "trades": 290,
+      "stop_loss_count": 125,
+      "stop_loss_share": 0.431034,
+      "total_return": 2.0201,
+      "annual_return": 0.1156,
+      "max_drawdown": -0.2377,
+      "win_rate": 0.2966,
+      "profit_factor": 3.86,
+      "avg_win": 0.1581,
+      "avg_loss": 0.041,
+      "best_trade": 1.2163,
+      "avg_exposure": 0.2656
+    },
+    "current_failed_breakout_retrigger": {
+      "entry_candidates": 82,
+      "trades": 74,
+      "stop_loss_count": 16,
+      "stop_loss_share": 0.216216,
+      "total_return": 0.0037,
+      "annual_return": 0.0004,
+      "max_drawdown": -0.2258,
+      "win_rate": 0.3108,
+      "profit_factor": 2.34,
+      "avg_win": 0.0681,
+      "avg_loss": 0.0291,
+      "best_trade": 0.2813,
+      "avg_exposure": 0.0677
+    },
+    "candidate_retention": 0.097969,
+    "trade_retention": 0.255172,
+    "stop_loss_share_change": -0.214818,
+    "avg_win_change": -0.09,
+    "best_trade_change": -0.935,
+    "interpretation": "Lower drawdown is largely accompanied by much lower exposure and near-zero annual return; it is not evidence that the retrigger branch can carry the primary VCP mandate."
+  },
+  "old_run_reconciliation": {
+    "run_id": "20260907T135221128740Z",
+    "old_entry_candidates": 82,
+    "old_trades": 74,
+    "ordered_structural_trade_signatures_equal": true,
+    "signature_fields": [
+      "symbol",
+      "entry_signal_date",
+      "entry_date",
+      "exit_signal_date",
+      "exit_date",
+      "exit_reason"
+    ],
+    "old_total_return": 0.0103,
+    "current_total_return": 0.0037,
+    "explanation": "The method and trade structure did not change. Current historical stamp tax and causal execution accounting increased realized costs."
+  },
+  "runtime": {
+    "total_seconds": 3363.6368,
+    "data_load_seconds": 67.6666,
+    "strategy_signal_seconds": 3293.0665,
+    "note": "Runtime was dominated by the frozen retrigger state-machine computation, not data repair."
+  },
+  "stop_rule_applied": "Keep direct breakout as the primary entry. Preserve retrigger only as a frozen secondary research branch; do not vary its windows, pivot bands, range or volume thresholds on this exposed interval.",
+  "p1_effect": "The leader breakout, failed-breakout retrigger and wide-pool baselines now have current same-cost run evidence. Their strategy semantics still differ, so this closes execution comparability rather than proving a single-factor ranking.",
+  "evidence": [
+    "data/research/vcp/runs/20260908T050534093286Z/protocol.json",
+    "data/research/vcp/runs/20260908T050534093286Z/result.json",
+    "data/research/vcp/runs/20260908T050534093286Z/trade-audit.json",
+    "data/research/vcp/runs/20260908T024521089151Z/result.json",
+    "data/research/vcp/runs/20260907T135221128740Z/result.json"
+  ]
+}

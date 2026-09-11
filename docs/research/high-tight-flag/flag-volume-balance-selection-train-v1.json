@@ -1,0 +1,18 @@
+{
+  "experiment": "flag-volume-balance-selection-train-v1",
+  "source": "AI structural hypothesis from user high-tight-flag preference and current detector: default flag quality measures pole gain, depth and breakout volume, but not directional volume during consolidation.",
+  "exposure": "2016-2022 training repeatedly exposed. Earlier flag scale/pole/depth decompositions and failed scale restriction are known; VCP aggregate volume and delayed entry failures are known. One representation, no threshold search; local intervals do not correct the whole adaptive research history.",
+  "baseline_run": "20260909T130617820559Z",
+  "data_archive": "data/research/vcp/forward/archives/vcp-forward-v2-20260908-baseline.zip",
+  "signal_period": ["2016-01-04", "2022-10-11"],
+  "training_data_end": "2022-12-31",
+  "candidate_definition": "All executable signals from the original QuantsHighTightFlagStrategy default params and original historical-union symbols, reconstructed using the same immutable archive in both arms. Retain original primary scale and thresholds. A necessary pole-gain precheck only skips mathematically impossible detections and must match the exact detector in parity tests.",
+  "flag_boundary": "At the completed signal, use the exact original primary scale/window. Pole high is argmax(high) in the first max(8,floor(0.58*window_length)) observations. Flag inputs run from the next observed bar through the bar BEFORE signal; current breakout price and volume do not enter the balance. No hindsight swing selection or scale reselection.",
+  "score": "sum(flag volume * sign(close minus previous observed close)) / sum(flag volume). Higher is expected better: more consolidation volume occurs on rising closes. Flat closes contribute zero numerator. This captures directional volume balance, not identified investor order flow or volume effects isolated from the number of rising days.",
+  "selector": "Select score >= same-signal-date median among finite scores; keep ties and singletons. Invalid feature remains reported and unavailable to both comparison portfolios. Mean daily IC uses higher score as better.",
+  "execution": "Reuse shared independent matcher: s+1 market open to s+11 open, commission 0.0003, slippage 10 bps each side, historical stamp tax. Unfilled cash stays in its ranked group; terminal unsold positions are censored and marked, not dropped. Same archive/name-based limit flags and incomplete historical ST coverage as earlier runs.",
+  "benchmark": "Same immutable-archive gross SH/SZ daily observed-price benchmark and return-difference formula as the previous VCP short-term experiment. Event statistics are not portfolio returns or turnover.",
+  "statistics": {"calendar_block_sessions": 20, "replicates": 4000, "seed": 20260910, "local_family_size": 2},
+  "gates": {"minimum_selected": 500, "minimum_informative_dates": 100, "minimum_paired_improvement": 0.0025, "minimum_positive_broad_years": 5, "minimum_positive_paired_years": 5, "positive_mean_daily_rank_ic": true, "both_adjusted_ci_lower_bounds_positive": true},
+  "decision": "Failure stops this balance representation and sign/weight/quantile/horizon neighbors. Passing retains a research candidate requiring directional-price control and portfolio validation, never automatic qualification. Reuse complete candidate/output ledgers after this run."
+}

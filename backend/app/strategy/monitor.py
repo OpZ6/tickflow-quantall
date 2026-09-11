@@ -36,6 +36,8 @@ _SIGNAL_CN: dict[str, str] = {
     "signal_ma_golden_5_20": "MA5上穿MA20", "signal_ma_dead_5_20": "MA5下穿MA20",
     "signal_ma_golden_20_60": "MA20上穿MA60", "signal_macd_golden": "MACD金叉",
     "signal_macd_dead": "MACD死叉", "signal_ma20_breakout": "突破MA20",
+    "signal_low_volatility_trend_entry": "进入低波动趋势状态",
+    "signal_oversold_reversal_confirmed": "超跌反转确认",
     "signal_ma20_breakdown": "跌破MA20", "signal_ma5_breakout": "突破MA5",
     "signal_ma5_breakdown": "跌破MA5", "signal_ma10_breakout": "突破MA10",
     "signal_ma10_breakdown": "跌破MA10", "signal_n_day_high": "60日新高",

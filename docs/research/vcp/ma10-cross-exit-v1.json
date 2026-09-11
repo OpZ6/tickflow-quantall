@@ -1,0 +1,24 @@
+{
+  "experiment": "vcp-ma10-cross-exit-v1",
+  "thought": "VCP leader breakout. Same 321 upper-half fills and original exits. One added sell: close crosses below MA10, next market open.",
+  "hypothesis": "The production MA20 trend exit is slow for a 2-20 day swing. Crossing below MA10 should cut more give-back without scanning MA length.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "breakout close in the upper half of the signal-day range",
+    "n_train_cited": 321,
+    "exits": "original plan stop / MA20 / profit lock / stop-loss",
+    "not_included": ["hold-low", "8% peak-close drawdown", "two-bar no-demand"]
+  },
+  "change": {
+    "id": "close_cross_below_ma10",
+    "definition": "MA10 is the mean of the last 10 market-session closes including today; all 10 bars must exist. Fire when previous close >= previous MA10 and today's close < today's MA10. Exit at the next market open if that session is strictly before the original exit. A stock hole on a market session, incomplete MA10, nonpositive volume, or one-price limit-down does not roll. Training does not read bars after 2022-12-31."
+  },
+  "metric": {
+    "primary": "independent win_rate, profit_factor, avg_pnl vs the same 321 original-exit pnls",
+    "validation_if_keep": "same overlay on 2023-2026 completed upper-half fills, labeled exposure"
+  },
+  "pass_fail": {
+    "pass": "training avg_pnl not below the 321-trade upper-half original-exit baseline and remains positive",
+    "fail": "Drop this sell. Baseline stays 321 original-exit upper-half. Next VCP edit still one mechanism."
+  }
+}

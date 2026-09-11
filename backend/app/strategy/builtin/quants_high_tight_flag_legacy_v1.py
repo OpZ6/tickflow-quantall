@@ -15,6 +15,12 @@ META = {
     "basic_filter": {"enabled": False},
     "params": [
         {
+            "id": "exclude_short_scale",
+            "label": "排除短尺度(研究)",
+            "type": "bool",
+            "default": False,
+        },
+        {
             "id": "pole_gain_min",
             "label": "旗杆涨幅",
             "type": "float",

@@ -1,0 +1,26 @@
+{
+  "experiment": "production-vcp-continuous-dimension-audit-train-2016-2022-v1",
+  "source": "data/research/vcp/gate-funnel/production-vcp-gate-funnel-train-2016-2022-v1/opportunities.parquet",
+  "purpose": "test_core_vcp_mechanisms_on_the_full_training_opportunity_universe_without_selecting_thresholds",
+  "training_period": ["2016-01-04", "2022-12-30"],
+  "dimensions": {
+    "trend_stack_margin": "higher_is_expected_better",
+    "rs_percentile": "higher_is_expected_better",
+    "range_contraction_ratio": "lower_is_expected_better",
+    "volume_dry_ratio": "lower_is_expected_better"
+  },
+  "method": "Within each signal year, rank every dimension into five equal-frequency groups in its expected direction. Compare the expected-best quintile with the expected-worst quintile and inspect the complete quintile path.",
+  "direction_gate": {
+    "minimum_valid_opportunities": 50000,
+    "minimum_best_minus_worst_40d_alpha": 0.01,
+    "minimum_positive_spread_years": 5,
+    "minimum_monotonic_alpha_steps": 3,
+    "minimum_50pct_leader_enrichment": 1.2
+  },
+  "constraints": [
+    "Use only 2016-2022 opportunities and signal-time features; future paths are labels only.",
+    "Do not choose cutoffs, combine dimensions, weight scores or create a trading strategy from this audit.",
+    "Future up, sideways and down market outcomes are attribution only, never applicability filters.",
+    "A failed dimension is stopped without trying alternate windows or transformations."
+  ]
+}

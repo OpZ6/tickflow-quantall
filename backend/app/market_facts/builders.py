@@ -234,6 +234,22 @@ def _build_trading_calendar(
     return FactBatch(DatasetId.TRADING_CALENDAR, as_of_date, frame)
 
 
+def build_trading_calendar_history_batch(
+    as_of_date: str,
+    payload: dict[str, Any],
+    run_id: str,
+    *,
+    ingested_at: str | None = None,
+) -> FactBatch:
+    """Build one point-in-time calendar partition from a recorded provider range."""
+    return _build_trading_calendar(
+        as_of_date,
+        {"tushare": payload},
+        run_id,
+        ingested_at or datetime.now(UTC).isoformat(timespec="seconds"),
+    )
+
+
 def _build_market_breadth(
     trade_date: str,
     sources: dict[str, dict[str, Any]],

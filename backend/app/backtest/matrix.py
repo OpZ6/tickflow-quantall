@@ -721,7 +721,11 @@ def load_market_data_matrix_from_parquet(
         | _normalize_matrix_cache_fields(cache_field_columns or field_columns)
     )
     normalized_symbols = _normalize_symbol_request(symbols)
-    instrument_fingerprint = _instrument_fingerprint(instruments).hex()
+    share_history, share_history_fingerprint = _load_matrix_share_history(root, build_fields)
+    instrument_fingerprint = hashlib.blake2b(
+        _instrument_fingerprint(instruments) + share_history_fingerprint,
+        digest_size=20,
+    ).hexdigest()
 
     partitioning = pads.partitioning(
         pa.schema([("date", pa.date32())]),
@@ -743,6 +747,7 @@ def load_market_data_matrix_from_parquet(
             requested_fields,
             normalized_symbols,
             instruments,
+            share_history,
             batch_size=batch_size,
             cache_status="disabled",
             cancel_event=cancel_event,
@@ -808,6 +813,8 @@ def load_market_data_matrix_from_parquet(
             effective_end,
             requested_fields,
         )
+    if cache_path.exists():
+        shutil.rmtree(cache_path)
 
     _build_market_data_matrix_cache_from_dataset(
         dataset,
@@ -818,6 +825,7 @@ def load_market_data_matrix_from_parquet(
         build_fields,
         normalized_symbols,
         instruments,
+        share_history,
         build_partitions,
         instrument_fingerprint,
         profile_generation,
@@ -868,6 +876,43 @@ def _normalize_matrix_cache_fields(
     return frozenset(str(name) for name in field_columns if str(name) not in ignored)
 
 
+def _load_matrix_share_history(
+    parquet_root: Path,
+    wanted_fields: frozenset[str],
+) -> tuple[pl.DataFrame | None, bytes]:
+    share_fields = {"total_shares", "float_shares"}
+    if not (wanted_fields & share_fields) and "turnover_rate" not in wanted_fields:
+        return None, b"no-share-history-requested"
+    path = parquet_root.parent / "financials" / "shares" / "part.parquet"
+    if not path.is_file():
+        return None, b"no-share-history"
+    stat = path.stat()
+    fingerprint = hashlib.blake2b(digest_size=20)
+    fingerprint.update(str(path.resolve()).encode("utf-8"))
+    fingerprint.update(int(stat.st_size).to_bytes(8, "little", signed=False))
+    fingerprint.update(int(stat.st_mtime_ns).to_bytes(8, "little", signed=False))
+    try:
+        frame = pl.read_parquet(path)
+    except Exception as exc:
+        raise ValueError(f"cannot read historical share capital: {path}") from exc
+    available_date = next(
+        (name for name in ("effective_date", "announce_date", "period_end") if name in frame.columns),
+        None,
+    )
+    available_shares = share_fields & set(frame.columns)
+    if available_date is None or "symbol" not in frame.columns or not available_shares:
+        raise ValueError("historical share capital is missing symbol/date/share columns")
+    history = frame.select(
+        pl.col("symbol").cast(pl.Utf8),
+        pl.col(available_date).cast(pl.Date, strict=False).alias("available_date"),
+        *(
+            pl.col(name).cast(pl.Float64, strict=False)
+            for name in sorted(available_shares)
+        ),
+    ).filter(pl.col("symbol").is_not_null() & pl.col("available_date").is_not_null())
+    return history, fingerprint.digest()
+
+
 def _normalize_symbol_request(symbols: list[str] | None) -> tuple[str, ...] | None:
     if symbols is None:
         return None
@@ -891,6 +936,7 @@ def _resolve_matrix_storage_fields(
     dataset: pads.Dataset,
     wanted_fields: frozenset[str],
     instruments: pl.DataFrame | None,
+    share_history: pl.DataFrame | None,
 ) -> tuple[list[str], list[str], list[str]]:
     available = set(dataset.schema.names)
     parquet_fields = sorted(
@@ -901,20 +947,25 @@ def _resolve_matrix_storage_fields(
         and _arrow_numeric(dataset.schema.field(name).type)
     )
     instrument_columns = set(instruments.columns) if instruments is not None else set()
+    historical_share_columns = (
+        set(share_history.columns) if share_history is not None else set()
+    )
     matrix_fields = set(parquet_fields)
-    vector_fields = {
-        name
-        for name in ("total_shares", "float_shares")
-        if name in wanted_fields
-        and name in instrument_columns
-        and name not in parquet_fields
-    }
+    vector_fields: set[str] = set()
+    needed_share_fields = {"total_shares", "float_shares"} & set(wanted_fields)
+    if "turnover_rate" in wanted_fields and "turnover_rate" not in parquet_fields:
+        needed_share_fields.add("float_shares")
+    for name in needed_share_fields:
+        if name in parquet_fields:
+            continue
+        if name in historical_share_columns:
+            matrix_fields.add(name)
+        elif name in instrument_columns:
+            vector_fields.add(name)
     if "raw_close" in wanted_fields:
         matrix_fields.add("raw_close")
     if "turnover_rate" in wanted_fields:
         matrix_fields.add("turnover_rate")
-        if "turnover_rate" not in parquet_fields and "float_shares" in instrument_columns:
-            vector_fields.add("float_shares")
     if "price_limit_pct" in wanted_fields:
         matrix_fields.add("price_limit_pct")
     resolved = matrix_fields | vector_fields
@@ -932,6 +983,7 @@ def _build_market_data_matrix_from_dataset(
     wanted_fields: frozenset[str],
     symbols: tuple[str, ...] | None,
     instruments: pl.DataFrame | None,
+    share_history: pl.DataFrame | None,
     *,
     batch_size: int,
     cache_status: str,
@@ -951,6 +1003,7 @@ def _build_market_data_matrix_from_dataset(
         dataset,
         wanted_fields,
         instruments,
+        share_history,
     )
     shape = (len(actual_dates), len(actual_symbols))
     arrays = {
@@ -984,6 +1037,8 @@ def _build_market_data_matrix_from_dataset(
         fields,
         wanted_fields,
         instruments,
+        actual_dates,
+        share_history,
         seen,
         parquet_fields=parquet_fields,
         vector_fields=vector_fields,
@@ -1054,6 +1109,7 @@ def _build_market_data_matrix_cache_from_dataset(
     wanted_fields: frozenset[str],
     symbols: tuple[str, ...] | None,
     instruments: pl.DataFrame | None,
+    share_history: pl.DataFrame | None,
     source_partitions: Mapping[str, str],
     instrument_fingerprint: str,
     profile_generation: str,
@@ -1094,6 +1150,7 @@ def _build_market_data_matrix_cache_from_dataset(
             dataset,
             wanted_fields,
             instruments,
+            share_history,
         )
         shape = (len(actual_dates), len(actual_symbols))
         array_specs, field_specs, total_bytes = _matrix_binary_layout(
@@ -1143,6 +1200,8 @@ def _build_market_data_matrix_cache_from_dataset(
             fields,
             wanted_fields,
             instruments,
+            actual_dates,
+            share_history,
             seen,
             parquet_fields=parquet_fields,
             vector_fields=vector_fields,
@@ -1214,17 +1273,30 @@ def _build_market_data_matrix_cache_from_dataset(
             encoding="utf-8",
         )
         _raise_if_matrix_cancelled(cancel_event)
-        try:
-            os.replace(temporary, cache_path)
-        except OSError:
-            if (cache_path / "manifest.json").exists():
-                shutil.rmtree(temporary, ignore_errors=True)
-            else:
-                raise
+        _publish_matrix_cache(temporary, cache_path)
     except BaseException:
         _close_matrix_memmaps(mapped)
         shutil.rmtree(temporary, ignore_errors=True)
         raise
+
+
+def _publish_matrix_cache(temporary: Path, cache_path: Path) -> None:
+    """Publish a complete cache after transient Windows directory locks."""
+    last_error: PermissionError | None = None
+    for attempt in range(10):
+        try:
+            os.replace(temporary, cache_path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+            if (cache_path / "manifest.json").exists():
+                shutil.rmtree(temporary, ignore_errors=True)
+                return
+            if cache_path.exists():
+                shutil.rmtree(cache_path)
+            if attempt < 9:
+                time.sleep(0.5)
+    raise last_error  # type: ignore[misc]
 
 
 def _matrix_binary_layout(
@@ -1398,6 +1470,8 @@ def _populate_matrix_derived_arrays(
     fields: dict[str, np.ndarray],
     wanted_fields: frozenset[str],
     instruments: pl.DataFrame | None,
+    actual_dates: list[date],
+    share_history: pl.DataFrame | None,
     seen: np.ndarray,
     *,
     parquet_fields: list[str],
@@ -1422,6 +1496,14 @@ def _populate_matrix_derived_arrays(
             fields[name][:] = values[0]
         else:
             np.copyto(fields[name], values, where=seen)
+    _write_historical_share_matrices(
+        fields,
+        actual_dates,
+        actual_symbols,
+        share_history,
+        wanted_fields,
+        seen,
+    )
     if "raw_close" in wanted_fields and "raw_close" not in parquet_fields:
         np.copyto(fields["raw_close"], arrays["close"])
     if "turnover_rate" in wanted_fields and "turnover_rate" not in parquet_fields:
@@ -1445,6 +1527,51 @@ def _populate_matrix_derived_arrays(
                 float_shares,
             )
     return names, latest_limits
+
+
+def _write_historical_share_matrices(
+    fields: dict[str, np.ndarray],
+    actual_dates: list[date],
+    actual_symbols: list[str],
+    share_history: pl.DataFrame | None,
+    wanted_fields: frozenset[str],
+    seen: np.ndarray,
+) -> None:
+    if share_history is None or share_history.is_empty():
+        return
+    requested = {"total_shares", "float_shares"} & set(fields)
+    if "turnover_rate" in wanted_fields and "float_shares" in fields:
+        requested.add("float_shares")
+    requested &= set(share_history.columns)
+    if not requested:
+        return
+    date_axis = np.asarray(actual_dates, dtype="datetime64[D]").astype(np.int64)
+    grouped = {
+        key[0] if isinstance(key, tuple) else key: frame.sort("available_date")
+        for key, frame in share_history.partition_by("symbol", as_dict=True).items()
+    }
+    for asset_id, symbol in enumerate(actual_symbols):
+        history = grouped.get(symbol)
+        if history is None or history.is_empty():
+            for name in requested:
+                fields[name][:, asset_id] = np.nan
+            continue
+        history = history.unique("available_date", keep="last").sort("available_date")
+        history_dates = np.asarray(
+            history["available_date"].to_numpy(), dtype="datetime64[D]"
+        ).astype(np.int64)
+        positions = np.searchsorted(history_dates, date_axis, side="right") - 1
+        has_history = positions >= 0
+        for name in requested:
+            target = fields[name][:, asset_id]
+            target[:] = np.nan
+            values = history[name].to_numpy().astype(np.float64, copy=False)
+            if has_history.any():
+                selected = values[positions[has_history]]
+                valid = np.isfinite(selected) & (selected > 0)
+                target_rows = np.flatnonzero(has_history)[valid]
+                target[target_rows] = selected[valid].astype(np.float32, copy=False)
+            target[~seen[:, asset_id]] = np.nan
 
 
 def _write_turnover_rate_matrix(
@@ -2332,6 +2459,7 @@ def build_market_matrix_from_signals(
     reference_price: np.ndarray | None = None,
     minute_exit_trigger: bool = False,
     entry_price_override: np.ndarray | None = None,
+    entry_fill_time_mask: np.ndarray | None = None,
 ) -> MarketMatrix:
     """Combine base data and strategy signals into the matcher input matrix."""
     if entry_delay_bars not in (0, 1) or exit_delay_bars not in (0, 1):
@@ -2346,7 +2474,18 @@ def build_market_matrix_from_signals(
         signals.entry_signal_code,
         present,
         entry_delay_bars,
+        # A close-T entry order is valid only for the next market session.
+        # Missing asset data must not carry a stale order to a later asset bar.
+        skip_missing_bars=False,
     )
+    if entry_fill_time_mask is not None:
+        fill_mask = np.asarray(entry_fill_time_mask, dtype=bool)
+        if fill_mask.shape != (market.shape[0],):
+            raise ValueError("entry_fill_time_mask must match the market time axis")
+        outside = ~fill_mask
+        entry[outside] = 0
+        entry_signal_time[outside] = -1
+        entry_signal_code[outside] = -1
     exit_, exit_signal_time, exit_signal_code = _delay_signal_matrix(
         signals.exit,
         signals.exit_signal_code,
@@ -2862,13 +3001,19 @@ def _delay_signal_matrix(
     codes: np.ndarray,
     present: np.ndarray,
     delay_bars: int,
+    *,
+    skip_missing_bars: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     shape = raw.shape
     output = np.zeros(shape, dtype=np.uint8)
     signal_time = np.full(shape, -1, dtype=np.int32)
     signal_code = np.full(shape, -1, dtype=np.int16)
     for asset_id in range(shape[1]):
-        rows = np.flatnonzero(present[:, asset_id])
+        rows = (
+            np.flatnonzero(present[:, asset_id])
+            if skip_missing_bars
+            else np.arange(shape[0], dtype=np.int32)
+        )
         if len(rows) <= delay_bars:
             continue
         source_rows = rows[: len(rows) - delay_bars] if delay_bars else rows
@@ -3645,7 +3790,7 @@ def build_basic_filter_mask(market: MarketDataMatrix, config: dict) -> np.ndarra
         (),
         config,
         lambda: _build_basic_filter_mask_uncached(market, config),
-        key_parts=cache.market_token(market),
+        key_parts=("raw_cap_v2", cache.market_token(market)),
     )
 
 
@@ -3660,8 +3805,16 @@ def _build_basic_filter_mask_uncached(market: MarketDataMatrix, config: dict) ->
     if config.get("price_max") is not None:
         mask &= close <= float(config["price_max"])
 
-    _apply_bound(mask, close * _optional_field(market, "total_shares"), config, "market_cap")
-    _apply_bound(mask, close * _optional_field(market, "float_shares"), config, "float_cap")
+    # Enriched close is adjusted; capitalization uses unadjusted price. Raw-only
+    # panels historically omit raw_close and already expose raw prices as close.
+    cap_price = market.fields.get("raw_close", close)
+    for prefix, share_field in (("market_cap", "total_shares"), ("float_cap", "float_shares")):
+        if config.get(f"{prefix}_min") is None and config.get(f"{prefix}_max") is None:
+            continue
+        shares = _optional_field(market, share_field)
+        values = cap_price * shares
+        mask &= np.isfinite(values) & (cap_price > 0) & (shares > 0)
+        _apply_bound(mask, values, config, prefix)
     _apply_bound(mask, _required_field_for_bound(market, config, "amount"), config, "amount")
     _apply_bound(mask, _optional_field(market, "turnover_rate"), config, "turnover")
 

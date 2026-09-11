@@ -633,11 +633,12 @@ class KlineRepository:
                 )
                 start_full = latest - timedelta(days=300)
                 read_cols = [c for c in ["symbol", "date", "open", "high", "low", "close",
-                                         "volume", "amount", "raw_close", "raw_high", "raw_low"]
+                                         "volume", "amount", "turnover_rate", "raw_close", "raw_high", "raw_low"]
                              if c in df_latest.columns]
                 lf = (
                     scan_enriched_parquet(self._enriched_glob)
                     .filter(pl.col("date") >= start_full)
+                    .unique(subset=["symbol", "date"], keep="last")
                     .sort(["symbol", "date"])
                 )
 
@@ -822,7 +823,9 @@ class KlineRepository:
                 logger.info("live agg step start: slice history cache")
                 df_hist = hist_all.filter(
                     (pl.col("date") >= start_60d) & (pl.col("date") <= latest)
-                ).select(needed).sort(["symbol", "date"])
+                ).select(needed).unique(
+                    subset=["symbol", "date"], keep="last",
+                ).sort(["symbol", "date"])
                 logger.info("live agg step done: slice history cache rows=%d (%.2fs)", len(df_hist), time.perf_counter() - step)
 
                 state_cols = [
@@ -2488,7 +2491,9 @@ class KlineRepository:
 
         from app.indicators.pipeline import ENRICHED_STORAGE_COLS
         storage_cols = [c for c in ENRICHED_STORAGE_COLS if c in df.columns]
-        df_storage = df.select(storage_cols).sort(["symbol"])
+        df_storage = df.select(storage_cols).unique(
+            subset=["symbol", "date"], keep="last",
+        ).sort(["symbol"])
         base = self.store.data_dir / table
         ds = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
         out = base / f"date={ds}" / "part.parquet"

@@ -1,0 +1,30 @@
+{
+  "experiment": "stage2-base-context-v3-semantic-v1",
+  "registered_before_implementation": true,
+  "question": "Can a relational stage-two context exclude reversal, vertical repricing and persistently loose paths before any local VCP contraction is evaluated?",
+  "scope": "Semantic representation only. It reads raw causal bars from broad-candidate dates but does not reuse the broad detector's legs, pivot, score or outcomes.",
+  "fixed_method": {
+    "context": "Exclude the completed signal bar, use the preceding 150 bars, and split them into three equal chronological blocks.",
+    "prior_advance": "The middle-block median close must exceed the early-block median close.",
+    "gain_retention": "The late-block median must remain above the early-block median, and its minimum close must remain above the midpoint between the early median and the pre-signal high.",
+    "continuous_advance": "The three largest positive daily log returns combined must contribute less than all remaining positive daily returns combined, so a few repricing bars cannot define the trend.",
+    "settling": "Median daily high-low range relative to close must be lower in the late block than in the middle block.",
+    "demand": "The completed signal bar must close above the preceding 20-bar high, in the upper half of its own range, on volume above the preceding 20-bar median.",
+    "supported": "All five relational conditions hold. No score or tunable neighborhood is used."
+  },
+  "fresh_blind_packet": {
+    "years": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    "per_year": {"supported": 2, "unsupported": 2},
+    "exclusions": "All 88 cases from the three earlier semantic packets are excluded.",
+    "selection": "Ascending SHA-256 of symbol, signal date, scale and sealed status; future outcomes are not part of selection.",
+    "hidden_until_labels_frozen": ["representation status", "symbol", "calendar date", "future return", "future excursion"]
+  },
+  "semantic_acceptance": {
+    "supported_classic_or_partial_rate_min": 0.75,
+    "supported_nonclassic_rate_max": 0.25,
+    "supported_minus_unsupported_classic_or_partial_min": 0.30
+  },
+  "stop_rule": "If any gate fails, stop this context representation and do not vary block size, gain-retention boundary, concentration rule, range comparison or demand rule on exposed samples.",
+  "next_if_pass": "Combine this frozen context with a separately defined local contraction representation, then validate the combined v3 semantics on another fresh packet before any time-split return diagnostic.",
+  "next_if_fail": "Stop price-path context engineering and retain human-visible semantic review as a research aid while moving the v3 hypothesis to a different causal input."
+}

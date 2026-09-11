@@ -6,6 +6,7 @@ so importing optional adapters never fails when a token is not configured.
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ import pandas as pd
 
 pro = None
 _DAILY_FRAME_CACHE: dict[str, pd.DataFrame] = {}
+_HISTORY_WORKERS = 8
+_INDEX_WORKERS = 8
 
 INDEXES = {
     "000985.CSI": "鍏ˋ鎸囨暟", "000001.SH": "涓婅瘉鎸囨暟", "000300.SH": "娌繁300",
@@ -58,17 +61,18 @@ def _classify_board(code: str) -> str:
 def _fetch_indexes(trade_date: str) -> dict[str, dict[str, Any]]:
     end = datetime.strptime(trade_date, "%Y%m%d")
     start = (end - timedelta(days=120)).strftime("%Y%m%d")
-    result: dict[str, dict[str, Any]] = {}
-    for code, name in INDEXES.items():
+
+    def load(item: tuple[str, str]) -> tuple[str, dict[str, Any] | None]:
+        code, name = item
         try:
             frame = pro.index_daily(ts_code=code, start_date=start, end_date=trade_date)  # type: ignore[union-attr]
         except Exception:
-            continue
+            return code, None
         if frame is None or frame.empty:
-            continue
+            return code, None
         frame = frame.sort_values("trade_date").reset_index(drop=True)
         close = pd.to_numeric(frame["close"], errors="coerce")
-        result[code] = {
+        return code, {
             "name": name,
             "close": float(close.iloc[-1]),
             "pct_chg": float(frame.get("pct_chg", pd.Series([0])).iloc[-1] or 0),
@@ -78,7 +82,11 @@ def _fetch_indexes(trade_date: str) -> dict[str, dict[str, Any]]:
             "ma10": round(float(close.tail(10).mean()), 2),
             "ma20": round(float(close.tail(20).mean()), 2),
         }
-    return result
+
+    workers = min(_INDEX_WORKERS, len(INDEXES))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        rows = list(pool.map(load, INDEXES.items()))
+    return {code: row for code, row in rows if row is not None}
 
 
 def _fetch_daily_market(trade_date: str, frame: pd.DataFrame) -> dict[str, Any]:
@@ -120,30 +128,42 @@ def _fetch_daily_market(trade_date: str, frame: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+def _parallel_daily_frames(dates: list[str]) -> list[tuple[str, pd.DataFrame]]:
+    def load(date: str) -> tuple[str, pd.DataFrame]:
+        try:
+            return date, _daily_frame(date)
+        except Exception:
+            return date, pd.DataFrame()
+
+    workers = min(_HISTORY_WORKERS, len(dates))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(load, dates))
+
+
 def _fetch_ad_history(trade_date: str, days: int = 60) -> dict[str, Any]:
     end = datetime.strptime(trade_date, "%Y%m%d")
     records: list[dict[str, Any]] = []
     cursor = end
     while len(records) < days:
-        if cursor.weekday() < 5:
-            date = cursor.strftime("%Y%m%d")
-            try:
-                frame = _daily_frame(date)
-            except Exception:
-                frame = pd.DataFrame()
-            if not frame.empty:
-                pct = pd.to_numeric(frame.get("pct_chg"), errors="coerce").fillna(0)
-                amount = pd.to_numeric(frame.get("amount"), errors="coerce").fillna(0)
-                records.append({
-                    "date": date,
-                    "up": int((pct > 0).sum()),
-                    "down": int((pct < 0).sum()),
-                    "flat": int((pct == 0).sum()),
-                    "total_amount_yi": float(amount.sum()) / 100000,
-                })
-        cursor -= timedelta(days=1)
-        if (end - cursor).days > days * 5:
+        batch: list[str] = []
+        while len(batch) < days - len(records) and (end - cursor).days <= days * 5:
+            if cursor.weekday() < 5:
+                batch.append(cursor.strftime("%Y%m%d"))
+            cursor -= timedelta(days=1)
+        if not batch:
             break
+        for date, frame in _parallel_daily_frames(batch):
+            if frame.empty:
+                continue
+            pct = pd.to_numeric(frame.get("pct_chg"), errors="coerce").fillna(0)
+            amount = pd.to_numeric(frame.get("amount"), errors="coerce").fillna(0)
+            records.append({
+                "date": date,
+                "up": int((pct > 0).sum()),
+                "down": int((pct < 0).sum()),
+                "flat": int((pct == 0).sum()),
+                "total_amount_yi": float(amount.sum()) / 100000,
+            })
     records.sort(key=lambda row: row["date"])
     records = records[-days:]
     running = 0

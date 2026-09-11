@@ -1,0 +1,33 @@
+{
+  "experiment": "production-leader-moneyflow-sponsorship-audit-2017-2026-v1",
+  "type": "causal_mechanism_audit",
+  "registered_before_analysis": true,
+  "question": "Does active-order sponsorship during the final contraction or on the breakout day distinguish durable VCP demand from failed release?",
+  "candidate_inputs": [
+    "data/research/vcp/candidate-labels/source-vcp-2017-2020-v1/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-v4/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-2024-2026-v1/discovery-candidates.parquet"
+  ],
+  "moneyflow_input": {
+    "path": "D:/quantall/apps/quants/data/warehouse/ppgu_unified.duckdb",
+    "table": "dwd_moneyflow",
+    "access": "read_only",
+    "coverage_observed_before_registration": "2015-01-05 through 2026-09-07; 11,337,431 rows; signal-date coverage 94.59%-100% by candidate year",
+    "contract": "Tushare moneyflow field family: volumes in round lots and amounts in ten-thousand yuan. Use net_mf_amount divided by the sum of same-row order-size amounts, so the feature is dimensionless and does not depend on daily-bar amount units.",
+    "provenance_limit": "2015 through part of 2026 is retained under quanti.stock_moneyflow_raw lineage; later rows are tushare.pro.moneyflow. The audit is isolated research evidence, not a TickFlow production dataset publication."
+  },
+  "causal_features": {
+    "final_leg_net_ratio": "Sum net_mf_amount from the recorded pivot date through the trading day before the signal, divided by the sum of all buy/sell size-bucket amounts in the same rows.",
+    "final_leg_positive_day_share": "Share of covered final-leg sessions with positive net_mf_amount.",
+    "signal_day_net_ratio": "Signal-day net_mf_amount divided by the sum of signal-day buy/sell size-bucket amounts; known at the completed close before next-open execution."
+  },
+  "future_labels_only": ["true_breakout_10_7_20", "return_40d", "mfe_40d"],
+  "method": "Compare continuous distributions, yearly pairwise ranking probability, annual-within-year quintiles, and Spearman association with 40-day return. No cutoff, score, classifier, strategy rule or portfolio backtest.",
+  "decision_rule": "Support the mechanism only if at least one feature is directionally positive overall, positive in at least 7 of 10 candidate years, has top-minus-bottom annual-within-year quintile breakout rate of at least 5 percentage points, and has positive Spearman association with 40-day return. Otherwise stop the moneyflow gate/rank direction without window variants.",
+  "anti_overfit": [
+    "Do not test 3/5/10/20-day rolling windows.",
+    "Do not select absolute net-flow thresholds or top-percentile cutoffs.",
+    "Do not combine the three features into a score.",
+    "Do not run a portfolio backtest unless the pre-registered mechanism gate passes."
+  ]
+}

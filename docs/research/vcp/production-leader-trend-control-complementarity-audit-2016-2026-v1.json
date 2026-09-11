@@ -1,0 +1,36 @@
+{
+  "experiment": "production-leader-trend-control-complementarity-audit-2016-2026-v1",
+  "purpose": "P3_primary_vcp_vs_existing_simple_trend_control_overlap",
+  "research_question": "Does the existing simple trend breakout provide a distinct and economically usable portfolio path relative to the frozen VCP leader strategy?",
+  "inputs": {
+    "primary_run": "20260908T024521089151Z",
+    "secondary_run": "20260908T061825556454Z",
+    "required_date_alignment": true,
+    "required_timing_violations": 0
+  },
+  "source_classification": "different_signal_family_existing_simple_control",
+  "known_before_overlap_audit": {
+    "secondary_total_return": -0.9982,
+    "secondary_win_rate": 0.2097,
+    "secondary_average_trade_return": -0.0351,
+    "secondary_first_below_half_initial_capital": "2016-08-01",
+    "interpretation_constraint": "Later low overlap or correlation can be caused by capital depletion and minimum-lot rejection. It cannot be treated as diversification."
+  },
+  "pre_registered_metrics": [
+    "daily return correlation on all dates and the union of exposed dates",
+    "exposed-day intersection and Jaccard overlap",
+    "combined end-of-day exposure above 100 percent",
+    "control entries when the primary portfolio ends the day at four positions",
+    "same-symbol concurrent trade intervals",
+    "drawdown overlap below minus 10 percent",
+    "control top-five winner share of gross positive PnL"
+  ],
+  "decision_rules": [
+    "Do not promote or combine a control that loses economic viability under the frozen current contract.",
+    "Do not repair the observed result by changing its window, volume threshold, stop, exit, score, holding period or position count.",
+    "Do not attribute the result solely to VCP structure because the methods also differ in market regime, relative strength, filters, ranking and exits.",
+    "Use overlap only to classify the control and close the current P3 comparison; do not optimize combined weights."
+  ],
+  "stop_condition": "Run the descriptive overlap once. If the control is economically nonviable, stop this default strategy family and retain it only as a null reference.",
+  "development_note": "This uses exposed history and a catastrophically depleted control path. It is not an independent alpha estimate or a basis for parameter repair."
+}

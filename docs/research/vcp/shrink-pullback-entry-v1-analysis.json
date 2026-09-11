@@ -1,0 +1,35 @@
+{
+  "experiment": "vcp-shrink-pullback-entry-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\shrink-pullback-entry-v1.json",
+  "training_2016_2022": {
+    "signals": 321,
+    "filled": 105,
+    "missed": 210,
+    "blocked": 6,
+    "baseline": {
+      "n_trades": 321,
+      "win_rate": 0.267913,
+      "profit_factor": 3.94,
+      "avg_pnl": 0.0124,
+      "avg_win": 0.150736,
+      "avg_loss": 0.038225
+    },
+    "variant": {
+      "n_trades": 105,
+      "win_rate": 0.219048,
+      "profit_factor": 3.42,
+      "avg_pnl": -0.001113,
+      "avg_win": 0.120419,
+      "avg_loss": 0.035202
+    },
+    "delta": {
+      "avg_pnl": -0.013513,
+      "win_rate": -0.048865,
+      "profit_factor": -0.52
+    },
+    "rule": "drop"
+  },
+  "rule": "drop",
+  "gaps": []
+}

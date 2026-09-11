@@ -60,6 +60,20 @@ export const BUILTIN_SIGNAL_DEFINITIONS: BuiltinSignalDefinition[] = [
     description: '收盘价向上突破 MA20，常用于趋势突破买点。',
   },
   {
+    id: 'signal_low_volatility_trend_entry',
+    name: '进入低波动趋势状态',
+    kind: 'entry',
+    category: '趋势',
+    description: '首次同时满足正动量、低波动和位于 MA20 上方。',
+  },
+  {
+    id: 'signal_oversold_reversal_confirmed',
+    name: '超跌反转确认',
+    kind: 'entry',
+    category: '反转',
+    description: 'RSI 处于超跌区时，价格上涨并首次收复 MA5 的确认事件。',
+  },
+  {
     id: 'signal_ma20_breakdown',
     name: '跌破MA20',
     kind: 'exit',

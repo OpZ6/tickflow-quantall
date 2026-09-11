@@ -24,7 +24,7 @@ _BUILTIN_SPECS: tuple[SourceSpec, ...] = (
         collector_type="provider",
         credentials_ref="TUSHARE_TOKEN",
         dependency_modules=("tushare",),
-        timeout_seconds=60,
+        timeout_seconds=180,
         rate_limit_rpm=180,
     ),
     SourceSpec("akshare", False, "legacy:akshare_scraper", "market", display_name="AKShare", timeout_seconds=90),

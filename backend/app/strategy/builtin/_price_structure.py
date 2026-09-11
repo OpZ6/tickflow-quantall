@@ -172,13 +172,22 @@ def launch_pullback_support(
     )
     launch_volume = _latest_prior_launch(market, launch, market.volume, lookback)
     tolerance = float(params.get("support_tolerance", 0.02))
-    entry = (
+    qualifying_pullback = (
         np.isfinite(launch_support)
         & (np.abs(change) <= float(params.get("pullback_change_abs_max", 0.02)))
         & (market.volume <= launch_volume * float(params.get("pullback_volume_ratio_max", 0.60)))
         & (market.low <= launch_support * (1.0 + tolerance))
         & (market.close >= launch_support * (1.0 - tolerance))
     )
+    launch_sequence = np.cumsum(launch, axis=0)
+    entry = np.zeros(market.shape, dtype=bool)
+    last_entered_launch = np.zeros(market.shape[1], dtype=launch_sequence.dtype)
+    for bar in range(market.shape[0]):
+        take = qualifying_pullback[bar] & (
+            launch_sequence[bar] > last_entered_launch
+        )
+        entry[bar, take] = True
+        last_entered_launch[take] = launch_sequence[bar, take]
     exit_ = np.isfinite(launch_support) & (
         market.close < launch_support * (1.0 - float(params.get("failure_buffer", 0.02)))
     )

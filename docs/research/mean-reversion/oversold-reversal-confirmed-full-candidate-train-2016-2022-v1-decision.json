@@ -1,0 +1,47 @@
+{
+  "experiment": "oversold-reversal-confirmed-full-candidate-train-2016-2022-v1",
+  "decision": "stop_default_representation",
+  "run_id": "20260909T082053251990Z",
+  "boundary_evidence": {
+    "maximum_entry_date": "2022-12-29",
+    "entries_after_training_end": 0,
+    "timing_violations": 0
+  },
+  "training_result": {
+    "trades": 6849,
+    "average_absolute_return": 0.007376,
+    "average_excess_return_held": -0.004797,
+    "average_5d_excess_return": 0.000319,
+    "average_10d_excess_return": 0.001583,
+    "average_20d_excess_return": 0.003100,
+    "average_40d_excess_return": 0.000130,
+    "positive_40d_alpha_years": 3,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 2356,
+    "mfe_50pct_count": 371,
+    "mfe_100pct_count": 37,
+    "stop_loss_share": 0.508687
+  },
+  "training_checks": {
+    "minimum_trades_500": true,
+    "nonnegative_average_excess_return_held": false,
+    "nonnegative_average_40d_excess_return": true,
+    "minimum_four_positive_alpha_years": false,
+    "positive_5d_excess_return": true
+  },
+  "fixed_40d_market_outcome_attribution": {
+    "down_alpha": -0.013057,
+    "sideways_alpha": -0.005331,
+    "up_alpha": 0.010833
+  },
+  "interpretation": "The default confirmation has a tiny positive average fixed-horizon Alpha but lacks yearly stability and loses Alpha under its executable exit. Its positive future-up bucket is ex-post attribution and cannot define applicability.",
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "RSI thresholds",
+    "positive-day thresholds",
+    "moving-average confirmation windows",
+    "holding-period selection",
+    "stop and exit variants"
+  ],
+  "evidence": "data/research/vcp/runs/20260909T082053251990Z/trade-path-analysis.json"
+}

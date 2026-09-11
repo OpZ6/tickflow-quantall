@@ -1,0 +1,44 @@
+{
+  "experiment": "volume-price-surge-full-candidate-train-2016-2022-v1",
+  "decision": "reject_default_representation_stop_adjacent_variants",
+  "run_id": "20260909T140604162872Z",
+  "strategy_id": "volume_price_surge",
+  "training_result": {
+    "trades": 57553,
+    "average_excess_return_held": -0.009217,
+    "average_40d_excess_return": -0.016539,
+    "positive_40d_alpha_years": 0,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 16007,
+    "mfe_20pct_rate": 0.278126,
+    "mfe_50pct_count": 3056,
+    "mfe_100pct_count": 471,
+    "stop_loss_share": 0.315726
+  },
+  "training_checks": {
+    "minimum_trades_100": true,
+    "nonnegative_average_excess_return_held": false,
+    "nonnegative_average_40d_alpha": false,
+    "minimum_four_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_20": true,
+    "minimum_mfe_50pct_count_10": true
+  },
+  "market_outcome_40d_alpha": {
+    "down": -0.016901,
+    "sideways": -0.015479,
+    "up": -0.0175
+  },
+  "interpretation": [
+    "The default MA20-breakout plus volume-ratio plus bullish-candle representation produces negative fixed-40-day Alpha in every training year and every market-outcome bucket, averaging -1.65 percent.",
+    "The right tail is material in absolute terms (3,056 paths above 50 percent MFE and 471 above 100 percent), but default exits realize little of it and selection itself is negative, so exit tuning alone cannot rescue this representation.",
+    "This is a clean failure of the frozen default representation and is consistent with the already-registered abnormal-demand family failure; it does not create a new mechanism."
+  ],
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "vol_ratio_min thresholds",
+    "MA20 window variants",
+    "volume-percentile and cooldown variants"
+  ],
+  "next_action": "Reject the default volume_price_surge representation and stop adjacent volume, MA-window, percentile, and cooldown parameter variants. The mechanism family remains recoverable only with new independent mechanism evidence.",
+  "evidence": "data/research/vcp/runs/20260909T140604162872Z/trade-path-analysis.json"
+}

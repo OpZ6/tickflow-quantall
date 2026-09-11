@@ -1,0 +1,11 @@
+{
+  "protocol": "docs\\research\\post-exit-path-diagnostic-v1.json",
+  "run_id": "20260909T135940874097Z",
+  "n": 4298,
+  "source_metadata_verified": true,
+  "immutable_snapshot": false,
+  "median_minimum_low_return": -0.09251172625818382,
+  "recovered_on_close_share": 0.8485342019543974,
+  "loss10_before_recovery_share": 0.19264774313634248,
+  "loss10_same_bar_as_recovery_share": 0.00046533271288971617
+}

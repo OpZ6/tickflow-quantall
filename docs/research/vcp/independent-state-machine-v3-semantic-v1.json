@@ -1,0 +1,31 @@
+{
+  "experiment": "independent-state-machine-v3-semantic-v1",
+  "registered_before_implementation": true,
+  "question": "Can an independent causal state machine generate semantically faithful VCP breakout candidates directly from the SH/SZ trend universe?",
+  "universe": "All SH/SZ daily securities passing the existing causal stage-two trend and RS>=85 context on each completed day from 2018 through 2025. The broad VCP detector, its candidates, legs, pivot and scores are not inputs.",
+  "fixed_state_machine": {
+    "supply_peak": "The highest completed high in the 120 bars before the signal, at least 10 bars old.",
+    "prior_advance": "The supply peak must be at least 30 percent above the preceding 63-bar low and the rise must span at least 20 completed bars.",
+    "base": "The decline after the peak may not exceed 35 percent.",
+    "wave_confirmation": "A trough or recovery is confirmed only after price reverses by the larger of 3 percent or twice the median daily high-low range, capped at 12 percent.",
+    "contraction": "At least two completed peak-trough-recovery waves are required; the latest wave must be shallower and have lower mean down-session volume than its predecessor.",
+    "right_edge": "No pre-signal close may exceed the supply peak, and the last pre-signal close must be in the upper half of the latest contraction.",
+    "demand": "The completed signal bar must be the first close above the supply peak, close in its upper half, and trade more volume than the preceding 20-bar median.",
+    "causality": "All extrema are confirmed only from completed bars. Any execution would occur no earlier than the next valid market open."
+  },
+  "fresh_blind_packet": {
+    "years": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    "per_year": {"supported": 2, "unsupported_trend_breakout": 2},
+    "exclusions": "All identities used by the three earlier semantic packets are excluded.",
+    "selection": "Ascending SHA-256 within year and sealed status; future outcomes are neither computed nor used.",
+    "hidden_until_labels_frozen": ["state-machine status", "symbol", "calendar date"]
+  },
+  "semantic_acceptance": {
+    "supported_classic_or_partial_rate_min": 0.75,
+    "supported_nonclassic_rate_max": 0.25,
+    "supported_minus_unsupported_classic_or_partial_min": 0.30
+  },
+  "stop_rule": "If the packet cannot be formed or any semantic gate fails, stop this state machine without changing lookbacks, thresholds, wave count, volume rule or trend context on exposed samples.",
+  "next_if_pass": "Register the frozen detector as a separate matrix-native v3 research strategy and run one fixed development/diagnostic time split before any forward clock.",
+  "next_if_fail": "Do not return to forward-v2 factor additions; retain forward-v2 for daily use and reconsider the VCP representation at the conceptual level."
+}

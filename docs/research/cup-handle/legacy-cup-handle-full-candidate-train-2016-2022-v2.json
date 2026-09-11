@@ -1,0 +1,7 @@
+{
+  "base_protocol": "legacy-cup-handle-full-candidate-train-2016-2022-v1.json",
+  "experiment": "legacy-cup-handle-full-candidate-train-2016-2022-v2",
+  "training_data_end": "2022-12-31",
+  "backtest": {"end": "2022-10-11"},
+  "boundary_note": "Conservative final-signal purge accommodates the existing 80-calendar-day label read allowance inside 2022. This buffer is not a replacement for trading-bar labels. Incomplete 40-bar paths fail analysis. Detector equivalence remains a prerequisite to launch."
+}

@@ -1,0 +1,24 @@
+{
+  "protocol": "production-leader-no-rs-no-ma-exit-train-2016-2022-v1.json",
+  "run_id": "20260909T041632402656Z",
+  "decision": "stop_without_temporal_test",
+  "temporal_test_allowed": false,
+  "incremental_results": {
+    "executed_trades": 801,
+    "average_absolute_return": 0.000350534,
+    "average_equal_weight_excess_return_held": 0.002724117,
+    "positive_alpha_years": 3,
+    "mfe_at_least_20pct_count": 230,
+    "mfe_at_least_20pct_rate": 0.287141074,
+    "average_40_session_excess_return": 0.014844349
+  },
+  "gates": {
+    "minimum_incremental_trades": {"required": 100, "actual": 801, "passed": true},
+    "minimum_incremental_average_excess_return_held": {"required": 0.0, "actual": 0.002724117, "passed": true},
+    "minimum_positive_alpha_years": {"required": 4, "actual": 3, "passed": false},
+    "minimum_incremental_mfe_20pct_rate": {"required": 0.2, "actual": 0.287141074, "passed": true}
+  },
+  "interpretation": "Removing MA20 exits recovers positive average alpha, but the result is not stable across enough training years. The method fails its registered gate and cannot enter the temporal test.",
+  "stop_rule_applied": "Do not test MA periods, delays, buffers, confirmations or RS thresholds.",
+  "evidence": "data/research/vcp/runs/20260909T041632402656Z/trade-path-analysis.json"
+}

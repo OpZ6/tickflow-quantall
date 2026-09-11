@@ -1,0 +1,14 @@
+{
+  "base_protocol": "production-middle-expansion-train-2016-2022-v1.json",
+  "experiment": "production-middle-expansion-test-2023-2026-v1",
+  "purpose": "temporal_test_of_frozen_middle_expansion_candidate_branch",
+  "evaluation_role": "temporal_test_not_unseen_holdout",
+  "evaluation_priority": "Evaluate frozen incremental candidates primarily by SH/SZ equal-weight market-relative return and by down, sideways and up 40-session market outcomes. Absolute return is diagnostic only.",
+  "frozen_rule_source": "production-middle-expansion-train-2016-2022-v1.json",
+  "development_note": "The project has previously inspected this market period, so this is a separated temporal test rather than a pristine holdout. Its result may reject the branch but must not tune it.",
+  "backtest": {
+    "start": "2023-01-03",
+    "end": "2026-06-30"
+  },
+  "stop_rule": "Report the frozen rule once and stop. Do not alter the branch from temporal-test outcomes."
+}

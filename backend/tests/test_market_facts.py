@@ -15,6 +15,7 @@ from app.market_facts.adapters import load_tickflow_market_aggregate
 from app.market_facts.builders import (
     build_initial_fact_batches,
     build_sector_breadth_history_batches,
+    build_trading_calendar_history_batch,
 )
 from app.market_facts.registry import DatasetId, get_dataset, get_route
 from app.market_facts.repository import MarketFactRepository
@@ -181,6 +182,33 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
             },
         },
     }
+
+
+def test_build_trading_calendar_history_batch_preserves_as_of_boundary() -> None:
+    payload = {
+        "scraped_at": "2026-09-07T10:00:00+08:00",
+        "trade_calendar": {
+            "records": [
+                {"exchange": "SSE", "cal_date": "20150101", "is_open": 0},
+                {
+                    "exchange": "SSE",
+                    "cal_date": "20150105",
+                    "is_open": 1,
+                    "pretrade_date": "20141231",
+                },
+            ]
+        },
+    }
+
+    batch = build_trading_calendar_history_batch(
+        "20260907", payload, "calendar-history-test"
+    )
+
+    assert batch.dataset_id == DatasetId.TRADING_CALENDAR
+    assert batch.trade_date == date(2026, 9, 7)
+    assert batch.frame["trade_date"].to_list() == [date(2015, 1, 1), date(2015, 1, 5)]
+    assert batch.frame["as_of_date"].unique().to_list() == [date(2026, 9, 7)]
+    assert batch.frame["is_open"].to_list() == [False, True]
 
 
 def _signal_tables() -> dict[str, dict]:

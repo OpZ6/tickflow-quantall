@@ -1,0 +1,49 @@
+{
+  "experiment": "production-leader-pivot-failure-exit-2016-2026-v1",
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "purpose": "exit_method_mechanism_test",
+  "hypothesis": "A VCP breakout is a claim that demand has accepted price above the pivot. If the first completed post-entry bars close back below that same pivot, the claim has failed and exiting next open should reduce no-follow losses without truncating leaders that immediately expand.",
+  "unique_change": "Keep the frozen candidate stream, entry, ranking, market regime, 5% hard stop, MA20 exit, 40-bar maximum hold, staged profit locks, costs and portfolio rules. Add a next-open exit after any completed post-breakout close below that setup's pivot.",
+  "causal_contract": "The pivot is frozen from the signal-time VCP structure. The breakout bar cannot trigger the added exit. Only later completed closes can emit an exit signal, which is filled at the next tradable open.",
+  "success_gate": {
+    "minimum_trades": 250,
+    "maximum_timing_violations": 0,
+    "minimum_average_loss_reduction": 0.005,
+    "minimum_average_win_retention_ratio": 0.90,
+    "maximum_drawdown_deterioration": 0.03
+  },
+  "baseline_reference": {
+    "run_id": "20260907T123519390606Z",
+    "average_loss": 0.0409,
+    "average_win": 0.1645,
+    "max_drawdown": -0.2592
+  },
+  "stop_condition": "Run this thesis-level exit once. If loss reduction requires sacrificing the right-tail gate, stop this rule; do not add buffers, confirmation days, or pivot percentages on the exposed interval.",
+  "universe_date": "2015-12-31",
+  "universe_mode": "historical_union",
+  "sample_size": 0,
+  "data_directory": "",
+  "backtest": {
+    "strategy_id": "vcp_pivot_failure_exit",
+    "symbols": null,
+    "start": "2016-01-04",
+    "end": "2026-06-30",
+    "params": null,
+    "overrides": {},
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.0005,
+    "slippage_bps": 10.0,
+    "max_positions": 4,
+    "max_exposure_pct": 1.0,
+    "initial_capital": 1000000.0,
+    "position_sizing": "equal",
+    "mode": "position",
+    "asset_type": "stock",
+    "minute_fill": false,
+    "regime_filter": null
+  },
+  "development_note": "The entire interval is exposed development data. This is a method diagnosis, not independent validation or live qualification."
+}

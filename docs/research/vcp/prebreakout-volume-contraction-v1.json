@@ -1,0 +1,21 @@
+{
+  "experiment": "vcp-prebreakout-volume-contraction-v1",
+  "thought": "VCP contraction: supply dries up before the break. Same fills and two-bar exits. One filter on pre-breakout volume.",
+  "hypothesis": "If the 5 market sessions before the breakout bar trade less volume than the prior 20-session mean, the pivot is a contraction rather than a noisy high. That subset should have higher avg_pnl / 盈亏比 than the full current baseline.",
+  "baseline": {
+    "run_id": "20260908T024521089151Z",
+    "exits": "recorded exits plus two-bar never-+3%",
+    "note": "breakout-day 放量 filter was dropped"
+  },
+  "change": {
+    "id": "prebreakout_5d_volume_lt_20d_mean",
+    "definition": "Keep the fill if mean volume of the 5 market sessions immediately before entry_signal_date < mean volume of the 20 market sessions before entry_signal_date. Holes do not roll; those trades are not in the variant."
+  },
+  "metric": {
+    "primary": "independent-trade win_rate, profit_factor, avg_pnl vs full current baseline"
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below baseline.",
+    "fail": "Drop this filter. Next edit still in the four thoughts (entry 回踩/企稳 or a sell)."
+  }
+}

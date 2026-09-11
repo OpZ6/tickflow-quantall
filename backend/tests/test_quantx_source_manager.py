@@ -143,6 +143,7 @@ def test_source_description_separates_readiness_dimensions(
         (ModuleNotFoundError("sdk"), "dependency"),
         (RuntimeError("HTTP 401 token invalid"), "authentication"),
         (RuntimeError("HTTP 429 rate limit"), "rate_limit"),
+        (RuntimeError("访问接口频率超限(1次/分钟)"), "rate_limit"),
         (ConnectionError("network unavailable"), "network"),
         (ValueError("bad payload"), "parse"),
     ],

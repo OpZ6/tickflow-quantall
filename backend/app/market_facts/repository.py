@@ -1,8 +1,9 @@
 """Read access to canonical non-OHLCV market facts."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import polars as pl
 
@@ -37,6 +38,83 @@ class MarketFactRepository:
 
     def get_market_breadth(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.MARKET_BREADTH_DAILY, trade_date)
+
+    def get_security_listing_snapshot(self, snapshot_date: date) -> pl.DataFrame:
+        """Read one explicit observation snapshot, not a historical universe."""
+        return self._read_date(DatasetId.SECURITY_LISTING_HISTORY, snapshot_date)
+
+    def get_security_name_snapshot(self, snapshot_date: date) -> pl.DataFrame:
+        """Read reconstructed intervals; callers must enforce knowledge cutoffs."""
+        return self._read_date(DatasetId.SECURITY_NAME_HISTORY, snapshot_date)
+
+    def get_security_names_at(
+        self, symbols: list[str], *, snapshot_date: date, cutoff: datetime,
+        allow_reconstructed: bool = False,
+    ) -> pl.DataFrame:
+        """Resolve an explicit snapshot without current-name or future fallback."""
+        from app.market_facts.security_history import resolve_security_names
+
+        return resolve_security_names(
+            self.get_security_name_snapshot(snapshot_date), symbols, cutoff=cutoff,
+            allow_reconstructed=allow_reconstructed,
+        )
+
+    def get_daily_security_eligibility(
+        self,
+        symbols: list[str],
+        *,
+        day: date,
+        listing_snapshot_date: date,
+        name_snapshot_date: date,
+        calendar_as_of: date,
+        cutoff: datetime,
+        exclude_new_days: int = 0,
+        exclude_st: bool = True,
+        allow_reconstructed_names: bool = False,
+    ) -> pl.DataFrame:
+        """Resolve one universe day from explicit fact versions only."""
+        if cutoff.tzinfo is None:
+            raise ValueError("cutoff must have a timezone")
+        if cutoff.astimezone(ZoneInfo("Asia/Shanghai")).date() != day:
+            raise ValueError("cutoff Beijing date must equal eligibility day")
+        listings = self.get_security_listing_snapshot(listing_snapshot_date)
+        names = self.get_security_names_at(
+            symbols,
+            snapshot_date=name_snapshot_date,
+            cutoff=cutoff,
+            allow_reconstructed=allow_reconstructed_names,
+        )
+        calendars: list[pl.DataFrame] = []
+        if exclude_new_days > 0 and not listings.is_empty():
+            relevant = listings.filter(pl.col("symbol").is_in(symbols))
+            for exchange in relevant["exchange"].drop_nulls().unique().to_list():
+                exchange_rows = relevant.filter(pl.col("exchange") == exchange)
+                starts = exchange_rows["list_date"].drop_nulls()
+                start = min(starts) if len(starts) else day
+                calendars.append(
+                    self.get_trading_calendar(
+                        start,
+                        day,
+                        exchange=exchange,
+                        as_of=calendar_as_of,
+                    )
+                )
+        calendar = (
+            pl.concat(calendars)
+            if calendars
+            else self._empty(DatasetId.TRADING_CALENDAR)
+        )
+        from app.market_facts.security_history import resolve_daily_security_eligibility
+
+        return resolve_daily_security_eligibility(
+            listings,
+            names,
+            calendar,
+            symbols,
+            day=day,
+            exclude_new_days=exclude_new_days,
+            exclude_st=exclude_st,
+        )
 
     def get_market_liquidity(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.MARKET_LIQUIDITY_DAILY, trade_date)

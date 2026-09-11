@@ -1,0 +1,71 @@
+{
+  "study": "source-vcp-fundamental-growth-audit-2021-2023-v1",
+  "question": "Do point-in-time reported growth, profitability, or their latest changes distinguish successful VCP breakouts from failures without selecting a threshold?",
+  "candidate_input": "data/research/vcp/candidate-labels/source-vcp-v3-fundamental-v1/discovery-candidates.parquet",
+  "analysis_output": "data/research/vcp/candidate-labels/source-vcp-v3-fundamental-v1/fundamental-growth-analysis.json",
+  "generator": "scripts/analyze_vcp_fundamental_growth.py",
+  "sample": {
+    "signal_range": [
+      "2021-09-07",
+      "2023-12-29"
+    ],
+    "candidates": 1258,
+    "symbols": 927,
+    "target": "true_breakout_10_7_20",
+    "target_rate": 0.3052464228934817,
+    "fundamental_level_coverage": [
+      0.9737678855325914,
+      0.9960254372019078
+    ],
+    "fundamental_change_coverage": [
+      0.8942766295707473,
+      0.9165341812400636
+    ],
+    "lookahead_rows": 0
+  },
+  "method": "Compare continuous medians and the common-language probability that a successful-breakout observation is greater than a failed-breakout observation, overall and by signal year. No cutoff, model, portfolio simulation, or parameter selection is performed.",
+  "main_results": {
+    "revenue_yoy": {
+      "winner_median": 9.9350866591,
+      "failure_median": 12.3654130059,
+      "probability_winner_greater": 0.4832054522476981
+    },
+    "net_income_yoy": {
+      "winner_median": 5.96,
+      "failure_median": 5.01,
+      "probability_winner_greater": 0.5001923527749893
+    },
+    "roe": {
+      "winner_median": 3.51,
+      "failure_median": 3.76,
+      "probability_winner_greater": 0.48794037082907693
+    },
+    "revenue_growth_acceleration": {
+      "winner_median": -0.8336832628999991,
+      "failure_median": -1.10517166045,
+      "probability_winner_greater": 0.5083789983433159
+    },
+    "profit_growth_acceleration": {
+      "winner_median": -3.0000000000000027,
+      "failure_median": -2.13,
+      "probability_winner_greater": 0.48902583031048696
+    }
+  },
+  "cross_year_finding": "No level or change feature has a stable direction across 2021, 2022, and 2023. Gross margin is the clearest reversal: probability_winner_greater is 0.565 in 2021, 0.416 in 2022, and 0.531 in 2023.",
+  "data_contract": {
+    "availability": "A row is usable only when announce_date is strictly earlier than signal_date.",
+    "source": "isolated local_financial full-market period snapshots backed by AkShare/Eastmoney",
+    "revision_limit": "A period snapshot may expose a later restatement in place of the original filing. Its later announcement date delays availability and avoids lookahead, but the reconstructed historical state may be stale or incomplete.",
+    "production_store_limit": "data/financials/metrics/part.parquet is broad only in 2026; the isolated research cache is not promoted into the production financial store."
+  },
+  "industry_history_probe": {
+    "date": "2026-09-07",
+    "current_snapshot": "data/ext_data/ext_hy_ths/part.parquet has 5567 unique symbols but mode=snapshot and no historical membership dates.",
+    "tushare_index_classify": "entitlement_denied",
+    "tushare_index_member_all": "entitlement_denied",
+    "conclusion": "Current industry labels must not be backfilled into historical candidates."
+  },
+  "decision": "stop_single_factor_fundamental_gates",
+  "interpretation": "The available evidence does not support adding a minimum revenue growth, profit growth, ROE, margin, or one-report acceleration threshold to VCP. This rejects threshold filtering on these isolated variables; it does not claim that the complete SEPA fundamental and industry-leadership thesis is false.",
+  "next_direction": "Keep the frozen VCP entry structure. Treat reported fundamentals as descriptive candidate evidence, not a gate. Historical industry leadership remains disabled until a dated membership source is available; continue method research with relative stock leadership and portfolio-level exposure/risk rather than threshold variants."
+}

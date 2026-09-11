@@ -22,7 +22,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.indicators.pipeline import run_pipeline
+from app.indicators.pipeline import filter_halt_days, run_pipeline
 from app.config import settings
 from app.services import index_sync, instrument_sync, kline_sync, preferences as _prefs
 from app.tickflow.capabilities import Cap, CapabilitySet
@@ -39,9 +39,8 @@ def _prune_partial_enriched_partitions(daily_dir: Path, enriched_dir: Path) -> l
 
     自选实时路径会在全市场 enriched 生成前提前创建当日分区 (只有几只自选),
     仅按日期目录计数比较会把它误判为完整分区而跳过计算, 造成日K缺失与
-    均线错误。同日 enriched 行数 < daily 行数即判定为部分分区: 删除后
-    run_pipeline(new_dates_only=True) 会把它们当"新日期"全市场补齐, 与
-    data_integrity.prune_enriched_partitions 的修复语义一致。
+    均线错误。enriched 按契约会过滤停牌占位行，因此行数少于 raw 不能单独
+    证明覆盖不全；只有过滤合法停牌后的预期证券集合仍有缺失才删除分区。
     daily 同日分区不存在 (今日日K尚未同步) 时不处理, 留给当日正常流程。
     """
     import shutil
@@ -63,10 +62,40 @@ def _prune_partial_enriched_partitions(daily_dir: Path, enriched_dir: Path) -> l
         if not daily_part.exists():
             continue
         e_rows, d_rows = _rows(part), _rows(daily_part)
-        if e_rows >= 0 and d_rows > 0 and e_rows < d_rows:
+        if e_rows < 0 or d_rows <= 0 or e_rows >= d_rows:
+            continue
+        try:
+            daily = pl.read_parquet(daily_part / "*.parquet")
+            expected = set(filter_halt_days(daily).get_column("symbol").to_list())
+            actual = set(
+                pl.read_parquet(part / "*.parquet", columns=["symbol"])
+                .get_column("symbol")
+                .to_list()
+            )
+        except Exception:  # noqa: BLE001
+            continue
+        if expected - actual:
             shutil.rmtree(part, ignore_errors=True)
             pruned.append(part.stem.split("=")[1])
     return pruned
+
+
+def _classify_missing_enriched_dates(
+    daily_dates: list[str], enriched_dates: list[str]
+) -> tuple[bool, bool]:
+    """Return ``(full_rebuild, forward_incremental)`` for raw-only dates.
+
+    Only dates strictly after the latest enriched partition can use the normal
+    incremental history prefix.  A gap before or inside the existing range
+    needs a full rebuild so path-dependent stored fields retain full context;
+    otherwise a later symbol-only recomputation can recreate a pruned partition
+    with just that symbol subset.
+    """
+    if not enriched_dates:
+        return False, bool(daily_dates)
+    missing = set(daily_dates) - set(enriched_dates)
+    full_rebuild = any(value <= enriched_dates[-1] for value in missing)
+    return full_rebuild, bool(missing) and not full_rebuild
 
 
 def _prune_stale_price_partitions(
@@ -457,16 +486,9 @@ def run_now(
     if daily_days > prev_enriched_days and enriched_exists:
         daily_dates = sorted(d.stem.split("=")[1] for d in daily_dir.glob("date=*"))
         enriched_dates = sorted(d.stem.split("=")[1] for d in enriched_dir.glob("date=*"))
-        earliest_enriched = enriched_dates[0]
-        latest_enriched = enriched_dates[-1]
-        new_dates = set(daily_dates) - set(enriched_dates)
-        if new_dates:
-            # 有新日期早于 enriched 最早日期 → 往前扩展
-            if any(d < earliest_enriched for d in new_dates):
-                backward_extension = True
-            # 有新日期晚于 enriched 最晚日期 → 往后新增
-            if any(d > latest_enriched for d in new_dates):
-                forward_incremental = True
+        backward_extension, forward_incremental = _classify_missing_enriched_dates(
+            daily_dates, enriched_dates
+        )
 
     def _enriched_batch_progress(cur: int, tot: int) -> None:
         emit("compute_enriched", 65 + int(23 * cur / tot),

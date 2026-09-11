@@ -1,0 +1,20 @@
+{
+  "base_protocol": "production-leader-no-rs-gate-train-2016-2022-v1.json",
+  "experiment": "production-leader-no-rs-no-ma-exit-train-2016-2022-v1",
+  "purpose": "test_whether_ma20_exit_mismatches_the_broadened_vcp_candidate_stream",
+  "hypothesis": "The broadened candidate cohort develops more slowly: its MA20 exits realize negative alpha while the same trades have positive 40-session alpha. Remove the MA20 signal exit entirely while retaining the causal hard stop, staged profit lock and 40-session cap.",
+  "single_change_from_no_rs_parent": "disable_signal_exit: false -> true",
+  "backtest": {
+    "params": {"rs_min": 0.0, "disable_signal_exit": true},
+    "start": "2016-01-04",
+    "end": "2022-12-30"
+  },
+  "acceptance": {
+    "minimum_incremental_trades": 100,
+    "minimum_incremental_average_excess_return_held": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "years_evaluated": 7,
+    "minimum_incremental_mfe_20pct_rate": 0.2
+  },
+  "stop_rule": "Run one frozen 2023-2026 temporal test only if every training gate passes. Do not try MA30, MA40, MA50, delays, buffers, confirmations or RS thresholds."
+}

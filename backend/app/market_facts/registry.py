@@ -10,6 +10,8 @@ import polars as pl
 
 
 class DatasetId(StrEnum):
+    SECURITY_LISTING_HISTORY = "security_listing_history"
+    SECURITY_NAME_HISTORY = "security_name_history"
     TRADING_CALENDAR = "trading_calendar"
     MARKET_BREADTH_DAILY = "market_breadth_daily"
     MARKET_LIQUIDITY_DAILY = "market_liquidity_daily"
@@ -62,6 +64,36 @@ def _schema(fields: dict[str, pl.DataType]) -> Mapping[str, pl.DataType]:
 
 DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
     {
+        DatasetId.SECURITY_LISTING_HISTORY: DatasetSpec(
+            dataset_id=DatasetId.SECURITY_LISTING_HISTORY,
+            description="Observed snapshot of reconstructed security listing events",
+            schema_version=2,
+            primary_key=("as_of_date", "security_id"),
+            partition_keys=("as_of_date",),
+            required_columns=("as_of_date", "security_id", "source_symbol", "symbol", "exchange", "source_status"),
+            storage_schema=_schema({
+                "as_of_date": pl.Date, "symbol": pl.String, "name": pl.String,
+                "security_id": pl.String, "source_symbol": pl.String,
+                "exchange": pl.String, "list_date": pl.Date, "delist_date": pl.Date,
+                "source_status": pl.String,
+            }),
+            field_units=MappingProxyType({}), freshness="as_of_date",
+        ),
+        DatasetId.SECURITY_NAME_HISTORY: DatasetSpec(
+            dataset_id=DatasetId.SECURITY_NAME_HISTORY,
+            description="Reconstructed name intervals with announcement and observation dates",
+            schema_version=1,
+            primary_key=("as_of_date", "symbol", "valid_from"),
+            partition_keys=("as_of_date",),
+            required_columns=("as_of_date", "symbol", "valid_from", "name", "coverage_until"),
+            storage_schema=_schema({
+                "as_of_date": pl.Date, "symbol": pl.String, "name": pl.String,
+                "valid_from": pl.Date, "valid_to_exclusive": pl.Date,
+                "ann_date": pl.Date, "available_from": pl.Date,
+                "coverage_until": pl.Date, "is_st_name": pl.Boolean,
+            }),
+            field_units=MappingProxyType({}), freshness="as_of_date",
+        ),
         DatasetId.TRADING_CALENDAR: DatasetSpec(
             dataset_id=DatasetId.TRADING_CALENDAR,
             description="Point-in-time exchange trading calendar",
@@ -474,6 +506,12 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
 
 ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
     {
+        DatasetId.SECURITY_LISTING_HISTORY: SourceRoute(
+            DatasetId.SECURITY_LISTING_HISTORY, ("security_history_snapshot",),
+        ),
+        DatasetId.SECURITY_NAME_HISTORY: SourceRoute(
+            DatasetId.SECURITY_NAME_HISTORY, ("security_history_snapshot",),
+        ),
         DatasetId.TRADING_CALENDAR: SourceRoute(
             DatasetId.TRADING_CALENDAR,
             ("tushare", "tickflow_enriched_aggregate", "tickflow_published_fact"),

@@ -160,6 +160,8 @@ class StrategyDataContext:
     daily_history: pl.DataFrame | None = None
     market: Any | None = None
     cache_key: str | None = None
+    # Optional caller-owned sink; currently supported by matrix snapshot screening.
+    screening_trace: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -1319,6 +1321,11 @@ class StrategyEngine:
             build_matrix_score,
         )
 
+        trace = context.screening_trace
+        if trace is not None:
+            trace.clear()
+            trace.update(scope="unavailable", as_of=str(as_of), strategy_id=strategy_id, rows=[])
+
         source_panel = context.history
         market = context.market
         if market is None:
@@ -1367,7 +1374,14 @@ class StrategyEngine:
         snapshot_fn = getattr(strategy.matrix_strategy, "screen_snapshot", None)
         snapshot_signals, candidate_details = None, None
         if callable(snapshot_fn):
-            snapshot_signals, candidate_details = snapshot_fn(market, params, target_time)
+            trace_fn = getattr(strategy.matrix_strategy, "screen_snapshot_with_trace", None)
+            detector_trace = {} if trace is not None and callable(trace_fn) else None
+            if detector_trace is not None:
+                snapshot_signals, candidate_details = trace_fn(
+                    market, params, target_time, detector_trace
+                )
+            else:
+                snapshot_signals, candidate_details = snapshot_fn(market, params, target_time)
 
         signals = MatrixStrategyPipeline().run(
             strategy.matrix_strategy,
@@ -1402,9 +1416,33 @@ class StrategyEngine:
         )
         candidate_mask = entry_active.astype(bool)
         candidate_scores = signals.score
+        trace_by_symbol = {}
         if candidate_details is not None:
             candidate_mask = np.array([symbol in candidate_details for symbol in market.symbols])
-            candidate_mask &= build_basic_filter_mask(market, basic_filter)[target_time]
+            basic_allowed = build_basic_filter_mask(market, basic_filter)[target_time]
+            if trace is not None:
+                for asset_id, symbol in enumerate(market.symbols):
+                    stage = "eligible_candidate"
+                    if not candidate_mask[asset_id]:
+                        stage = "strategy_no_candidate"
+                    elif not basic_allowed[asset_id]:
+                        stage = "basic_filter"
+                    elif asset_mask is not None and not asset_mask[asset_id]:
+                        stage = "pool_filter"
+                    trace_by_symbol[symbol] = {
+                        "symbol": symbol,
+                        "stage": stage,
+                        "detector_reason": (detector_trace or {})
+                        .get("detector_reasons", {})
+                        .get(symbol),
+                    }
+                trace.update(
+                    scope="matrix_snapshot_candidate_pipeline",
+                    detector_subreasons_available=detector_trace is not None,
+                    detector_reason_semantics=(detector_trace or {}).get("reason_semantics"),
+                    rows=list(trace_by_symbol.values()),
+                )
+            candidate_mask &= basic_allowed
             if asset_mask is not None:
                 candidate_mask &= asset_mask
             universe = np.zeros(market.shape, dtype=bool)
@@ -1434,6 +1472,8 @@ class StrategyEngine:
             symbol = market.symbols[int(asset_id)]
             row = row_by_symbol.get(symbol)
             if row is None:
+                if symbol in trace_by_symbol:
+                    trace_by_symbol[symbol]["stage"] = "missing_current_row"
                 continue
             score = float(candidate_scores[target_time, int(asset_id)])
             details = (candidate_details or {}).get(symbol, {})
@@ -1444,6 +1484,13 @@ class StrategyEngine:
         )
         limit = self._result_limit(strategy, overrides)
         selected_rows = ranked if limit is None else ranked[:limit]
+        if trace_by_symbol:
+            displayed = {str(row["symbol"]) for _, row in selected_rows}
+            for _, row in ranked:
+                symbol = str(row["symbol"])
+                trace_by_symbol[symbol]["stage"] = (
+                    "displayed_candidate" if symbol in displayed else "display_limit"
+                )
         rows = _sanitize([row for _, row in selected_rows])
         scores = {str(row["symbol"]): float(row.get("score") or 0.0) for row in rows}
         return StrategyResult(
@@ -1603,23 +1650,23 @@ class StrategyEngine:
             exprs.append(pl.col("close") >= bf["price_min"])
         if bf.get("price_max") is not None:
             exprs.append(pl.col("close") <= bf["price_max"])
-        if bf.get("market_cap_min") is not None and "total_shares" in df.columns:
-            exprs.append(
-                pl.col("close") * pl.col("total_shares") >= bf["market_cap_min"]
-            )
-        if bf.get("market_cap_max") is not None and "total_shares" in df.columns:
-            exprs.append(
-                pl.col("close") * pl.col("total_shares") <= bf["market_cap_max"]
-            )
-        # 流通市值
-        if bf.get("float_cap_min") is not None and "float_shares" in df.columns:
-            exprs.append(
-                pl.col("close") * pl.col("float_shares") >= bf["float_cap_min"]
-            )
-        if bf.get("float_cap_max") is not None and "float_shares" in df.columns:
-            exprs.append(
-                pl.col("close") * pl.col("float_shares") <= bf["float_cap_max"]
-            )
+        # Enriched close is adjusted. Raw-only/live inputs expose raw price as
+        # close; an existing but null raw_close must never fall back to close.
+        cap_price = pl.col("raw_close" if "raw_close" in df.columns else "close")
+        for prefix, share_field in (("market_cap", "total_shares"), ("float_cap", "float_shares")):
+            minimum, maximum = bf.get(f"{prefix}_min"), bf.get(f"{prefix}_max")
+            if minimum is None and maximum is None:
+                continue
+            if share_field not in df.columns:
+                exprs.append(pl.lit(False))
+                continue
+            shares = pl.col(share_field)
+            values = cap_price * shares
+            exprs.append(values.is_finite() & (cap_price > 0) & (shares > 0))
+            if minimum is not None:
+                exprs.append(values >= minimum)
+            if maximum is not None:
+                exprs.append(values <= maximum)
         if bf.get("amount_min") is not None:
             exprs.append(pl.col("amount") >= bf["amount_min"])
         if bf.get("amount_max") is not None:

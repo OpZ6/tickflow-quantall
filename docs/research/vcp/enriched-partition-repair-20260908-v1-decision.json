@@ -1,0 +1,45 @@
+{
+  "decision_id": "enriched-partition-repair-20260908-v1",
+  "decided_at": "2026-09-08T22:28:44+08:00",
+  "scope": "production kline_daily_enriched coverage and VCP research baseline",
+  "finding": {
+    "affected_partitions": 61,
+    "date_range": [
+      "2025-08-26",
+      "2026-08-12"
+    ],
+    "rows_per_affected_partition": [18, 19],
+    "cause": [
+      "The partial-partition guard treated any enriched/raw row-count difference as corruption although legitimate halt placeholders are filtered from enriched data.",
+      "An interior raw-only date was not classified as a full rebuild, so a later affected-symbol update could recreate it with only the small symbol subset."
+    ]
+  },
+  "repair": {
+    "implementation": "backend/app/jobs/daily_pipeline.py",
+    "behavior": [
+      "Compare enriched symbols with raw symbols after the shared halt filter.",
+      "Classify every missing date inside the existing enriched range as requiring a full rebuild."
+    ],
+    "production_rebuild_rows": 11352502
+  },
+  "validation": {
+    "partition_count": 2840,
+    "minimum_partition_rows": 1303,
+    "partitions_below_1000_rows": 0,
+    "enriched_partitions_larger_than_raw": 0,
+    "maximum_raw_minus_enriched_rows": 1,
+    "tests": "13 passed: test_enriched_partial_partition.py and test_enriched_full_rebuild.py",
+    "targeted_ruff": "passed"
+  },
+  "backtest_impact": {
+    "recent_old_run": "20260907T123240771947Z",
+    "recent_repaired_run": "20260908T141803375881Z",
+    "recent_trade_count": [106, 112],
+    "long_old_run": "20260908T093944103019Z",
+    "long_repaired_run": "20260908T142007914349Z",
+    "long_trade_count": [290, 303],
+    "long_total_return": [2.0201, 2.085]
+  },
+  "decision": "accept_repaired_production_enriched_store_and_invalidate_prior_forward_v1_data_baseline",
+  "strategy_rules_changed": false
+}

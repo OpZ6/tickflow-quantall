@@ -1,0 +1,11 @@
+{
+  "experiment": "right-side-playbook-v1",
+  "layer": 7,
+  "hypothesis_source": "Assemble the only surviving plan. Breakout-through-high, skip-gap-up, and two-bar no-demand all stopped. MA20 reclaim vs same-day watch names without reclaim is the handbook contrast.",
+  "reused_contrast": "docs/research/watchlist-ma20-reclaim-v1-analysis.json",
+  "handbook": "docs/research/right-side-playbook-v1.md",
+  "one_plan": "Watch list look-at only; buy MA20 reclaim next open including gap-up; hold 10 sessions; do not buy new highs; do not cut on two-bar never +3%.",
+  "pass_fail": {
+    "pass": "Handbook written; 有手册 vs 无手册 is the reclaim vs untriggered 10/20-day date-EW already contrasted. Stopped items written as stopped."
+  }
+}

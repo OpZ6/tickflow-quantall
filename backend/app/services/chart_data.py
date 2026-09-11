@@ -79,7 +79,7 @@ def _symbol_listing_date(repo, asset_type: str, symbol: str) -> date | None:
         return None
     try:
         instruments = getter(asset_type)
-    except Exception:  # noqa: BLE001 - optional dimension must not break chart reads
+    except Exception:
         return None
     if instruments is None or instruments.is_empty() or "symbol" not in instruments.columns:
         return None
@@ -269,9 +269,11 @@ def build_chart_response(
     params_fingerprint: str | None = None,
 ) -> dict:
     listing_date = _symbol_listing_date(repo, query.asset_type, query.symbol)
-    earliest = repo.earliest_daily_date()
+    # The full-history floor scan (min over every daily partition) is only used
+    # by range=all; preset/custom ranges resolve purely from the requested window.
+    earliest: date | None = None
     if query.range_name == "all" and query.start_date is None:
-        earliest = listing_date or earliest
+        earliest = listing_date or repo.earliest_daily_date()
     start, end = resolve_date_range(query, earliest)
     # Preset ranges may include a frontend-supplied preload boundary. Never
     # treat the time before listing as missing history, otherwise a recent IPO
@@ -434,7 +436,10 @@ def build_chart_response(
                 metadata = item.setdefault("metadata", {})
                 event_date = str(metadata.get("event_date") or "")[:10]
                 existing = list(metadata.get("pattern_refs") or [])
-                metadata["pattern_refs"] = sorted(set(existing + pattern_refs_by_date.get(event_date, [])))
+                for pattern_ref in sorted(pattern_refs_by_date.get(event_date, [])):
+                    if pattern_ref not in existing:
+                        existing.append(pattern_ref)
+                metadata["pattern_refs"] = existing
 
     return {
         "symbol": query.symbol,

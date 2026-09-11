@@ -296,7 +296,7 @@ def test_chart_response_uses_requested_warmup_and_keeps_it_hidden() -> None:
     assert result["analysis_rows"][0]["date"] < "2026-08-01"
 
 
-def test_chart_response_layers_share_the_final_candle_fingerprint() -> None:
+def test_chart_response_layers_share_the_final_candle_fingerprint(monkeypatch, tmp_path) -> None:
     dates = pl.date_range(date(2026, 1, 1), date(2026, 8, 31), interval="1d", eager=True)
     frame = pl.DataFrame({
         "symbol": ["000001.SZ"] * len(dates),
@@ -322,13 +322,29 @@ def test_chart_response_layers_share_the_final_candle_fingerprint() -> None:
         def get_daily_asset(self, *_args, **_kwargs):
             return pl.DataFrame()
 
+    monkeypatch.setattr(
+        "app.services.strategy_signal_events.StrategySignalEventRepository.query",
+        lambda *_args, **_kwargs: [{
+            "strategy_id": "quants_vcp_legacy_v1",
+            "strategy_version": "legacy-v1",
+            "params_fingerprint": "params",
+            "symbol": "000001.SZ",
+            "event_date": "2026-08-31",
+            "event_type": "candidate",
+            "signal_kind": "strategy_signal",
+            "source_run_id": "run",
+            "pattern_refs": [{"primary": {"pivot": 10.2}}],
+        }],
+    )
+
     result = build_chart_response(
         Repo(),
         ChartQuery(
             symbol="000001.SZ", asset_type="stock", interval="1d", adjustment="none",
             range_name="custom", start_date=date(2026, 7, 1), end_date=date(2026, 8, 31),
         ),
-        layer_categories={"pattern", "event", "plan"},
+        data_dir=tmp_path,
+        layer_categories={"pattern", "strategy", "event", "plan"},
     )
     assert result["annotation_layers"]
     assert all(
@@ -339,6 +355,10 @@ def test_chart_response_layers_share_the_final_candle_fingerprint() -> None:
     assert len(key_level_layer["lines"]) == sum(len(items) for items in result["levels"].values())
     assert {line["value"] for line in key_level_layer["lines"]} == {
         level["value"] for items in result["levels"].values() for level in items
+    }
+    strategy_layer = next(layer for layer in result["annotation_layers"] if layer["id"] == "strategy.signals")
+    assert strategy_layer["evidence"][0]["metadata"]["pattern_refs"][0] == {
+        "primary": {"pivot": 10.2}
     }
 
 

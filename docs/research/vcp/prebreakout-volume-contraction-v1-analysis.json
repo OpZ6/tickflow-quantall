@@ -1,0 +1,33 @@
+{
+  "experiment": "vcp-prebreakout-volume-contraction-v1",
+  "baseline_run": "20260908T024521089151Z",
+  "training_start": "2016-01-01",
+  "kept": 71,
+  "quiet_breakout": 97,
+  "missing_volume_history": 3,
+  "baseline": {
+    "n_trades": 171,
+    "win_rate": 0.315789,
+    "profit_factor": 3.22,
+    "avg_pnl": 0.010753,
+    "avg_win": 0.104258,
+    "avg_loss": 0.032403
+  },
+  "variant": {
+    "n_trades": 71,
+    "win_rate": 0.28169,
+    "profit_factor": 1.92,
+    "avg_pnl": -0.005671,
+    "avg_win": 0.06103,
+    "avg_loss": 0.031829
+  },
+  "delta": {
+    "avg_pnl": -0.016424,
+    "win_rate": -0.034099,
+    "profit_factor": -1.3
+  },
+  "rule": "drop",
+  "pass_metric": "independent_avg_pnl_and_payoff",
+  "gaps": [],
+  "protocol": "..\\docs\\research\\vcp\\prebreakout-volume-contraction-v1.json"
+}

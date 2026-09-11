@@ -73,6 +73,27 @@ def test_get_daily_by_date(mock_get_pro):
     assert "close" in df.columns
     assert df["symbol"].to_list() == ["600519.SH", "000001.SZ"]
     mock_pro.daily.assert_called_once_with(trade_date="20260821")
+    assert df["amount"].to_list() == [1.5e10, 2.0e9]
+    assert df["volume"].to_list() == [10000.0, 20000.0]
+
+
+@patch("app.plugins.tushare.provider._get_pro")
+def test_get_daily_accepts_pandas_string_dtype_dates(mock_get_pro):
+    """Mirror responses may use pandas StringDtype instead of legacy object strings."""
+    mock_pro = MagicMock()
+    raw = _daily_df()
+    raw["trade_date"] = raw["trade_date"].astype("string")
+    mock_pro.daily.return_value = raw
+    mock_get_pro.return_value = mock_pro
+
+    df = TushareProvider().get_daily(
+        ["600519.SH"], datetime(2026, 8, 21), datetime(2026, 8, 21)
+    )
+
+    assert df["date"].to_list() == [
+        datetime(2026, 8, 21).date(),
+        datetime(2026, 8, 21).date(),
+    ]
 
 
 @patch("app.plugins.tushare.provider._get_pro")

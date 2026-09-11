@@ -1,0 +1,42 @@
+{
+  "experiment": "legacy-high-tight-flag-medium-long-train-v1",
+  "run_id": "20260909T153630166989Z",
+  "baseline_run_id": "20260909T130617820559Z",
+  "decision": "stop_primary_scale_restriction_failed_training_gates",
+  "selection_supported": false,
+  "training_result": {
+    "trades": 735,
+    "average_40d_gross_excess": 0.001789105813077242,
+    "average_realized_net_excess": -0.00654775020811,
+    "positive_alpha_years": 3,
+    "yearly_40d_excess": {"2016": -0.07648152413207861, "2017": 0.036318098312539175, "2018": -0.07843726291804337, "2019": 0.0349809597602563, "2020": 0.07525256768874901, "2021": -0.06628965690177374, "2022": -0.03687740785011621},
+    "mfe20_rate": 0.3782312925170068,
+    "mfe50_count": 63,
+    "baseline_mfe50_count": 117,
+    "baseline_mfe50_retention": 0.5384615384615384
+  },
+  "training_checks": {
+    "minimum_trades_40": true,
+    "nonnegative_realized_excess": false,
+    "nonnegative_40d_excess": true,
+    "minimum_four_positive_years": false,
+    "minimum_mfe20_rate_0_25": true,
+    "minimum_mfe50_count_10": true,
+    "strict_majority_baseline_mfe50_retention": true
+  },
+  "reconciliation": {
+    "universe_and_data_references_equal": true,
+    "config_difference": "params: null -> exclude_short_scale=true",
+    "all_735_trade_keys_are_unique_baseline_subset": true,
+    "trade_key": ["symbol", "entry_signal_date", "entry_date", "entry_signal_id"],
+    "entry_signal_id_note": "Both ledgers omit entry_signal_id; single registered entry signal is fixed by protocol. Symbol and dated entry identity remain unique.",
+    "retained_trade_entry_exit_price_date_reason_and_pnl_differences": 0,
+    "complete_candidate_identity_reconciliation": "not materialized in result; full candidate identity proof remains unavailable. This is not treated as promotion evidence.",
+    "complete_training_labels": true
+  },
+  "interpretation": "Removing short primary flags removes the negative bulk and retains 63/117 large-winner paths, but only three years have positive 40-day Alpha and realized Alpha remains negative. The registered representation fails; do not relax inherited gates.",
+  "stopped_variants": ["primary medium/long restriction", "adjacent scale or pole/depth threshold searches", "alternate-scale reselection to rescue this experiment"],
+  "next_action": "Retain original default pool for descriptive use; stop this scale-only executable representation. Resume only with independent structural mechanism evidence. Continue the existing VCP/cup exit-structure evidence task.",
+  "temporal_test_authorized": false,
+  "evidence": "data/research/vcp/runs/20260909T153630166989Z/trade-path-analysis.json"
+}

@@ -1,0 +1,15 @@
+{
+  "experiment": "launch-pullback-independent-train-2016-2022-v1",
+  "baseline_run": "20260909T053715693165Z",
+  "strategy_id": "launch_pullback_support",
+  "n_all": 32193,
+  "training": {
+    "n_trades": 32086,
+    "win_rate": 0.25014,
+    "profit_factor": 2.25,
+    "avg_pnl": -0.009777,
+    "avg_win": 0.117306,
+    "avg_loss": 0.05217
+  },
+  "gaps": []
+}

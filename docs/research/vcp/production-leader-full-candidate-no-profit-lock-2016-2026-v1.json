@@ -1,0 +1,13 @@
+{
+  "base_protocol": "production-leader-full-candidate-ledger-2016-2026-v1.json",
+  "experiment": "production-leader-full-candidate-no-profit-lock-2016-2026-v1",
+  "purpose": "isolate_profit_lock_effect_on_independent_candidate_exit_quality",
+  "question": "Does removing staged profit protection improve large-winner retention across independently executed VCP candidates?",
+  "single_change": "Remove staged profit-lock steps; retain candidate selection, T+1 fills, costs, MA20 exit, 5 percent hard stop and 40-bar maximum hold.",
+  "backtest": {
+    "overrides": {
+      "profit_lock_steps": []
+    }
+  },
+  "stop_rule": "Compare the frozen profit-lock rule with no profit lock. Do not scan neighboring lock thresholds on this exposed interval."
+}

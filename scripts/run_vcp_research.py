@@ -48,6 +48,27 @@ def load_protocol(path: Path, seen: tuple[Path, ...] = ()):
     return merged(load_protocol(base_path, (*seen, path)), protocol)
 
 
+def validate_training_boundary(protocol, config, definition):
+    """Reject signal ranges whose existing execution/label padding crosses training."""
+    cutoff = protocol.get("training_data_end")
+    if cutoff is None:
+        if "training_gate" in protocol:
+            raise ValueError("training_gate requires explicit training_data_end")
+        return
+    cutoff = date.fromisoformat(cutoff)
+    overrides = config.overrides or {}
+    holding = overrides.get("max_hold_days", definition.max_hold_days)
+    forward = max(int(holding or config.holding_days or 5), 1)
+    execution_end = config.end
+    if config.mode == "full":
+        execution_end += timedelta(days=(forward + 5) * 2)
+    analysis = protocol.get("analysis") or {}
+    horizon = int(analysis.get("evaluation_horizon_bars") or holding or 40)
+    label_end = config.end + timedelta(days=max(horizon * 2, 80))
+    if max(execution_end, label_end) > cutoff:
+        raise ValueError("Training execution/label padding exceeds training_data_end; purge final signals")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -103,6 +124,10 @@ def main():
             raise ValueError("This engineering protocol does not define phases")
         cfg["start"] = date.fromisoformat(cfg["start"])
         cfg["end"] = date.fromisoformat(cfg["end"])
+        boundary_config = StrategyBacktestConfig(**cfg)
+        validate_training_boundary(
+            protocol, boundary_config, strategies.get(boundary_config.strategy_id)
+        )
         universe_date = date.fromisoformat(protocol["universe_date"])
         if universe_date >= cfg["start"]:
             raise ValueError("universe_date must precede the experiment")
@@ -111,6 +136,9 @@ def main():
         )
         universe = engine.load_panel(None, universe_date, universe_end, columns=["symbol", "date"])
         symbols = sorted(set(universe["symbol"].to_list())) if not universe.is_empty() else []
+        universe_suffixes = tuple(str(value) for value in protocol.get("universe_suffixes", []))
+        if universe_suffixes:
+            symbols = [symbol for symbol in symbols if symbol.endswith(universe_suffixes)]
         if protocol.get("data_directory"):
             quality = json.loads((data_dir / "quality-summary.json").read_text(encoding="utf-8"))
             excluded = set(quality.get("excluded_symbols", []))
@@ -133,6 +161,7 @@ def main():
                 "date": universe_date,
                 "end": universe_end,
                 "mode": protocol.get("universe_mode", "snapshot"),
+                "suffixes": list(universe_suffixes),
                 "available": len(symbols),
                 "method": "sorted_symbol_even_spacing",
                 "symbols": selected,
@@ -194,6 +223,8 @@ def main():
             "adj_factor",
             "instruments",
             "kline_index_daily",
+            "financials/shares",
+            "trading_calendar",
         ):
             for path in sorted((data_dir / directory).rglob("*.parquet")):
                 stat = path.stat()

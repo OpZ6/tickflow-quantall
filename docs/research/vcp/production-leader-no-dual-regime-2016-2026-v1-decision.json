@@ -1,0 +1,35 @@
+{
+  "experiment": "production-leader-no-dual-regime-2016-2026-v1",
+  "baseline_run": "20260907T123519390606Z",
+  "experiment_run": "20260907T124708165810Z",
+  "decision": "retain_integrated_dual_regime_design",
+  "reason": "Removing the integrated regime design greatly expanded candidates and destroyed portfolio behavior; both predeclared deterioration tests passed.",
+  "comparison": {
+    "baseline": {
+      "entry_candidates": 837,
+      "trades": 298,
+      "stop_loss_share": 0.4261744966,
+      "max_drawdown": -0.2592,
+      "annual_return": 0.1377,
+      "sharpe": 0.82
+    },
+    "no_dual_regime": {
+      "entry_candidates": 6547,
+      "trades": 1183,
+      "stop_loss_share": 0.5384615385,
+      "max_drawdown": -0.9373,
+      "annual_return": -0.2259,
+      "sharpe": -0.7
+    },
+    "candidate_increase": 6.8219832736,
+    "stop_loss_share_change": 0.1122870418,
+    "max_drawdown_change": -0.6781
+  },
+  "diagnostic_results": {
+    "minimum_candidate_increase_0_25": "pass",
+    "minimum_stop_loss_share_deterioration_0_03": "pass",
+    "minimum_drawdown_deterioration_0_03": "pass"
+  },
+  "causal_limit": "a_share_dual_regime also changes short-scale eligibility and pre-breakout pivot-close behavior, so this run validates the integrated stage-aware design, not an isolated breadth threshold.",
+  "next_action": "Freeze the integrated regime design; do not sweep breadth thresholds. Analyze branch-level trade paths and failure mechanisms before choosing the next method comparison."
+}

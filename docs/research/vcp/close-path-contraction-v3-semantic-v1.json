@@ -1,0 +1,31 @@
+{
+  "experiment": "close-path-contraction-v3-semantic-v1",
+  "registered_before_implementation": true,
+  "question": "Can close-confirmed and temporally ordered contractions distinguish a persistent VCP path from intrabar oscillation, broad recovery and abrupt repricing?",
+  "universe": "All SH/SZ daily securities passing the existing causal stage-two trend and RS>=85 context on each completed day from 2018 through 2025. The broad VCP detector and all previous v3 representations are not inputs.",
+  "fixed_representation": {
+    "pivot": "The highest completed close in the 120 bars before the signal, at least 10 bars old.",
+    "prior_advance": "The pivot close must be at least 30 percent above the preceding 63-bar closing low, and the rise must span at least 20 completed bars.",
+    "close_confirmed_turns": "Directional changes are detected only from completed closes using the larger of 3 percent or twice the median absolute daily close return, capped at 12 percent. A recovery must occur strictly after its trough and a following peak must occur strictly after that recovery.",
+    "persistent_legs": "Each decline and recovery must span at least three completed sessions, and no single close-to-close move may contribute more than half of that leg's absolute close-path movement.",
+    "contraction": "At least two completed decline-recovery waves are required. The latest decline must be shallower and have lower mean volume on declining closes than its predecessor.",
+    "right_edge": "The final pre-signal close must be above the midpoint of the latest decline and the range of the final ten completed closes must be smaller than the latest decline depth.",
+    "demand": "The signal must be the first close above the pivot, close in the upper half of its daily range, and trade more volume than the preceding 20-bar median.",
+    "causality": "All state transitions use completed bars through the signal close. Any execution would occur no earlier than the next valid market open."
+  },
+  "fresh_blind_packet": {
+    "years": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    "per_year": {"supported": 2, "unsupported_trend_breakout": 2},
+    "exclusions": "All identities used by the four earlier semantic packets are excluded.",
+    "selection": "Ascending SHA-256 within year and sealed status; future outcomes are neither computed nor used.",
+    "hidden_until_labels_frozen": ["representation status", "symbol", "calendar date"]
+  },
+  "semantic_acceptance": {
+    "supported_classic_or_partial_rate_min": 0.75,
+    "supported_nonclassic_rate_max": 0.25,
+    "supported_minus_unsupported_classic_or_partial_min": 0.30
+  },
+  "stop_rule": "If the packet cannot be formed or any semantic gate fails, stop price-path representation work without changing lookbacks, reversal size, persistence rules, wave count, right-edge rule or trend context on exposed samples.",
+  "next_if_pass": "Register the frozen detector as a separate matrix-native v3 strategy and run one fixed development and diagnostic time split.",
+  "next_if_fail": "Stop geometric price-path refinement. Keep forward-v2 frozen and select one new pre-signal causal fact rather than another price threshold."
+}

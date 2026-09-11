@@ -1,0 +1,42 @@
+{
+  "experiment": "production-leader-moneyflow-sponsorship-audit-2017-2026-v1",
+  "decision": "stop",
+  "reason": "No causal sponsorship feature passed the pre-registered cross-year, quintile and continuous-return gates. Final-leg active net flow was weakly inverse to the binary breakout label; signal-day flow had only a small and unstable association.",
+  "coverage": {
+    "unique_setups": 3771,
+    "signal_day": 0.9915141872182445,
+    "final_leg_any": 0.9915141872182445,
+    "final_leg_sessions_median": 16
+  },
+  "feature_results": {
+    "final_leg_net_ratio": {
+      "pairwise_probability": 0.48381347068097474,
+      "years_positive": 4,
+      "top_minus_bottom_breakout_rate": -0.009832352909507902,
+      "spearman_return_40d": 0.026501604786001512,
+      "passed": false
+    },
+    "final_leg_positive_day_share": {
+      "pairwise_probability": 0.47578271993461957,
+      "years_positive": 2,
+      "top_minus_bottom_breakout_rate": -0.030446856666368816,
+      "spearman_return_40d": 0.02700520698442963,
+      "passed": false
+    },
+    "signal_day_net_ratio": {
+      "pairwise_probability": 0.5061995505097171,
+      "years_positive": 5,
+      "top_minus_bottom_breakout_rate": 0.02499811571992061,
+      "spearman_return_40d": 0.051843870035777444,
+      "passed": false
+    }
+  },
+  "stopped_variants": [
+    "3/5/10/20-day moneyflow windows",
+    "absolute net-flow thresholds",
+    "daily percentile cutoffs",
+    "weighted sponsorship scores",
+    "portfolio backtests using these fields"
+  ],
+  "next_action": "Retain moneyflow only as candidate explanation. With price-only structure, isolated fundamentals, dynamic peers and active-order sponsorship all exhausted, test one remaining transaction-level hypothesis: whether loss of the completed breakout bar low is a causal demand-failure exit. Do not alter entry, portfolio size or profit protection."
+}

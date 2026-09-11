@@ -1,0 +1,33 @@
+{
+  "experiment": "vcp-prebreakout-volume-expansion-v1",
+  "baseline_run": "20260908T024521089151Z",
+  "training_start": "2016-01-01",
+  "kept": 97,
+  "quiet_breakout": 71,
+  "missing_volume_history": 3,
+  "baseline": {
+    "n_trades": 171,
+    "win_rate": 0.315789,
+    "profit_factor": 3.22,
+    "avg_pnl": 0.010753,
+    "avg_win": 0.104258,
+    "avg_loss": 0.032403
+  },
+  "variant": {
+    "n_trades": 97,
+    "win_rate": 0.340206,
+    "profit_factor": 3.97,
+    "avg_pnl": 0.022616,
+    "avg_win": 0.130103,
+    "avg_loss": 0.032807
+  },
+  "delta": {
+    "avg_pnl": 0.011863,
+    "win_rate": 0.024417,
+    "profit_factor": 0.75
+  },
+  "rule": "keep",
+  "pass_metric": "independent_avg_pnl_and_payoff",
+  "gaps": [],
+  "protocol": "..\\docs\\research\\vcp\\prebreakout-volume-expansion-v1.json"
+}

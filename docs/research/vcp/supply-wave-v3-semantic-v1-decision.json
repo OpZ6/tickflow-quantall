@@ -1,0 +1,48 @@
+{
+  "experiment": "supply-wave-v3-semantic-v1",
+  "decision": "stop",
+  "reason": "Requiring two completed recovery waves with shallower depth and lower downside pressure did not improve VCP naming fidelity. The supported group contained more nonclassic reversal, repricing and loose-range charts than the unsupported group.",
+  "blind_evidence": {
+    "cases": 32,
+    "labels_sha256": "46b34ce743563da80c2075420dd519e589560aee49d3193f9f3d7247f67db837",
+    "identity_prediction_and_outcomes_hidden_until_label_freeze": true,
+    "supported": {
+      "cases": 16,
+      "classic": 2,
+      "partial": 5,
+      "nonclassic": 9,
+      "classic_or_partial_rate": 0.4375,
+      "nonclassic_rate": 0.5625
+    },
+    "unsupported": {
+      "cases": 16,
+      "classic": 1,
+      "partial": 7,
+      "nonclassic": 8,
+      "classic_or_partial_rate": 0.5,
+      "nonclassic_rate": 0.5
+    },
+    "supported_minus_unsupported_classic_or_partial": -0.0625
+  },
+  "gate_results": {
+    "supported_classic_or_partial_rate_at_least_0_75": false,
+    "supported_nonclassic_rate_at_most_0_25": false,
+    "supported_minus_unsupported_at_least_0_30": false
+  },
+  "post_unblind_descriptive_only": {
+    "supported_future_breakout_rate": 0.4375,
+    "unsupported_future_breakout_rate": 0.25,
+    "supported_median_return_40d": -0.014137357473373413,
+    "unsupported_median_return_40d": -0.08664608001708984,
+    "interpretation": "The outcome difference cannot rescue a representation that failed its semantic gates and must not be used to tune it."
+  },
+  "stopped_variants": [
+    "swing span changes",
+    "recovery fraction changes",
+    "pivot tolerance changes",
+    "volume baseline changes",
+    "weighted supply-wave scores",
+    "historical portfolio backtest of this representation"
+  ],
+  "next_action": "Replace the concept with one stage-two base-continuity representation that first excludes long declines, vertical repricing and persistently loose ranges before evaluating local contraction. Pre-register it and use a new outcome-blind packet; keep forward-v2 frozen."
+}

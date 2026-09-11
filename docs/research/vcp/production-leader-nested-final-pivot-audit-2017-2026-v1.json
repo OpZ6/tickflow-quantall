@@ -1,0 +1,34 @@
+{
+  "experiment": "production-leader-nested-final-pivot-audit-2017-2026-v1",
+  "type": "causal_structure_representation_audit",
+  "registered_before_result": true,
+  "hypothesis": "A broad VCP leg often contains a later, smaller line-of-least-resistance pivot whose post-pivot low provides a coherent and materially tighter structural risk level than the broad final contraction low.",
+  "inputs": [
+    "data/research/vcp/candidate-labels/source-vcp-2017-2020-v1/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-v4/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-2024-2026-v1/discovery-candidates.parquet",
+    "data/kline_daily_enriched/date=*/part.parquet"
+  ],
+  "candidate_deduplication": "earliest signal per symbol, scale, pivot_date",
+  "representation": {
+    "broad_last_low_date": "signal_date minus the already-recorded last_low_age_days",
+    "search_interval": "broad last-low date through the completed bar before signal day",
+    "micro_pivot": "most recent one-bar local high confirmed by the following completed bar and below the signal-day close",
+    "micro_structure_low": "lowest low strictly after that micro pivot through the completed bar before signal day",
+    "causal_cutoff": "No signal-day high/low is used to select or confirm the micro pivot; signal-day close is used only to establish that the resistance was crossed."
+  },
+  "outputs": [
+    "representation coverage",
+    "micro pivot date and price",
+    "micro structure low",
+    "micro risk from signal close",
+    "broad last-leg risk from signal close",
+    "risk compression ratio",
+    "calendar-year coverage and risk medians"
+  ],
+  "acceptance": "The representation is useful only if it exists for at least 70% of unique setups, has at least 60% coverage in every full calendar year 2018-2025, and the overall median micro risk is no more than half the median broad-leg risk. Outcome labels are reported descriptively but cannot be used to change the representation.",
+  "anti_overfit": "No alternate swing span, lookback window, tightness threshold, risk cutoff, stop rule, entry rule, or portfolio backtest is permitted after seeing this result.",
+  "future_labels_only": ["true_breakout_10_7_20", "return_40d", "mfe_40d"],
+  "next_if_pass": "Expose the nested pivot and structure low as research evidence, then pre-register one coherent risk-sizing method. Do not alter forward-v1.",
+  "next_if_fail": "Stop technical micro-pivot extraction and require external catalyst or manually labeled structure evidence before further strategy changes."
+}

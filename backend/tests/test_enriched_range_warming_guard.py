@@ -10,7 +10,7 @@ from datetime import date
 
 import polars as pl
 
-from app.tickflow.repository import KlineRepository
+from app.tickflow.repository import DataStore, KlineRepository
 
 
 def _bare_repo() -> KlineRepository:
@@ -54,3 +54,44 @@ def test_get_enriched_range_rebuilds_when_cold_and_not_warming():
     assert result is not None
     assert result.height == 2
     assert result["symbol"].unique().to_list() == ["600000.SH"]
+
+
+def test_refresh_enriched_history_keeps_persisted_turnover_rate(tmp_path, monkeypatch):
+    days = [date(2026, 8, 13), date(2026, 8, 14)]
+    for index, day in enumerate(days):
+        target = tmp_path / "kline_daily_enriched" / f"date={day.isoformat()}"
+        target.mkdir(parents=True)
+        pl.DataFrame(
+            {
+                "symbol": ["600000.SH"],
+                "date": [day],
+                "open": [10.0 + index],
+                "high": [11.0 + index],
+                "low": [9.0 + index],
+                "close": [10.5 + index],
+                "volume": [100.0],
+                "amount": [1_000.0],
+                "raw_close": [10.5 + index],
+                "raw_high": [11.0 + index],
+                "raw_low": [9.0 + index],
+                "turnover_rate": [3.5 + index],
+            }
+        ).write_parquet(target / "part.parquet")
+
+    monkeypatch.setattr(
+        "app.indicators.pipeline.compute_enriched_history_window",
+        lambda frame, *_args, **_kwargs: frame,
+    )
+    monkeypatch.setattr(
+        "app.indicators.pipeline.repair_today_deviation_columns",
+        lambda frame, *_args, **_kwargs: frame,
+    )
+    repo = KlineRepository(DataStore(tmp_path))
+    monkeypatch.setattr(repo, "get_matrix_data_generation", lambda _asset_type: "test")
+    monkeypatch.setattr(repo, "_build_live_agg", lambda _latest: None)
+
+    repo._refresh_enriched()
+    result = repo.get_enriched_range(days[0], days[-1], columns=["turnover_rate"])
+
+    assert result is not None
+    assert result["turnover_rate"].to_list() == [3.5, 4.5]

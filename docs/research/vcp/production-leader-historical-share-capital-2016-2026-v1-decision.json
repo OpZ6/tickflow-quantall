@@ -1,0 +1,62 @@
+{
+  "decision": "adopt_historical_daily_share_capital",
+  "scope": "2016-2026_sh_sz_research_execution",
+  "strategy_rules_changed": false,
+  "source": {
+    "database": "D:/quantall/apps/quants/data/warehouse/ppgu_unified.duckdb",
+    "table": "dwd_daily_basic",
+    "read_only": true,
+    "source_rows": 11597369,
+    "source_symbols": 6136,
+    "source_start": "2015-01-05",
+    "source_end": "2026-09-07",
+    "source_share_unit": "10000_shares",
+    "target_share_unit": "shares"
+  },
+  "publication": {
+    "run_id": "share-history-20260907-f9b3fd2a",
+    "changes_from_2015": 112735,
+    "published_rows_with_predecessors": 112752,
+    "published_symbols": 6136,
+    "duplicate_keys": 0,
+    "invalid_total_shares": 0,
+    "invalid_float_shares": 1,
+    "target": "data/financials/shares/part.parquet",
+    "target_sha256": "bebc1965be2a59e2049638a746d62e296809c0eb8ac8b10aa5abb67b3aa02347",
+    "backup": "data/.fact_backups/share-history-20260907-f9b3fd2a"
+  },
+  "coverage": {
+    "research_start": "2016-01-04",
+    "research_end": "2026-06-30",
+    "sh_sz_daily_bar_coverage": 1.0,
+    "missing_daily_basic_rows": 129426,
+    "missing_scope": "BJ_only",
+    "vcp_consumes_missing_scope": false
+  },
+  "execution_contract": {
+    "availability": "latest effective_date not later than the market date",
+    "missing_history": "NaN_and_fail_closed_for_cap_filters",
+    "latest_instrument_fallback_when_history_exists": false,
+    "matrix_cache_includes_share_history_fingerprint": true
+  },
+  "production_probe": {
+    "symbol": "600519.SH",
+    "dates": "2016-01-04/2016-01-08",
+    "matrix_total_shares": 1256197760.0,
+    "latest_instrument_total_shares": 1250081601.0
+  },
+  "baseline_comparison": {
+    "previous_run": "20260907T191325624983Z",
+    "historical_share_run": "20260908T021955114526Z",
+    "candidates": 837,
+    "trades": 290,
+    "trades_identical": true,
+    "equity_curve_identical": true,
+    "trade_sha256": "e2644c0cd80baf42fa7ce7c3d984b3e9a0c72110a8a2672f957edb92b23ed413",
+    "equity_sha256": "0cade0d6234555fbb4b22ddfec90de23fc91075aac30bf8dbf840867a05eca88",
+    "annual_return": 0.1184,
+    "max_drawdown": -0.232
+  },
+  "superseded_by_historical_stamp_tax_run": "20260908T024521089151Z",
+  "interpretation": "The future-share fallback is removed for the current SH/SZ VCP research scope. Exact baseline equality shows that the correction does not alter the current strategy conclusion and is not a reason to retune it."
+}

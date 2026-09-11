@@ -1,8 +1,8 @@
 """Free daily-index fallback used by the shared post-market pipeline."""
 from __future__ import annotations
 
-from datetime import date, timedelta
 import time
+from datetime import date, timedelta
 from typing import Any, Protocol
 
 import httpx
@@ -10,6 +10,7 @@ import polars as pl
 
 _ENDPOINT = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 _USER_AGENT = "Mozilla/5.0 (compatible; TickFlow/0.2; index-data-sync)"
+_MAX_CALENDAR_DAYS_PER_REQUEST = 1000
 
 
 class _Response(Protocol):
@@ -111,29 +112,51 @@ def fetch_index_daily(
     if start > end:
         raise ValueError("start must not be after end")
     market_key = _market_key(symbol)
-    trading_day_estimate = max(10, min(640, (end - start).days + 20))
-    params = {
-        "param": f"{market_key},day,,,{trading_day_estimate},qfq",
-    }
     headers = {"User-Agent": _USER_AGENT}
+    owned_client = None
+    active_client = client
     try:
-        if client is None:
-            with httpx.Client(timeout=15.0, trust_env=False) as http_client:
-                response = http_client.get(_ENDPOINT, params=params, headers=headers)
-        else:
-            response = client.get(_ENDPOINT, params=params, headers=headers)
-        response.raise_for_status()
-        payload = response.json()
+        if active_client is None:
+            owned_client = httpx.Client(timeout=15.0, trust_env=False)
+            active_client = owned_client
+        frames: list[pl.DataFrame] = []
+        window_start = start
+        while window_start <= end:
+            window_end = min(
+                end,
+                window_start + timedelta(days=_MAX_CALENDAR_DAYS_PER_REQUEST - 1),
+            )
+            params = {
+                "param": (
+                    f"{market_key},day,{window_start.isoformat()},"
+                    f"{window_end.isoformat()},{_MAX_CALENDAR_DAYS_PER_REQUEST},qfq"
+                ),
+            }
+            response = active_client.get(_ENDPOINT, params=params, headers=headers)
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("code") not in (None, 0):
+                raise TencentIndexProviderError("index endpoint returned an error payload")
+            frame = _parse_rows(payload, market_key=market_key, symbol=symbol)
+            if not frame.is_empty():
+                frames.append(
+                    frame.filter(
+                        pl.col("date").is_between(window_start, window_end, closed="both")
+                    )
+                )
+            window_start = window_end + timedelta(days=1)
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         raise TencentIndexProviderError(f"index request failed: {exc}") from exc
-    if not isinstance(payload, dict) or payload.get("code") not in (None, 0):
-        raise TencentIndexProviderError("index endpoint returned an error payload")
-    frame = _parse_rows(payload, market_key=market_key, symbol=symbol)
-    if frame.is_empty():
-        return frame
-    return frame.filter(
-        (pl.col("date") >= start) & (pl.col("date") <= end)
-    ).sort(["symbol", "date"])
+    finally:
+        if owned_client is not None:
+            owned_client.close()
+    if not frames:
+        return pl.DataFrame()
+    return (
+        pl.concat(frames, how="diagonal_relaxed")
+        .unique(["symbol", "date"], keep="last")
+        .sort(["symbol", "date"])
+    )
 
 
 def fetch_index_realtime(

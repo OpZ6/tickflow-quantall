@@ -1875,6 +1875,7 @@ def _load_recent_history(enriched_base: Path, symbols: list[str], days: int) -> 
                 (pl.col("symbol").is_in(symbols))
                 & (pl.col("date") >= cutoff)
             )
+            .unique(subset=["symbol", "date"], keep="last")
             .sort(["symbol", "date"])
         )
         hist_cols = [c for c in ["symbol", "date", "open", "high", "low", "close",
@@ -2134,7 +2135,7 @@ def compute_enriched_today(
             pl.col("boll_upper").alias("_prev_boll_upper"),
             pl.col("boll_lower").alias("_prev_boll_lower"),
             pl.col("close").alias("_prev_close_enriched"),
-        )
+        ).unique(subset=["symbol"], keep="last")
         df = df.join(sig_prev, on="symbol", how="left")
 
         df = df.with_columns([

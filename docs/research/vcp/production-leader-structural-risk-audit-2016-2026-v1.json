@@ -1,0 +1,21 @@
+{
+  "analysis": "production-leader-structural-risk-audit-2016-2026-v1",
+  "source_run": "20260907T123519390606Z",
+  "source_evidence": "data/research/vcp/runs/20260907T123519390606Z/entry-structure-evidence.json",
+  "scope": "298 executed entries; signal-time structure only",
+  "calculation": "last_leg_low = pivot * (1 - last_leg_depth); structural_risk = 1 - last_leg_low / actual_entry_price",
+  "all_trades": {
+    "count": 298,
+    "risk_p10": 0.0731,
+    "risk_median": 0.1033,
+    "risk_p90": 0.1449,
+    "share_within_5pct": 0.0134,
+    "share_within_8pct": 0.1711,
+    "share_within_10pct": 0.4362
+  },
+  "winner_risk_median": 0.1010,
+  "nonwinner_risk_median": 0.1050,
+  "decision": "current_last_contraction_low_is_not_a_practical_stop_anchor",
+  "interpretation": "The current swing detector describes broad contraction legs. Its last-leg low is usually around ten percent below entry and barely differs between winners and nonwinners, so substituting it for the fixed stop would widen risk without adding selection information.",
+  "next_research_question": "Represent the causally observable tight pivot shelf separately from the broad contraction leg, then ask whether shelf acceptance and shelf failure explain immediate expansion. Do not search stop percentages against the current broad-leg representation."
+}

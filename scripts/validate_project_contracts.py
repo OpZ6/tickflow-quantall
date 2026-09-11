@@ -57,6 +57,7 @@ def _markdown_link_errors(path: Path) -> list[str]:
 def validate() -> list[str]:
     from app.market_facts.registry import ROUTES, validate_registry_contracts
     from app.quantx_data.collectors import SOURCE_MANAGER
+    from app.quantx_data.security_snapshots import snapshot_manager
 
     errors: list[str] = []
     for root in PRODUCTION_ROOTS:
@@ -96,7 +97,13 @@ def validate() -> list[str]:
             errors.append(f"AGENTS.md does not route to docs/{name}")
 
     errors.extend(validate_registry_contracts())
-    registered = {spec.name for spec in SOURCE_MANAGER.specs} | INTERNAL_FACT_SOURCES
+    # Manual research sources are registered separately, never auto-selected by
+    # the daily pipeline. Inspect their real registry without collecting data.
+    registered = (
+        {spec.name for spec in SOURCE_MANAGER.specs}
+        | {spec.name for spec in snapshot_manager().specs}
+        | INTERNAL_FACT_SOURCES
+    )
     for dataset_id, route in ROUTES.items():
         for source_id in route.sources:
             if source_id not in registered:

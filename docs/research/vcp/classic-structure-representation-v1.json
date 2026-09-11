@@ -1,0 +1,37 @@
+{
+  "experiment": "classic-structure-representation-v1",
+  "type": "outcome_blind_semantic_representation",
+  "registered_before_implementation": true,
+  "question": "Can one topology-first representation identify the supply-contraction structure it claims to identify without using future returns or tuning the legacy detector?",
+  "scope": "Broad VCP candidates only. The existing swing extractor, trend template, RS gate, market regime, entry, exit and portfolio rules remain unchanged and are not tested here.",
+  "fixed_method": {
+    "pattern_cutoff": "All structure and supply inputs end before the breakout signal bar. The signal bar is demand evidence only.",
+    "swings": "Reuse the existing span-2, volatility-adaptive confirmed swing points so this audit changes one concept only.",
+    "contraction_chain": "Take the latest contiguous suffix of adjacent high-to-low pullbacks whose depths strictly decrease. No pullback may be skipped and the chain must contain at least two contractions.",
+    "pivot_integrity": "After the final contraction high and before the signal, no completed close may exceed that high.",
+    "right_edge": "The last pre-signal close must remain inside the final contraction and in its upper half.",
+    "supply": "Median volume from the final contraction high through the pre-signal bar must be lower than median volume in the earlier part of the contiguous contraction chain.",
+    "supported": "All four conditions hold: contiguous multi-contraction chain, pivot integrity, upper-half right edge, and relational supply reduction. There are no return-derived cutoffs or weighted scores."
+  },
+  "fresh_blind_packet": {
+    "years": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    "per_year": {"supported": 2, "unsupported": 2},
+    "selection": "Ascending SHA-256 of symbol|signal_date|scale|pivot_date|representation_status after excluding the first blind packet.",
+    "hidden_until_labels_frozen": ["symbol", "calendar date", "future breakout label", "future return", "future MFE"],
+    "label_rubric": "Reuse classic, partial and nonclassic definitions from production-leader-classic-vcp-blind-casebook-v1."
+  },
+  "semantic_acceptance": {
+    "supported_classic_or_partial_rate_min": 0.75,
+    "supported_nonclassic_rate_max": 0.25,
+    "supported_minus_unsupported_classic_or_partial_min": 0.30,
+    "note": "These gates evaluate naming fidelity, not predictive edge, and are not strategy parameters."
+  },
+  "anti_overfit": [
+    "Do not read future outcomes before labels and their hash are frozen.",
+    "Do not alter the representation after viewing the fresh packet.",
+    "Do not infer entry, exit, stop or portfolio rules from semantic labels.",
+    "If a gate fails, stop this topology and do not vary swing span, volume windows or acceptance thresholds on the same packet."
+  ],
+  "next_if_pass": "Retain the representation as a separately named classic-structure research layer and freeze it before any historical return diagnostic.",
+  "next_if_fail": "Stop price-only structure refinement and move to causal catalyst or sponsorship evidence while retaining the broad watchlist."
+}

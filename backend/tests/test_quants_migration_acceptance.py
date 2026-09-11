@@ -1,7 +1,7 @@
 """Business checks for the versioned migration strategies (no source checkout needed)."""
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -58,6 +58,39 @@ def case_market(frame):
             c for c in ("net_mf_amount", "pct_chg", "ma10", "vol_ma20") if c in frame.columns
         ],
     )
+
+
+@pytest.mark.parametrize("kind", ["cup", "pullback"])
+@pytest.mark.parametrize("field,value", [("open", np.nan), ("low", 0), ("volume", 0)])
+def test_long_history_validation_is_not_lost_after_420_bars(monkeypatch, kind, field, value):
+    from app.strategy.builtin import _quants_legacy_patterns as patterns
+
+    # Isolate the shared validity gate from the shape detectors.
+    monkeypatch.setattr(patterns, "cup_detect", lambda *args: {"status": "executable"})
+    monkeypatch.setattr(patterns, "pullback_detect", lambda *args: {"status": "executable"})
+    frame = pl.DataFrame(
+        {
+            "date": [date(2020, 1, 1) + timedelta(days=i) for i in range(500)],
+            "symbol": ["600000.SH"] * 500,
+            **{
+                name: [10.0] * 500
+                for name in ("open", "high", "low", "close", "volume", "net_mf_amount")
+            },
+        }
+    )
+    market = case_market(frame)
+    strategy = patterns.LegacyPatternStrategy(kind)
+    assert strategy.compute_signals(market, {}).entry[-1, 0]
+    market = case_market(
+        frame.with_columns(
+            pl.when(pl.col("date") == date(2020, 1, 1))
+            .then(value)
+            .otherwise(pl.col(field))
+            .alias(field)
+        )
+    )
+    assert strategy._detect(market, 0, 499, {})["reason"] == "invalid_history"
+    assert not strategy.compute_signals(market, {}).entry.any()
 
 
 def test_v2_is_hidden_but_compatibility_id_survives():

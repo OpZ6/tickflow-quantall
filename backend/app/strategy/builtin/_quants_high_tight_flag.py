@@ -162,7 +162,16 @@ class QuantsHighTightFlagStrategy:
             or np.any(values[3] <= 0)
         ):
             return None
-        return detect(*values, params)
+        candidate = detect(*values, params)
+        if (
+            candidate
+            and params.get("exclude_short_scale", False)
+            and candidate.get("scale") == "short"
+            and candidate.get("status") == "executable"
+        ):
+            # Filter the original primary; choosing an alternate changes the hypothesis.
+            candidate = {**candidate, "status": "watch", "reason": "short_scale_excluded"}
+        return candidate
 
     def compute_signals(self, market: MarketDataMatrix, params):
         entry = np.zeros(market.shape, dtype=bool)

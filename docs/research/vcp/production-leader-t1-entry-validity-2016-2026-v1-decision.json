@@ -1,0 +1,42 @@
+{
+  "decision": "adopt_strict_next_market_session_entry_validity",
+  "scope": "execution_contract_only",
+  "strategy_rules_changed": false,
+  "old_run": "20260907T123519390606Z",
+  "replacement_run": "20260907T191325624983Z",
+  "protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "reason": "A close-T entry signal must expire after the next market session. The old matrix delayed by the next present asset bar and could execute stale orders after missing sessions.",
+  "old_run_audit": {
+    "trades": 298,
+    "entries_on_next_market_session": 288,
+    "stale_delayed_entries": 10,
+    "worst_delay_example": {
+      "symbol": "600797.SH",
+      "signal_date": "2016-10-26",
+      "old_entry_date": "2017-01-06",
+      "required_entry_session": "2016-10-27"
+    }
+  },
+  "replacement_run_result": {
+    "candidates": 837,
+    "trades": 290,
+    "expired_or_untradable_entry_attempts": 21,
+    "total_return": 2.0969,
+    "annual_return": 0.1184,
+    "max_drawdown": -0.232,
+    "sharpe": 0.74,
+    "win_rate": 0.2966,
+    "avg_win": 0.1585,
+    "avg_loss": 0.0407,
+    "avg_exposure": 0.2656,
+    "timing_violations": 0
+  },
+  "trade_path_delta": {
+    "old_only": 13,
+    "replacement_only": 5,
+    "note": "Portfolio slot changes propagate beyond the ten stale fills, so trade-count delta alone is not the stale-fill count."
+  },
+  "interpretation": "The candidate set is unchanged. The lower return is accepted as removal of non-causal execution, not treated as a strategy failure or a prompt to retune parameters.",
+  "follow_up": "Use the replacement run for future baseline performance references. Keep the exposed-history strategy-change queue frozen; do not rerun stopped parameter or mechanism variants merely to recover return.",
+  "superseded_by_causal_share_run": "20260908T021955114526Z"
+}

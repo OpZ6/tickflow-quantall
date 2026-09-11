@@ -115,6 +115,37 @@ def test_stock_returns_prefers_repository_computed_turnover(tmp_path) -> None:
     assert result["return"][1] == pytest.approx(0.1)
 
 
+def test_stock_returns_falls_back_when_repository_omits_required_column(tmp_path) -> None:
+    days = [date(2026, 8, 27), date(2026, 8, 28)]
+    persisted = pl.DataFrame(
+        {
+            "symbol": ["600000.SH", "600000.SH"],
+            "date": days,
+            "close": [10.0, 11.0],
+            "raw_close": [10.0, 11.0],
+            "amount": [100.0, 120.0],
+            "turnover_rate": [1.5, 1.8],
+        }
+    )
+    for day in days:
+        target = tmp_path / "kline_daily_enriched" / f"date={day.isoformat()}"
+        target.mkdir(parents=True)
+        persisted.filter(pl.col("date") == day).write_parquet(target / "part.parquet")
+
+    class Repository:
+        def get_enriched_range(self, start, end, *, columns):
+            return persisted.select(["symbol", "date", "close", "raw_close", "amount"])
+
+    result = _stock_returns(tmp_path, days[-1], repo=Repository())
+
+    assert result["turnover_rate"].to_list() == [1.5, 1.8]
+    assert result["return"][1] == pytest.approx(0.1)
+
+
+def test_density_returns_unavailable_for_schema_less_empty_input() -> None:
+    assert _density(pl.DataFrame(), date(2026, 8, 28)) == {}
+
+
 def test_state_transition_normalizes_each_non_empty_row() -> None:
     frame = pl.DataFrame(
         {

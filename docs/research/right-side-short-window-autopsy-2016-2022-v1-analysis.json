@@ -1,0 +1,978 @@
+{
+  "experiment": "right-side-short-window-autopsy-2016-2022-v1",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\right-side-short-window-autopsy-2016-2022-v1.json",
+  "training_end": "2022-12-31",
+  "windows": [
+    5,
+    10,
+    20
+  ],
+  "cost": {
+    "commission_pct": 0.0003,
+    "slippage_bps": 10.0,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "gaps": [],
+  "families": {
+    "wide_vcp": {
+      "trades": 4396,
+      "windows": {
+        "5": {
+          "complete": 4366,
+          "signal_days": 1322,
+          "trade_mean_gross": 0.002062,
+          "trade_mean_net": -0.001541,
+          "trade_mean_gross_excess": 0.002084,
+          "trade_mean_net_excess": -0.001519,
+          "date_ew_gross": -7.2e-05,
+          "date_ew_net": -0.003667,
+          "date_ew_gross_excess": 0.000395,
+          "date_ew_net_excess": -0.003202,
+          "date_ew_market": -0.000227,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 3,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 229,
+              "signal_days": 108,
+              "date_ew_net_excess": -0.009706
+            },
+            "2017": {
+              "complete": 1152,
+              "signal_days": 236,
+              "date_ew_net_excess": 0.001694
+            },
+            "2018": {
+              "complete": 637,
+              "signal_days": 194,
+              "date_ew_net_excess": 0.001321
+            },
+            "2019": {
+              "complete": 796,
+              "signal_days": 217,
+              "date_ew_net_excess": -0.009156
+            },
+            "2020": {
+              "complete": 633,
+              "signal_days": 211,
+              "date_ew_net_excess": 0.003287
+            },
+            "2021": {
+              "complete": 500,
+              "signal_days": 197,
+              "date_ew_net_excess": -0.005025
+            },
+            "2022": {
+              "complete": 419,
+              "signal_days": 159,
+              "date_ew_net_excess": -0.009798
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": 0.005379,
+            "sideways": -0.000813,
+            "up": -0.030066
+          }
+        },
+        "10": {
+          "complete": 4353,
+          "signal_days": 1319,
+          "trade_mean_gross": 0.001448,
+          "trade_mean_net": -0.002152,
+          "trade_mean_gross_excess": 0.002179,
+          "trade_mean_net_excess": -0.001424,
+          "date_ew_gross": 0.000628,
+          "date_ew_net": -0.002969,
+          "date_ew_gross_excess": 0.000188,
+          "date_ew_net_excess": -0.003408,
+          "date_ew_market": 0.000937,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 4,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 227,
+              "signal_days": 106,
+              "date_ew_net_excess": -0.012312
+            },
+            "2017": {
+              "complete": 1147,
+              "signal_days": 235,
+              "date_ew_net_excess": 0.001087
+            },
+            "2018": {
+              "complete": 636,
+              "signal_days": 194,
+              "date_ew_net_excess": 0.004736
+            },
+            "2019": {
+              "complete": 795,
+              "signal_days": 217,
+              "date_ew_net_excess": -0.009699
+            },
+            "2020": {
+              "complete": 634,
+              "signal_days": 211,
+              "date_ew_net_excess": 0.001715
+            },
+            "2021": {
+              "complete": 495,
+              "signal_days": 197,
+              "date_ew_net_excess": 0.000598
+            },
+            "2022": {
+              "complete": 419,
+              "signal_days": 159,
+              "date_ew_net_excess": -0.01723
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": 0.005693,
+            "sideways": 0.000508,
+            "up": -0.02967
+          }
+        },
+        "20": {
+          "complete": 4331,
+          "signal_days": 1317,
+          "trade_mean_gross": 0.00175,
+          "trade_mean_net": -0.001852,
+          "trade_mean_gross_excess": 0.002806,
+          "trade_mean_net_excess": -0.000799,
+          "date_ew_gross": 0.000135,
+          "date_ew_net": -0.003461,
+          "date_ew_gross_excess": -0.002674,
+          "date_ew_net_excess": -0.00626,
+          "date_ew_market": 0.00387,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 3,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 223,
+              "signal_days": 105,
+              "date_ew_net_excess": -0.03397
+            },
+            "2017": {
+              "complete": 1138,
+              "signal_days": 236,
+              "date_ew_net_excess": 0.007743
+            },
+            "2018": {
+              "complete": 632,
+              "signal_days": 194,
+              "date_ew_net_excess": -0.003006
+            },
+            "2019": {
+              "complete": 791,
+              "signal_days": 217,
+              "date_ew_net_excess": -0.019013
+            },
+            "2020": {
+              "complete": 632,
+              "signal_days": 211,
+              "date_ew_net_excess": 0.006837
+            },
+            "2021": {
+              "complete": 499,
+              "signal_days": 196,
+              "date_ew_net_excess": 0.00193
+            },
+            "2022": {
+              "complete": 416,
+              "signal_days": 158,
+              "date_ew_net_excess": -0.02289
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": 0.010841,
+            "sideways": 0.00455,
+            "up": -0.02763
+          }
+        }
+      },
+      "early_death": {
+        "first_two_bars_observed": 4386,
+        "never_plus_3pct_count": 2461,
+        "never_plus_3pct_share": 0.561104,
+        "window_5_complete_with_two_bars": 4363,
+        "never_plus_3pct_and_5d_net_negative_share": 0.379097
+      },
+      "run_id": "20260909T135940874097Z",
+      "cited_ledger_trades": 4396,
+      "ledger_trades": 4396,
+      "training_trades": 4396,
+      "exposure_trades_after_training": 0,
+      "rule": "stop_as_selector"
+    },
+    "leader_vcp": {
+      "trades": 173,
+      "windows": {
+        "5": {
+          "complete": 170,
+          "signal_days": 113,
+          "trade_mean_gross": 0.008869,
+          "trade_mean_net": 0.005242,
+          "trade_mean_gross_excess": -0.001274,
+          "trade_mean_net_excess": -0.004864,
+          "date_ew_gross": 0.005757,
+          "date_ew_net": 0.002141,
+          "date_ew_gross_excess": -0.001741,
+          "date_ew_net_excess": -0.00533,
+          "date_ew_market": 0.00748,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 3,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 28,
+              "signal_days": 20,
+              "date_ew_net_excess": -0.016833
+            },
+            "2017": {
+              "complete": 25,
+              "signal_days": 16,
+              "date_ew_net_excess": 0.002344
+            },
+            "2018": {
+              "complete": 16,
+              "signal_days": 10,
+              "date_ew_net_excess": -0.034684
+            },
+            "2019": {
+              "complete": 35,
+              "signal_days": 22,
+              "date_ew_net_excess": -0.007256
+            },
+            "2020": {
+              "complete": 40,
+              "signal_days": 27,
+              "date_ew_net_excess": -0.000431
+            },
+            "2021": {
+              "complete": 13,
+              "signal_days": 9,
+              "date_ew_net_excess": 0.02226
+            },
+            "2022": {
+              "complete": 13,
+              "signal_days": 9,
+              "date_ew_net_excess": 0.001627
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.051097,
+            "sideways": -0.002365,
+            "up": -0.021525
+          }
+        },
+        "10": {
+          "complete": 167,
+          "signal_days": 111,
+          "trade_mean_gross": 0.024946,
+          "trade_mean_net": 0.021261,
+          "trade_mean_gross_excess": 0.006338,
+          "trade_mean_net_excess": 0.00272,
+          "date_ew_gross": 0.020064,
+          "date_ew_net": 0.016396,
+          "date_ew_gross_excess": 0.003538,
+          "date_ew_net_excess": -7e-05,
+          "date_ew_market": 0.015893,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 4,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 26,
+              "signal_days": 18,
+              "date_ew_net_excess": -0.021463
+            },
+            "2017": {
+              "complete": 25,
+              "signal_days": 16,
+              "date_ew_net_excess": -0.00587
+            },
+            "2018": {
+              "complete": 16,
+              "signal_days": 10,
+              "date_ew_net_excess": -0.08676
+            },
+            "2019": {
+              "complete": 34,
+              "signal_days": 22,
+              "date_ew_net_excess": 0.017372
+            },
+            "2020": {
+              "complete": 40,
+              "signal_days": 27,
+              "date_ew_net_excess": 0.001858
+            },
+            "2021": {
+              "complete": 13,
+              "signal_days": 9,
+              "date_ew_net_excess": 0.071209
+            },
+            "2022": {
+              "complete": 13,
+              "signal_days": 9,
+              "date_ew_net_excess": 0.029653
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.08079,
+            "sideways": 0.016616,
+            "up": -0.02242
+          }
+        },
+        "20": {
+          "complete": 168,
+          "signal_days": 112,
+          "trade_mean_gross": 0.017861,
+          "trade_mean_net": 0.014201,
+          "trade_mean_gross_excess": -0.004008,
+          "trade_mean_net_excess": -0.007589,
+          "date_ew_gross": 0.009233,
+          "date_ew_net": 0.005604,
+          "date_ew_gross_excess": -0.010041,
+          "date_ew_net_excess": -0.0136,
+          "date_ew_market": 0.018747,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 2,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 27,
+              "signal_days": 19,
+              "date_ew_net_excess": -0.0127
+            },
+            "2017": {
+              "complete": 25,
+              "signal_days": 16,
+              "date_ew_net_excess": -0.001917
+            },
+            "2018": {
+              "complete": 16,
+              "signal_days": 10,
+              "date_ew_net_excess": -0.122169
+            },
+            "2019": {
+              "complete": 35,
+              "signal_days": 22,
+              "date_ew_net_excess": 0.00726
+            },
+            "2020": {
+              "complete": 39,
+              "signal_days": 27,
+              "date_ew_net_excess": -0.044021
+            },
+            "2021": {
+              "complete": 13,
+              "signal_days": 9,
+              "date_ew_net_excess": 0.121931
+            },
+            "2022": {
+              "complete": 13,
+              "signal_days": 9,
+              "date_ew_net_excess": -0.010896
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.024421,
+            "sideways": -0.001732,
+            "up": -0.007849
+          }
+        }
+      },
+      "early_death": {
+        "first_two_bars_observed": 171,
+        "never_plus_3pct_count": 89,
+        "never_plus_3pct_share": 0.520468,
+        "window_5_complete_with_two_bars": 170,
+        "never_plus_3pct_and_5d_net_negative_share": 0.358824
+      },
+      "run_id": "20260908T024521089151Z",
+      "cited_ledger_trades": 290,
+      "ledger_trades": 290,
+      "training_trades": 173,
+      "exposure_trades_after_training": 117,
+      "rule": "stop_as_selector"
+    },
+    "cup_handle": {
+      "trades": 98489,
+      "windows": {
+        "5": {
+          "complete": 98140,
+          "signal_days": 1643,
+          "trade_mean_gross": -2.4e-05,
+          "trade_mean_net": -0.003619,
+          "trade_mean_gross_excess": -0.000957,
+          "trade_mean_net_excess": -0.004549,
+          "date_ew_gross": -0.000542,
+          "date_ew_net": -0.004135,
+          "date_ew_gross_excess": -0.001938,
+          "date_ew_net_excess": -0.005526,
+          "date_ew_market": 0.001526,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 0,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 6673,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.0111
+            },
+            "2017": {
+              "complete": 16287,
+              "signal_days": 244,
+              "date_ew_net_excess": -0.003436
+            },
+            "2018": {
+              "complete": 12051,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.00845
+            },
+            "2019": {
+              "complete": 16933,
+              "signal_days": 244,
+              "date_ew_net_excess": -0.003293
+            },
+            "2020": {
+              "complete": 14784,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.002478
+            },
+            "2021": {
+              "complete": 16982,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.004196
+            },
+            "2022": {
+              "complete": 14430,
+              "signal_days": 183,
+              "date_ew_net_excess": -0.005823
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": 0.003053,
+            "sideways": -0.004827,
+            "up": -0.009635
+          }
+        },
+        "10": {
+          "complete": 97998,
+          "signal_days": 1643,
+          "trade_mean_gross": -6.5e-05,
+          "trade_mean_net": -0.00366,
+          "trade_mean_gross_excess": -0.001549,
+          "trade_mean_net_excess": -0.005138,
+          "date_ew_gross": 0.000141,
+          "date_ew_net": -0.003455,
+          "date_ew_gross_excess": -0.002964,
+          "date_ew_net_excess": -0.006548,
+          "date_ew_market": 0.003433,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 0,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 6648,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.0141
+            },
+            "2017": {
+              "complete": 16244,
+              "signal_days": 244,
+              "date_ew_net_excess": -0.003568
+            },
+            "2018": {
+              "complete": 12003,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.011304
+            },
+            "2019": {
+              "complete": 16914,
+              "signal_days": 244,
+              "date_ew_net_excess": -0.004303
+            },
+            "2020": {
+              "complete": 14780,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.002652
+            },
+            "2021": {
+              "complete": 16981,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.004247
+            },
+            "2022": {
+              "complete": 14428,
+              "signal_days": 183,
+              "date_ew_net_excess": -0.005403
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": 0.00508,
+            "sideways": -0.005406,
+            "up": -0.014213
+          }
+        },
+        "20": {
+          "complete": 97842,
+          "signal_days": 1642,
+          "trade_mean_gross": 0.000365,
+          "trade_mean_net": -0.003231,
+          "trade_mean_gross_excess": -0.001688,
+          "trade_mean_net_excess": -0.005278,
+          "date_ew_gross": 0.001927,
+          "date_ew_net": -0.001675,
+          "date_ew_gross_excess": -0.004364,
+          "date_ew_net_excess": -0.007943,
+          "date_ew_market": 0.007034,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 1,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 6616,
+              "signal_days": 242,
+              "date_ew_net_excess": -0.023023
+            },
+            "2017": {
+              "complete": 16147,
+              "signal_days": 244,
+              "date_ew_net_excess": -0.003157
+            },
+            "2018": {
+              "complete": 11987,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.013298
+            },
+            "2019": {
+              "complete": 16908,
+              "signal_days": 244,
+              "date_ew_net_excess": -0.003385
+            },
+            "2020": {
+              "complete": 14785,
+              "signal_days": 243,
+              "date_ew_net_excess": 0.001633
+            },
+            "2021": {
+              "complete": 16968,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.007046
+            },
+            "2022": {
+              "complete": 14431,
+              "signal_days": 183,
+              "date_ew_net_excess": -0.007258
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": 0.005445,
+            "sideways": -0.004932,
+            "up": -0.016124
+          }
+        }
+      },
+      "early_death": {
+        "first_two_bars_observed": 98390,
+        "never_plus_3pct_count": 60696,
+        "never_plus_3pct_share": 0.616892,
+        "window_5_complete_with_two_bars": 98093,
+        "never_plus_3pct_and_5d_net_negative_share": 0.426085
+      },
+      "run_id": "20260909T133226351846Z",
+      "cited_ledger_trades": 98489,
+      "ledger_trades": 98489,
+      "training_trades": 98489,
+      "exposure_trades_after_training": 0,
+      "rule": "stop_as_selector"
+    },
+    "high_tight_flag": {
+      "trades": 1245,
+      "windows": {
+        "5": {
+          "complete": 1238,
+          "signal_days": 726,
+          "trade_mean_gross": -0.007338,
+          "trade_mean_net": -0.010907,
+          "trade_mean_gross_excess": -0.006329,
+          "trade_mean_net_excess": -0.009902,
+          "date_ew_gross": -0.010535,
+          "date_ew_net": -0.014092,
+          "date_ew_gross_excess": -0.010454,
+          "date_ew_net_excess": -0.014012,
+          "date_ew_market": -0.000326,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 1,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 163,
+              "signal_days": 97,
+              "date_ew_net_excess": -0.018344
+            },
+            "2017": {
+              "complete": 251,
+              "signal_days": 133,
+              "date_ew_net_excess": -0.018035
+            },
+            "2018": {
+              "complete": 47,
+              "signal_days": 41,
+              "date_ew_net_excess": -0.036337
+            },
+            "2019": {
+              "complete": 162,
+              "signal_days": 100,
+              "date_ew_net_excess": -0.011643
+            },
+            "2020": {
+              "complete": 274,
+              "signal_days": 146,
+              "date_ew_net_excess": 0.007663
+            },
+            "2021": {
+              "complete": 262,
+              "signal_days": 154,
+              "date_ew_net_excess": -0.021752
+            },
+            "2022": {
+              "complete": 79,
+              "signal_days": 55,
+              "date_ew_net_excess": -0.020177
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.029527,
+            "sideways": -0.007858,
+            "up": -0.022203
+          }
+        },
+        "10": {
+          "complete": 1234,
+          "signal_days": 725,
+          "trade_mean_gross": -0.012381,
+          "trade_mean_net": -0.015932,
+          "trade_mean_gross_excess": -0.011637,
+          "trade_mean_net_excess": -0.01519,
+          "date_ew_gross": -0.011625,
+          "date_ew_net": -0.015179,
+          "date_ew_gross_excess": -0.012717,
+          "date_ew_net_excess": -0.016267,
+          "date_ew_market": 0.001175,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 1,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 160,
+              "signal_days": 96,
+              "date_ew_net_excess": -0.009494
+            },
+            "2017": {
+              "complete": 250,
+              "signal_days": 134,
+              "date_ew_net_excess": -0.02484
+            },
+            "2018": {
+              "complete": 46,
+              "signal_days": 40,
+              "date_ew_net_excess": -0.030643
+            },
+            "2019": {
+              "complete": 162,
+              "signal_days": 100,
+              "date_ew_net_excess": -0.028477
+            },
+            "2020": {
+              "complete": 275,
+              "signal_days": 146,
+              "date_ew_net_excess": 0.007727
+            },
+            "2021": {
+              "complete": 262,
+              "signal_days": 154,
+              "date_ew_net_excess": -0.021049
+            },
+            "2022": {
+              "complete": 79,
+              "signal_days": 55,
+              "date_ew_net_excess": -0.024848
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.024913,
+            "sideways": -0.013741,
+            "up": -0.016418
+          }
+        },
+        "20": {
+          "complete": 1233,
+          "signal_days": 726,
+          "trade_mean_gross": -0.014899,
+          "trade_mean_net": -0.018441,
+          "trade_mean_gross_excess": -0.01555,
+          "trade_mean_net_excess": -0.01909,
+          "date_ew_gross": -0.011833,
+          "date_ew_net": -0.015386,
+          "date_ew_gross_excess": -0.016022,
+          "date_ew_net_excess": -0.019559,
+          "date_ew_market": 0.003566,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 1,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 161,
+              "signal_days": 97,
+              "date_ew_net_excess": -0.031507
+            },
+            "2017": {
+              "complete": 248,
+              "signal_days": 133,
+              "date_ew_net_excess": -0.037778
+            },
+            "2018": {
+              "complete": 47,
+              "signal_days": 41,
+              "date_ew_net_excess": -0.063208
+            },
+            "2019": {
+              "complete": 161,
+              "signal_days": 100,
+              "date_ew_net_excess": -0.043145
+            },
+            "2020": {
+              "complete": 275,
+              "signal_days": 146,
+              "date_ew_net_excess": 0.03783
+            },
+            "2021": {
+              "complete": 262,
+              "signal_days": 154,
+              "date_ew_net_excess": -0.015835
+            },
+            "2022": {
+              "complete": 79,
+              "signal_days": 55,
+              "date_ew_net_excess": -0.041783
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.048214,
+            "sideways": -0.012295,
+            "up": -0.007613
+          }
+        }
+      },
+      "early_death": {
+        "first_two_bars_observed": 1240,
+        "never_plus_3pct_count": 481,
+        "never_plus_3pct_share": 0.387903,
+        "window_5_complete_with_two_bars": 1235,
+        "never_plus_3pct_and_5d_net_negative_share": 0.276923
+      },
+      "run_id": "20260909T130617820559Z",
+      "cited_ledger_trades": 1245,
+      "ledger_trades": 1245,
+      "training_trades": 1245,
+      "exposure_trades_after_training": 0,
+      "rule": "stop_as_selector"
+    },
+    "launch_pullback": {
+      "trades": 32171,
+      "windows": {
+        "5": {
+          "complete": 32002,
+          "signal_days": 1653,
+          "trade_mean_gross": -0.000644,
+          "trade_mean_net": -0.004238,
+          "trade_mean_gross_excess": -0.002696,
+          "trade_mean_net_excess": -0.006282,
+          "date_ew_gross": -0.00263,
+          "date_ew_net": -0.006216,
+          "date_ew_gross_excess": -0.004143,
+          "date_ew_net_excess": -0.007723,
+          "date_ew_market": 0.001514,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 0,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 2984,
+              "signal_days": 214,
+              "date_ew_net_excess": -0.01448
+            },
+            "2017": {
+              "complete": 2994,
+              "signal_days": 242,
+              "date_ew_net_excess": -0.009195
+            },
+            "2018": {
+              "complete": 3375,
+              "signal_days": 236,
+              "date_ew_net_excess": -0.008317
+            },
+            "2019": {
+              "complete": 4306,
+              "signal_days": 240,
+              "date_ew_net_excess": -0.005036
+            },
+            "2020": {
+              "complete": 5043,
+              "signal_days": 242,
+              "date_ew_net_excess": -0.006007
+            },
+            "2021": {
+              "complete": 6823,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.005119
+            },
+            "2022": {
+              "complete": 6477,
+              "signal_days": 236,
+              "date_ew_net_excess": -0.006669
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.005314,
+            "sideways": -0.00637,
+            "up": -0.005858
+          }
+        },
+        "10": {
+          "complete": 31887,
+          "signal_days": 1648,
+          "trade_mean_gross": -0.001767,
+          "trade_mean_net": -0.005356,
+          "trade_mean_gross_excess": -0.005108,
+          "trade_mean_net_excess": -0.008685,
+          "date_ew_gross": -0.004516,
+          "date_ew_net": -0.008095,
+          "date_ew_gross_excess": -0.007541,
+          "date_ew_net_excess": -0.011109,
+          "date_ew_market": 0.003122,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 0,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 2956,
+              "signal_days": 214,
+              "date_ew_net_excess": -0.021684
+            },
+            "2017": {
+              "complete": 2983,
+              "signal_days": 242,
+              "date_ew_net_excess": -0.016884
+            },
+            "2018": {
+              "complete": 3365,
+              "signal_days": 236,
+              "date_ew_net_excess": -0.011759
+            },
+            "2019": {
+              "complete": 4307,
+              "signal_days": 240,
+              "date_ew_net_excess": -0.009284
+            },
+            "2020": {
+              "complete": 5045,
+              "signal_days": 242,
+              "date_ew_net_excess": -0.005023
+            },
+            "2021": {
+              "complete": 6818,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.005176
+            },
+            "2022": {
+              "complete": 6413,
+              "signal_days": 231,
+              "date_ew_net_excess": -0.009109
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.005077,
+            "sideways": -0.009256,
+            "up": -0.008112
+          }
+        },
+        "20": {
+          "complete": 31487,
+          "signal_days": 1638,
+          "trade_mean_gross": -0.003465,
+          "trade_mean_net": -0.007047,
+          "trade_mean_gross_excess": -0.010614,
+          "trade_mean_net_excess": -0.014171,
+          "date_ew_gross": -0.008093,
+          "date_ew_net": -0.011659,
+          "date_ew_gross_excess": -0.014632,
+          "date_ew_net_excess": -0.018174,
+          "date_ew_market": 0.006655,
+          "same_day_unselected": "unavailable_not_in_frozen_inputs",
+          "positive_excess_years": 0,
+          "years_evaluated": 7,
+          "yearly": {
+            "2016": {
+              "complete": 2931,
+              "signal_days": 214,
+              "date_ew_net_excess": -0.035251
+            },
+            "2017": {
+              "complete": 2952,
+              "signal_days": 242,
+              "date_ew_net_excess": -0.030825
+            },
+            "2018": {
+              "complete": 3362,
+              "signal_days": 236,
+              "date_ew_net_excess": -0.019167
+            },
+            "2019": {
+              "complete": 4303,
+              "signal_days": 240,
+              "date_ew_net_excess": -0.015658
+            },
+            "2020": {
+              "complete": 5043,
+              "signal_days": 242,
+              "date_ew_net_excess": -0.005198
+            },
+            "2021": {
+              "complete": 6824,
+              "signal_days": 243,
+              "date_ew_net_excess": -0.008035
+            },
+            "2022": {
+              "complete": 6072,
+              "signal_days": 221,
+              "date_ew_net_excess": -0.014816
+            }
+          },
+          "market_outcome_trade_mean_net_excess": {
+            "down": -0.019359,
+            "sideways": -0.01374,
+            "up": -0.011586
+          }
+        }
+      },
+      "early_death": {
+        "first_two_bars_observed": 32126,
+        "never_plus_3pct_count": 17923,
+        "never_plus_3pct_share": 0.557897,
+        "window_5_complete_with_two_bars": 31995,
+        "never_plus_3pct_and_5d_net_negative_share": 0.399469
+      },
+      "run_id": "20260909T053715693165Z",
+      "cited_ledger_trades": 32193,
+      "ledger_trades": 32193,
+      "training_trades": 32171,
+      "exposure_trades_after_training": 22,
+      "rule": "stop_as_selector"
+    }
+  }
+}

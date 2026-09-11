@@ -2,15 +2,70 @@ from __future__ import annotations
 
 import numpy as np
 
-from app.backtest.matrix import MarketDataMatrix, make_signal_matrix, valid_rolling_mean
+from app.backtest.matrix import MarketDataMatrix, make_signal_matrix, njit, valid_rolling_mean
 
 
-def _series(market, asset, t):
-    indices = np.flatnonzero(np.isfinite(market.close[: t + 1, asset]))
+def _series(market, asset, indices):
     return tuple(
         values[indices, asset]
         for values in (market.open, market.high, market.low, market.close, market.volume)
     )
+
+
+@njit(cache=True)
+def _broken_cup_continuity(high, low, close, min_depth, max_depth):
+    """Return the first legacy continuity guard with the original loop semantics."""
+    n = len(high)
+    limit = int(n * 0.65)
+    for left in range(5, limit):
+        lp = float(high[left])
+        local_high = float(high[max(0, left - 5)])
+        for index in range(max(0, left - 5) + 1, left + 1):
+            local_high = max(local_high, float(high[index]))
+        if lp < local_high:
+            continue
+
+        bottom = left + 5
+        for index in range(bottom + 1, n):
+            if low[index] < low[bottom]:
+                bottom = index
+        depth = (lp - float(low[bottom])) / lp if lp > 0 else 0.0
+        if depth < min_depth or depth > max_depth:
+            continue
+
+        rim = -1
+        for index in range(bottom + 1, n):
+            if lp * 0.95 <= high[index] <= lp * 1.05:
+                rim = index
+                break
+        if rim < 0 or rim - left < 20:
+            continue
+
+        broken = False
+        closes_above = 0
+        for index in range(bottom + 1, rim):
+            if high[index] > lp * 1.05:
+                broken = True
+            if close[index] > lp * 1.03:
+                closes_above += 1
+        if closes_above >= 2:
+            broken = True
+
+        if not broken:
+            first = -1
+            for index in range(rim + 1, n):
+                if high[index] > lp * 1.05:
+                    first = index
+                    break
+            if first >= 0 and first + 1 < n:
+                minimum_after = float(low[first + 1])
+                for index in range(first + 2, n):
+                    minimum_after = min(minimum_after, float(low[index]))
+                broken = minimum_after < lp * 0.9
+
+        if broken:
+            return True, lp
+    return False, 0.0
 
 
 def _cup_detect_window(high, low, close, volume, p):
@@ -139,48 +194,25 @@ def cup_detect(high, low, close, volume, p):
     continuity_candidate = None
     if len(close) >= 60:
         hh, ll, cc = high[-260:], low[-260:], close[-260:]
-        limit = int(len(hh) * 0.65)
-        for left in range(5, limit):
-            lp = float(hh[left])
-            if lp < float(np.max(hh[max(0, left - 5) : left + 1])):
-                continue
-            tail = ll[left + 5 :]
-            if not len(tail):
-                continue
-            bottom = left + 5 + int(np.argmin(tail))
-            depth = (lp - float(ll[bottom])) / lp if lp > 0 else 0.0
-            if depth < float(p.get("cup_min_depth_pct", 0.12)) or depth > float(
-                p.get("cup_max_depth_pct", 0.45)
-            ):
-                continue
-            rim = next(
-                (i for i in range(bottom + 1, len(hh)) if lp * 0.95 <= hh[i] <= lp * 1.05), None
-            )
-            if rim is None or rim - left < 20:
-                continue
-            middle = hh[bottom + 1 : rim]
-            broken = len(middle) and (
-                float(np.max(middle)) > lp * 1.05
-                or int(np.sum(cc[bottom + 1 : rim] > lp * 1.03)) >= 2
-            )
-            if not broken:
-                after = np.flatnonzero(hh[rim + 1 :] > lp * 1.05)
-                if len(after):
-                    first = rim + 1 + int(after[0])
-                    broken = first + 1 < len(ll) and float(np.min(ll[first + 1 :])) < lp * 0.9
-            if broken:
-                continuity_candidate = {
-                    "valid": False,
-                    "status": "invalid",
-                    "setup": "invalid",
-                    "stage": "mid_cup_breakout_invalid",
-                    "quality": 0.0,
-                    "scale": "long",
-                    "reason": "mid_cup_breakout_invalid",
-                    "pivot": round(lp, 4),
-                    "alternates": candidates[:3],
-                }
-                break
+        broken, lp = _broken_cup_continuity(
+            hh,
+            ll,
+            cc,
+            float(p.get("cup_min_depth_pct", 0.12)),
+            float(p.get("cup_max_depth_pct", 0.45)),
+        )
+        if broken:
+            continuity_candidate = {
+                "valid": False,
+                "status": "invalid",
+                "setup": "invalid",
+                "stage": "mid_cup_breakout_invalid",
+                "quality": 0.0,
+                "scale": "long",
+                "reason": "mid_cup_breakout_invalid",
+                "pivot": round(lp, 4),
+                "alternates": candidates[:3],
+            }
     if continuity_candidate is not None:
         candidates.append(continuity_candidate)
     if not candidates:
@@ -326,14 +358,17 @@ class LegacyPatternStrategy:
     def _detect(self, market, asset, t, params):
         if not np.isfinite(market.close[t, asset]):
             return {"valid": False, "status": "invalid", "reason": "missing_current_bar"}
-        o, h, low, c, v = _series(market, asset, t)
+        indices = np.flatnonzero(np.isfinite(market.close[: t + 1, asset]))
+        return self._detect_indices(market, asset, indices, params)
+
+    def _detect_indices(self, market, asset, indices, params):
+        o, h, low, c, v = _series(market, asset, indices)
         if (
             any(not np.isfinite(values).all() for values in (o, h, low, c, v))
             or np.any(low <= 0)
             or np.any(v <= 0)
         ):
             return {"valid": False, "status": "invalid", "reason": "invalid_history"}
-        indices = np.flatnonzero(np.isfinite(market.close[: t + 1, asset]))
         mf = None
         if self.kind == "pullback" and "net_mf_amount" not in market.fields:
             raise ValueError(
@@ -365,8 +400,9 @@ class LegacyPatternStrategy:
     def compute_signals(self, market: MarketDataMatrix, params):
         entry = np.zeros(market.shape, dtype=bool)
         for a in range(market.shape[1]):
-            for t in range(market.shape[0]):
-                d = self._detect(market, a, t, params)
+            valid_indices = np.flatnonzero(np.isfinite(market.close[:, a]))
+            for position, t in enumerate(valid_indices):
+                d = self._detect_indices(market, a, valid_indices[: position + 1], params)
                 entry[t, a] = d.get("status") == "executable"
         ma = valid_rolling_mean(
             market.close, np.isfinite(market.close), 20, bar_index=market.valid_bars

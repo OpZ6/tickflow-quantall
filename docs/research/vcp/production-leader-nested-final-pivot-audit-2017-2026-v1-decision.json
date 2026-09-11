@@ -1,0 +1,50 @@
+{
+  "experiment": "production-leader-nested-final-pivot-audit-2017-2026-v1",
+  "decision": "stop_mechanical_nested_pivot_direction",
+  "reason": "The fixed causal representation failed all three pre-registered acceptance conditions. A one-bar confirmed local high does not reliably recover a tight line-of-least-resistance structure inside the broad detected VCP legs.",
+  "sample": {
+    "unique_setups": 3771,
+    "available_setups": 2415,
+    "coverage": 0.6404,
+    "date_range": ["2017-11-15", "2026-06-30"]
+  },
+  "acceptance": {
+    "overall_coverage_at_least_0_70": false,
+    "every_full_year_coverage_at_least_0_60": false,
+    "median_nested_risk_at_most_half_broad_risk": false,
+    "accepted": false
+  },
+  "risk": {
+    "nested_risk_median": 0.07854,
+    "broad_risk_median_on_available_setups": 0.10632,
+    "ratio_of_medians": 0.7387,
+    "median_per_setup_compression_ratio": 0.7445,
+    "nested_structure_bars_median": 3,
+    "nested_structure_bars_p90": 10
+  },
+  "coverage_failures": {
+    "2020": 0.585,
+    "2021": 0.596,
+    "2025": 0.571
+  },
+  "descriptive_outcome_only": {
+    "future_breakout_false_nested_risk_median": 0.07636,
+    "future_breakout_true_nested_risk_median": 0.08299
+  },
+  "unavailable_reasons": {
+    "no_confirmed_local_high": 838,
+    "fewer_than_3_pre_signal_bars": 399,
+    "missing_signal_bar_in_production_inventory": 119
+  },
+  "guardrails": {
+    "strategy_changed": false,
+    "threshold_selected": false,
+    "portfolio_backtest_run": false,
+    "alternate_swing_spans_or_windows_forbidden": true
+  },
+  "evidence": [
+    "data/research/vcp/analysis/nested-final-pivot-2017-2026-v1.json",
+    "data/research/vcp/analysis/nested-final-pivot-2017-2026-v1.parquet"
+  ],
+  "next_action": "Create a blind pre-signal chart-labeling packet to determine whether the broad detector is admitting non-classic structures. Do not modify stop levels or micro-pivot extraction before that representation audit."
+}

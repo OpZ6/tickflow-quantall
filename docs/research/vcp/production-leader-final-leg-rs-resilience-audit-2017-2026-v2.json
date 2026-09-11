@@ -1,0 +1,39 @@
+{
+  "experiment": "production-leader-final-leg-rs-resilience-audit-2017-2026-v2",
+  "research_question": "Does a VCP leader that sustains cross-sectional relative strength throughout its recorded final contraction have more reliable post-breakout follow-through than one that only reaches the RS threshold on the signal day?",
+  "mechanism": "A genuine leader should absorb supply while its base forms. The final contraction may reduce absolute price, but relative strength should remain persistently high rather than recover only on the breakout bar.",
+  "primary_feature": "Share of official market sessions from pivot_date through signal_date, inclusive, whose causal 63/126/252-session composite cross-sectional RS percentile is at least 85.",
+  "measurement_contract": {
+    "calendar_partition": "data/trading_calendar/date=2026-09-07/part.parquet",
+    "denominator": "Every SSE open session from pivot_date through signal_date, inclusive.",
+    "completeness": "The feature is null unless pivot_date and signal_date are market sessions, every denominator session exists on the price matrix, every session has finite RS, and signal-date RS is finite.",
+    "missing_values": "Missing RS sessions remain in the denominator contract and invalidate the setup; they are never removed before computing the share.",
+    "endpoint": "The completed signal date is included and must be valid."
+  },
+  "causal_contract": "RS uses only closes available on each evaluated date. The feature window ends on the completed signal date. Future columns are labels only.",
+  "population": {
+    "inputs": [
+      "data/research/vcp/candidate-labels/source-vcp-2017-2020-v1/discovery-candidates.parquet",
+      "data/research/vcp/candidate-labels/source-vcp-v4/discovery-candidates.parquet",
+      "data/research/vcp/candidate-labels/source-vcp-2024-2026-v1/discovery-candidates.parquet"
+    ],
+    "deduplication": "First signal per symbol, scale and pivot_date, sorted by signal_date and symbol.",
+    "expected_unique_setups": 3771
+  },
+  "outcome": "true_breakout_10_7_20",
+  "acceptance": {
+    "feature_coverage_min": 0.95,
+    "overall_pairwise_probability_min": 0.56,
+    "years_above_0_5_min": 7,
+    "within_year_top_minus_bottom_quintile_breakout_rate_min": 0.05
+  },
+  "prior_exposure": "The same 2017-2026 population and the flawed v1 output have already been observed. V2 keeps the original thresholds unchanged and can close the measurement question, but cannot provide independent validation or directly qualify a strategy change.",
+  "guardrails": {
+    "strategy_changed": false,
+    "threshold_search": false,
+    "portfolio_backtest": false,
+    "secondary_features_are_diagnostic_only": true,
+    "failure_action": "Stop RS-window and threshold variants; retain the existing signal-day RS gate and frozen strategy.",
+    "pass_action": "Register the fixed feature for genuinely unseen forward evidence; do not promote it from this exposed interval."
+  }
+}

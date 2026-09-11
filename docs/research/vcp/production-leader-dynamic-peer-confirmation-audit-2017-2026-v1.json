@@ -1,0 +1,34 @@
+{
+  "experiment": "production-leader-dynamic-peer-confirmation-audit-2017-2026-v1",
+  "type": "descriptive_mechanism_audit",
+  "registered_before_result": true,
+  "hypothesis": "A VCP breakout is more likely to receive follow-through when demand is diffusing through a contemporaneous co-moving peer group, even when point-in-time industry membership is unavailable.",
+  "candidate_inputs": [
+    "data/research/vcp/candidate-labels/source-vcp-2017-2020-v1/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-v4/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-2024-2026-v1/discovery-candidates.parquet"
+  ],
+  "market_input": "data/kline_daily_enriched/date=*/part.parquet close",
+  "peer_definition": {
+    "correlation_window": "63 completed trading returns ending before signal day",
+    "minimum_overlapping_returns": 50,
+    "peer_count": 20,
+    "selection": "highest positive Pearson correlations; candidate excluded"
+  },
+  "signal_day_peer_features": [
+    "peer_correlation_median",
+    "peer_above_ma20_share",
+    "peer_return_20d_median",
+    "peer_at_63d_high_share"
+  ],
+  "future_labels_only": ["true_breakout_10_7_20", "return_40d", "mfe_40d"],
+  "analysis": [
+    "overall pairwise ranking probability",
+    "Spearman association with continuous 40-day return",
+    "calendar-year direction stability",
+    "within-year fixed quintile profiles"
+  ],
+  "decision_rule": "Continue this mechanism only if at least one peer-demand feature is directionally positive in at least 7 of 10 usable calendar years and its highest within-year quintile improves true-breakout rate by at least 5 percentage points over its lowest quintile without reversing continuous 40-day return. Otherwise stop. No feature cutoff or strategy rule may be selected from this audit.",
+  "anti_overfit": "One quarterly correlation window and one 20-peer representation are fixed as a representative mechanism test. No alternative window, peer count, correlation floor, feature combination, model, portfolio backtest, or neighboring variant is allowed after seeing the result.",
+  "causal_limit": "Dynamic peers are a price-derived proxy for shared sponsorship, not proof of industry identity or common fundamentals. Future paths are labels only."
+}

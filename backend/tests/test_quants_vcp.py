@@ -12,13 +12,35 @@ from app.strategy.builtin._quants_vcp import (
     apply_turnover_ranking,
     cross_sectional_percentile_ranks,
     entry_allowed,
+    fresh_20d_breakout_opportunity_mask,
     market_breadth_allowed,
+    market_outperformance_allowed,
     technical_score,
     trend_context,
 )
 from app.strategy.engine import StrategyDataContext, StrategyEngine
 
 BUILTIN = Path(__file__).resolve().parents[1] / "app/strategy/builtin"
+
+
+def test_fresh_20d_breakout_uses_prior_high_and_twenty_valid_bar_cooldown():
+    closes = [10.0] * 20 + [11.0, 12.0] + [12.0] * 18 + [13.0]
+    frame = pl.DataFrame({
+        "symbol": ["600000.SH"] * len(closes),
+        "date": [date(2024, 1, 1) + timedelta(days=i) for i in range(len(closes))],
+        "open": closes,
+        "high": closes,
+        "low": [value - 0.1 for value in closes],
+        "close": closes,
+        "volume": [1_000_000.0] * len(closes),
+        "amount": [30_000_000.0] * len(closes),
+    })
+
+    mask = fresh_20d_breakout_opportunity_mask(
+        build_market_data_matrix(frame, field_columns={"amount"})
+    )
+
+    assert np.flatnonzero(mask[:, 0]).tolist() == [20, 40]
 
 
 def test_snapshot_rejects_silent_zero_when_252_day_history_is_missing():
@@ -59,6 +81,14 @@ def test_cross_sectional_percentile_ranks_are_same_day_and_average_ties():
     assert ranks[0].tolist() == pytest.approx([25.0, 62.5, 62.5, 100.0])
     assert ranks[1, [0, 2, 3]].tolist() == pytest.approx([100.0, 100 / 3, 200 / 3])
     assert np.isnan(ranks[1, 1])
+
+
+def test_market_outperformance_uses_only_same_day_equal_weight_return():
+    close = np.array([[10.0, 10.0], [11.0, 10.2], [10.45, 10.404]])
+
+    allowed = market_outperformance_allowed(close)
+
+    assert allowed.tolist() == [[False, False], [True, False], [False, True]]
 
 
 def test_candidate_rankings_combine_fields_and_preserve_missing_values():
@@ -212,6 +242,37 @@ def test_a_share_dual_regime_allows_early_recovery_and_broad_advance():
     assert allowed[-2]  # 20% breadth, up from 10% five sessions earlier
     assert allowed[-1]  # broad advance with positive 63-session market return
     assert breadth[-2] == pytest.approx(0.2)
+
+
+def test_middle_expansion_is_an_opt_in_dual_regime_branch():
+    close = np.full((69, 10), 10.0)
+    close[-6] = [11.0 if asset < 3 else 9.0 for asset in range(10)]
+    close[-1] = [11.0 if asset < 5 else 9.0 for asset in range(10)]
+    ma20 = np.full_like(close, 10.0)
+
+    frozen, _ = market_breadth_allowed(close, ma20, {"a_share_dual_regime": True})
+    expanded, breadth = market_breadth_allowed(
+        close,
+        ma20,
+        {
+            "a_share_dual_regime": True,
+            "include_middle_expansion_regime": True,
+        },
+    )
+
+    assert breadth[-1] == pytest.approx(0.5)
+    assert not frozen[-1]
+    assert expanded[-1]
+
+
+def test_middle_expansion_strategy_is_separate_from_frozen_leader():
+    engine = StrategyEngine([BUILTIN])
+    frozen = engine.get("vcp_leader_breakout")
+    expanded = engine.get("vcp_middle_expansion")
+
+    assert StrategyEngine.resolve_params(frozen).get("include_middle_expansion_regime") is None
+    assert StrategyEngine.resolve_params(expanded)["include_middle_expansion_regime"] is True
+    assert expanded.entry_signals[-1] == "signal_quants_vcp_middle_expansion"
 
 
 def test_breakout_volume_can_rank_candidates_without_changing_default_score():
@@ -368,6 +429,30 @@ def test_volume_breakout_and_chase_band():
     ).entry[-1, 0]
 
 
+def test_signal_exit_can_be_disabled_for_a_registered_ablation():
+    rows = vcp_history(True).to_dicts()
+    rows.extend([
+        {
+            **rows[-1],
+            "date": rows[-1]["date"] + timedelta(days=offset),
+            "open": 101.0 - offset,
+            "high": 101.5 - offset,
+            "low": 100.0 - offset,
+            "close": 101.0 - offset,
+        }
+        for offset in range(1, 5)
+    ])
+    market = build_market_data_matrix(pl.DataFrame(rows))
+    params = {"trend_filter": False, "rs_min": 0}
+    enabled = strategy().matrix_strategy.compute_signals(market, params)
+    disabled = strategy().matrix_strategy.compute_signals(
+        market, {**params, "disable_signal_exit": True}
+    )
+
+    assert enabled.exit.any()
+    assert not disabled.exit.any()
+
+
 def test_prefix_causality_and_snapshot_match():
     s = strategy().matrix_strategy
     frame = vcp_history(True)
@@ -464,6 +549,65 @@ def test_default_full_universe_rs_trend_and_signal():
     assert signals.entry[-1, index]
     assert set(rows) == {"600000.SH"}
     assert rows["600000.SH"]["vcp_rs"] == 100
+
+
+def test_snapshot_trace_preserves_results_and_identifies_basic_filter_rejection():
+    engine = StrategyEngine([BUILTIN])
+    context = context_for(long_universe())
+    plain = engine.run("quants_vcp_legacy_v1", context)
+    context.screening_trace = {}
+    traced = engine.run("quants_vcp_legacy_v1", context)
+    assert traced.rows == plain.rows
+    assert traced.entry_signal_hits == plain.entry_signal_hits
+    stages = {row["symbol"]: row["stage"] for row in context.screening_trace["rows"]}
+    assert stages["600000.SH"] == "displayed_candidate"
+    assert all(stages[f"{i:06d}.SZ"] == "strategy_no_candidate" for i in range(1, 5))
+
+    blocked = engine.run(
+        "quants_vcp_legacy_v1", context,
+        overrides={"basic_filter": {
+            "enabled": True, "price_min": 1_000_000.0,
+            "market_cap_min": None, "amount_min": None,
+        }},
+    )
+    assert blocked.rows == []
+    stages = {row["symbol"]: row["stage"] for row in context.screening_trace["rows"]}
+    assert stages["600000.SH"] == "basic_filter"
+    assert context.screening_trace["as_of"] == str(context.as_of)
+
+    engine.run("quants_vcp_legacy_v1", context, pool=["000001.SZ"])
+    stages = {row["symbol"]: row["stage"] for row in context.screening_trace["rows"]}
+    assert stages["600000.SH"] == "pool_filter"
+
+
+def test_snapshot_trace_distinguishes_display_limit_from_entry_signal():
+    frame = long_universe()
+    second = frame.filter(pl.col("symbol") == "600000.SH").with_columns(pl.lit("600001.SH").alias("symbol"))
+    context = context_for(pl.concat([frame, second]))
+    context.screening_trace = {}
+    result = StrategyEngine([BUILTIN]).run(
+        "quants_vcp_legacy_v1", context, overrides={"display_limit": 1},
+    )
+    assert len(result.rows) == 1
+    assert len(result.entry_signal_hits) == 2
+    stages = [row["stage"] for row in context.screening_trace["rows"]]
+    assert stages.count("displayed_candidate") == 1
+    assert stages.count("display_limit") == 1
+
+
+def test_detector_trace_uses_first_failed_gate_and_preserves_signals():
+    market = build_market_data_matrix(long_universe())
+    detector = strategy().matrix_strategy
+    params = {"market_breadth_ma20_min": 1.0}
+    plain, plain_rows = detector.screen_snapshot(market, params, market.shape[0] - 1)
+    trace = {}
+    traced, traced_rows = detector.screen_snapshot_with_trace(market, params, market.shape[0] - 1, trace)
+    np.testing.assert_array_equal(plain.entry, traced.entry)
+    np.testing.assert_array_equal(plain.exit, traced.exit)
+    np.testing.assert_array_equal(plain.score, traced.score)
+    assert plain_rows == traced_rows
+    assert trace["detector_reasons"]["600000.SH"] == "market_regime"
+    assert all(trace["detector_reasons"][f"{i:06d}.SZ"] == "trend_ma_alignment" for i in range(1, 5))
 
 
 def test_rs_and_signal_independent_of_future_and_input_order():

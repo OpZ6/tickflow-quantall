@@ -1,4 +1,4 @@
-"""低波动龙头 — 正动量 + 低波动 + MA20上方"""
+"""低波动趋势延续 — 正动量、低波动且位于 MA20 上方。"""
 
 import numpy as np
 
@@ -14,9 +14,9 @@ from app.backtest.matrix import (
 
 META = {
     "id": "low_volatility_leader",
-    "name": "低波动龙头",
-    "description": "20日动量为正 + 年化波动 < 30% + MA20上方",
-    "tags": ["低波动", "龙头"],
+    "name": "低波动趋势延续",
+    "description": "首次进入20日动量为正、年化波动低于30%且位于MA20上方的趋势状态",
+    "tags": ["低波动", "趋势延续"],
     "asset_types": ["stock", "etf"],
     "timeframes": ["1d"],
     "params": [
@@ -50,7 +50,7 @@ META = {
 }
 
 EXECUTION_BACKEND = "matrix_native"
-ENTRY_SIGNALS = ["signal_ma20_breakout"]
+ENTRY_SIGNALS = ["signal_low_volatility_trend_entry"]
 EXIT_SIGNALS = ["signal_ma20_breakdown"]
 STOP_LOSS = -0.05
 MAX_HOLD_DAYS = 30
@@ -66,13 +66,21 @@ class LowVolatilityLeaderMatrixStrategy:
 
     def compute_signals(self, market: MarketDataMatrix, params: dict) -> SignalMatrix:
         ma20 = matrix_feature(market, "ma20")
-        entry = np.ones(market.shape, dtype=bool)
+        qualifying = np.ones(market.shape, dtype=bool)
         if params.get("require_positive_momentum", True):
-            entry &= matrix_feature(market, "momentum_20d") > 0
+            qualifying &= matrix_feature(market, "momentum_20d") > 0
         if params.get("use_volatility_filter", True):
-            entry &= matrix_feature(market, "annual_vol_20d") < float(params.get("vol_max", 0.30))
+            qualifying &= matrix_feature(market, "annual_vol_20d") < float(
+                params.get("vol_max", 0.30)
+            )
         if params.get("require_above_ma20", True):
-            entry &= market.close > ma20
+            qualifying &= market.close > ma20
+        previous_qualifying = shift(
+            qualifying,
+            1,
+            valid_mask=np.isfinite(market.close),
+        ) > 0.5
+        entry = qualifying & ~previous_qualifying
         exit_ = (market.close < ma20) & (shift(market.close, 1) >= shift(ma20, 1))
         return make_signal_matrix(
             market.shape,
@@ -80,7 +88,7 @@ class LowVolatilityLeaderMatrixStrategy:
             exit=exit_.astype(np.uint8),
             entry_signal_code=np.where(entry, 0, -1).astype(np.int16),
             exit_signal_code=np.where(exit_, 0, -1).astype(np.int16),
-            entry_signal_ids=("signal_ma20_breakout",),
+            entry_signal_ids=tuple(ENTRY_SIGNALS),
             exit_signal_ids=("signal_ma20_breakdown",),
         )
 

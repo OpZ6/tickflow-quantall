@@ -1,0 +1,14 @@
+{
+  "experiment": "peak-close-drawdown-exit-v1",
+  "source": "Current goal.md specifies 8 percent drawdown from highest holding-period close; prior outcomes exposed, no threshold search",
+  "baseline": "Original VCP exits plus two-bar no-demand, selected by previous 5-session mean volume >= previous 20-session mean",
+  "matched_run": "20260908T024521089151Z",
+  "full_run": "20260909T030431101979Z",
+  "only_change": "Track highest completed close starting with entry-day close. First close <= 0.92 * that peak signals exit at next market-session open, only if strictly earlier than current baseline exit. T+1 holds even for entry-day signals. Do not use daily highs as peak.",
+  "missing_data": "Missing/invalid holding-session close makes the new stop uncomputable and preserves baseline. First triggered exit with missing/invalid OHLC, nonpositive volume or one-price bar preserves baseline, without retry.",
+  "training": "Entry 2016-2022 and original exit <= 2022-12-31. No post-2022 bar read.",
+  "cost": "Same commission 0.0003, slippage 10bps, historical stamp tax and net_round_trip",
+  "scope": "First reproduce current 97 matched fills. Independently apply the exact same composite selection/exit to the existing full-mode training completed fills; report both and do not call matched subset full coverage. Missing selection histories reported separately.",
+  "gate": "Retain added exit only if mean net return does not decline versus the same composite baseline and remains positive, in both scopes. Report win rate, payoff and changed trades. Failure drops only new 8 percent stop.",
+  "output": "data/research/vcp/peak-close-drawdown-exit-v1"
+}

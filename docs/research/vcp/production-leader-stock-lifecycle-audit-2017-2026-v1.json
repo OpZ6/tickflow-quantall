@@ -1,0 +1,36 @@
+{
+  "experiment": "production-leader-stock-lifecycle-audit-2017-2026-v1",
+  "type": "descriptive_mechanism_audit",
+  "registered_before_result": true,
+  "hypothesis": "VCP follow-through depends on the stock's advance lifecycle: a base formed after a meaningful prior advance should differ from repeated distinct bases late in the same one-year trend episode.",
+  "inputs": [
+    "data/research/vcp/candidate-labels/source-vcp-2017-2020-v1/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-v4/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-2024-2026-v1/discovery-candidates.parquet"
+  ],
+  "deduplication": "Keep the earliest signal for each symbol, scale, and pivot_date; later daily signals from the same detected base are not independent setups.",
+  "causal_features": [
+    "prior_runup_63_before_base",
+    "prior_return_126d",
+    "base_days",
+    "base_depth",
+    "distance_to_252d_high",
+    "prior_unique_setups_365d",
+    "days_since_prior_unique_setup"
+  ],
+  "future_labels_only": [
+    "true_breakout_10_7_20",
+    "return_40d",
+    "mfe_40d"
+  ],
+  "analysis": [
+    "overall pairwise ranking probability for binary follow-through",
+    "Spearman association with continuous 40-day return",
+    "calendar-year direction stability",
+    "within-year fixed quintile profiles for continuous features",
+    "0, 1, and 2+ prior-distinct-setup descriptive groups"
+  ],
+  "decision_rule": "Treat the lifecycle mechanism as supported only if at least one causal feature has the hypothesized direction overall, the same direction in at least 7 of 10 calendar years with usable positive and negative labels, and a broadly ordered quintile profile. Otherwise stop this direction. No cutoff, score, strategy filter, or portfolio backtest may be created from this audit.",
+  "anti_overfit": "No parameter search, threshold selection, feature combination, model fitting, or selection by portfolio return. All listed features and summaries are reported, including null or contrary results.",
+  "causal_limit": "The three candidate files are exposed development datasets and use future paths only for outcome labels. This audit can select a research direction, not validate alpha or live eligibility."
+}

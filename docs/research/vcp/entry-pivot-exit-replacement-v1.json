@@ -1,0 +1,25 @@
+{
+  "experiment": "entry-pivot-exit-replacement-v1",
+  "baseline_run": "20260909T135940874097Z",
+  "scope": "Matched exit intervention on the 4396 archived executed entries; not candidate selection or a portfolio backtest.",
+  "arms": ["ma20_cross", "original_entry_pivot_loss"],
+  "unique_change": "Replace MA20 downward-cross exit with first post-entry completed close below the fixed original entry-signal pivot. Each entry has its own state.",
+  "training_data_end": "2022-12-31",
+  "horizon": "Archived 40-valid-bar endpoint of each original entry, identical across arms.",
+  "execution": "Reuse BacktestEngine independent matcher, T+1, original prices, tradability and one-price limits; frozen commission 0.0003, slippage 10 bps, a_share_historical sell tax. No stops, profit locks or max-hold overrides.",
+  "terminal_accounting": "Matcher end records are censored, not strategy exits. Mark open shares at endpoint close after entry costs without a hypothetical sell fee. Executed exits use net proceeds held as zero-interest cash to the same endpoint. Include pending unsellable positions as censored.",
+  "benchmark": "Archived equal-weight market gross return over the same fixed horizon. Report geometric excess wealth; paired difference is pivot excess minus MA20 excess.",
+  "gates": {
+    "matched_entry_count": 4396,
+    "minimum_mean_paired_excess_improvement": 0.0,
+    "minimum_positive_improvement_years": 4,
+    "minimum_pivot_mean_fixed_endpoint_excess": 0.0,
+    "minimum_baseline_positive_outcome_retention": 0.9,
+    "maximum_mean_negative_outcome_deterioration": 0.005,
+    "paired_improvement_95pct_ci_lower_strictly_positive": true
+  },
+  "statistics": "2000 circular moving-block bootstrap replicates on the complete training signal-date trading calendar, block length 60 trading days, seed 20260910. Resample day sums and counts jointly, retaining all same-day cross-sectional events. Centered two-sided bootstrap p-value. Exploratory family exposure remains disclosed; this is not independent confirmation.",
+  "required_outputs": ["both arms per-event records and censor counts", "entry identity reconciliation", "annual paired effects", "fixed 50-percent-MFE path outcomes", "all gates and one next action"],
+  "decision": "All gates are needed for research support of the exit intervention; failure stops this representation and neighboring buffer/MA-window tuning. Candidate selection remains unsupported even if exit intervention passes.",
+  "temporal_test_authorized": false
+}

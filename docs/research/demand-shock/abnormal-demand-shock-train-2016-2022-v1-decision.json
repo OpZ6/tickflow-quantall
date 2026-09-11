@@ -1,0 +1,135 @@
+{
+  "protocol": "docs\\research\\demand-shock\\abnormal-demand-shock-train-2016-2022-v1.json",
+  "candidate": {
+    "candidates": 77729,
+    "horizons": {
+      "5": {
+        "average_return": -0.004527361326840521,
+        "average_alpha": -0.006177890826922001
+      },
+      "20": {
+        "average_return": -0.006784083365433517,
+        "average_alpha": -0.013847038780306103
+      },
+      "40": {
+        "average_return": -0.007954433871691948,
+        "average_alpha": -0.020718340374468423
+      }
+    },
+    "positive_primary_alpha_years": 1,
+    "years_present": 7,
+    "mfe_40d_20pct_rate": 0.2989360470352121,
+    "mfe_40d_50pct_count": 4784,
+    "mfe_40d_100pct_count": 831,
+    "by_signal_year": {
+      "2016": {
+        "candidates": 9717,
+        "average_20d_alpha": -0.025299217065226316
+      },
+      "2017": {
+        "candidates": 10503,
+        "average_20d_alpha": -0.019536771439720657
+      },
+      "2018": {
+        "candidates": 8557,
+        "average_20d_alpha": -0.021113132300658935
+      },
+      "2019": {
+        "candidates": 10748,
+        "average_20d_alpha": -0.017391400012500245
+      },
+      "2020": {
+        "candidates": 12408,
+        "average_20d_alpha": -0.010397547397075557
+      },
+      "2021": {
+        "candidates": 13840,
+        "average_20d_alpha": 0.0004786791222380122
+      },
+      "2022": {
+        "candidates": 11956,
+        "average_20d_alpha": -0.011317630078453694
+      }
+    }
+  },
+  "matched_control": {
+    "candidates": 77729,
+    "horizons": {
+      "5": {
+        "average_return": -0.005462011308362315,
+        "average_alpha": -0.007375351692403351
+      },
+      "20": {
+        "average_return": -0.012465959737403335,
+        "average_alpha": -0.019868629298021988
+      },
+      "40": {
+        "average_return": -0.020263751148060147,
+        "average_alpha": -0.0327942747744866
+      }
+    },
+    "positive_primary_alpha_years": 1,
+    "years_present": 7,
+    "mfe_40d_20pct_rate": 0.36332642900333206,
+    "mfe_40d_50pct_count": 6638,
+    "mfe_40d_100pct_count": 1071,
+    "by_signal_year": {
+      "2016": {
+        "candidates": 9717,
+        "average_20d_alpha": -0.052959551395040036
+      },
+      "2017": {
+        "candidates": 10503,
+        "average_20d_alpha": -0.018063190941305915
+      },
+      "2018": {
+        "candidates": 8557,
+        "average_20d_alpha": -0.015842447256237062
+      },
+      "2019": {
+        "candidates": 10748,
+        "average_20d_alpha": -0.016807133751810404
+      },
+      "2020": {
+        "candidates": 12408,
+        "average_20d_alpha": 0.004783624111164071
+      },
+      "2021": {
+        "candidates": 13840,
+        "average_20d_alpha": -0.022028371593690487
+      },
+      "2022": {
+        "candidates": 11956,
+        "average_20d_alpha": -0.02327857826383238
+      }
+    }
+  },
+  "candidate_minus_control_20d_alpha": 0.006021590517715886,
+  "positive_pair_spread_years": 3,
+  "pair_spread_by_signal_year": {
+    "2016": 0.027660334329813713,
+    "2017": -0.0014735804984147421,
+    "2018": -0.005270685044421872,
+    "2019": -0.0005842662606898427,
+    "2020": -0.015181171508239628,
+    "2021": 0.022507050715928498,
+    "2022": 0.011960948185378685
+  },
+  "mfe_40d_20pct_enrichment_vs_control": 0.822775397471761,
+  "candidate_events_before_matching": 80377,
+  "excluded_incomplete_pairs": 2569,
+  "maximum_label_end_date": "2022-12-30",
+  "training_checks": {
+    "minimum_matched_candidates": true,
+    "minimum_average_20d_alpha": false,
+    "minimum_candidate_minus_control_20d_alpha": true,
+    "minimum_positive_candidate_alpha_years": false,
+    "minimum_positive_pair_spread_years": false,
+    "minimum_40d_mfe_20pct_rate": true,
+    "minimum_40d_mfe_20pct_enrichment_vs_control": false
+  },
+  "passed_training": false,
+  "temporal_test_inspected": false,
+  "decision": "reject_training",
+  "next_action": "Stop abnormal-demand threshold and window variants and return to the mechanism map."
+}

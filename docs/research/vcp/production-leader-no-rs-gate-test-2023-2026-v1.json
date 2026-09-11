@@ -1,0 +1,9 @@
+{
+  "base_protocol": "production-leader-no-rs-gate-train-2016-2022-v1.json",
+  "experiment": "production-leader-no-rs-gate-test-2023-2026-v1",
+  "purpose": "temporal_test_of_frozen_no_rs_gate_vcp",
+  "backtest": {"start": "2023-01-03", "end": "2026-06-30"},
+  "evaluation_role": "temporal_test_not_unseen_holdout",
+  "evaluation_priority": "Evaluate the frozen incremental cohort by SH/SZ equal-weight Alpha and down, sideways and up market outcomes. The result may reject the method but may not tune it.",
+  "stop_rule": "Do not alter the RS rule, other gates, entry or exits after reading this period."
+}

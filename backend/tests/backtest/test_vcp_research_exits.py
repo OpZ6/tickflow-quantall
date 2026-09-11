@@ -13,6 +13,7 @@ from app.backtest.matrix import (
     build_market_matrix_from_signals,
     make_signal_matrix,
 )
+from app.strategy.builtin._quants_vcp import build_breakout_bar_failure_exits
 from app.strategy.engine import StrategyEngine
 
 
@@ -107,3 +108,27 @@ def test_staged_profit_lock_protects_entry_after_ten_percent_gain():
     assert trades[0].exit_reason == "staged_profit_lock"
     assert str(trades[0].exit_date) == str(days[23])
     assert trades[0].exit_price == pytest.approx(10.0)
+
+
+def test_breakout_bar_low_exit_uses_only_later_completed_closes():
+    close = [10.0, 9.7, 9.4, 9.8]
+    low = [9.5, 9.2, 9.3, 9.7]
+    frame = pl.DataFrame(
+        {
+            "symbol": ["600000.SH"] * 4,
+            "date": [date(2024, 1, 2) + timedelta(days=i) for i in range(4)],
+            "open": close,
+            "high": [value + 0.2 for value in close],
+            "low": low,
+            "close": close,
+            "volume": [100000.0] * 4,
+        }
+    )
+    market = build_market_data_matrix(frame)
+    entry = np.zeros(market.shape, np.uint8)
+    base_exit = np.zeros(market.shape, np.uint8)
+    entry[0, 0] = 1
+
+    exits = build_breakout_bar_failure_exits(market, entry, base_exit)
+
+    assert exits[:, 0].tolist() == [0, 0, 1, 0]

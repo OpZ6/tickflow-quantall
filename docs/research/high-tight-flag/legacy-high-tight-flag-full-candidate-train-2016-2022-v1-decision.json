@@ -1,0 +1,46 @@
+{
+  "experiment": "legacy-high-tight-flag-full-candidate-train-2016-2022-v1",
+  "decision": "retain_candidate_pool_stop_default_executable_representation",
+  "run_id": "20260909T101658309142Z",
+  "strategy_id": "quants_high_tight_flag_legacy_v1",
+  "training_result": {
+    "trades": 1269,
+    "average_excess_return_held": -0.011211,
+    "average_40d_excess_return": -0.024992,
+    "positive_40d_alpha_years": 1,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 491,
+    "mfe_20pct_rate": 0.386919,
+    "mfe_50pct_count": 118,
+    "mfe_100pct_count": 23,
+    "stop_loss_share": 0.57762
+  },
+  "training_checks": {
+    "minimum_trades_40": true,
+    "nonnegative_average_excess_return_held": false,
+    "nonnegative_average_40d_alpha": false,
+    "minimum_four_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_25": true,
+    "minimum_mfe_50pct_count_10": true
+  },
+  "market_outcome_40d_alpha": {
+    "down": -0.015592,
+    "sideways": -0.039568,
+    "up": -0.008052
+  },
+  "interpretation": [
+    "The exact legacy multiscale implementation produced 1269 independent executable candidates, so the prior 202-trade simplified strategy was not a valid substitute.",
+    "The candidate pool recalls a material right tail, including 118 paths above 50 percent MFE and 23 above 100 percent, but fixed-40-day Alpha is negative overall, in six of seven training years, and in every market-outcome bucket.",
+    "Exit tuning cannot repair the negative fixed-horizon selection Alpha. The strategy remains useful as a broad candidate generator, but its default executable status is not promoted to a complete strategy."
+  ],
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "pole gain thresholds",
+    "flag depth thresholds",
+    "breakout volume thresholds",
+    "chase and stop percentages",
+    "test-period or market-regime selection from these results"
+  ],
+  "next_action": "Before any new trade rule, audit the legacy detector's scale and setup-stage composition using training candidates only. Register one structural entry hypothesis only if a pre-signal semantic subgroup explains the negative bulk while preserving right-tail recall.",
+  "evidence": "data/research/vcp/runs/20260909T101658309142Z/trade-path-analysis.json"
+}

@@ -90,7 +90,48 @@ def test_tradable_matches_legacy_suspension_rules():
     assert tradable == {"A": 1, "B": 0, "C": 1, "D": 0}
 
 
-def test_open_t_plus_one_keeps_legacy_next_asset_bar_semantics():
+def test_execution_rejections_are_dated_and_do_not_change_matching():
+    rows = []
+    for symbol, score in (("A", 90), ("B", 80), ("C", 70)):
+        for day in range(5):
+            patch = {"score": score, "signal_entry": day == 0 or (symbol == "B" and day == 1)}
+            if symbol == "C" and day == 1:
+                patch["volume"] = 0
+            if symbol == "A":
+                patch["signal_exit"] = day == 1
+                if day == 2:
+                    patch.update(open=9, high=9, low=9, close=9, signal_limit_down=True)
+            rows.append(_row(symbol, day, 10, **patch))
+    panel = pl.DataFrame(rows)
+    matrix = build_market_matrix(
+        panel, panel["signal_entry"], panel["signal_exit"],
+        entry_delay_bars=1, exit_delay_bars=1,
+    )
+    config = MatcherConfig(matching="open_t+1", max_positions=1, fees_pct=0, slippage_bps=0)
+    engine = BacktestEngine(None)
+    plain = engine.simulate_market_matrix(matrix, config, options=SimulationOptions(include_monte_carlo=False))
+    traced = engine.simulate_market_matrix(
+        matrix, config,
+        options=SimulationOptions(include_monte_carlo=False, include_execution_rejections=True),
+    )
+    assert traced.trades == plain.trades
+    assert traced.equity_curve == plain.equity_curve
+    assert traced.stats["execution"] == plain.stats["execution"]
+    assert "execution_rejections" not in plain.stats
+    events = traced.stats["execution_rejections"]
+    assert {(row["date"], row["symbol"], row["reason"]) for row in events} == {
+        ("2024-01-02", "C", "buy_suspended"),
+        ("2024-01-02", "B", "buy_rank_cutoff"),
+        ("2024-01-03", "A", "sell_limit_down"),
+        ("2024-01-03", "B", "buy_no_slot"),
+    }
+    sell = next(row for row in events if row["side"] == "sell")
+    assert sell["signal_date"] == "2024-01-02"
+    for key in ("buy_suspended", "buy_no_slot", "sell_limit_down"):
+        assert sum(row["reason"] == key for row in events) == traced.stats["execution"][key]
+
+
+def test_open_t_plus_one_signal_expires_when_next_market_session_bar_is_missing():
     panel = pl.DataFrame([
         _row("A", 0, 10, signal_entry=True),
         _row("B", 1, 20),
@@ -104,8 +145,24 @@ def test_open_t_plus_one_keeps_legacy_next_asset_bar_semantics():
         entry_signal_ids=["signal_entry"],
     )
 
-    assert matrix.entry[:, 0].tolist() == [0, 0, 1]
-    assert matrix.entry_signal_time[2, 0] == 0
+    assert matrix.entry[:, 0].tolist() == [0, 1, 0]
+    assert matrix.entry_signal_time[1, 0] == 0
+
+
+def test_missing_bar_and_suspension_placeholder_both_consume_entry_signal():
+    rows = [_row("A", 0, 10, signal_entry=True), _row("A", 2, 12), _row("A", 3, 12)]
+    rows += [_row("B", day, 20) for day in range(4)]
+    outcomes = []
+    for placeholder in (False, True):
+        panel = pl.DataFrame(rows + ([_row("A", 1, 10, volume=0)] if placeholder else []))
+        matrix = build_market_matrix(panel, panel["signal_entry"], None, entry_delay_bars=1)
+        result = BacktestEngine(None).simulate_market_matrix(
+            matrix,
+            MatcherConfig(matching="open_t+1", fees_pct=0, slippage_bps=0),
+            options=SimulationOptions(include_monte_carlo=False),
+        )
+        outcomes.append([str(trade.entry_date) for trade in result.trades])
+    assert outcomes == [[], []]
 
 
 def test_matrix_matcher_matches_legacy_trade_records_and_equity():

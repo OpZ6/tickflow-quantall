@@ -1,0 +1,19 @@
+{
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "production-leader-min-legs3-2016-2026-v1",
+  "purpose": "single_factor_vcp_structure_quality_diagnostic",
+  "hypothesis": "Requiring three contraction legs instead of two selects more mature VCP structures and reduces failed breakouts without unacceptable sample loss or drawdown deterioration.",
+  "single_change": "min_legs: 2 -> 3",
+  "decision_rule": {
+    "minimum_trades": 150,
+    "minimum_stop_loss_share_reduction": 0.05,
+    "maximum_drawdown_deterioration": 0.03,
+    "note": "Total return is secondary; this exposed interval cannot promote the rule directly to validation or live use."
+  },
+  "backtest": {
+    "params": {
+      "min_legs": 3
+    }
+  },
+  "development_note": "Single-factor comparison against run 20260907T123519390606Z on the same fully exposed 2016-2026 interval."
+}

@@ -1,0 +1,41 @@
+{
+  "experiment": "high-tight-flag-full-candidate-train-2016-2022-v1",
+  "decision": "stop_default_representation",
+  "run_id": "20260909T051105816621Z",
+  "training_result": {
+    "trades": 202,
+    "average_absolute_return": -0.033830,
+    "average_excess_return_held": -0.037907,
+    "average_40d_excess_return": -0.032147,
+    "positive_alpha_years": 1,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 89,
+    "mfe_20pct_rate": 0.440594,
+    "mfe_50pct_count": 27,
+    "mfe_100pct_count": 2,
+    "stop_loss_share": 0.5
+  },
+  "training_checks": {
+    "minimum_trades_40": true,
+    "nonnegative_average_excess_return_held": false,
+    "nonnegative_average_40d_excess_return": false,
+    "minimum_four_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_25": true,
+    "minimum_mfe_50pct_count_10": true
+  },
+  "market_outcome_attribution": {
+    "down_held_alpha": -0.037960,
+    "sideways_held_alpha": -0.029342,
+    "up_held_alpha": -0.057879
+  },
+  "interpretation": "The default high-tight-flag representation recalls many large future paths but has strongly negative market-relative returns in every future market-outcome bucket. Recall is not sufficient to support an executable selector.",
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "pole window and gain",
+    "flag window and depth",
+    "flag volume threshold",
+    "breakout volume threshold",
+    "stop and MA-exit parameter variants"
+  ],
+  "evidence": "data/research/vcp/runs/20260909T051105816621Z/trade-path-analysis.json"
+}

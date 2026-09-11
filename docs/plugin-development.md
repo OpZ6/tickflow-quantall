@@ -1,6 +1,6 @@
 # 数据源插件开发指南
 
-数据源插件是可选的行情数据来源(fuyao、stock-sdk、akshare 等),作为独立模块放在
+数据源插件是可选的行情数据来源(fuyao、stock-sdk、tdx、tushare、local_financial 等),作为独立模块放在
 `backend/app/plugins/` 下。services 层(kline_sync / quote_service / financial_sync)
 全部通过统一路由点分流:插件声明了某数据集就走插件,未声明自动回退 TickFlow。
 因此**一个合格的插件只需要正确实现契约,不需要改动任何 service / API 代码**;
@@ -56,7 +56,7 @@ TickFlow 的「先探后存」语义:
 
 | runtime | 含义 | 典型场景 |
 |---|---|---|
-| `python` | 纯 Python 依赖, `pip install` | akshare、tushare |
+| `python` | 纯 Python 依赖, `pip install` | tdx(eltdx)、tushare、local_financial(AkShare + Tushare) |
 | `node` | 需要 Node.js 运行时, `npm install` | stock-sdk |
 | `none` | 无额外依赖 | 纯 HTTP API 源 |
 
@@ -99,7 +99,7 @@ def availability() -> tuple[bool, str]:
 | --- | --- | --- |
 | `change_pct` | **小数制**, `0.0366` = 3.66% | 接口给百分数(3.66)时必须在 provider 内显式 /100 |
 | `turnover_rate`(realtime 入口) | **小数制**, `0.05` = 5% | 下游 enriched 管道统一转百分数值存储 |
-| `volume` | 股 | |
+| `volume` | 手 | 日 K 内部统一按手存储；来源给股时必须在 provider 内除以 100 |
 | `amount` / `turnover` | 元 | |
 | 日K OHLC | **不复权原始价** | 复权由 adj_factor + enriched 管道处理, provider 不得自行复权 |
 
@@ -291,7 +291,7 @@ uv run --extra dev python -m ruff check app/plugins/<your_plugin>/ tests/test_<y
 ## 现有插件参考
 
 - **`backend/app/plugins/fuyao/`** — 同花顺官方 REST 数据源(runtime: none, 纯 HTTP 零依赖)
-  - 提供 `realtime`(A 股全市场快照, 分页拉取)、`daily`(原始价日K三档: 近端窗口走 daily-k-10d dump, 深窗口走 daily-k 10 年全量 dump(172MB 一次下载、缓存复用、10d 补尾), 兜底单标的接口按 10 年自动分片)、`adj_factor`(事件 dump + 前收盘价从本地日K dump 一次取齐、缺价标的回退单标的接口, 按交易所公式推导单事件比值, 涨跌停自检; 全市场配价从逐标的 ~13 分钟降为秒级); Key 在设置页卡片直接配置(先探后存), 或 `.env` 配 `FUYAO_API_KEY`
+  - 提供 `realtime`(A 股全市场快照, 分页拉取)、`daily`(原始价日K三档: 近端窗口走 daily-k-10d dump, 深窗口走 daily-k 10 年全量 dump(172MB 一次下载、缓存复用、10d 补尾), 兜底单标的接口按 10 年自动分片)、`adj_factor`(事件 dump + 前收盘价从本地日K dump 一次取齐、缺价标的回退单标的接口, 按交易所公式推导单事件比值, 涨跌停自检; 全市场配价从逐标的 ~13 分钟降为秒级)、`financial`(利润表/资产负债表/现金流量表/指标, 字段映射至项目口径, bps 由估值反推; 股本无上游接口, 指标历史期建议切回 TickFlow); Key 在设置页卡片直接配置(先探后存), 或 `.env` 配 `FUYAO_API_KEY`
   - `client.py` — httpx 客户端(X-api-key 认证 + 统一信封解包 + 分页 + 页间隔限频 + 单标的日K + dump 预签名下载, S3 下载不带 Key 头)
   - `provider.py` — Provider 实现(实测/文档双字段名映射、百分数→小数制、volume 股→手、上海零点戳 +8h 时区、dump 按 release 版本缓存、软失败、Key 探测)
   - `tests/test_fuyao_provider.py` — 73 个契约测试, 是新插件的测试范本
@@ -305,6 +305,14 @@ uv run --extra dev python -m ruff check app/plugins/<your_plugin>/ tests/test_<y
     `TUSHARE_TOKEN` 配置原 Tushare 备用源
   - mirror 网络异常会先重试一次;单次接口失败后才回退原 Tushare
   - `client.py` 同时供标准 provider 和 QuantX 兼容采集入口使用,避免两条链路路由不一致
+- **`backend/app/plugins/tdx/`** — 通达信(免费行情, runtime: python, 依赖 eltdx)
+  - 提供 `realtime`(A 股 L1 全市场快照)、`minute`(逐标的 1 分钟 K, 270 个交易日历史)、`depth5`(五档 L1 快照, 不代表逐笔/委托队列 L2); 不声明 `daily`, 该数据集自动回退 TickFlow
+  - `provider.py` — 直接调用 eltdx `TdxClient`(probe_hosts 自动选路); `TDX_HOSTS` 可配置 host:port 列表; `get_instruments` 可作 A 股标的维表来源
+  - MIT 许可的 [eltdx](https://github.com/electkismet/eltdx) 连接公共行情服务器, 可用性/数据许可由部署者自行确认
+- **`backend/app/plugins/local_financial/`** — 本地财务(AkShare + Tushare, runtime: python, 无 TickFlow Expert 依赖)
+  - 仅声明 `financial`: `financial_mode()` 按是否配置 Tushare 返回 `overview_only` 或 `standard_on_demand`
+  - 全市场业绩概览与 2012 起历史核心表回填(metrics/income/balance_sheet/cash_flow, 按报告期)走 AkShare/东财; 单股标准三表/指标委托内部 `TushareProvider`, 需 `TUSHARE_MIRROR_TOKEN` 或 `TUSHARE_TOKEN`
+  - `provider.py` — 组合实现, 详表与全市场批量事实分层见 [data-foundation.md §10](./data-foundation.md)
 
 ## 路由机制(无需关心, 仅参考)
 

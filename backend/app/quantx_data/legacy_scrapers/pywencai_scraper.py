@@ -299,7 +299,7 @@ def fetch_new_high_100d() -> dict:
             "error": "pywencai package not installed",
         }
     print("  [pywencai] Querying 百日新高 via iwencai...")
-    cookie = _warm_iwencai_session() if type(_pywencai).__module__.startswith("pywencai") else ""
+    cookie = _warm_iwencai_session() if getattr(_pywencai, "__name__", "") == "pywencai" else ""
     last_error = ""
     for attempt in range(3):
         try:
@@ -311,7 +311,7 @@ def fetch_new_high_100d() -> dict:
                 print(f"  [pywencai] 百日新高 attempt {attempt+1} returned None")
                 if attempt < 2:
                     time.sleep([8, 25][attempt])
-                    if type(_pywencai).__module__.startswith("pywencai"):
+                    if getattr(_pywencai, "__name__", "") == "pywencai":
                         cookie = cookie or _warm_iwencai_session()
                     continue
                 last_error = "pywencai returned None after 3 attempts"
@@ -354,7 +354,7 @@ def fetch_new_high_100d() -> dict:
             print(f"  [pywencai] 百日新高 attempt {attempt+1} failed: {e}")
             if attempt < 2:
                 time.sleep([8, 25][attempt])
-                if type(_pywencai).__module__.startswith("pywencai"):
+                if getattr(_pywencai, "__name__", "") == "pywencai":
                     cookie = cookie or _warm_iwencai_session()
                 continue
     return {

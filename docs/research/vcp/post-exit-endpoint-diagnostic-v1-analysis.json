@@ -1,0 +1,82 @@
+{
+  "protocol": "docs/research/post-exit-endpoint-diagnostic-v1.json",
+  "run_id": "20260909T135940874097Z",
+  "total_paths": 4396,
+  "excluded_non_signal_or_exit_not_before_endpoint": 98,
+  "overall": {
+    "n": 4298,
+    "mean": 0.008464065813122874,
+    "median": -0.010484255030307532,
+    "positive_share": 0.46533271288971617,
+    "endpoint_loss_at_least_10pct_share": 0.23708701721731038,
+    "endpoint_gain_at_least_10pct_share": 0.22568636575151232,
+    "signal_day_equal_weight_mean": 0.010823189419260752
+  },
+  "by_entry_year": {
+    "2016": {
+      "n": 229,
+      "mean": -0.017032068118053377,
+      "median": -0.02667421669274106,
+      "positive_share": 0.37554585152838427,
+      "endpoint_loss_at_least_10pct_share": 0.25327510917030566,
+      "endpoint_gain_at_least_10pct_share": 0.14410480349344978,
+      "signal_day_equal_weight_mean": -0.015018114479890765
+    },
+    "2017": {
+      "n": 1126,
+      "mean": -0.0020717080264709958,
+      "median": -0.003941828089575883,
+      "positive_share": 0.4822380106571936,
+      "endpoint_loss_at_least_10pct_share": 0.19449378330373002,
+      "endpoint_gain_at_least_10pct_share": 0.17850799289520428,
+      "signal_day_equal_weight_mean": 0.0103012009230347
+    },
+    "2018": {
+      "n": 644,
+      "mean": -0.027260623199186016,
+      "median": -0.038887442774736936,
+      "positive_share": 0.38664596273291924,
+      "endpoint_loss_at_least_10pct_share": 0.31211180124223603,
+      "endpoint_gain_at_least_10pct_share": 0.16459627329192547,
+      "signal_day_equal_weight_mean": -0.014739796581871988
+    },
+    "2019": {
+      "n": 773,
+      "mean": 0.03383129331968515,
+      "median": 0.013246284684337084,
+      "positive_share": 0.5407503234152652,
+      "endpoint_loss_at_least_10pct_share": 0.16558861578266496,
+      "endpoint_gain_at_least_10pct_share": 0.2858990944372574,
+      "signal_day_equal_weight_mean": 0.028386958729131082
+    },
+    "2020": {
+      "n": 622,
+      "mean": 0.06299741689405267,
+      "median": 0.029615317661160212,
+      "positive_share": 0.5755627009646302,
+      "endpoint_loss_at_least_10pct_share": 0.19935691318327975,
+      "endpoint_gain_at_least_10pct_share": 0.3536977491961415,
+      "signal_day_equal_weight_mean": 0.05210254983714488
+    },
+    "2021": {
+      "n": 489,
+      "mean": 0.012004781748965,
+      "median": -0.03208556149732622,
+      "positive_share": 0.4130879345603272,
+      "endpoint_loss_at_least_10pct_share": 0.29243353783231085,
+      "endpoint_gain_at_least_10pct_share": 0.2392638036809816,
+      "signal_day_equal_weight_mean": 0.01339726417245578
+    },
+    "2022": {
+      "n": 415,
+      "mean": -0.026599610307332038,
+      "median": -0.045294372161812646,
+      "positive_share": 0.3469879518072289,
+      "endpoint_loss_at_least_10pct_share": 0.35180722891566263,
+      "endpoint_gain_at_least_10pct_share": 0.17349397590361446,
+      "signal_day_equal_weight_mean": -0.020634949978978634
+    }
+  },
+  "post_exit_drawdown_available": false,
+  "causal_exit_effect_estimated": false
+}

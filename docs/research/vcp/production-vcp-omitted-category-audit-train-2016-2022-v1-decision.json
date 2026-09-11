@@ -1,0 +1,21 @@
+{
+  "protocol": "production-vcp-omitted-category-audit-train-2016-2022-v1.json",
+  "decision": "stop_representation",
+  "selected_category": null,
+  "selected_applicability": null,
+  "categorized_opportunities": 98339,
+  "closest_regime_specific_result": {
+    "category": "loose_breakout",
+    "applicability": "broad_bull",
+    "opportunities": 2128,
+    "leaders_50pct": 218,
+    "matched_leader_enrichment": 1.893,
+    "average_40d_alpha": -0.00953,
+    "positive_alpha_years": 2,
+    "years_present": 7,
+    "passed": false
+  },
+  "interpretation": "Preregistered omitted structures contain many future large-winner paths, but none produces stable positive market-relative return across all states or inside broad-bull, transition or weak-bear signal-time regimes. Large-winner recall alone is insufficient.",
+  "stop_rule_applied": "Do not alter category windows, combine categories or use the loose-breakout residual as a VCP method.",
+  "evidence": "data/research/vcp/category-audits/production-vcp-omitted-category-audit-train-2016-2022-v1/summary.json"
+}

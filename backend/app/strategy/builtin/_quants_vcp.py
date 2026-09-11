@@ -23,6 +23,7 @@ ENTRY_IDS = (
     "signal_quants_vcp_early_recovery",
     "signal_quants_vcp_broad_advance",
 )
+EXPANDED_ENTRY_IDS = (*ENTRY_IDS, "signal_quants_vcp_middle_expansion")
 EXIT_IDS = ("signal_quants_vcp_exit_ma20",)
 
 
@@ -392,7 +393,16 @@ def market_breadth_allowed(close, ma20, params, valid_bars=None):
             & np.isfinite(market_return_63)
             & (market_return_63 >= 0)
         )
-        return early_recovery | broad_advance, breadth
+        middle_expansion = (
+            bool(params.get("include_middle_expansion_regime", False))
+            & (breadth >= 0.3)
+            & (breadth < 0.7)
+            & np.isfinite(prior_breadth)
+            & (breadth > prior_breadth)
+            & np.isfinite(market_return_63)
+            & (market_return_63 >= 0)
+        )
+        return early_recovery | middle_expansion | broad_advance, breadth
     lower = float(params.get("market_breadth_ma20_min", 0.0))
     upper = float(params.get("market_breadth_ma20_max", 1.0))
     allowed = np.isfinite(breadth) & (breadth >= lower) & (breadth <= upper)
@@ -523,7 +533,24 @@ def cross_sectional_percentile_ranks(values, valid=None):
     return ranks
 
 
-def trend_context(market, params):
+def market_outperformance_allowed(close, valid_bars=None):
+    """Return stocks whose causal close-to-close return beat the same-day market."""
+    valid = np.isfinite(close) & (close > 0)
+    prior = valid_shift(close, 1, valid, bar_index=valid_bars)
+    returns = np.divide(
+        close, prior, out=np.full(close.shape, np.nan), where=prior > 0
+    ) - 1.0
+    counts = np.isfinite(returns).sum(axis=1)
+    market_return = np.divide(
+        np.nansum(returns, axis=1),
+        counts,
+        out=np.full(close.shape[0], np.nan),
+        where=counts > 0,
+    )
+    return np.isfinite(returns) & (returns > market_return[:, None])
+
+
+def trend_context(market, params, *, diagnostics=None):
     close = market.close
     valid = np.isfinite(close) & (close > 0)
     returns = []
@@ -548,17 +575,62 @@ def trend_context(market, params):
             / len(ids)
         )
     mask = valid.copy()
+    if diagnostics is not None:
+        diagnostics["valid_close"] = valid
     if params.get("trend_filter", True):
         means = [
             valid_rolling_mean(close, valid, n, bar_index=market.valid_bars) for n in (50, 150, 200)
         ]
         high252 = valid_rolling_max(market.high, valid, 252, bar_index=market.valid_bars)
-        mask &= (close > means[0]) & (means[0] > means[1]) & (means[1] > means[2])
-        mask &= np.logical_and.reduce([r > 0 for r in returns])
-        mask &= close >= high252 * (1 - float(params.get("distance_high_max", 0.12)))
+        ma_alignment = (close > means[0]) & (means[0] > means[1]) & (means[1] > means[2])
+        positive_returns = np.logical_and.reduce([r > 0 for r in returns])
+        near_high = close >= high252 * (1 - float(params.get("distance_high_max", 0.12)))
+        mask &= ma_alignment
+        mask &= positive_returns
+        mask &= near_high
+        if diagnostics is not None:
+            diagnostics.update(
+                trend_ma_alignment=ma_alignment,
+                positive_returns=positive_returns,
+                near_52_week_high=near_high,
+            )
     if float(params.get("rs_min", 85)) > 0:
-        mask &= ranks >= float(params.get("rs_min", 85))
+        rs_threshold = ranks >= float(params.get("rs_min", 85))
+        mask &= rs_threshold
+        if diagnostics is not None:
+            diagnostics["rs_threshold"] = rs_threshold
     return mask, ranks
+
+
+def fresh_20d_breakout_opportunity_mask(market):
+    """Mark the first liquid 20-session-high breakout after a 20-bar cooldown."""
+    valid = np.isfinite(market.close) & (market.close > 0)
+    prior_high = valid_shift(
+        valid_rolling_max(market.high, valid, 20, bar_index=market.valid_bars),
+        1,
+        valid,
+        bar_index=market.valid_bars,
+    )
+    amount = market.fields.get("amount")
+    if amount is None:
+        raise ValueError("require_fresh_20d_breakout requires amount")
+    result = np.zeros(market.shape, dtype=bool)
+    for asset in range(market.shape[1]):
+        ids = np.flatnonzero(valid[:, asset])
+        last_kept_position = -1000
+        for position, t in enumerate(ids):
+            if position - last_kept_position < 20:
+                continue
+            if (
+                np.isfinite(prior_high[t, asset])
+                and market.close[t, asset] > prior_high[t, asset]
+                and 3.0 <= market.close[t, asset] <= 300.0
+                and np.isfinite(amount[t, asset])
+                and amount[t, asset] >= 20_000_000.0
+            ):
+                result[t, asset] = True
+                last_kept_position = position
+    return result
 
 
 class QuantsVcpStrategy:
@@ -570,6 +642,8 @@ class QuantsVcpStrategy:
 
     def required_fields_for_params(self, params):
         fields = set()
+        if params.get("require_fresh_20d_breakout", False):
+            fields.add("amount")
         if (
             float(params.get("turnover_rank_weight", 0.0)) > 0
             or float(params.get("turnover_market_percentile_min", 0.0)) > 0
@@ -585,8 +659,21 @@ class QuantsVcpStrategy:
     def screen_snapshot(self, market: MarketDataMatrix, params, time_index):
         return self._evaluate(market, params, time_index)
 
-    def _evaluate(self, market, params, time_index):
-        eligible, ranks = trend_context(market, params)
+    def screen_snapshot_with_trace(self, market, params, time_index, trace):
+        return self._evaluate(market, params, time_index, trace=trace)
+
+    def _evaluate(self, market, params, time_index, trace=None):
+        trend_diagnostics = {} if trace is not None and time_index is not None else None
+        eligible, ranks = trend_context(market, params, diagnostics=trend_diagnostics)
+        if params.get("require_fresh_20d_breakout", False):
+            fresh_breakout = fresh_20d_breakout_opportunity_mask(market)
+            eligible &= fresh_breakout
+            if trend_diagnostics is not None:
+                trend_diagnostics["fresh_20d_breakout"] = fresh_breakout
+        if params.get("require_signal_day_market_outperformance", False):
+            eligible &= market_outperformance_allowed(
+                market.close, market.valid_bars
+            )
         if time_index is not None:
             current_universe = int(np.count_nonzero(np.isfinite(market.close[time_index])))
             ranked_universe = int(np.count_nonzero(np.isfinite(ranks[time_index])))
@@ -604,7 +691,10 @@ class QuantsVcpStrategy:
             turnover_ranks = cross_sectional_percentile_ranks(
                 market.field("turnover_rate"), np.isfinite(market.close)
             )
-            eligible &= turnover_ranks >= turnover_percentile_min
+            turnover_allowed = turnover_ranks >= turnover_percentile_min
+            eligible &= turnover_allowed
+            if trend_diagnostics is not None:
+                trend_diagnostics["turnover_percentile"] = turnover_allowed
         entry = np.zeros(market.shape, np.uint8)
         score = np.zeros(market.shape, np.float32)
         contraction_strength = np.full(market.shape, np.nan, np.float32)
@@ -615,6 +705,33 @@ class QuantsVcpStrategy:
             market.close, ma20, params, market.valid_bars
         )
         eligible &= breadth_allowed[:, None]
+        detector_reasons = {}
+        if trend_diagnostics is not None:
+            ordered_gates = [
+                ("invalid_close", trend_diagnostics.get("valid_close")),
+                ("trend_ma_alignment", trend_diagnostics.get("trend_ma_alignment")),
+                ("positive_returns", trend_diagnostics.get("positive_returns")),
+                ("near_52_week_high", trend_diagnostics.get("near_52_week_high")),
+                ("rs_threshold", trend_diagnostics.get("rs_threshold")),
+                ("turnover_percentile", trend_diagnostics.get("turnover_percentile")),
+                ("fresh_20d_breakout", trend_diagnostics.get("fresh_20d_breakout")),
+            ]
+            for asset, symbol in enumerate(market.symbols):
+                reason = "market_regime"
+                for gate_name, gate in ordered_gates:
+                    if gate is not None and not bool(gate[time_index, asset]):
+                        reason = gate_name
+                        break
+                else:
+                    if bool(breadth_allowed[time_index]):
+                        reason = "vcp_structure"
+                detector_reasons[symbol] = reason
+            trace.clear()
+            trace.update(
+                scope="vcp_snapshot_detector",
+                reason_semantics="first_failed_gate",
+                detector_reasons=detector_reasons,
+            )
         exit_ma_days = int(params.get("exit_ma_days", 20))
         exit_ma = (
             ma20
@@ -626,6 +743,8 @@ class QuantsVcpStrategy:
         prev = valid_shift(market.close, 1, valid, bar_index=market.valid_bars)
         prev_ma = valid_shift(exit_ma, 1, valid, bar_index=market.valid_bars)
         exit_ = (market.close < exit_ma) & (prev >= prev_ma)
+        if params.get("disable_signal_exit", False):
+            exit_ = np.zeros(market.shape, dtype=bool)
         rows = {}
         for asset, symbol in enumerate(market.symbols):
             seen_setups = set()
@@ -653,18 +772,33 @@ class QuantsVcpStrategy:
                     or np.any(volume <= 0)
                     or np.any(low <= 0)
                 ):
+                    if trace is not None:
+                        detector_reasons[symbol] = "invalid_history_window"
                     continue
                 dates = [market.timestamp_labels[i][:10] for i in history_ids]
                 structure = detect(high, low, close, volume, dates, params)
                 if structure is None or not structure["primary"]["valid"]:
+                    if trace is not None:
+                        detector_reasons[symbol] = "vcp_structure"
                     continue
                 p = structure["primary"]
                 dual_regime = bool(params.get("a_share_dual_regime", False))
                 broad_advance = dual_regime and breadth[t] >= 0.7
+                middle_expansion = (
+                    dual_regime
+                    and bool(params.get("include_middle_expansion_regime", False))
+                    and 0.3 <= breadth[t] < 0.7
+                )
                 if p.get("scale") == "short" and (
-                    not params.get("short_scale_enabled", True) or broad_advance
+                    not params.get("short_scale_enabled", True)
+                    or broad_advance
+                    or middle_expansion
                 ):
+                    if trace is not None:
+                        detector_reasons[symbol] = "short_scale_excluded"
                     continue
+                if trace is not None:
+                    detector_reasons[symbol] = "candidate"
                 rs = float(ranks[t, asset]) if np.isfinite(ranks[t, asset]) else None
                 # 0..100 technical score, not Quants' legacy finance/industry score.
                 quality_score = technical_score(p, rs, params)
@@ -691,7 +825,9 @@ class QuantsVcpStrategy:
                     if not duplicate:
                         entry[t, asset] = 1
                         codes[t, asset] = (
-                            3
+                            4
+                            if middle_expansion
+                            else 3
                             if broad_advance
                             else 2
                             if dual_regime
@@ -776,7 +912,11 @@ class QuantsVcpStrategy:
             score=score,
             entry_signal_code=codes,
             exit_signal_code=np.where(exit_, 0, -1).astype(np.int16),
-            entry_signal_ids=ENTRY_IDS,
+            entry_signal_ids=(
+                EXPANDED_ENTRY_IDS
+                if params.get("include_middle_expansion_regime", False)
+                else ENTRY_IDS
+            ),
             exit_signal_ids=EXIT_IDS,
         ), rows
 
@@ -784,5 +924,305 @@ class QuantsVcpStrategy:
 class QuantsLegacyVcpStrategy(QuantsVcpStrategy):
     """Preserve source dry-up/cheat semantics separately from the research variant."""
 
-    def _evaluate(self, market, params, time_index):
-        return super()._evaluate(market, {**params, "legacy_semantics": True}, time_index)
+    def _evaluate(self, market, params, time_index, trace=None):
+        return super()._evaluate(
+            market, {**params, "legacy_semantics": True}, time_index, trace=trace
+        )
+
+
+FAILED_RETRIGGER_ENTRY_IDS = ("signal_vcp_failed_breakout_retrigger",)
+
+
+def build_failed_breakout_retriggers(
+    market: MarketDataMatrix,
+    breakout_entry: np.ndarray,
+    breakout_score: np.ndarray,
+    breakout_pivot: np.ndarray,
+):
+    """Build causal close-time retriggers from frozen VCP breakout events."""
+    entry = np.zeros(market.shape, dtype=np.uint8)
+    score = np.zeros(market.shape, dtype=np.float32)
+    valid = (
+        np.isfinite(market.high)
+        & np.isfinite(market.low)
+        & np.isfinite(market.close)
+        & np.isfinite(market.volume)
+        & (market.low > 0)
+        & (market.volume > 0)
+    )
+    for asset in range(market.shape[1]):
+        ids = np.flatnonzero(valid[:, asset])
+        pending = None
+        for pos, t_value in enumerate(ids):
+            t = int(t_value)
+            if breakout_entry[t, asset] and np.isfinite(breakout_pivot[t, asset]):
+                pivot = float(breakout_pivot[t, asset])
+                # A different frozen setup supersedes an older unresolved one.
+                if pending is None or round(pending["pivot"], 4) != round(pivot, 4):
+                    pending = {
+                        "pivot": pivot,
+                        "breakout_pos": pos,
+                        "failure_pos": None,
+                        "score": float(breakout_score[t, asset]),
+                    }
+                continue
+            if pending is None:
+                continue
+            pivot = pending["pivot"]
+            failure_pos = pending["failure_pos"]
+            if failure_pos is None:
+                # The source detector only treats the latest eighteen bars as
+                # belonging to an observed breakout episode.
+                if pos - pending["breakout_pos"] > 18:
+                    pending = None
+                    continue
+                if market.low[t, asset] < pivot * 0.975 or market.close[t, asset] < pivot * 0.992:
+                    pending["failure_pos"] = pos
+                continue
+            bars_since_failure = pos - failure_pos
+            if bars_since_failure > 30:
+                pending = None
+                continue
+            if bars_since_failure < 3:
+                continue
+            recovery_start = failure_pos + 1
+            window_start = max(recovery_start, pos - 5)
+            window_ids = ids[window_start : pos + 1]
+            if len(window_ids) < 3:
+                continue
+            recent_close = market.close[window_ids, asset]
+            recent_high = market.high[window_ids, asset]
+            recent_low = market.low[window_ids, asset]
+            recent_volume = market.volume[window_ids, asset]
+            latest_close = float(recent_close[-1])
+            low_value = float(np.min(recent_low))
+            high_value = float(np.max(recent_high))
+            recent_range = high_value / low_value - 1.0
+            volume_history = market.volume[ids[max(0, pos - 19) : pos + 1], asset]
+            volume_avg_20 = float(np.mean(volume_history)) if len(volume_history) >= 5 else np.nan
+            volume_dry = np.isfinite(volume_avg_20) and float(np.mean(recent_volume)) <= volume_avg_20 * 1.08
+            near_pivot_days = int(
+                np.count_nonzero(
+                    (recent_close >= pivot * 0.985) & (recent_close <= pivot * 1.02)
+                )
+            )
+            ready = (
+                pivot * 0.985 <= latest_close <= pivot * 1.02
+                and high_value >= pivot * 0.995
+                and low_value >= pivot * 0.972
+                and recent_range <= 0.07
+                and volume_dry
+                and near_pivot_days >= 2
+            )
+            if ready:
+                entry[t, asset] = 1
+                score[t, asset] = pending["score"]
+                pending = None
+    return entry, score
+
+
+class VcpFailedBreakoutRetriggerStrategy:
+    """Change only the entry event while retaining the frozen VCP context."""
+
+    def __init__(self):
+        self._base = QuantsLegacyVcpStrategy()
+
+    def required_fields(self):
+        return self._base.required_fields()
+
+    def required_warmup_bars(self, params):
+        return self._base.required_warmup_bars(params)
+
+    def required_fields_for_params(self, params):
+        return self._base.required_fields_for_params(params)
+
+    def compute_signals(self, market: MarketDataMatrix, params):
+        base = self._base.compute_signals(market, params)
+        pivots = self._reconstruct_breakout_pivots(market, params, base.entry)
+        entry, score = build_failed_breakout_retriggers(
+            market, base.entry, base.score, pivots
+        )
+        return make_signal_matrix(
+            market.shape,
+            entry=entry,
+            exit=base.exit,
+            score=score,
+            entry_signal_code=np.where(entry, 0, -1).astype(np.int16),
+            exit_signal_code=base.exit_signal_code,
+            entry_signal_ids=FAILED_RETRIGGER_ENTRY_IDS,
+            exit_signal_ids=base.exit_signal_ids,
+        )
+
+    @staticmethod
+    def _reconstruct_breakout_pivots(market, params, breakout_entry):
+        pivots = np.full(market.shape, np.nan, dtype=np.float32)
+        valid = np.isfinite(market.close)
+        for asset in range(market.shape[1]):
+            ids = np.flatnonzero(valid[:, asset])
+            for t_value in np.flatnonzero(breakout_entry[:, asset]):
+                t = int(t_value)
+                stop = int(np.searchsorted(ids, t, side="right"))
+                history_ids = ids[max(0, stop - 260) : stop]
+                high, low, close, volume = [
+                    np.asarray(values[history_ids, asset], dtype=np.float64)
+                    for values in (market.high, market.low, market.close, market.volume)
+                ]
+                if not len(close) or not all(
+                    np.isfinite(values).all() for values in (high, low, close, volume)
+                ):
+                    continue
+                dates = [market.timestamp_labels[i][:10] for i in history_ids]
+                structure = detect(
+                    high,
+                    low,
+                    close,
+                    volume,
+                    dates,
+                    {**params, "legacy_semantics": True},
+                )
+                if structure and structure["primary"].get("valid"):
+                    pivots[t, asset] = float(structure["primary"]["pivot"])
+        return pivots
+
+
+PIVOT_FAILURE_EXIT_IDS = (*EXIT_IDS, "signal_vcp_pivot_failure_exit")
+
+
+def build_pivot_failure_exits(market, breakout_entry, breakout_pivot, base_exit):
+    """Exit next open after a completed post-breakout close loses its pivot."""
+    pivot_exit = np.zeros(market.shape, dtype=np.uint8)
+    valid = np.isfinite(market.close) & (market.close > 0)
+    for asset in range(market.shape[1]):
+        ids = np.flatnonzero(valid[:, asset])
+        active = None
+        for pos, t_value in enumerate(ids):
+            t = int(t_value)
+            if active is None and breakout_entry[t, asset] and np.isfinite(
+                breakout_pivot[t, asset]
+            ):
+                active = {
+                    "pivot": float(breakout_pivot[t, asset]),
+                    "breakout_pos": pos,
+                }
+                continue
+            if active is None:
+                continue
+            if pos - active["breakout_pos"] > 40:
+                active = None
+                continue
+            if market.close[t, asset] < active["pivot"]:
+                pivot_exit[t, asset] = 1
+                active = None
+                continue
+            if base_exit[t, asset]:
+                active = None
+    return pivot_exit
+
+
+class VcpPivotFailureExitStrategy:
+    """Frozen leader entry with a thesis-level pivot-loss exit."""
+
+    def __init__(self):
+        self._base = QuantsLegacyVcpStrategy()
+
+    def required_fields(self):
+        return self._base.required_fields()
+
+    def required_warmup_bars(self, params):
+        return self._base.required_warmup_bars(params)
+
+    def required_fields_for_params(self, params):
+        return self._base.required_fields_for_params(params)
+
+    def compute_signals(self, market: MarketDataMatrix, params):
+        base = self._base.compute_signals(market, params)
+        pivots = VcpFailedBreakoutRetriggerStrategy._reconstruct_breakout_pivots(
+            market, params, base.entry
+        )
+        pivot_exit = build_pivot_failure_exits(
+            market, base.entry, pivots, base.exit
+        )
+        exit_ = base.exit | pivot_exit
+        exit_codes = np.where(
+            pivot_exit,
+            len(EXIT_IDS),
+            np.where(base.exit, base.exit_signal_code, -1),
+        ).astype(np.int16)
+        return make_signal_matrix(
+            market.shape,
+            entry=base.entry,
+            exit=exit_,
+            score=base.score,
+            entry_signal_code=base.entry_signal_code,
+            exit_signal_code=exit_codes,
+            entry_signal_ids=base.entry_signal_ids,
+            exit_signal_ids=PIVOT_FAILURE_EXIT_IDS,
+        )
+
+
+BREAKOUT_BAR_FAILURE_EXIT_IDS = (*EXIT_IDS, "signal_vcp_breakout_bar_failure_exit")
+
+
+def build_breakout_bar_failure_exits(market, breakout_entry, base_exit):
+    """Exit next open after a later completed close loses the breakout-bar low."""
+    failure_exit = np.zeros(market.shape, dtype=np.uint8)
+    valid = np.isfinite(market.close) & np.isfinite(market.low) & (market.close > 0)
+    for asset in range(market.shape[1]):
+        ids = np.flatnonzero(valid[:, asset])
+        active = None
+        for pos, t_value in enumerate(ids):
+            t = int(t_value)
+            if active is None and breakout_entry[t, asset]:
+                active = {
+                    "breakout_low": float(market.low[t, asset]),
+                    "breakout_pos": pos,
+                }
+                continue
+            if active is None:
+                continue
+            if pos - active["breakout_pos"] > 40:
+                active = None
+                continue
+            if market.close[t, asset] < active["breakout_low"]:
+                failure_exit[t, asset] = 1
+                active = None
+                continue
+            if base_exit[t, asset]:
+                active = None
+    return failure_exit
+
+
+class VcpBreakoutBarFailureExitStrategy:
+    """Frozen leader entry with completed breakout-bar-low invalidation."""
+
+    def __init__(self):
+        self._base = QuantsLegacyVcpStrategy()
+
+    def required_fields(self):
+        return self._base.required_fields()
+
+    def required_warmup_bars(self, params):
+        return self._base.required_warmup_bars(params)
+
+    def required_fields_for_params(self, params):
+        return self._base.required_fields_for_params(params)
+
+    def compute_signals(self, market: MarketDataMatrix, params):
+        base = self._base.compute_signals(market, params)
+        failure_exit = build_breakout_bar_failure_exits(market, base.entry, base.exit)
+        exit_ = base.exit | failure_exit
+        exit_codes = np.where(
+            failure_exit,
+            len(EXIT_IDS),
+            np.where(base.exit, base.exit_signal_code, -1),
+        ).astype(np.int16)
+        return make_signal_matrix(
+            market.shape,
+            entry=base.entry,
+            exit=exit_,
+            score=base.score,
+            entry_signal_code=base.entry_signal_code,
+            exit_signal_code=exit_codes,
+            entry_signal_ids=base.entry_signal_ids,
+            exit_signal_ids=BREAKOUT_BAR_FAILURE_EXIT_IDS,
+        )

@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import polars as pl
+import pytest
 
 from app.backtest.engine import BacktestEngine, MatcherConfig
 
@@ -80,6 +81,22 @@ def test_commission_pct_zero_is_not_treated_as_unset():
     cfg = MatcherConfig(fees_pct=0.0002, commission_pct=0.0, slippage_bps=0)
     assert cfg.buy_cost_pct() == 0.0
     assert cfg.sell_cost_pct() == 0.0
+
+
+def test_a_share_historical_stamp_tax_uses_exit_date_policy_boundary():
+    cfg = MatcherConfig(
+        commission_pct=0.0003,
+        stamp_tax_pct=0.0005,
+        stamp_tax_policy="a_share_historical",
+        slippage_bps=0,
+    )
+
+    assert cfg.sell_cost_pct(date(2023, 8, 27)) == pytest.approx(0.0013)
+    assert cfg.sell_cost_pct(date(2023, 8, 28)) == pytest.approx(0.0008)
+    with pytest.raises(ValueError, match="supports exits from 2008-09-19"):
+        cfg.sell_cost_pct(date(2008, 9, 18))
+    with pytest.raises(ValueError, match="requires an exit date"):
+        cfg.sell_cost_pct()
 
 
 # ---------------------------------------------------------------

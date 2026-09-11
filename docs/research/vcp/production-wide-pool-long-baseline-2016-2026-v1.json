@@ -1,0 +1,10 @@
+{
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "production-wide-pool-long-baseline-2016-2026-v1",
+  "purpose": "P1_frozen_wide_pool_default_behavior_baseline",
+  "hypothesis": "Document the existing wide screener's executable signal and exit behavior over the same interval and execution-cost settings as the leader baseline, without selecting new rules.",
+  "development_note": "Exposed development data. The wide screener is not a complete trading recommendation. Its default filters, ranking and exits differ together from the leader strategy, so performance differences are not a single-factor causal effect. Keep defaults, report candidate count, trades, exit reasons and timing violations; do not tune from this result.",
+  "backtest": {
+    "strategy_id": "quants_vcp_legacy_v1"
+  }
+}

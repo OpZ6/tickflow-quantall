@@ -1,0 +1,18 @@
+{
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "production-leader-failed-retrigger-current-execution-replay-2016-2026-v1",
+  "purpose": "P1_same_cost_current_execution_replay",
+  "hypothesis": "The frozen failed-breakout retrigger branch can be compared with the current causal leader baseline under the same data, T+1 validity, historical stamp-tax, cost and portfolio contracts without changing the method.",
+  "unique_change": "Replace the primary vcp_leader_breakout entry stream with the already-frozen vcp_failed_breakout_retrigger strategy. Do not change its recovery state machine, thresholds, exits, ranking or portfolio rules.",
+  "acceptance": {
+    "maximum_timing_violations": 0,
+    "required_stamp_tax_policy": "a_share_historical",
+    "required_matching": "open_t+1",
+    "comparison_baseline_run": "20260908T024521089151Z",
+    "decision_rule": "Use the replay only to close the same-cost P1 audit. Preserve the prior secondary-mechanism interpretation unless current causal execution evidence directly contradicts it; do not tune any retrigger parameter from this exposed interval."
+  },
+  "development_note": "The full interval is exposed development data. This is an execution-contract replay of an existing method, not a new strategy trial, parameter search, independent validation or live qualification.",
+  "backtest": {
+    "strategy_id": "vcp_failed_breakout_retrigger"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "experiment": "watchlist-ma20-reclaim-two-bar-no-demand-v1",
+  "layer": 6,
+  "prior": "docs/research/watchlist-ma20-reclaim-no-gap-up-v1-decision.md",
+  "hypothesis_source": "Leader-VCP path review: 49% of non-winners never printed +3% in the first two bars. Sequence 5 is already the live plan (MA20 reclaim). Sequence 4 skip-gap-up failed. This round: on the same reclaim T+1 fills, if max(high of entry session, high of next session) / entry_open - 1 < 0.03, exit at the open two sessions after entry. Otherwise keep the scheduled 10/20-day open exit.",
+  "distinct_from_failed_representations": "Not a 5% stop. Not pivot-break. Not waiting after breakout. Same reclaim entries as v1. One event: no +3% demand in two bars.",
+  "exposure": "Training 2016-01-01 through 2022-12-31.",
+  "entry": "Unchanged: watch-list MA20 reclaim, T+1 open, buy all fills.",
+  "exit": {
+    "id": "two_bar_never_plus_3pct",
+    "definition": "Entry session is t+1. If max(high[t+1], high[t+2]) < entry_open * 1.03, sell at open[t+3]. Missing high or blocked early sell makes that path incomplete (no roll). Else scheduled 10/20 open."
+  },
+  "control": "Same fills, scheduled 10/20-day open exit (v1 windows).",
+  "windows": {"diagnostic": 5, "primary": [10, 20]},
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "10-day and 20-day date-EW net with the two-bar rule is not worse than scheduled 10/20 on the same fills.",
+    "fail": "Stop this invalidation. Keep scheduled 10/20 exit. Do not scan 3%.",
+    "not_claimed": "No live qualification."
+  },
+  "outputs": [
+    "docs/research/watchlist-ma20-reclaim-two-bar-no-demand-v1.json",
+    "docs/research/watchlist-ma20-reclaim-two-bar-no-demand-v1-analysis.json",
+    "docs/research/watchlist-ma20-reclaim-two-bar-no-demand-v1-decision.md"
+  ]
+}

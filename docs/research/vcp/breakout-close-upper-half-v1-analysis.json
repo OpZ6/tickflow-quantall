@@ -1,0 +1,63 @@
+{
+  "experiment": "vcp-breakout-close-upper-half-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\breakout-close-upper-half-v1.json",
+  "training_2016_2022": {
+    "kept": 321,
+    "lower_half": 153,
+    "missing": 0,
+    "baseline": {
+      "n_trades": 474,
+      "win_rate": 0.274262,
+      "profit_factor": 3.56,
+      "avg_pnl": 0.009139,
+      "avg_win": 0.129955,
+      "avg_loss": 0.036518
+    },
+    "variant": {
+      "n_trades": 321,
+      "win_rate": 0.267913,
+      "profit_factor": 3.94,
+      "avg_pnl": 0.0124,
+      "avg_win": 0.150736,
+      "avg_loss": 0.038225
+    },
+    "delta": {
+      "avg_pnl": 0.003261,
+      "win_rate": -0.006349,
+      "profit_factor": 0.38
+    },
+    "rule": "keep"
+  },
+  "rule": "keep",
+  "gaps": [],
+  "validation_2023_2026": {
+    "kept": 258,
+    "lower_half": 112,
+    "missing": 0,
+    "baseline": {
+      "n_trades": 370,
+      "win_rate": 0.259459,
+      "profit_factor": 3.35,
+      "avg_pnl": 0.005399,
+      "avg_win": 0.140457,
+      "avg_loss": 0.04192
+    },
+    "variant": {
+      "n_trades": 258,
+      "win_rate": 0.271318,
+      "profit_factor": 3.68,
+      "avg_pnl": 0.011578,
+      "avg_win": 0.157703,
+      "avg_loss": 0.042831
+    },
+    "delta": {
+      "avg_pnl": 0.006179,
+      "win_rate": 0.011859,
+      "profit_factor": 0.33
+    },
+    "rule": "keep",
+    "incomplete_excluded": 0
+  },
+  "validation_note": "exposure, not a clean holdout"
+}

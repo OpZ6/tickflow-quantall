@@ -1,0 +1,49 @@
+{
+  "experiment": "legacy-wide-vcp-full-candidate-train-2016-2022-v1",
+  "decision": "selection_supported_false_descriptive_evidence_only",
+  "run_id": "20260909T135940874097Z",
+  "strategy_id": "quants_vcp_legacy_v1",
+  "training_result": {
+    "trades": 4396,
+    "candidates": 4411,
+    "average_excess_return_held": -0.00723,
+    "average_40d_excess_return": 0.002307,
+    "positive_40d_alpha_years": 3,
+    "years_evaluated": 7,
+    "positive_40d_alpha_year_list": [2017, 2018, 2020],
+    "mfe_20pct_count": 1315,
+    "mfe_20pct_rate": 0.299136,
+    "mfe_50pct_count": 246,
+    "mfe_100pct_count": 37,
+    "stop_loss_share": 0.0,
+    "unique_signal_days": 1322,
+    "unique_symbols": 1467,
+    "largest_signal_day_trades": 18,
+    "top5_symbol_trade_share": 0.021838
+  },
+  "training_checks": {
+    "minimum_100_complete_paths": true,
+    "positive_mean_40d_excess": true,
+    "minimum_four_positive_alpha_years": false
+  },
+  "selection_supported": false,
+  "market_outcome_40d_alpha": {
+    "down": 0.023007,
+    "sideways": 0.000398,
+    "up": -0.015791
+  },
+  "entry_signal_split": {
+    "signal_quants_vcp_breakout": {"n": 4240, "mean_40d_excess": 0.003177},
+    "signal_quants_vcp_cheat": {"n": 156, "mean_40d_excess": -0.021346}
+  },
+  "interpretation": [
+    "The wide default VCP stream yields weakly positive fixed-40-day selection Alpha (+0.23 percent) but only three of seven training years are positive, so the pre-registered four-year stability gate fails and selection_supported is false.",
+    "The pool is defensive: fixed-40-day excess is positive in down markets (+2.30 percent) and flat in sideways markets, but negative in up markets (-1.58 percent). It is a relative-strength/defensive candidate stream rather than a market-capture stream.",
+    "Default exits destroy the selection edge: realized held excess is -0.72 percent versus +0.23 percent fixed-40-day, with no stop-loss exits and all exits via signal or end-of-path.",
+    "The right tail is material in absolute terms (246 paths above 50 percent MFE, 37 above 100 percent), and concentration is low (largest signal day 18 trades, top-five symbols 2.18 percent of trades).",
+    "The cheat entry signal is a small negative subset (156 trades, -2.13 percent 40-day excess) and should not be mixed with the breakout entry in future structural hypotheses."
+  ],
+  "temporal_test_run": null,
+  "next_action": "Retain the wide VCP stream as a descriptive candidate pool only. Any structural step must first separate selection quality from exit realization on this ledger, then register one exit hypothesis before one entry hypothesis.",
+  "evidence": "data/research/vcp/runs/20260909T135940874097Z/trade-path-analysis.json"
+}

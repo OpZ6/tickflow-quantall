@@ -1,0 +1,28 @@
+{
+  "analysis": "production-leader-breakout-demand-audit-2016-2026-v1",
+  "source_run": "20260907T123519390606Z",
+  "artifact": "data/research/vcp/runs/20260907T123519390606Z/breakout-demand-analysis.json",
+  "scope": "298 executed entries; demand inputs end on the completed breakout signal bar; future bars are labels only",
+  "method": "Compare gap, close return, intraday return, high return, range expansion, close location, pivot clearance and volume expansion as continuous distributions. No composite score, classifier or threshold selection.",
+  "key_evidence": {
+    "volume_ratio_20": {
+      "winner_median": 1.802427,
+      "no_follow_failure_median": 1.558790,
+      "probability_winner_greater": 0.610156
+    },
+    "close_return_probability_winner_greater": 0.495869,
+    "intraday_return_probability_winner_greater": 0.465741,
+    "close_location_probability_winner_greater": 0.466843,
+    "range_expansion_probability_winner_greater": 0.525006,
+    "pivot_clearance_probability_winner_greater": 0.537233
+  },
+  "year_stability": {
+    "years_compared": 11,
+    "directionally_strong_years_probability_at_least_0_60": 7,
+    "weak_or_reversed_years": [2018, 2019, 2025, 2026],
+    "note": "Several yearly winner/no-follow cells are small; 2026 is partial. This is descriptive stability evidence, not an acceptance threshold."
+  },
+  "decision": "stop_single_variable_technical_entry_filters",
+  "interpretation": "Breakout volume has a plausible but unstable relationship with immediate follow-through. Price-bar strength measures add essentially no separation. Raising the existing volume threshold after observing this interval would be parameter fitting.",
+  "next_action": "Audit causal company-growth and industry-leadership inputs required by the fuller SEPA/VCP thesis. Continue only with fields whose historical coverage and announcement-time semantics can be demonstrated."
+}

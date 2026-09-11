@@ -14,7 +14,7 @@
 | :---------- | :------------------------------------------------------- |
 | 趋势 / 形态 | 趋势突破 · 均线多头 · MA 金叉 · MACD 金叉放量 · 布林突破 |
 | 量价 / 涨停 | 量价齐升 · 高换手强势 · 连板股 · 断板反包 · 涨停动量     |
-| 反转 / 波动 | 超跌反弹 · 超卖反转 · 新低反转 · 低波动龙头 · 回踩 MA20  |
+| 反转 / 波动 | 超跌反弹 · 超卖反转 · 新低反转 · 低波动趋势延续 · 回踩 MA20  |
 
 全 A 股一次扫表,Polars 毫秒级返回。选股页点策略卡片即可扫描,结果支持导出。**分钟策略**与日线策略共用同一个标的池,按策略声明的周期自动路由执行(分钟策略依赖数据页开启分钟数据落盘)。
 
@@ -156,7 +156,7 @@
 
 ### 数据源插件化
 
-内置 [TickFlow](https://tickflow.org) 官方 SDK(日 K / 分钟 K / 指数 / 财务 / 实时行情),同时支持接入第三方数据源:YAML 声明自有 HTTP 接口,或开发插件源(参考实现 stock-sdk,Docker 镜像已内置)。多个数据集(日K / 除权因子 / 实时行情 / 分钟K / 五档盘口 / 财务,注册表持续扩展)按源声明自由组合,在「设置 → 数据源」切换。
+内置 [TickFlow](https://tickflow.org) 官方 SDK(日 K / 分钟 K / 指数 / 财务 / 实时行情),同时支持接入第三方数据源:YAML 声明自有 HTTP 接口,或开发插件源。当前内置插件:`backend/app/plugins/` 下的 TDX(eltdx, 实时/分钟/五档)、fuyao(同花顺 REST)、tushare-compatible(mirror 优先)、local_financial(AkShare + Tushare)与 stock-sdk(Node 型;Docker 默认不打包,需 `--build-arg INCLUDE_STOCKSDK=1`,见 [deployment.md](./deployment.md))。多个数据集(日K / 除权因子 / 实时行情 / 分钟K / 五档盘口 / 财务,注册表持续扩展)按源声明自由组合,在「设置 → 数据源」切换。
 
 详见 [custom-data-source.md](./custom-data-source.md) 与 [plugin-development.md](./plugin-development.md)。
 

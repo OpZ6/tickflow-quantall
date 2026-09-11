@@ -118,7 +118,7 @@ def _market(
             "signal_launch_pullback_support",
             _market(
                 [10.0] * 25 + [11.0, 11.20, 11.10, 11.05, 10.98],
-                volumes=[1_000.0] * 25 + [3_000.0, 1_000.0, 850.0, 700.0, 500.0],
+                volumes=[1_000.0] * 25 + [3_000.0, 2_000.0, 2_000.0, 2_000.0, 500.0],
             ),
         ),
     ],
@@ -141,6 +141,53 @@ def test_registered_price_structure_strategy_emits_real_entry_signal(
         {item["id"]: item["default"] for item in strategy.meta["params"]},
     )
     assert bool(signals.entry[-1, 0]), strategy_id
+
+
+def test_launch_pullback_emits_only_first_qualifying_entry_for_each_launch():
+    market = _market(
+        [10.0] * 25 + [11.0, 11.02, 11.01, 11.00],
+        volumes=[1_000.0] * 25 + [3_000.0, 700.0, 650.0, 600.0],
+    )
+    strategy = StrategyEngine._load_file(BUILTIN_DIR / "launch_pullback_support.py")
+    signals = strategy.matrix_strategy.compute_signals(
+        market,
+        {item["id"]: item["default"] for item in strategy.meta["params"]},
+    )
+
+    assert np.flatnonzero(signals.entry[:, 0]).tolist() == [26]
+
+
+def test_low_volatility_trend_emits_only_on_state_entry():
+    market = _market([10.0] * 25 + [9.0, 9.0, 11.0, 11.0, 11.0])
+    strategy = StrategyEngine._load_file(BUILTIN_DIR / "low_volatility_leader.py")
+    signals = strategy.matrix_strategy.compute_signals(
+        market,
+        {
+            "require_positive_momentum": False,
+            "use_volatility_filter": False,
+            "require_above_ma20": True,
+        },
+    )
+
+    assert strategy.meta["name"] == "低波动趋势延续"
+    assert strategy.entry_signals == ["signal_low_volatility_trend_entry"]
+    assert np.flatnonzero(signals.entry[:, 0]).tolist() == [27]
+
+
+def test_oversold_reversal_emits_only_on_confirmation_transition():
+    market = _market([10.0] * 25 + [9.0, 9.0, 11.0, 11.0, 11.0])
+    strategy = StrategyEngine._load_file(BUILTIN_DIR / "oversold_reversal.py")
+    signals = strategy.matrix_strategy.compute_signals(
+        market,
+        {
+            "use_rsi_filter": False,
+            "use_change_filter": False,
+            "require_above_ma5": True,
+        },
+    )
+
+    assert strategy.entry_signals == ["signal_oversold_reversal_confirmed"]
+    assert np.flatnonzero(signals.entry[:, 0]).tolist() == [27]
 
 
 def test_price_structure_strategies_are_not_registered_as_pattern_layers():

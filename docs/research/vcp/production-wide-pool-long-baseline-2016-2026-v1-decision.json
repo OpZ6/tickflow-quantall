@@ -1,0 +1,49 @@
+{
+  "decision": "retain_candidate_screener_stop_default_trading_promotion",
+  "experiment": "production-wide-pool-long-baseline-2016-2026-v1",
+  "archive_run_id": "20260908T034433432997Z",
+  "engine_run_id": "2eb0dcc3b1",
+  "status": "completed",
+  "scope": "2016-01-04 through 2026-06-30, exposed development history",
+  "evidence": {
+    "result": "data/research/vcp/runs/20260908T034433432997Z/result.json",
+    "analysis": "data/research/vcp/runs/20260908T034433432997Z/analysis.json",
+    "timing_audit": "data/research/vcp/runs/20260908T034433432997Z/trade-audit.json",
+    "leader_reference": "20260908T024521089151Z",
+    "serialized_config_difference_keys": ["strategy_id"]
+  },
+  "observations": {
+    "engine_entry_candidates": 7379,
+    "trades": 768,
+    "breakout_entries": 726,
+    "cheat_entries": 42,
+    "signal_exits": 766,
+    "period_end_exits": 2,
+    "trade_timing_violations": 0,
+    "total_return": -0.5668,
+    "annual_return": -0.0795,
+    "max_drawdown": -0.8403,
+    "win_rate": 0.2982,
+    "average_exposure": 0.9108,
+    "aggregate_monetary_profit_factor": 0.8256414104312875,
+    "final_equity": 433243.6,
+    "equity_minus_realized_pnl_rounding_residual": 0.04
+  },
+  "runtime_seconds": {
+    "wall": 1388.629792,
+    "data_load": 34.1105,
+    "strategy_signals": 1333.212,
+    "simulation": 1.2187
+  },
+  "interpretation": [
+    "The existing wide screener's default signal-to-exit behavior does not support promotion to a complete trading strategy under this protocol.",
+    "Wide and leader defaults differ jointly in filters, market regime, ranking, entry permissions and risk exits. Their return difference is not a single-factor causal estimate.",
+    "A poor default execution baseline does not falsify the VCP idea or identify which individual rule should change.",
+    "Keep the screener for candidate observation. Retain the frozen leader forward version; do not scan thresholds or exits from this result.",
+    "Most runtime was signal computation, not data preparation. Historical ST, listing-age and universe limitations remain as already documented."
+  ],
+  "strategy_changed": false,
+  "parameter_search": false,
+  "independent_validation": false,
+  "next_action": "Complete the already planned candidate rejection evidence for forward observation, preserving candidate, executable signal and simulated fill distinctions."
+}

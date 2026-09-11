@@ -1,0 +1,49 @@
+{
+  "experiment": "low-volatility-trend-entry-full-candidate-train-2016-2022-v1",
+  "decision": "stop_default_representation",
+  "run_id": "20260909T080702565610Z",
+  "superseded_boundary_contaminated_run": "20260909T055608181544Z",
+  "boundary_evidence": {
+    "maximum_entry_date": "2022-12-30",
+    "maximum_entry_signal_date": "2022-12-29",
+    "entries_after_training_end": 0,
+    "removed_cross_boundary_entries": 58,
+    "timing_violations": 0
+  },
+  "training_result": {
+    "trades": 86511,
+    "average_absolute_return": -0.002208,
+    "average_excess_return_held": -0.004986,
+    "average_40d_excess_return": -0.002507,
+    "positive_held_alpha_years": 1,
+    "positive_40d_alpha_years": 3,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 19040,
+    "mfe_20pct_rate": 0.220088,
+    "mfe_50pct_count": 2986,
+    "mfe_100pct_count": 446,
+    "stop_loss_share": 0.227832
+  },
+  "training_checks": {
+    "minimum_trades_500": true,
+    "nonnegative_average_excess_return_held": false,
+    "nonnegative_average_40d_excess_return": false,
+    "minimum_four_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_2": true
+  },
+  "fixed_40d_market_outcome_attribution": {
+    "down_alpha": 0.008425,
+    "sideways_alpha": -0.000300,
+    "up_alpha": -0.013331
+  },
+  "interpretation": "The first transition into the default low-volatility trend state is a very broad market condition rather than a selective edge. It recalls large future paths but has negative realized and fixed-horizon Alpha, with the largest deficit during future rising markets.",
+  "temporal_test_run": null,
+  "test_exposure_note": "Earlier development analyses allowed late-2022 training signals or positions to consume early-2023 exits and 40-session labels. Together they expose 2023-01-03 through 2023-03-07; pristine temporal testing now starts on 2023-03-08.",
+  "stopped_variants": [
+    "annual-volatility thresholds",
+    "momentum windows",
+    "moving-average windows",
+    "stop and exit variants"
+  ],
+  "evidence": "data/research/vcp/runs/20260909T080702565610Z/trade-path-analysis.json"
+}

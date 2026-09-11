@@ -1,0 +1,214 @@
+{
+  "protocol": "docs\\research\\momentum\\medium-term-skip-month-momentum-train-2016-2022-v1.json",
+  "candidate": {
+    "candidates": 20184,
+    "average_40d_return": 0.00838717612275741,
+    "average_40d_alpha": -0.01058678132915926,
+    "mfe_20pct_rate": 0.3620689655172414,
+    "mfe_50pct_count": 1551,
+    "mfe_100pct_count": 192,
+    "positive_alpha_years": 2,
+    "by_signal_year": {
+      "2016": {
+        "candidates": 2244,
+        "average_40d_return": -0.0014598324561729264,
+        "average_40d_alpha": -0.053755927083059526,
+        "mfe_20pct_rate": 0.3016934046345811,
+        "mfe_50pct_count": 110,
+        "mfe_100pct_count": 12
+      },
+      "2017": {
+        "candidates": 2511,
+        "average_40d_return": -0.023279863557927143,
+        "average_40d_alpha": -0.0017592694571428045,
+        "mfe_20pct_rate": 0.2214257268020709,
+        "mfe_50pct_count": 61,
+        "mfe_100pct_count": 6
+      },
+      "2018": {
+        "candidates": 2303,
+        "average_40d_return": -0.03634881193498102,
+        "average_40d_alpha": -0.011916686862553046,
+        "mfe_20pct_rate": 0.19192357794181503,
+        "mfe_50pct_count": 52,
+        "mfe_100pct_count": 4
+      },
+      "2019": {
+        "candidates": 2891,
+        "average_40d_return": 0.05106870878774459,
+        "average_40d_alpha": 0.009284641610769301,
+        "mfe_20pct_rate": 0.4261501210653753,
+        "mfe_50pct_count": 280,
+        "mfe_100pct_count": 49
+      },
+      "2020": {
+        "candidates": 3287,
+        "average_40d_return": 0.04147374544442257,
+        "average_40d_alpha": 0.009526564330612981,
+        "mfe_20pct_rate": 0.504107088530575,
+        "mfe_50pct_count": 414,
+        "mfe_100pct_count": 30
+      },
+      "2021": {
+        "candidates": 3487,
+        "average_40d_return": -0.009044486610865364,
+        "average_40d_alpha": -0.03162816911695313,
+        "mfe_20pct_rate": 0.3825638084313163,
+        "mfe_50pct_count": 311,
+        "mfe_100pct_count": 50
+      },
+      "2022": {
+        "candidates": 3461,
+        "average_40d_return": 0.018001723376048787,
+        "average_40d_alpha": -0.002618297793314952,
+        "mfe_20pct_rate": 0.4073967061542907,
+        "mfe_50pct_count": 323,
+        "mfe_100pct_count": 41
+      }
+    },
+    "by_future_market_outcome": {
+      "down": {
+        "candidates": 4250,
+        "average_40d_return": -0.09486265314800262,
+        "average_40d_alpha": -0.0008752168071177416,
+        "mfe_20pct_rate": 0.19505882352941176,
+        "mfe_50pct_count": 140,
+        "mfe_100pct_count": 16
+      },
+      "sideways": {
+        "candidates": 8971,
+        "average_40d_return": -0.016419181495686594,
+        "average_40d_alpha": -0.014977614581446596,
+        "mfe_20pct_rate": 0.3096644744175677,
+        "mfe_50pct_count": 434,
+        "mfe_100pct_count": 49
+      },
+      "up": {
+        "candidates": 6963,
+        "average_40d_return": 0.10336773171600619,
+        "average_40d_alpha": -0.01085735207630945,
+        "mfe_20pct_rate": 0.5315237684905931,
+        "mfe_50pct_count": 977,
+        "mfe_100pct_count": 127
+      }
+    }
+  },
+  "control": {
+    "candidates": 20105,
+    "average_40d_return": 0.002779395253670275,
+    "average_40d_alpha": -0.01654470303993632,
+    "mfe_20pct_rate": 0.3142999253916936,
+    "mfe_50pct_count": 1233,
+    "mfe_100pct_count": 176,
+    "positive_alpha_years": 0,
+    "by_signal_year": {
+      "2016": {
+        "candidates": 2232,
+        "average_40d_return": 0.01307494153005277,
+        "average_40d_alpha": -0.038874375869061215,
+        "mfe_20pct_rate": 0.23790322580645162,
+        "mfe_50pct_count": 52,
+        "mfe_100pct_count": 1
+      },
+      "2017": {
+        "candidates": 2499,
+        "average_40d_return": -0.04402462077613028,
+        "average_40d_alpha": -0.024494285121809116,
+        "mfe_20pct_rate": 0.16686674669867949,
+        "mfe_50pct_count": 40,
+        "mfe_100pct_count": 2
+      },
+      "2018": {
+        "candidates": 2291,
+        "average_40d_return": -0.022013900155375535,
+        "average_40d_alpha": -0.0007369649849767039,
+        "mfe_20pct_rate": 0.31252728066346575,
+        "mfe_50pct_count": 122,
+        "mfe_100pct_count": 11
+      },
+      "2019": {
+        "candidates": 2879,
+        "average_40d_return": 0.030298425497618235,
+        "average_40d_alpha": -0.013827633841711843,
+        "mfe_20pct_rate": 0.3959708232025009,
+        "mfe_50pct_count": 323,
+        "mfe_100pct_count": 54
+      },
+      "2020": {
+        "candidates": 3275,
+        "average_40d_return": 0.014275724529146546,
+        "average_40d_alpha": -0.01650063148789199,
+        "mfe_20pct_rate": 0.36793893129770994,
+        "mfe_50pct_count": 264,
+        "mfe_100pct_count": 44
+      },
+      "2021": {
+        "candidates": 3475,
+        "average_40d_return": 0.01368950249600721,
+        "average_40d_alpha": -0.008766959388779728,
+        "mfe_20pct_rate": 0.35683453237410073,
+        "mfe_50pct_count": 248,
+        "mfe_100pct_count": 46
+      },
+      "2022": {
+        "candidates": 3454,
+        "average_40d_return": 0.0016197622007108085,
+        "average_40d_alpha": -0.016980177344831565,
+        "mfe_20pct_rate": 0.30978575564562827,
+        "mfe_50pct_count": 184,
+        "mfe_100pct_count": 18
+      }
+    },
+    "by_future_market_outcome": {
+      "down": {
+        "candidates": 4247,
+        "average_40d_return": -0.1217296870485441,
+        "average_40d_alpha": -0.029595891497167712,
+        "mfe_20pct_rate": 0.18554273604897575,
+        "mfe_50pct_count": 101,
+        "mfe_100pct_count": 17
+      },
+      "sideways": {
+        "candidates": 8909,
+        "average_40d_return": -0.01394547268036079,
+        "average_40d_alpha": -0.012388579526745243,
+        "mfe_20pct_rate": 0.26680884498821417,
+        "mfe_50pct_count": 395,
+        "mfe_100pct_count": 58
+      },
+      "up": {
+        "candidates": 6949,
+        "average_40d_return": 0.10031744691028088,
+        "average_40d_alpha": -0.01389662518717442,
+        "mfe_20pct_rate": 0.4538782558641531,
+        "mfe_50pct_count": 737,
+        "mfe_100pct_count": 101
+      }
+    }
+  },
+  "candidate_minus_control_40d_alpha": 0.0059579217107770584,
+  "training_checks": {
+    "minimum_candidates": true,
+    "minimum_average_40d_alpha": false,
+    "minimum_top_minus_bottom_40d_alpha": false,
+    "minimum_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate": true,
+    "minimum_mfe_50pct_count": true
+  },
+  "passed_training": false,
+  "excluded_incomplete_labels": {
+    "candidate": 4,
+    "control": 1
+  },
+  "maximum_label_end_date": "2022-12-30",
+  "temporal_test_inspected": false,
+  "decision": "reject_training",
+  "interpretation": "The top decile beat the bottom decile by 0.60 percentage points, but its market-relative alpha was -1.06%, the spread missed the preregistered 1 percentage point gate, and only 2 of 7 years had positive alpha.",
+  "stopped_variants": [
+    "lookback_window_scan",
+    "skip_window_scan",
+    "quantile_scan",
+    "vcp_or_regime_overlay",
+    "temporal_test_inspection"
+  ]
+}

@@ -71,7 +71,10 @@ def classify_source_error(exc: BaseException) -> str:
         return "dependency"
     if "401" in message or "403" in message or "token" in message or "auth" in message:
         return "authentication"
-    if "429" in message or "rate limit" in message or "too many requests" in message:
+    if any(
+        marker in message
+        for marker in ("429", "rate limit", "too many requests", "频率超限", "访问频次")
+    ):
         return "rate_limit"
     if isinstance(exc, TimeoutError) or "timeout" in message or "timed out" in message:
         return "timeout"

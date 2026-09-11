@@ -34,6 +34,9 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 
 ## 支持文档
 
+- [量化策略研发通用规范](research/strategy-development-methodology.md)：所有选股与交易策略共用的研究顺序、时间隔离、Alpha 评价、适用期验证、反过拟合和证据要求。
+- [右侧中短线波段方向合同](research/right-side-swing-operating-system-20260910.md)：身份与停止边界。迭代用法见[策略迭代助手](research/strategy-iteration-assistant.md)。当前枪见 `goal.md` 与 [`goal-launch-prompt.txt`](../goal-launch-prompt.txt)。
+- [量化选股策略迭代主计划](research/quant-development-plan.md)：当前策略队列、数据状态与阶段计划；具体正在执行的任务见根目录 `goal.md`。
 - [VCP 研究记录](research/vcp/README.md)：交易闭环配置、独立运行归档、首轮诊断和正式优化的数据前置条件。
 
 - [Quants 策略核心迁移验收](spec/quants-strategy-core-acceptance-20260905.md)：当前名称、V2 默认排除、核心语义回归证据与数据限制；用户已将要求调整为核心思路一致。原完整迁移计划已移入 [`archive/20260907/`](archive/20260907/)。

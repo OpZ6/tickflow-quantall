@@ -1,0 +1,31 @@
+{
+  "experiment": "production-leader-baseline-20260907",
+  "purpose": "fixed_defaults_production_data_development_baseline",
+  "universe_date": "2023-12-29",
+  "universe_mode": "historical_union",
+  "sample_size": 0,
+  "data_directory": "",
+  "development_note": "Already exposed development interval. Production data has unresolved historical universe, ST, new-listing and share-capital limitations. No parameter tuning or profitability qualification in this run.",
+  "backtest": {
+    "strategy_id": "vcp_leader_breakout",
+    "symbols": null,
+    "start": "2024-01-02",
+    "end": "2026-06-30",
+    "params": null,
+    "overrides": {},
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.0005,
+    "slippage_bps": 10.0,
+    "max_positions": 4,
+    "max_exposure_pct": 1.0,
+    "initial_capital": 1000000.0,
+    "position_sizing": "equal",
+    "mode": "position",
+    "asset_type": "stock",
+    "minute_fill": false,
+    "regime_filter": null
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "experiment": "vcp-two-bar-no-demand-exit-v1",
+  "thought": "VCP leader breakout. Same entries. One added sell: no demand in the first two bars.",
+  "hypothesis": "About half of non-winners never printed +3% in the first two bars. Cutting those at the open two sessions after entry should raise 盈亏比 by shrinking left-tail holds, without changing who is selected.",
+  "baseline": {
+    "strategy_id": "vcp_leader_breakout",
+    "run_id": "20260908T024521089151Z",
+    "fills": "frozen T+1 filled trades; do not re-run the detector",
+    "exits": "plan stop / MA20 / profit lock / stop-loss as recorded"
+  },
+  "change": {
+    "id": "two_bar_never_plus_3pct",
+    "definition": "Market-calendar sessions: entry day and the next market session highs vs entry_price. If max high / entry_price - 1 < 0.03, sell at the open two market sessions after entry if that session is strictly before the baseline exit. A hole in the stock's bars on a market session, limit-down lock or halt does not roll to the next stock bar; keep the baseline exit."
+  },
+  "universe": "Same filled names as the frozen run. Training: entry_date in 2016-01-01..2022-12-31 and baseline exit_date <= 2022-12-31.",
+  "metric": {
+    "primary": "independent-trade win_rate, profit_factor (avg_win/avg_|loss|), avg_pnl (pnl_pct)",
+    "not_used_as_pass": ["equity curve", "max_positions", "forced 10-day hold"]
+  },
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below baseline, and profit_factor does not collapse expected value.",
+    "fail": "Drop this sell. Baseline unchanged. Next edit stays in VCP/cup/flag/volume-break/pullback thought."
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "experiment": "production-leader-min-legs3-2016-2026-v1",
+  "baseline_run": "20260907T123519390606Z",
+  "experiment_run": "20260907T124336318983Z",
+  "decision": "reject",
+  "reason": "The stricter structure retained enough trades but failed both quality and drawdown gates.",
+  "comparison": {
+    "baseline": {
+      "entry_candidates": 837,
+      "trades": 298,
+      "stop_loss_share": 0.4261744966,
+      "max_drawdown": -0.2592,
+      "annual_return": 0.1377,
+      "sharpe": 0.82
+    },
+    "min_legs_3": {
+      "entry_candidates": 538,
+      "trades": 233,
+      "stop_loss_share": 0.4506437768,
+      "max_drawdown": -0.3211,
+      "annual_return": 0.0265,
+      "sharpe": 0.26
+    },
+    "stop_loss_share_change": 0.0244692802,
+    "max_drawdown_change": -0.0619
+  },
+  "gate_results": {
+    "minimum_trades_150": "pass",
+    "minimum_stop_loss_share_reduction_0_05": "fail",
+    "maximum_drawdown_deterioration_0_03": "fail"
+  },
+  "next_action": "Keep min_legs=2 and begin the market-stage factor group with a dual-regime ablation."
+}

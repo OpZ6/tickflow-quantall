@@ -1,0 +1,21 @@
+{
+  "decision_id": "security-name-second-page-boundary-audit-20260908-v1",
+  "decided_at": "2026-09-08T22:46:00+08:00",
+  "snapshot": "data/research/security-snapshots/20260907-namechange-v1",
+  "request": {
+    "offset": 10000,
+    "limit": 10000,
+    "returned_rows": 4207
+  },
+  "finding": {
+    "exact_duplicates_with_first_page": 358,
+    "conflicting_duplicates": 0,
+    "duplicate_start_date": "20061009",
+    "first_page_duplicate_index_range": [9642, 9999],
+    "second_page_duplicate_index_range": [142, 499],
+    "interpretation": "The offset boundary cuts through a tied start_date without a stable secondary order, so accepting or merely deduplicating the page cannot prove complete coverage."
+  },
+  "decision": "retain_second_page_as_rejected_and_do_not_publish",
+  "next_action": "Use one separately validated boundary-date request for 20061009 before accepting the terminal page; do not repeat the same offset request.",
+  "production_published": false
+}

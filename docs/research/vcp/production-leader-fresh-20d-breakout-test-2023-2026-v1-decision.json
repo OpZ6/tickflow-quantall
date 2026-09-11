@@ -1,0 +1,39 @@
+{
+  "experiment": "production-leader-fresh-20d-breakout-test-2023-2026-v1",
+  "run_id": "20260909T093808009600Z",
+  "decision": "reject_temporal_test",
+  "test_result": {
+    "trades": 87,
+    "average_excess_return_held": -0.001674,
+    "average_40d_excess_return": -0.021810,
+    "positive_40d_alpha_years": 1,
+    "years_evaluated": 4,
+    "mfe_20pct_count": 36,
+    "mfe_20pct_rate": 0.413793,
+    "mfe_50pct_count": 10,
+    "mfe_100pct_count": 0
+  },
+  "test_checks": {
+    "minimum_candidates_40": true,
+    "nonnegative_average_40d_alpha": false,
+    "minimum_three_positive_40d_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_25": true,
+    "minimum_mfe_50pct_count_5": true
+  },
+  "by_entry_year_40d_alpha": {
+    "2023": 0.026935,
+    "2024": -0.014896,
+    "2025": -0.032798,
+    "2026": -0.029273
+  },
+  "interpretation": "The rule continued to recall large future paths, but its positive training alpha did not generalize. Market alpha already fails the frozen acceptance gates, so a matched-opportunity comparison cannot rescue or promote the rule.",
+  "stopped_variants": [
+    "breakout_window_scan",
+    "cooldown_scan",
+    "threshold_scan",
+    "test_subperiod_selection",
+    "market_regime_selection_from_test_results"
+  ],
+  "next_action": "Return to the mechanism map and select a distinct mechanism family; keep forward-v2 observation separate.",
+  "evidence": "data/research/vcp/runs/20260909T093808009600Z/trade-path-analysis.json"
+}

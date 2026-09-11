@@ -122,6 +122,51 @@ def test_tencent_index_provider_normalizes_and_filters_daily_rows() -> None:
     assert captured["params"]["param"].startswith("sh000985,day")
 
 
+def test_tencent_index_provider_splits_long_ranges_by_calendar_window() -> None:
+    calls: list[str] = []
+
+    class Response:
+        def __init__(self, trade_date: str) -> None:
+            self.trade_date = trade_date
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return {
+                "code": 0,
+                "data": {
+                    "sh000300": {
+                        "day": [
+                            [self.trade_date, "1", "2", "3", "0.5", "100"]
+                        ]
+                    }
+                },
+            }
+
+    class Client:
+        def get(self, url, *, params, headers):
+            del url, headers
+            value = params["param"]
+            calls.append(value)
+            return Response(value.split(",")[2])
+
+    frame = fetch_index_daily(
+        "000300.SH",
+        date(2015, 1, 1),
+        date(2020, 12, 31),
+        client=Client(),
+    )
+
+    assert len(calls) == 3
+    assert calls[0].startswith("sh000300,day,2015-01-01,2017-09-26,1000,qfq")
+    assert frame["date"].to_list() == [
+        date(2015, 1, 1),
+        date(2017, 9, 27),
+        date(2020, 6, 23),
+    ]
+
+
 def test_tencent_index_realtime_uses_latest_two_rows_and_decimal_change() -> None:
     class Response:
         def raise_for_status(self) -> None:

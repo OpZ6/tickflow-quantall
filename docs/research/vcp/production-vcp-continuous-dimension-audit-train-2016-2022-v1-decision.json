@@ -1,0 +1,336 @@
+{
+  "protocol": "docs\\research\\vcp\\production-vcp-continuous-dimension-audit-train-2016-2022-v1.json",
+  "opportunities": 98459,
+  "dimensions": {
+    "trend_stack_margin": {
+      "valid_opportunities": 97387,
+      "by_expected_quintile": {
+        "1": {
+          "opportunities": 19480,
+          "average_40d_alpha": -0.021041841354889613,
+          "average_40d_return": 0.019208746466181363,
+          "mfe_20pct_rate": 0.3461498973305955,
+          "mfe_50pct_rate": 0.06817248459958933,
+          "mfe_100pct_rate": 0.011242299794661192
+        },
+        "2": {
+          "opportunities": 19477,
+          "average_40d_alpha": -0.018980325239213443,
+          "average_40d_return": 0.0030721499578733797,
+          "mfe_20pct_rate": 0.2931149561020691,
+          "mfe_50pct_rate": 0.059146685834574116,
+          "mfe_100pct_rate": 0.010730605329362838
+        },
+        "3": {
+          "opportunities": 19477,
+          "average_40d_alpha": -0.011278576365705013,
+          "average_40d_return": -0.001018989974850042,
+          "mfe_20pct_rate": 0.27832828464342557,
+          "mfe_50pct_rate": 0.05888997278841711,
+          "mfe_100pct_rate": 0.01083329054782564
+        },
+        "4": {
+          "opportunities": 19477,
+          "average_40d_alpha": -0.007126209541898674,
+          "average_40d_return": -0.006191531665125514,
+          "mfe_20pct_rate": 0.279149766391128,
+          "mfe_50pct_rate": 0.06109770498536736,
+          "mfe_100pct_rate": 0.00985778097242902
+        },
+        "5": {
+          "opportunities": 19476,
+          "average_40d_alpha": -0.017499722862923103,
+          "average_40d_return": -0.022626100005886104,
+          "mfe_20pct_rate": 0.3096118299445471,
+          "mfe_50pct_rate": 0.06977818853974121,
+          "mfe_100pct_rate": 0.010217703840624358
+        }
+      },
+      "best_minus_worst_40d_alpha": 0.0035421184919665095,
+      "best_to_worst_50pct_leader_enrichment": 1.0235535487606617,
+      "monotonic_alpha_steps": 3,
+      "positive_spread_years": 4,
+      "by_signal_year_best_minus_worst_alpha": {
+        "2016": -0.016326098931603118,
+        "2017": 0.05223177268262026,
+        "2018": 0.017449320198724583,
+        "2019": 0.02204153265758334,
+        "2020": 0.01833604479034244,
+        "2021": -0.017182934154871356,
+        "2022": -0.03191482719568615
+      },
+      "expected_best_quintile_by_future_market_outcome": {
+        "down": {
+          "opportunities": 5769,
+          "average_40d_alpha": 0.002807468909952995
+        },
+        "sideways": {
+          "opportunities": 8579,
+          "average_40d_alpha": -0.029075583202502687
+        },
+        "up": {
+          "opportunities": 5128,
+          "average_40d_alpha": -0.020979224322452993
+        }
+      },
+      "checks": {
+        "minimum_valid_opportunities": true,
+        "minimum_best_minus_worst_40d_alpha": false,
+        "minimum_positive_spread_years": false,
+        "minimum_monotonic_alpha_steps": true,
+        "minimum_50pct_leader_enrichment": false
+      },
+      "alpha_direction_supported": false,
+      "passed": false
+    },
+    "rs_percentile": {
+      "valid_opportunities": 89235,
+      "by_expected_quintile": {
+        "1": {
+          "opportunities": 17850,
+          "average_40d_alpha": -0.010672633264067666,
+          "average_40d_return": 0.0032613753237310246,
+          "mfe_20pct_rate": 0.28364145658263307,
+          "mfe_50pct_rate": 0.05215686274509804,
+          "mfe_100pct_rate": 0.00918767507002801
+        },
+        "2": {
+          "opportunities": 17847,
+          "average_40d_alpha": -0.0053829339915283814,
+          "average_40d_return": 0.006288979680302925,
+          "mfe_20pct_rate": 0.26514260099736653,
+          "mfe_50pct_rate": 0.05306213929511963,
+          "mfe_100pct_rate": 0.01025382417212977
+        },
+        "3": {
+          "opportunities": 17848,
+          "average_40d_alpha": -0.009642515067083928,
+          "average_40d_return": 0.004214417137596331,
+          "mfe_20pct_rate": 0.2832810398924249,
+          "mfe_50pct_rate": 0.057709547288211566,
+          "mfe_100pct_rate": 0.008964589870013447
+        },
+        "4": {
+          "opportunities": 17847,
+          "average_40d_alpha": -0.014032112395911255,
+          "average_40d_return": 0.001227986734441237,
+          "mfe_20pct_rate": 0.30935171177228665,
+          "mfe_50pct_rate": 0.06813470050988962,
+          "mfe_100pct_rate": 0.011430492519751218
+        },
+        "5": {
+          "opportunities": 17843,
+          "average_40d_alpha": -0.02151679143747453,
+          "average_40d_return": -0.0038657683812535707,
+          "mfe_20pct_rate": 0.3591324328868464,
+          "mfe_50pct_rate": 0.08524351286218686,
+          "mfe_100pct_rate": 0.013562741691419604
+        }
+      },
+      "best_minus_worst_40d_alpha": -0.010844158173406863,
+      "best_to_worst_50pct_leader_enrichment": 1.6343681037486955,
+      "monotonic_alpha_steps": 1,
+      "positive_spread_years": 3,
+      "by_signal_year_best_minus_worst_alpha": {
+        "2016": -0.0445155535606742,
+        "2017": 0.03610859576185475,
+        "2018": -0.011160039159587338,
+        "2019": 0.009933101441646535,
+        "2020": 0.007398569886993231,
+        "2021": -0.032976509046230895,
+        "2022": -0.03494409099642215
+      },
+      "expected_best_quintile_by_future_market_outcome": {
+        "down": {
+          "opportunities": 4155,
+          "average_40d_alpha": -0.0005185042422277835
+        },
+        "sideways": {
+          "opportunities": 7349,
+          "average_40d_alpha": -0.038504950302541176
+        },
+        "up": {
+          "opportunities": 6339,
+          "average_40d_alpha": -0.015585556825844206
+        }
+      },
+      "checks": {
+        "minimum_valid_opportunities": true,
+        "minimum_best_minus_worst_40d_alpha": false,
+        "minimum_positive_spread_years": false,
+        "minimum_monotonic_alpha_steps": false,
+        "minimum_50pct_leader_enrichment": true
+      },
+      "alpha_direction_supported": false,
+      "passed": false
+    },
+    "range_contraction_ratio": {
+      "valid_opportunities": 97731,
+      "by_expected_quintile": {
+        "1": {
+          "opportunities": 19549,
+          "average_40d_alpha": -0.019134551984387547,
+          "average_40d_return": 0.00012089687940427865,
+          "mfe_20pct_rate": 0.3354135761420021,
+          "mfe_50pct_rate": 0.0745306665302573,
+          "mfe_100pct_rate": 0.012174535781881426
+        },
+        "2": {
+          "opportunities": 19546,
+          "average_40d_alpha": -0.01580501159979447,
+          "average_40d_return": -0.0015936463104596612,
+          "mfe_20pct_rate": 0.30722398444694565,
+          "mfe_50pct_rate": 0.06410518776220199,
+          "mfe_100pct_rate": 0.010641563491251407
+        },
+        "3": {
+          "opportunities": 19547,
+          "average_40d_alpha": -0.015094949929089751,
+          "average_40d_return": -0.0034717749608912636,
+          "mfe_20pct_rate": 0.29498132705786057,
+          "mfe_50pct_rate": 0.061595129687420064,
+          "mfe_100pct_rate": 0.010129431626336522
+        },
+        "4": {
+          "opportunities": 19546,
+          "average_40d_alpha": -0.012299693872884068,
+          "average_40d_return": -0.002435337874463182,
+          "mfe_20pct_rate": 0.28716873017497185,
+          "mfe_50pct_rate": 0.05893789010539241,
+          "mfe_100pct_rate": 0.010078788498925611
+        },
+        "5": {
+          "opportunities": 19543,
+          "average_40d_alpha": -0.014052191282872122,
+          "average_40d_return": -0.0007922741003231206,
+          "mfe_20pct_rate": 0.2827099217110986,
+          "mfe_50pct_rate": 0.05853758378959218,
+          "mfe_100pct_rate": 0.009824489587064422
+        }
+      },
+      "best_minus_worst_40d_alpha": 0.005082360701515425,
+      "best_to_worst_50pct_leader_enrichment": 0.7854160779016729,
+      "monotonic_alpha_steps": 3,
+      "positive_spread_years": 4,
+      "by_signal_year_best_minus_worst_alpha": {
+        "2016": 0.015739775920389255,
+        "2017": -0.011385867866516786,
+        "2018": 0.00987213626473058,
+        "2019": -0.003888025177661616,
+        "2020": -0.005857319784906375,
+        "2021": 0.015874204579930714,
+        "2022": 0.01297071092204316
+      },
+      "expected_best_quintile_by_future_market_outcome": {
+        "down": {
+          "opportunities": 4596,
+          "average_40d_alpha": -0.00921983976310596
+        },
+        "sideways": {
+          "opportunities": 8298,
+          "average_40d_alpha": -0.02097385421277873
+        },
+        "up": {
+          "opportunities": 6649,
+          "average_40d_alpha": -0.00875418084408134
+        }
+      },
+      "checks": {
+        "minimum_valid_opportunities": true,
+        "minimum_best_minus_worst_40d_alpha": false,
+        "minimum_positive_spread_years": false,
+        "minimum_monotonic_alpha_steps": true,
+        "minimum_50pct_leader_enrichment": false
+      },
+      "alpha_direction_supported": false,
+      "passed": false
+    },
+    "volume_dry_ratio": {
+      "valid_opportunities": 97731,
+      "by_expected_quintile": {
+        "1": {
+          "opportunities": 19549,
+          "average_40d_alpha": -0.023713660719227776,
+          "average_40d_return": -0.01657911135208955,
+          "mfe_20pct_rate": 0.31070642999641923,
+          "mfe_50pct_rate": 0.07268914010946852,
+          "mfe_100pct_rate": 0.012532610363701468
+        },
+        "2": {
+          "opportunities": 19546,
+          "average_40d_alpha": -0.016010839137110953,
+          "average_40d_return": -0.00605235125224934,
+          "mfe_20pct_rate": 0.29852655274736517,
+          "mfe_50pct_rate": 0.060216924178860126,
+          "mfe_100pct_rate": 0.010027627135986903
+        },
+        "3": {
+          "opportunities": 19547,
+          "average_40d_alpha": -0.014527647535826298,
+          "average_40d_return": -0.0005656127527911883,
+          "mfe_20pct_rate": 0.29825548677546426,
+          "mfe_50pct_rate": 0.06077658975801913,
+          "mfe_100pct_rate": 0.009464367933698266
+        },
+        "4": {
+          "opportunities": 19546,
+          "average_40d_alpha": -0.012246217445785771,
+          "average_40d_return": 0.004492185303172716,
+          "mfe_20pct_rate": 0.29376854599406527,
+          "mfe_50pct_rate": 0.06016576281592142,
+          "mfe_100pct_rate": 0.009976465773048193
+        },
+        "5": {
+          "opportunities": 19543,
+          "average_40d_alpha": -0.009886720701252325,
+          "average_40d_return": 0.010536907038595698,
+          "mfe_20pct_rate": 0.3062477613467738,
+          "mfe_50pct_rate": 0.06385918231591875,
+          "mfe_100pct_rate": 0.010847873919050299
+        }
+      },
+      "best_minus_worst_40d_alpha": 0.01382694001797545,
+      "best_to_worst_50pct_leader_enrichment": 0.8785243878211791,
+      "monotonic_alpha_steps": 4,
+      "positive_spread_years": 7,
+      "by_signal_year_best_minus_worst_alpha": {
+        "2016": 0.005890929284835714,
+        "2017": 0.0048519114048461605,
+        "2018": 0.012521057320443417,
+        "2019": 0.00896086070018272,
+        "2020": 0.02484044595929522,
+        "2021": 0.019741531689088886,
+        "2022": 0.013023910021895482
+      },
+      "expected_best_quintile_by_future_market_outcome": {
+        "down": {
+          "opportunities": 4259,
+          "average_40d_alpha": -0.00863823849749297
+        },
+        "sideways": {
+          "opportunities": 7676,
+          "average_40d_alpha": -0.009450818703958138
+        },
+        "up": {
+          "opportunities": 7608,
+          "average_40d_alpha": -0.011025425937456456
+        }
+      },
+      "checks": {
+        "minimum_valid_opportunities": true,
+        "minimum_best_minus_worst_40d_alpha": true,
+        "minimum_positive_spread_years": true,
+        "minimum_monotonic_alpha_steps": true,
+        "minimum_50pct_leader_enrichment": false
+      },
+      "alpha_direction_supported": true,
+      "passed": false
+    }
+  },
+  "alpha_supported_dimensions": [
+    "volume_dry_ratio"
+  ],
+  "passed_dimensions": [],
+  "decision": "retain_alpha_mechanism_without_strategy_promotion",
+  "interpretation": "Alpha support and large-winner recall are reported separately. A dimension may be retained as a reusable quality mechanism without qualifying as a standalone selector."
+}

@@ -1,0 +1,34 @@
+{
+  "experiment": "production-leader-classic-vcp-blind-casebook-v1",
+  "decision": "retain_broad_watchlist_and_separate_structure_semantics",
+  "reason": "Outcome-blind chart review found that the broad detector mixes classic contractions, partial structures, and materially different loose or reversal patterns. This is a representation problem, not evidence for a tighter numeric filter.",
+  "label_freeze": {
+    "cases": 24,
+    "labels_sha256": "2e7603f19e9bb15f9c3ad04ceda4cfc50aa714c6a0dbcd382bb1533e586ce089",
+    "outcomes_opened_before_freeze": false,
+    "classic": 5,
+    "partial": 8,
+    "nonclassic": 11
+  },
+  "dominant_semantic_gaps": {
+    "contracting_depth_missing_or_contrary": 19,
+    "right_edge_tightness_missing_or_contrary": 13,
+    "loose_or_erratic": 12,
+    "volume_dry_up_missing_or_contrary": 10,
+    "pivot_leakage": 5
+  },
+  "post_unblind_descriptive_only": {
+    "overall_future_breakout_rate": 0.375,
+    "classic_future_breakout_rate": 0.4,
+    "partial_future_breakout_rate": 0.25,
+    "nonclassic_future_breakout_rate": 0.45454545454545453,
+    "interpretation": "The tiny qualitative sample does not rank the classes and cannot define a trading rule. Nonclassic cases doing as well as classic cases under this label also warns against optimizing the label instead of fixing semantics."
+  },
+  "stopped_actions": [
+    "Do not convert the 5 of 24 classic share into a performance claim.",
+    "Do not derive thresholds, scores, classifiers, or portfolio rules from these cases.",
+    "Do not resample this packet after outcomes were opened.",
+    "Do not relabel the broad detector as a pure classic VCP detector."
+  ],
+  "next_action": "Design one separate, interpretable classic-structure representation from supply contraction, right-edge tightness, pre-breakout dry-up, and pivot integrity. Evaluate semantic fidelity on a fresh outcome-blind packet before any return or portfolio comparison; keep the existing broad detector and forward-v1 frozen."
+}

@@ -5,7 +5,7 @@ from _quants_vcp import ENTRY_IDS, EXIT_IDS, QuantsLegacyVcpStrategy
 META = {
     "id": "vcp_leader_breakout",
     "name": "VCP 领涨突破（前向观察）",
-    "version": "forward-v1",
+    "version": "forward-v2",
     "description": (
         "从宽泛VCP候选池中，仅交易市场早期复苏的首次枢轴突破，或强势市场中的中长周期VCP；"
         "拥挤日优先选择收缩递减更充分的形态。盈利达到10%后保护成本线，达到20%后按峰值回撤10%保护利润。"
@@ -46,6 +46,7 @@ META = {
         {"id": "plan_stop_pct", "label": "形态计划止损比例", "type": "float", "default": 0.03, "min": 0.01, "max": 0.08, "step": 0.005},
         {"id": "allow_cheat", "label": "允许枢轴下方提前试探", "type": "bool", "default": False},
         {"id": "require_pivot_cross", "label": "只允许首次上穿枢轴", "type": "bool", "default": False},
+        {"id": "require_fresh_20d_breakout", "label": "只允许新鲜20日突破机会", "type": "bool", "default": False},
         {"id": "breakout_volume_ratio_min", "label": "突破量比下限", "type": "float", "default": 1.25, "min": 1.0, "max": 3.0, "step": 0.05},
         {"id": "breakout_volume_score_weight", "label": "突破量比排序权重", "type": "float", "default": 0.0, "min": 0.0, "max": 20.0, "step": 1.0},
         {"id": "turnover_rank_weight", "label": "换手率排序权重", "type": "float", "default": 0.0, "min": 0.0, "max": 0.5, "step": 0.05},

@@ -1,0 +1,16 @@
+{
+  "experiment": "post-exit-endpoint-diagnostic-v1",
+  "question": "Do frozen signal-exit events typically recover by the already-labelled 40-bar endpoint?",
+  "inputs": "Existing result.json and trade-path-analysis.json for the wide VCP and cup-handle baseline runs only.",
+  "runs": {"vcp": "20260909T135940874097Z", "cup-handle": "20260909T133226351846Z"},
+  "join_key": ["symbol", "entry_signal_date", "entry_date", "entry_signal_id"],
+  "population": "All signal exits strictly earlier than the fixed horizon end date; disclose excluded count. No outcome-selected entry filters.",
+  "measure": "gross endpoint price / recorded exit fill price - 1 = (1 + horizon_close_return) * entry_price / exit_price - 1",
+  "aggregation": ["all eligible events", "equal-weight signal-day means", "entry year"],
+  "limits": [
+    "Recorded fill prices may contain slippage. This is a price comparison, not a net executable delayed-exit backtest or Alpha.",
+    "Endpoint return cannot establish post-exit maximum drawdown, recovery timing, or a condition observable at exit.",
+    "No new market data, parameter changes, strategy promotion or temporal test."
+  ],
+  "next_action": "Use the distribution to accept or reject a generic delayed-exit narrative; only consider a structural experiment after observing the full post-exit downside path and a causal exit-time condition."
+}

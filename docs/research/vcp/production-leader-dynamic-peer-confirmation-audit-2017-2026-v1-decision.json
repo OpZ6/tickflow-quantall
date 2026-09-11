@@ -1,0 +1,48 @@
+{
+  "experiment": "production-leader-dynamic-peer-confirmation-audit-2017-2026-v1",
+  "decision": "stop_dynamic_peer_filter_direction",
+  "reason": "No peer-demand feature met the pre-registered combination of yearly direction, top-versus-bottom quintile separation, and non-reversing continuous return. Price-derived co-movement is too weak to substitute for point-in-time industry or catalyst evidence.",
+  "sample": {
+    "unique_setups": 3771,
+    "setups_with_20_peers": 3405,
+    "date_range": ["2017-11-15", "2026-06-30"],
+    "usable_binary_label_years": 9
+  },
+  "results": {
+    "peer_correlation_median": {
+      "pairwise_probability": 0.499,
+      "spearman_return_40d": 0.017,
+      "years_above_0_5": 4,
+      "lowest_to_highest_quintile_breakout_rate": [0.367, 0.345]
+    },
+    "peer_above_ma20_share": {
+      "pairwise_probability": 0.522,
+      "spearman_return_40d": -0.030,
+      "years_above_0_5": 5,
+      "lowest_to_highest_quintile_breakout_rate": [0.362, 0.392]
+    },
+    "peer_return_20d_median": {
+      "pairwise_probability": 0.517,
+      "spearman_return_40d": -0.044,
+      "years_above_0_5": 4,
+      "lowest_to_highest_quintile_breakout_rate": [0.385, 0.410]
+    },
+    "peer_at_63d_high_share": {
+      "pairwise_probability": 0.517,
+      "spearman_return_40d": -0.024,
+      "years_above_0_5": 6,
+      "lowest_to_highest_quintile_breakout_rate": [0.360, 0.393]
+    }
+  },
+  "guardrails": {
+    "strategy_changed": false,
+    "threshold_selected": false,
+    "portfolio_backtest_run": false,
+    "neighboring_peer_counts_or_windows_forbidden": true
+  },
+  "evidence": [
+    "data/research/vcp/analysis/dynamic-peer-confirmation-2017-2026-v1.json",
+    "data/research/vcp/analysis/dynamic-peer-confirmation-2017-2026-v1.parquet"
+  ],
+  "next_action": "Keep dynamic peers as optional descriptive evidence only. Do not filter or score candidates from these fields and do not tune the peer representation."
+}

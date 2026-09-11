@@ -94,6 +94,14 @@ QuantX 多日快照 `tickflow-quantx-multiday-v3` 只保留 `sector_flow_continu
 
 ## 3. 新分析示例路径
 
+内部盘后筛选诊断可由调用者将 `StrategyDataContext.screening_trace` 设为空字典开启，默认不记录。具备 `screen_snapshot` 候选详情的矩阵路径写入 `matrix_snapshot_candidate_pipeline` 范围、日期、策略 ID 和逐证券阶段：`strategy_no_candidate`、`basic_filter`、`pool_filter`、`missing_current_row`、`display_limit`、`displayed_candidate`。按真实候选集合和既有掩码记录；展示上限不等于入场信号被拒绝。VCP 快照同时按实际判断顺序记录首个检测器结果：`invalid_close`、`trend_ma_alignment`、`positive_returns`、`near_52_week_high`、`rs_threshold`、`turnover_percentile`、`market_regime`、`invalid_history_window`、`vcp_structure`、`short_scale_excluded` 或 `candidate`。原因表示首个未通过关卡，不代表之后关卡也通过或失败。不可用路径保留 `scope=unavailable`，不视为空失败集合。该诊断不改变筛选输出，也不属于成交证据。
+
+日线前向观察可通过内部 `BacktestResultPolicy(include_execution_rejections=True)` 开启矩阵组合撮合的逐笔拒绝记录，默认关闭。`stats.execution_rejections` 保存实际判断日 `date`、证券 `symbol`、方向 `side`、原因 `reason`、对应 `signal_date` 与是否增加原计数的 `counted_in_execution_stats`；范围标记为 `portfolio_matrix_attempts`。记录来自撮合实际分支，不得根据候选缺失倒推拒绝。`buy_rank_cutoff` 和 `buy_already_held` 是此前未累计的跳过记录，计数标记为 false；`pending_exit` 是挂起状态计数，不是另一笔拒绝。该范围不包含策略早期过滤、未进入买入循环的末日信号或零仓位禁用场景，也不承诺其他模拟路径或分钟触发回退有逐笔记录。范围字段缺失应报告不可用，不能将空列表宣称为完整覆盖。开启记录不得改变交易、净值或现有执行计数。
+
+基础选股与回测的总市值/流通市值过滤统一优先使用 `raw_close × total_shares/float_shares`，不得用 enriched 前复权 `close` 乘股本。原始行情/实时输入未提供 raw_close 时保留 close 即原始价的兼容契约；已有 raw_close 但值为空不回退 close。启用市值界而股本缺失、非正或结果非有限时，该行不通过；未启用市值界的策略不新增字段要求。回测依赖解析携带 raw_close，计算缓存包含此口径版本。历史研究仍须另外证明股本在目标时点可得，不能把价格公式修复等同于历史股本完整。
+
+A 股历史回测使用 `a_share_historical` 印花税策略时，卖出成本必须按实际退出日期取值：2023-08-28 前为成交额的 1‰，自 2023-08-28 起为 0.5‰；买入侧不收印花税，退出日期缺失时拒绝计算。当前历史契约从 2008-09-19 起有明确定义，更早退出日期必须拒绝，不能静默套用 1‰。`fixed` 策略只用于显式固定费率协议和兼容既有调用。成本变化不得影响候选或信号生成；因资金复利改变后续整手数量属于执行结果，必须与结构交易序列分开比较。
+
 假设需要“行业 20 日连续性”：
 
 1. 从 `sector_flow_daily` 和交易日历读取最近 20 个交易日。
