@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from app.backtest.minute_trigger import MINUTE_EXIT_TRIGGER_SIGNALS
 from app.strategy import config as strategy_config
 from app.strategy.ai_generator import AIStrategyGenerator, find_meta_assignment
+from app.strategy.catalog import catalog_label_for, catalog_origin
 from app.strategy.engine import StrategyDef, StrategyEngine
 from app.strategy.monitor import StrategyMonitorService
 from app.strategy.prompt_builder import build_step1, build_step2
@@ -183,6 +184,7 @@ def _strategy_detail(
     # 名称/描述可被用户覆盖
     name = overrides.get("name", s.meta.get("name", "")) if overrides else s.meta.get("name", "")
     description = overrides.get("description", s.meta.get("description", "")) if overrides else s.meta.get("description", "")
+    origin = catalog_origin(str(s.meta["id"]), s.source)
 
     return {
         "id": s.meta["id"],
@@ -190,6 +192,8 @@ def _strategy_detail(
         "description": description or s.meta.get("description", ""),
         "tags": s.meta.get("tags", []),
         "source": s.source,
+        "catalog_origin": origin,
+        "catalog_label": catalog_label_for(origin),
         "execution_backend": s.execution_backend,
         "asset_types": s.meta.get("asset_types", ["stock"]),
         "timeframes": s.meta.get("timeframes", ["1d"]),
@@ -220,6 +224,10 @@ def _strategy_detail(
             overrides.get("profit_lock_steps", s.meta.get("profit_lock_steps"))
             if overrides
             else s.meta.get("profit_lock_steps")
+        ),
+        "close_breakeven_activate_pct": (
+            overrides.get("close_breakeven_activate_pct", s.meta.get("close_breakeven_activate_pct"))
+            if overrides else s.meta.get("close_breakeven_activate_pct")
         ),
         "recommended_max_positions": s.meta.get("recommended_max_positions"),
         "max_hold_days": overrides.get("max_hold_days", s.max_hold_days) if overrides else s.max_hold_days,

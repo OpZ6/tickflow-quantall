@@ -1,0 +1,65 @@
+{
+  "experiment": "vcp-min-legs-3-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\vcp-min-legs-3-v1.json",
+  "training_2016_2022": {
+    "baseline": {
+      "n_trades": 321,
+      "win_rate": 0.267913,
+      "profit_factor": 4.04,
+      "avg_pnl": 0.012957,
+      "avg_win": 0.149747,
+      "avg_loss": 0.037102
+    },
+    "variant": {
+      "n_trades": 179,
+      "win_rate": 0.273743,
+      "profit_factor": 4.58,
+      "avg_pnl": 0.019889,
+      "avg_win": 0.172602,
+      "avg_loss": 0.037671
+    },
+    "kept": 179,
+    "dropped_short_legs": 142,
+    "missing_reconstruction": 0,
+    "delta": {
+      "avg_pnl": 0.006932,
+      "win_rate": 0.00583,
+      "profit_factor": 0.54
+    },
+    "rule": "keep",
+    "upper_half_n": 321
+  },
+  "validation_2023_2026": {
+    "baseline": {
+      "n_trades": 258,
+      "win_rate": 0.271318,
+      "profit_factor": 3.79,
+      "avg_pnl": 0.012327,
+      "avg_win": 0.155664,
+      "avg_loss": 0.041043
+    },
+    "variant": {
+      "n_trades": 149,
+      "win_rate": 0.255034,
+      "profit_factor": 4.45,
+      "avg_pnl": 0.015638,
+      "avg_win": 0.178473,
+      "avg_loss": 0.040107
+    },
+    "kept": 149,
+    "dropped_short_legs": 109,
+    "missing_reconstruction": 0,
+    "delta": {
+      "avg_pnl": 0.003311,
+      "win_rate": -0.016284,
+      "profit_factor": 0.66
+    },
+    "rule": "keep",
+    "upper_half_n": 258,
+    "incomplete_excluded": 0
+  },
+  "validation_note": "exposure, not clean OOS",
+  "rule": "keep",
+  "gaps": []
+}

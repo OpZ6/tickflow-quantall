@@ -1,0 +1,7 @@
+{
+  "experiment": "high-tight-flag-independent-train-2016-2022-v1",
+  "purpose": "Open the high-tight-flag dialect independent-trade baseline. No rule change.",
+  "source_run": "20260909T130617820559Z",
+  "strategy_id": "quants_high_tight_flag_legacy_v1",
+  "training": "entry 2016-01-01..2022-12-31 and original exit <= 2022-12-31"
+}

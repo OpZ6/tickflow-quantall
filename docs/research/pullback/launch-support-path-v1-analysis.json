@@ -1,0 +1,48 @@
+{
+  "source_run": "20260909T053715693165Z",
+  "n": 1421,
+  "incomplete_paths": 13,
+  "scope": "Descriptive held-path signal comparison, not an exit intervention or executable return estimate",
+  "groups": {
+    "给回": {
+      "n": 388,
+      "expired_during_hold": 215,
+      "higher_support": 28,
+      "lower_support": 0,
+      "fixed_only_break": 71,
+      "dynamic_only_break": 18
+    },
+    "赢家": {
+      "n": 393,
+      "expired_during_hold": 321,
+      "higher_support": 120,
+      "lower_support": 0,
+      "fixed_only_break": 15,
+      "dynamic_only_break": 78
+    },
+    "磨掉": {
+      "n": 175,
+      "expired_during_hold": 49,
+      "higher_support": 0,
+      "lower_support": 0,
+      "fixed_only_break": 15,
+      "dynamic_only_break": 0
+    },
+    "失败突破": {
+      "n": 452,
+      "expired_during_hold": 45,
+      "higher_support": 0,
+      "lower_support": 0,
+      "fixed_only_break": 24,
+      "dynamic_only_break": 0
+    },
+    "incomplete": {
+      "n": 13,
+      "expired_during_hold": 13,
+      "higher_support": 2,
+      "lower_support": 0,
+      "fixed_only_break": 3,
+      "dynamic_only_break": 1
+    }
+  }
+}

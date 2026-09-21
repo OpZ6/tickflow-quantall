@@ -1,0 +1,180 @@
+{
+  "candidates": 1438,
+  "baseline": {
+    "n_trades": 1421,
+    "win_rate": 0.278677,
+    "profit_factor": 2.72,
+    "avg_pnl": 0.00192,
+    "avg_win": 0.146477,
+    "avg_loss": 0.053929,
+    "signal_days": 304,
+    "signal_day_equal_weight_net": 0.0015791036487987937,
+    "years": {
+      "2016": {
+        "n_trades": 251,
+        "win_rate": 0.211155,
+        "profit_factor": 2.21,
+        "avg_pnl": -0.017045,
+        "avg_win": 0.116895,
+        "avg_loss": 0.052898
+      },
+      "2017": {
+        "n_trades": 137,
+        "win_rate": 0.226277,
+        "profit_factor": 1.46,
+        "avg_pnl": -0.022318,
+        "avg_win": 0.073322,
+        "avg_loss": 0.050288
+      },
+      "2018": {
+        "n_trades": 79,
+        "win_rate": 0.202532,
+        "profit_factor": 1.79,
+        "avg_pnl": -0.023822,
+        "avg_win": 0.097629,
+        "avg_loss": 0.054667
+      },
+      "2019": {
+        "n_trades": 439,
+        "win_rate": 0.346241,
+        "profit_factor": 2.74,
+        "avg_pnl": 0.015606,
+        "avg_win": 0.145051,
+        "avg_loss": 0.05295
+      },
+      "2020": {
+        "n_trades": 262,
+        "win_rate": 0.278626,
+        "profit_factor": 3.75,
+        "avg_pnl": 0.018683,
+        "avg_win": 0.216997,
+        "avg_loss": 0.057914
+      },
+      "2021": {
+        "n_trades": 120,
+        "win_rate": 0.225,
+        "profit_factor": 2.21,
+        "avg_pnl": -0.015621,
+        "avg_win": 0.12426,
+        "avg_loss": 0.056231
+      },
+      "2022": {
+        "n_trades": 133,
+        "win_rate": 0.330827,
+        "profit_factor": 2.92,
+        "avg_pnl": 0.015595,
+        "avg_win": 0.152976,
+        "avg_loss": 0.052324
+      }
+    }
+  },
+  "missing": [],
+  "extra": [],
+  "mismatches": [],
+  "baseline_execution": {
+    "buy_invalid_price": 0,
+    "buy_suspended": 0,
+    "buy_limit_up": 0,
+    "buy_score_filter": 0,
+    "buy_no_next_bar": 7,
+    "sell_invalid_price": 0,
+    "sell_suspended": 0,
+    "sell_limit_down": 17,
+    "sell_no_future": 6,
+    "pending_exit": 8
+  },
+  "orders": {
+    "orders": 1431,
+    "triggered": 766,
+    "untriggered": 665,
+    "invalid": 0,
+    "gap_open": 101,
+    "intraday": 665
+  },
+  "variant": {
+    "n_trades": 760,
+    "win_rate": 0.289474,
+    "profit_factor": 2.44,
+    "avg_pnl": -0.000261,
+    "avg_win": 0.146575,
+    "avg_loss": 0.060082,
+    "signal_days": 248,
+    "signal_day_equal_weight_net": -0.0006636706767694682,
+    "years": {
+      "2016": {
+        "n_trades": 121,
+        "win_rate": 0.22314,
+        "profit_factor": 2.29,
+        "avg_pnl": -0.015833,
+        "avg_win": 0.136937,
+        "avg_loss": 0.059713
+      },
+      "2017": {
+        "n_trades": 65,
+        "win_rate": 0.230769,
+        "profit_factor": 1.19,
+        "avg_pnl": -0.028807,
+        "avg_win": 0.069182,
+        "avg_loss": 0.058204
+      },
+      "2018": {
+        "n_trades": 39,
+        "win_rate": 0.25641,
+        "profit_factor": 1.28,
+        "avg_pnl": -0.024247,
+        "avg_win": 0.074363,
+        "avg_loss": 0.05825
+      },
+      "2019": {
+        "n_trades": 241,
+        "win_rate": 0.344398,
+        "profit_factor": 2.14,
+        "avg_pnl": 0.004694,
+        "avg_win": 0.124355,
+        "avg_loss": 0.058165
+      },
+      "2020": {
+        "n_trades": 148,
+        "win_rate": 0.304054,
+        "profit_factor": 3.56,
+        "avg_pnl": 0.024494,
+        "avg_win": 0.225503,
+        "avg_loss": 0.063326
+      },
+      "2021": {
+        "n_trades": 66,
+        "win_rate": 0.227273,
+        "profit_factor": 2.68,
+        "avg_pnl": -0.010348,
+        "avg_win": 0.170104,
+        "avg_loss": 0.063422
+      },
+      "2022": {
+        "n_trades": 80,
+        "win_rate": 0.3125,
+        "profit_factor": 2.51,
+        "avg_pnl": 0.005778,
+        "avg_win": 0.149883,
+        "avg_loss": 0.059724
+      }
+    }
+  },
+  "variant_execution": {
+    "buy_invalid_price": 0,
+    "buy_suspended": 0,
+    "buy_limit_up": 0,
+    "buy_score_filter": 0,
+    "buy_no_next_bar": 672,
+    "sell_invalid_price": 0,
+    "sell_suspended": 0,
+    "sell_limit_down": 8,
+    "sell_no_future": 3,
+    "pending_exit": 5
+  },
+  "unfinished_variant": 3,
+  "expanded_baseline_mismatches": [],
+  "decision": "drop",
+  "reason": "negative mean net and lower signal-day equal-weight return; no parameter neighbors",
+  "scope": "Full frozen source universe, training only; daily stop-order approximation; exposed history",
+  "protocol": "docs/research/multi-strategy-next-entry-experiments-20260913.md"
+}

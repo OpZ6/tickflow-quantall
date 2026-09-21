@@ -1,0 +1,14 @@
+{
+  "experiment": "launch-pullback-leader-open-v1",
+  "thought": "One universe change: only take launch_pullback fills on dual-regime-open days AND RS>=85. That is the same look-at set as VCP leaders, not two sequential keeps of failed filters.",
+  "hypothesis": "All-market pullbacks lose because they fire on weak names in closed tapes. Restricting to the VCP look-at set should turn avg_pnl positive.",
+  "baseline": {"run_id": "20260909T053715693165Z", "n_train": 32086, "avg_pnl": -0.009777},
+  "change": {
+    "id": "dual_regime_open_and_rs85",
+    "definition": "Keep if a_share_dual_regime is open on entry_signal_date AND RS percentile >= 85. Missing either flag is not kept."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below baseline and remains positive. If keep, report 2023-2026.",
+    "fail": "Drop. Leave pullback at -0.98%. Return next round to frozen VCP 321 breakout book."
+  }
+}

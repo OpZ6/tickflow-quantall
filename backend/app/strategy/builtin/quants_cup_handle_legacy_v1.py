@@ -2,9 +2,9 @@ from _quants_legacy_patterns import LegacyPatternStrategy
 
 META = {
     "id": "quants_cup_handle_legacy_v1",
-    "name": "杯柄候选池（多尺度形态）",
+    "name": "杯柄 · 观察",
     "version": "legacy-v1",
-    "description": "多尺度识别杯体、右沿整理和杯沿支撑，区分观察、待突破、可执行与追价过远。",
+    "description": "多尺度杯柄候选，含观察和待突破，不是买入名单。",
     "strategy_role": "candidate_screener",
     "tags": ["Quants", "cup-with-handle", "legacy-v1"],
     "asset_types": ["stock"],

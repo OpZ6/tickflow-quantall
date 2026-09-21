@@ -272,7 +272,7 @@ def main():
             ):
                 violations.append("entry_not_after_signal")
             if (
-                trade.get("exit_reason") == "signal"
+                trade.get("exit_reason") in {"signal", "close_breakeven"}
                 and trade.get("exit_signal_date")
                 and str(trade["exit_signal_date"]) >= str(trade["exit_date"])
             ):

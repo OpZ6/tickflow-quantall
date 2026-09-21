@@ -602,6 +602,105 @@ def trend_context(market, params, *, diagnostics=None):
     return mask, ranks
 
 
+def leader_open_entry_mask(market, params=None):
+    """RS percentile without the trend template, on dual-regime days only."""
+    params = params or {}
+    rs_mask, _ = trend_context(
+        market,
+        {
+            "trend_filter": False,
+            "rs_min": float(params.get("rs_min", 85.0)),
+        },
+    )
+    valid = np.isfinite(market.close) & (market.close > 0)
+    ma20 = valid_rolling_mean(market.close, valid, 20, bar_index=market.valid_bars)
+    gate, _ = market_breadth_allowed(
+        market.close,
+        ma20,
+        {
+            "a_share_dual_regime": True,
+            "include_middle_expansion_regime": False,
+        },
+        market.valid_bars,
+    )
+    return rs_mask & gate[:, None]
+
+
+def mask_entry_signals(signals, entry_mask):
+    """Keep exits; zero entry bits that fail the same-day mask."""
+    entry = np.asarray(signals.entry, dtype=bool) & np.asarray(entry_mask, dtype=bool)
+    return make_signal_matrix(
+        signals.entry.shape,
+        entry=entry.astype(np.uint8),
+        exit=signals.exit,
+        score=np.where(entry, signals.score, np.float32(0)).astype(np.float32),
+        entry_signal_code=np.where(entry, signals.entry_signal_code, np.int16(-1)).astype(
+            np.int16
+        ),
+        exit_signal_code=signals.exit_signal_code,
+        entry_signal_ids=signals.entry_signal_ids,
+        exit_signal_ids=signals.exit_signal_ids,
+    )
+
+
+def snapshot_entries_only(signals, rows, market, time_index):
+    """Screener list = names whose entry bit is on. Watch/wait names are omitted."""
+    kept = {}
+    source = rows or {}
+    for asset, symbol in enumerate(market.symbols):
+        if not bool(signals.entry[time_index, asset]):
+            continue
+        row = dict(source.get(symbol) or {})
+        row["buy_ready"] = True
+        if "vcp_status" in row:
+            row["vcp_entry_triggered"] = True
+        kept[symbol] = row
+    return signals, kept
+
+
+class ScreenFilterStrategy:
+    """Wrap a matrix strategy with an optional leader-open mask and entry-only snapshot."""
+
+    def __init__(self, inner, *, apply_leader_open=False, entries_only=False):
+        self._inner = inner
+        self._apply_leader_open = apply_leader_open
+        self._entries_only = entries_only
+
+    def required_fields(self):
+        return self._inner.required_fields()
+
+    def required_warmup_bars(self, params):
+        warmup = int(self._inner.required_warmup_bars(params))
+        if self._apply_leader_open:
+            return max(warmup, 260)
+        return warmup
+
+    def required_fields_for_params(self, params):
+        if hasattr(self._inner, "required_fields_for_params"):
+            return self._inner.required_fields_for_params(params)
+        return frozenset()
+
+    def compute_signals(self, market, params):
+        signals = self._inner.compute_signals(market, params)
+        if self._apply_leader_open:
+            signals = mask_entry_signals(signals, leader_open_entry_mask(market, params))
+        return signals
+
+    def screen_snapshot(self, market, params, time_index):
+        if hasattr(self._inner, "screen_snapshot"):
+            signals, rows = self._inner.screen_snapshot(market, params, time_index)
+            if self._apply_leader_open:
+                signals = mask_entry_signals(
+                    signals, leader_open_entry_mask(market, params)
+                )
+        else:
+            signals = self.compute_signals(market, params)
+            rows = {}
+        if self._entries_only:
+            return snapshot_entries_only(signals, rows, market, time_index)
+        return signals, rows
+
+
 def fresh_20d_breakout_opportunity_mask(market):
     """Mark the first liquid 20-session-high breakout after a 20-bar cooldown."""
     valid = np.isfinite(market.close) & (market.close > 0)
@@ -634,6 +733,10 @@ def fresh_20d_breakout_opportunity_mask(market):
 
 
 class QuantsVcpStrategy:
+    def __init__(self, *, primary_min_legs=0, raw_close_location=False):
+        self._primary_min_legs = primary_min_legs
+        self._raw_close_location = raw_close_location
+
     def required_fields(self):
         return frozenset({"open", "high", "low", "close", "volume"})
 
@@ -641,7 +744,7 @@ class QuantsVcpStrategy:
         return 260
 
     def required_fields_for_params(self, params):
-        fields = set()
+        fields = {"raw_high", "raw_low", "raw_close"} if self._raw_close_location else set()
         if params.get("require_fresh_20d_breakout", False):
             fields.add("amount")
         if (
@@ -782,6 +885,18 @@ class QuantsVcpStrategy:
                         detector_reasons[symbol] = "vcp_structure"
                     continue
                 p = structure["primary"]
+                if self._raw_close_location:
+                    raw = np.array([market.field(f)[t, asset] for f in ("raw_high", "raw_low", "raw_close")])
+                    if not np.isfinite(raw).all() or np.any(raw <= 0):
+                        continue
+                    raw_high, raw_low, raw_close = np.rint(raw.astype(np.float64) * 100)
+                    if raw_high <= raw_low:
+                        continue
+                    p["close_location"] = float((raw_close - raw_low) / (raw_high - raw_low))
+                if len(p["legs"]) < self._primary_min_legs:
+                    if trace is not None:
+                        detector_reasons[symbol] = "primary_min_legs"
+                    continue
                 dual_regime = bool(params.get("a_share_dual_regime", False))
                 broad_advance = dual_regime and breadth[t] >= 0.7
                 middle_expansion = (
@@ -870,6 +985,7 @@ class QuantsVcpStrategy:
                             ("market_breadth_ma20", breadth[time_index], "ratio"),
                         )
                     ]
+                    triggered = bool(entry[t, asset])
                     rows[symbol] = {
                         "vcp_status": p["status"],
                         "vcp_setup": p["setup"],
@@ -879,6 +995,8 @@ class QuantsVcpStrategy:
                         "vcp_structure": structure,
                         "vcp_rs": rs,
                         "score": quality_score,
+                        "vcp_entry_triggered": triggered,
+                        "buy_ready": triggered,
                         "strategy_evidence": {
                             "reason_codes": [p["status"]],
                             "metrics": metrics,

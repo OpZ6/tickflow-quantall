@@ -25,10 +25,11 @@ router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
 
 def _run_pipeline_and_quantx(repo, capset, progress) -> dict:
-    """Run the main data pipeline and its dependent QuantX publication."""
+    """Run the main data pipeline and all dependent daily publications."""
 
     result = daily_pipeline.run_now(repo, capset, on_progress=progress)
     result["quantx"] = daily_pipeline._run_quantx_after_pipeline()
+    result["stock_pools"] = daily_pipeline._run_stock_pools_after_pipeline()
     return result
 
 

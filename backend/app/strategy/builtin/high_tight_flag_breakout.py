@@ -7,10 +7,11 @@ from app.backtest.matrix import MarketDataMatrix, SignalMatrix, make_signal_matr
 
 META = {
     "id": "high_tight_flag_breakout",
-    "name": "高而紧旗形突破（简化交易版）",
+    "name": "高旗 · 简化突破",
     "version": "1.0.0",
-    "description": "固定窗口识别强旗杆、浅整理和放量突破，用于直接回测的简化交易版。",
+    "description": "固定窗口突破，另一套算法，不是观察池。",
     "strategy_role": "complete_strategy",
+    "research_only": True,
     "tags": ["高而紧", "旗形", "突破"],
     "asset_types": ["stock", "etf"],
     "timeframes": ["1d"],

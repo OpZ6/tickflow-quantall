@@ -7,9 +7,9 @@ from app.backtest.matrix import MarketDataMatrix, SignalMatrix, make_signal_matr
 
 META = {
     "id": "launch_pullback_support",
-    "name": "启动后缩量回踩",
+    "name": "回踩 · 全市场",
     "version": "1.0.0",
-    "description": "放量上涨启动后, 在十个交易日内缩量回踩并守住启动日中位",
+    "description": "放量后缩量回踩，不过滤强弱。",
     "tags": ["启动", "缩量", "回踩", "守轴"],
     "asset_types": ["stock", "etf"],
     "timeframes": ["1d"],

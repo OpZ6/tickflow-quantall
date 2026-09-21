@@ -1,0 +1,18 @@
+{
+  "experiment": "cup-handle-leader-open-v1",
+  "thought": "Cup-handle default stream. One universe: dual-regime open AND RS>=85, same look-at set as VCP/pullback-thin.",
+  "hypothesis": "All-market cup-handle averages -0.79% because it is not a leader-in-open-tape book. The restricted set should lift avg_pnl, possibly through zero.",
+  "baseline": {
+    "run_id": "20260909T133226351846Z",
+    "n_train": 98489,
+    "avg_pnl": -0.007945
+  },
+  "change": {
+    "id": "dual_regime_open_and_rs85",
+    "definition": "Keep if a_share_dual_regime is open on entry_signal_date AND RS percentile >= 85. Missing either flag is not kept."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below baseline and remains positive.",
+    "fail": "Drop. Cup book stays -0.79%. Next: return to VCP 321 or HTF leader-open."
+  }
+}

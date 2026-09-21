@@ -4,9 +4,9 @@ from _quants_high_tight_flag import ENTRY_IDS, EXIT_IDS, QuantsHighTightFlagStra
 
 META = {
     "id": "quants_high_tight_flag_legacy_v1",
-    "name": "高而紧旗形候选池（多尺度形态）",
+    "name": "高旗 · 观察",
     "version": "legacy-v1",
-    "description": "多尺度识别快速上涨后的高位窄幅整理，以旗形上沿和放量确认突破，并限制过度追价。",
+    "description": "多尺度旗形候选。研究为负，不作买入名单。",
     "strategy_role": "candidate_screener",
     "tags": ["Quants", "high-tight-flag", "legacy-v1"],
     "asset_types": ["stock"],

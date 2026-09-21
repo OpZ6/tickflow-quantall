@@ -1,0 +1,1493 @@
+{
+  "scope": "Completed training trades only; executed-event coverage, not all generated signals. Descriptive CSI300 contemporaneous MA20 state, not a new filter.",
+  "market_sessions": 1703,
+  "calendar_source": "data/research/calendar-20150101-20260907.json",
+  "source_signal_windows": {
+    "cup": [
+      "2016-01-04",
+      "2022-10-11"
+    ],
+    "pullback": [
+      "2016-01-04",
+      "2022-12-30"
+    ]
+  },
+  "coverage_caveat": "Cup source stops on 2022-10-11; later zero events are unobserved, not strategy inactivity. Common full-year denominator describes archived books only.",
+  "strategies": {
+    "vcp": {
+      "trades": 180,
+      "signal_days": 114,
+      "avg_net": 0.021066972222222223,
+      "execution_day_fraction": 0.06694069289489137,
+      "longest_execution_day_gap": 218,
+      "environments": {
+        "rising": {
+          "trades": 143,
+          "signal_days": 87,
+          "avg_net": 0.019815307692307695,
+          "market_sessions": 746
+        },
+        "falling": {
+          "trades": 19,
+          "signal_days": 14,
+          "avg_net": 0.05015284210526316,
+          "market_sessions": 646
+        },
+        "mixed": {
+          "trades": 18,
+          "signal_days": 13,
+          "avg_net": 0.00030900000000000166,
+          "market_sessions": 311
+        },
+        "missing": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null,
+          "market_sessions": 0
+        }
+      },
+      "months": {
+        "2016-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-02": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-03": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-05": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-06": {
+          "trades": 3,
+          "signal_days": 3,
+          "avg_net": -0.0223
+        },
+        "2016-07": {
+          "trades": 2,
+          "signal_days": 2,
+          "avg_net": -0.003595
+        },
+        "2016-08": {
+          "trades": 3,
+          "signal_days": 3,
+          "avg_net": -0.043138333333333334
+        },
+        "2016-09": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-10": {
+          "trades": 8,
+          "signal_days": 6,
+          "avg_net": 0.03025725
+        },
+        "2016-11": {
+          "trades": 10,
+          "signal_days": 4,
+          "avg_net": -0.0231258
+        },
+        "2016-12": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-01": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.038239
+        },
+        "2017-02": {
+          "trades": 10,
+          "signal_days": 6,
+          "avg_net": 0.0469161
+        },
+        "2017-03": {
+          "trades": 2,
+          "signal_days": 2,
+          "avg_net": -0.011626000000000001
+        },
+        "2017-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-05": {
+          "trades": 3,
+          "signal_days": 2,
+          "avg_net": -0.045902
+        },
+        "2017-06": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-08": {
+          "trades": 7,
+          "signal_days": 5,
+          "avg_net": 0.12663542857142857
+        },
+        "2017-09": {
+          "trades": 18,
+          "signal_days": 8,
+          "avg_net": 0.006145555555555556
+        },
+        "2017-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-11": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.044684
+        },
+        "2017-12": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2018-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-02": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-03": {
+          "trades": 3,
+          "signal_days": 1,
+          "avg_net": -0.03927633333333333
+        },
+        "2018-04": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2018-05": {
+          "trades": 3,
+          "signal_days": 2,
+          "avg_net": 0.04203766666666667
+        },
+        "2018-06": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2018-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-08": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2018-09": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-11": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-12": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-02": {
+          "trades": 12,
+          "signal_days": 8,
+          "avg_net": 0.046552916666666666
+        },
+        "2019-03": {
+          "trades": 6,
+          "signal_days": 6,
+          "avg_net": -0.0393905
+        },
+        "2019-04": {
+          "trades": 4,
+          "signal_days": 2,
+          "avg_net": -0.016615
+        },
+        "2019-05": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-06": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-08": {
+          "trades": 7,
+          "signal_days": 4,
+          "avg_net": 0.09016514285714286
+        },
+        "2019-09": {
+          "trades": 19,
+          "signal_days": 10,
+          "avg_net": 0.054926263157894735
+        },
+        "2019-10": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2019-11": {
+          "trades": 2,
+          "signal_days": 1,
+          "avg_net": 0.06322699999999999
+        },
+        "2019-12": {
+          "trades": 4,
+          "signal_days": 3,
+          "avg_net": 0.047984500000000006
+        },
+        "2020-01": {
+          "trades": 11,
+          "signal_days": 6,
+          "avg_net": -0.029338272727272723
+        },
+        "2020-02": {
+          "trades": 3,
+          "signal_days": 2,
+          "avg_net": 0.010364333333333335
+        },
+        "2020-03": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-05": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-06": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2020-07": {
+          "trades": 20,
+          "signal_days": 10,
+          "avg_net": 0.0500745
+        },
+        "2020-08": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2020-09": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2020-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-11": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-12": {
+          "trades": 2,
+          "signal_days": 1,
+          "avg_net": 0.17103949999999998
+        },
+        "2021-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-02": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-03": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-05": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.064183
+        },
+        "2021-06": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-08": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-09": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2021-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-11": {
+          "trades": 2,
+          "signal_days": 2,
+          "avg_net": 0.056078499999999996
+        },
+        "2021-12": {
+          "trades": 2,
+          "signal_days": 1,
+          "avg_net": -0.0285055
+        },
+        "2022-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-02": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.053416
+        },
+        "2022-03": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-05": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-06": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-08": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-09": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-11": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-12": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.003595
+        }
+      },
+      "on_days_without_vcp_execution": {
+        "trades": 0,
+        "signal_days": 0,
+        "avg_net": null
+      }
+    },
+    "cup": {
+      "trades": 2034,
+      "signal_days": 298,
+      "avg_net": 0.007107730088495574,
+      "execution_day_fraction": 0.17498532002348796,
+      "longest_execution_day_gap": 69,
+      "environments": {
+        "rising": {
+          "trades": 1046,
+          "signal_days": 159,
+          "avg_net": 0.015593532504780114,
+          "market_sessions": 746
+        },
+        "falling": {
+          "trades": 747,
+          "signal_days": 107,
+          "avg_net": -0.004398579651941099,
+          "market_sessions": 646
+        },
+        "mixed": {
+          "trades": 241,
+          "signal_days": 32,
+          "avg_net": 0.005942020746887966,
+          "market_sessions": 311
+        },
+        "missing": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null,
+          "market_sessions": 0
+        }
+      },
+      "months": {
+        "2016-01": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.073344
+        },
+        "2016-02": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.073344
+        },
+        "2016-03": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-04": {
+          "trades": 6,
+          "signal_days": 4,
+          "avg_net": -0.050898500000000006
+        },
+        "2016-05": {
+          "trades": 7,
+          "signal_days": 5,
+          "avg_net": -0.03157157142857143
+        },
+        "2016-06": {
+          "trades": 10,
+          "signal_days": 6,
+          "avg_net": -0.006509900000000002
+        },
+        "2016-07": {
+          "trades": 5,
+          "signal_days": 3,
+          "avg_net": -0.000535399999999999
+        },
+        "2016-08": {
+          "trades": 4,
+          "signal_days": 2,
+          "avg_net": -0.057517750000000006
+        },
+        "2016-09": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-10": {
+          "trades": 11,
+          "signal_days": 6,
+          "avg_net": -0.006477636363636367
+        },
+        "2016-11": {
+          "trades": 18,
+          "signal_days": 6,
+          "avg_net": -0.023265
+        },
+        "2016-12": {
+          "trades": 36,
+          "signal_days": 8,
+          "avg_net": -0.01767116666666667
+        },
+        "2017-01": {
+          "trades": 15,
+          "signal_days": 3,
+          "avg_net": 0.023548866666666668
+        },
+        "2017-02": {
+          "trades": 52,
+          "signal_days": 7,
+          "avg_net": -0.007788346153846154
+        },
+        "2017-03": {
+          "trades": 27,
+          "signal_days": 3,
+          "avg_net": -0.010923851851851853
+        },
+        "2017-04": {
+          "trades": 39,
+          "signal_days": 2,
+          "avg_net": -0.020260666666666666
+        },
+        "2017-05": {
+          "trades": 75,
+          "signal_days": 7,
+          "avg_net": -0.005243853333333334
+        },
+        "2017-06": {
+          "trades": 37,
+          "signal_days": 3,
+          "avg_net": 0.0004762702702702699
+        },
+        "2017-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-08": {
+          "trades": 87,
+          "signal_days": 6,
+          "avg_net": 0.018769344827586208
+        },
+        "2017-09": {
+          "trades": 105,
+          "signal_days": 9,
+          "avg_net": 0.004284504761904761
+        },
+        "2017-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-11": {
+          "trades": 25,
+          "signal_days": 2,
+          "avg_net": -0.0032110400000000005
+        },
+        "2017-12": {
+          "trades": 54,
+          "signal_days": 4,
+          "avg_net": 0.004724444444444444
+        },
+        "2018-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-02": {
+          "trades": 42,
+          "signal_days": 4,
+          "avg_net": 0.02382095238095238
+        },
+        "2018-03": {
+          "trades": 13,
+          "signal_days": 1,
+          "avg_net": -0.029878153846153846
+        },
+        "2018-04": {
+          "trades": 18,
+          "signal_days": 1,
+          "avg_net": 0.05090011111111111
+        },
+        "2018-05": {
+          "trades": 40,
+          "signal_days": 3,
+          "avg_net": -0.008596025
+        },
+        "2018-06": {
+          "trades": 72,
+          "signal_days": 8,
+          "avg_net": -0.03577848611111111
+        },
+        "2018-07": {
+          "trades": 28,
+          "signal_days": 6,
+          "avg_net": -0.031790928571428574
+        },
+        "2018-08": {
+          "trades": 25,
+          "signal_days": 3,
+          "avg_net": -0.02745348
+        },
+        "2018-09": {
+          "trades": 19,
+          "signal_days": 3,
+          "avg_net": -0.025082947368421052
+        },
+        "2018-10": {
+          "trades": 46,
+          "signal_days": 6,
+          "avg_net": -0.017941326086956522
+        },
+        "2018-11": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-12": {
+          "trades": 24,
+          "signal_days": 2,
+          "avg_net": -0.042861916666666666
+        },
+        "2019-01": {
+          "trades": 91,
+          "signal_days": 5,
+          "avg_net": 0.03274589010989011
+        },
+        "2019-02": {
+          "trades": 131,
+          "signal_days": 12,
+          "avg_net": 0.1270656717557252
+        },
+        "2019-03": {
+          "trades": 104,
+          "signal_days": 17,
+          "avg_net": 0.010913076923076921
+        },
+        "2019-04": {
+          "trades": 22,
+          "signal_days": 7,
+          "avg_net": -0.055597909090909094
+        },
+        "2019-05": {
+          "trades": 49,
+          "signal_days": 7,
+          "avg_net": -0.01084522448979592
+        },
+        "2019-06": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-08": {
+          "trades": 47,
+          "signal_days": 6,
+          "avg_net": 0.04732714893617021
+        },
+        "2019-09": {
+          "trades": 80,
+          "signal_days": 12,
+          "avg_net": -0.0010007000000000006
+        },
+        "2019-10": {
+          "trades": 13,
+          "signal_days": 1,
+          "avg_net": -0.0009145384615384629
+        },
+        "2019-11": {
+          "trades": 52,
+          "signal_days": 6,
+          "avg_net": 0.0013619423076923075
+        },
+        "2019-12": {
+          "trades": 44,
+          "signal_days": 5,
+          "avg_net": 0.008744749999999999
+        },
+        "2020-01": {
+          "trades": 56,
+          "signal_days": 9,
+          "avg_net": -0.019578053571428573
+        },
+        "2020-02": {
+          "trades": 50,
+          "signal_days": 11,
+          "avg_net": -0.02431036
+        },
+        "2020-03": {
+          "trades": 42,
+          "signal_days": 10,
+          "avg_net": -0.003603000000000001
+        },
+        "2020-04": {
+          "trades": 13,
+          "signal_days": 2,
+          "avg_net": 0.022623846153846154
+        },
+        "2020-05": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-06": {
+          "trades": 16,
+          "signal_days": 4,
+          "avg_net": 0.0509971875
+        },
+        "2020-07": {
+          "trades": 47,
+          "signal_days": 13,
+          "avg_net": 0.005512999999999999
+        },
+        "2020-08": {
+          "trades": 3,
+          "signal_days": 1,
+          "avg_net": -0.035858
+        },
+        "2020-09": {
+          "trades": 5,
+          "signal_days": 2,
+          "avg_net": -0.0295528
+        },
+        "2020-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-11": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-12": {
+          "trades": 18,
+          "signal_days": 3,
+          "avg_net": -0.017250111111111112
+        },
+        "2021-01": {
+          "trades": 15,
+          "signal_days": 2,
+          "avg_net": -0.037766933333333336
+        },
+        "2021-02": {
+          "trades": 11,
+          "signal_days": 2,
+          "avg_net": -0.022729909090909096
+        },
+        "2021-03": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-05": {
+          "trades": 12,
+          "signal_days": 2,
+          "avg_net": 0.031042916666666667
+        },
+        "2021-06": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": 0.266119
+        },
+        "2021-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-08": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-09": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.073344
+        },
+        "2021-10": {
+          "trades": 16,
+          "signal_days": 4,
+          "avg_net": 0.06651125
+        },
+        "2021-11": {
+          "trades": 47,
+          "signal_days": 10,
+          "avg_net": -0.005294319148936171
+        },
+        "2021-12": {
+          "trades": 6,
+          "signal_days": 1,
+          "avg_net": -0.024356
+        },
+        "2022-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-02": {
+          "trades": 27,
+          "signal_days": 5,
+          "avg_net": -0.017066111111111112
+        },
+        "2022-03": {
+          "trades": 6,
+          "signal_days": 2,
+          "avg_net": 0.15523716666666668
+        },
+        "2022-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-05": {
+          "trades": 11,
+          "signal_days": 3,
+          "avg_net": 0.045783818181818176
+        },
+        "2022-06": {
+          "trades": 32,
+          "signal_days": 4,
+          "avg_net": 0.012818687499999998
+        },
+        "2022-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-08": {
+          "trades": 12,
+          "signal_days": 2,
+          "avg_net": -0.022018000000000003
+        },
+        "2022-09": {
+          "trades": 12,
+          "signal_days": 1,
+          "avg_net": -0.03036875
+        },
+        "2022-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-11": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-12": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        }
+      },
+      "on_days_without_vcp_execution": {
+        "trades": 1218,
+        "signal_days": 192,
+        "avg_net": -0.0001011962233169139
+      }
+    },
+    "pullback": {
+      "trades": 1421,
+      "signal_days": 304,
+      "avg_net": 0.0019197220267417293,
+      "execution_day_fraction": 0.178508514386377,
+      "longest_execution_day_gap": 69,
+      "environments": {
+        "rising": {
+          "trades": 870,
+          "signal_days": 167,
+          "avg_net": 0.008715811494252872,
+          "market_sessions": 746
+        },
+        "falling": {
+          "trades": 339,
+          "signal_days": 97,
+          "avg_net": -0.001022050147492627,
+          "market_sessions": 646
+        },
+        "mixed": {
+          "trades": 212,
+          "signal_days": 40,
+          "avg_net": -0.021265830188679245,
+          "market_sessions": 311
+        },
+        "missing": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null,
+          "market_sessions": 0
+        }
+      },
+      "months": {
+        "2016-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-02": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-03": {
+          "trades": 2,
+          "signal_days": 1,
+          "avg_net": -0.083887
+        },
+        "2016-04": {
+          "trades": 26,
+          "signal_days": 7,
+          "avg_net": -0.05167684615384616
+        },
+        "2016-05": {
+          "trades": 18,
+          "signal_days": 8,
+          "avg_net": 0.033396277777777775
+        },
+        "2016-06": {
+          "trades": 23,
+          "signal_days": 6,
+          "avg_net": -0.01170226086956522
+        },
+        "2016-07": {
+          "trades": 21,
+          "signal_days": 5,
+          "avg_net": -0.02010357142857143
+        },
+        "2016-08": {
+          "trades": 32,
+          "signal_days": 8,
+          "avg_net": -0.0438940625
+        },
+        "2016-09": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2016-10": {
+          "trades": 56,
+          "signal_days": 11,
+          "avg_net": 0.010210517857142854
+        },
+        "2016-11": {
+          "trades": 34,
+          "signal_days": 7,
+          "avg_net": -0.02381117647058824
+        },
+        "2016-12": {
+          "trades": 39,
+          "signal_days": 8,
+          "avg_net": -0.026521307692307695
+        },
+        "2017-01": {
+          "trades": 6,
+          "signal_days": 3,
+          "avg_net": 0.07078133333333333
+        },
+        "2017-02": {
+          "trades": 26,
+          "signal_days": 6,
+          "avg_net": -0.028528846153846155
+        },
+        "2017-03": {
+          "trades": 9,
+          "signal_days": 3,
+          "avg_net": -0.034845666666666664
+        },
+        "2017-04": {
+          "trades": 3,
+          "signal_days": 2,
+          "avg_net": -0.02839533333333334
+        },
+        "2017-05": {
+          "trades": 13,
+          "signal_days": 6,
+          "avg_net": 0.008196076923076922
+        },
+        "2017-06": {
+          "trades": 2,
+          "signal_days": 1,
+          "avg_net": 0.047849
+        },
+        "2017-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-08": {
+          "trades": 23,
+          "signal_days": 6,
+          "avg_net": -0.02435408695652174
+        },
+        "2017-09": {
+          "trades": 37,
+          "signal_days": 8,
+          "avg_net": -0.024107621621621625
+        },
+        "2017-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2017-11": {
+          "trades": 3,
+          "signal_days": 2,
+          "avg_net": -0.05262666666666667
+        },
+        "2017-12": {
+          "trades": 15,
+          "signal_days": 4,
+          "avg_net": -0.062260133333333335
+        },
+        "2018-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-02": {
+          "trades": 8,
+          "signal_days": 3,
+          "avg_net": 0.010870999999999995
+        },
+        "2018-03": {
+          "trades": 1,
+          "signal_days": 1,
+          "avg_net": -0.06338
+        },
+        "2018-04": {
+          "trades": 3,
+          "signal_days": 1,
+          "avg_net": -0.003078666666666665
+        },
+        "2018-05": {
+          "trades": 11,
+          "signal_days": 3,
+          "avg_net": -0.02944145454545455
+        },
+        "2018-06": {
+          "trades": 10,
+          "signal_days": 4,
+          "avg_net": -0.05837970000000001
+        },
+        "2018-07": {
+          "trades": 11,
+          "signal_days": 5,
+          "avg_net": -0.047240727272727275
+        },
+        "2018-08": {
+          "trades": 8,
+          "signal_days": 3,
+          "avg_net": -0.012546874999999999
+        },
+        "2018-09": {
+          "trades": 2,
+          "signal_days": 2,
+          "avg_net": -0.060844
+        },
+        "2018-10": {
+          "trades": 20,
+          "signal_days": 5,
+          "avg_net": -0.0015769000000000015
+        },
+        "2018-11": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2018-12": {
+          "trades": 5,
+          "signal_days": 2,
+          "avg_net": -0.0430842
+        },
+        "2019-01": {
+          "trades": 26,
+          "signal_days": 4,
+          "avg_net": -0.004838423076923078
+        },
+        "2019-02": {
+          "trades": 73,
+          "signal_days": 10,
+          "avg_net": 0.11462676712328768
+        },
+        "2019-03": {
+          "trades": 112,
+          "signal_days": 16,
+          "avg_net": 0.01833805357142857
+        },
+        "2019-04": {
+          "trades": 31,
+          "signal_days": 7,
+          "avg_net": -0.03564380645161291
+        },
+        "2019-05": {
+          "trades": 25,
+          "signal_days": 8,
+          "avg_net": -0.03915616
+        },
+        "2019-06": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-08": {
+          "trades": 36,
+          "signal_days": 6,
+          "avg_net": 0.0192495
+        },
+        "2019-09": {
+          "trades": 76,
+          "signal_days": 12,
+          "avg_net": -0.016154210526315792
+        },
+        "2019-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2019-11": {
+          "trades": 29,
+          "signal_days": 6,
+          "avg_net": 0.008449758620689654
+        },
+        "2019-12": {
+          "trades": 31,
+          "signal_days": 5,
+          "avg_net": -0.03455222580645161
+        },
+        "2020-01": {
+          "trades": 60,
+          "signal_days": 10,
+          "avg_net": 0.03295613333333333
+        },
+        "2020-02": {
+          "trades": 63,
+          "signal_days": 10,
+          "avg_net": -0.003333920634920636
+        },
+        "2020-03": {
+          "trades": 23,
+          "signal_days": 7,
+          "avg_net": -0.02651508695652174
+        },
+        "2020-04": {
+          "trades": 4,
+          "signal_days": 1,
+          "avg_net": -0.033169750000000005
+        },
+        "2020-05": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-06": {
+          "trades": 30,
+          "signal_days": 4,
+          "avg_net": 0.056500666666666664
+        },
+        "2020-07": {
+          "trades": 50,
+          "signal_days": 13,
+          "avg_net": 0.03395932
+        },
+        "2020-08": {
+          "trades": 4,
+          "signal_days": 2,
+          "avg_net": -0.05753525
+        },
+        "2020-09": {
+          "trades": 9,
+          "signal_days": 2,
+          "avg_net": -0.019895000000000003
+        },
+        "2020-10": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-11": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2020-12": {
+          "trades": 19,
+          "signal_days": 3,
+          "avg_net": 0.04665289473684211
+        },
+        "2021-01": {
+          "trades": 13,
+          "signal_days": 2,
+          "avg_net": 0.006584153846153846
+        },
+        "2021-02": {
+          "trades": 4,
+          "signal_days": 2,
+          "avg_net": 0.0024809999999999936
+        },
+        "2021-03": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-05": {
+          "trades": 17,
+          "signal_days": 2,
+          "avg_net": -0.021784705882352942
+        },
+        "2021-06": {
+          "trades": 4,
+          "signal_days": 1,
+          "avg_net": 0.137676
+        },
+        "2021-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-08": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2021-09": {
+          "trades": 5,
+          "signal_days": 1,
+          "avg_net": -0.030358000000000003
+        },
+        "2021-10": {
+          "trades": 8,
+          "signal_days": 4,
+          "avg_net": 0.05177975
+        },
+        "2021-11": {
+          "trades": 62,
+          "signal_days": 11,
+          "avg_net": -0.03219083870967742
+        },
+        "2021-12": {
+          "trades": 7,
+          "signal_days": 1,
+          "avg_net": -0.059571000000000006
+        },
+        "2022-01": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-02": {
+          "trades": 25,
+          "signal_days": 5,
+          "avg_net": -0.023547920000000003
+        },
+        "2022-03": {
+          "trades": 7,
+          "signal_days": 2,
+          "avg_net": -0.033503000000000005
+        },
+        "2022-04": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-05": {
+          "trades": 17,
+          "signal_days": 3,
+          "avg_net": 0.15406370588235294
+        },
+        "2022-06": {
+          "trades": 32,
+          "signal_days": 4,
+          "avg_net": 0.0014552187499999997
+        },
+        "2022-07": {
+          "trades": 0,
+          "signal_days": 0,
+          "avg_net": null
+        },
+        "2022-08": {
+          "trades": 9,
+          "signal_days": 2,
+          "avg_net": -0.030042333333333338
+        },
+        "2022-09": {
+          "trades": 3,
+          "signal_days": 1,
+          "avg_net": -0.03361033333333333
+        },
+        "2022-10": {
+          "trades": 10,
+          "signal_days": 2,
+          "avg_net": 0.0338659
+        },
+        "2022-11": {
+          "trades": 26,
+          "signal_days": 3,
+          "avg_net": 0.018138192307692307
+        },
+        "2022-12": {
+          "trades": 4,
+          "signal_days": 1,
+          "avg_net": -0.05184975
+        }
+      },
+      "on_days_without_vcp_execution": {
+        "trades": 860,
+        "signal_days": 198,
+        "avg_net": -0.0010000186046511645
+      }
+    }
+  },
+  "pairs": {
+    "vcp/cup": {
+      "shared_execution_signal_days": 106,
+      "day_jaccard": 0.3464052287581699,
+      "shared_symbol_signal_day_events": 12,
+      "shared_negative_signal_months": [
+        "2016-06",
+        "2016-07",
+        "2016-08",
+        "2016-11",
+        "2017-03",
+        "2017-05",
+        "2017-11",
+        "2018-03",
+        "2018-06",
+        "2018-08",
+        "2019-04",
+        "2019-10",
+        "2020-01",
+        "2020-08",
+        "2020-09",
+        "2021-09",
+        "2021-12",
+        "2022-02"
+      ]
+    },
+    "vcp/pullback": {
+      "shared_execution_signal_days": 106,
+      "day_jaccard": 0.33974358974358976,
+      "shared_symbol_signal_day_events": 4,
+      "shared_negative_signal_months": [
+        "2016-06",
+        "2016-07",
+        "2016-08",
+        "2016-11",
+        "2017-03",
+        "2017-11",
+        "2017-12",
+        "2018-03",
+        "2018-04",
+        "2018-06",
+        "2018-08",
+        "2019-04",
+        "2020-08",
+        "2020-09",
+        "2021-05",
+        "2021-09",
+        "2021-12",
+        "2022-02",
+        "2022-12"
+      ]
+    },
+    "cup/pullback": {
+      "shared_execution_signal_days": 269,
+      "day_jaccard": 0.8078078078078078,
+      "shared_symbol_signal_day_events": 31,
+      "shared_negative_signal_months": [
+        "2016-04",
+        "2016-06",
+        "2016-07",
+        "2016-08",
+        "2016-11",
+        "2016-12",
+        "2017-02",
+        "2017-03",
+        "2017-04",
+        "2017-11",
+        "2018-03",
+        "2018-05",
+        "2018-06",
+        "2018-07",
+        "2018-08",
+        "2018-09",
+        "2018-10",
+        "2018-12",
+        "2019-04",
+        "2019-05",
+        "2019-09",
+        "2020-02",
+        "2020-03",
+        "2020-08",
+        "2020-09",
+        "2021-09",
+        "2021-11",
+        "2021-12",
+        "2022-02",
+        "2022-08",
+        "2022-09"
+      ]
+    }
+  },
+  "union_execution_days": 336,
+  "union_execution_day_fraction": 0.19729888432178508,
+  "union_longest_gap": 69,
+  "union_symbol_signal_day_events": 3588
+}

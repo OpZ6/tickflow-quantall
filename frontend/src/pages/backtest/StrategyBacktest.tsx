@@ -307,6 +307,7 @@ const buildDefaultOverrides = (detail: StrategyDetail) => normalizeStrategyOverr
   trailing_take_profit_activate: detail.trailing_take_profit_activate,
   trailing_take_profit_drawdown: detail.trailing_take_profit_drawdown,
   profit_lock_steps: detail.profit_lock_steps ?? null,
+  close_breakeven_activate_pct: detail.close_breakeven_activate_pct ?? null,
   score_min: null,
   score_max: null,
   max_hold_days: detail.max_hold_days,
@@ -327,6 +328,7 @@ const strategyBacktestConfigSignature = (detail: StrategyDetail) => JSON.stringi
   trailing_take_profit_activate: detail.trailing_take_profit_activate,
   trailing_take_profit_drawdown: detail.trailing_take_profit_drawdown,
   profit_lock_steps: detail.profit_lock_steps ?? null,
+  close_breakeven_activate_pct: detail.close_breakeven_activate_pct ?? null,
   recommended_max_positions: detail.recommended_max_positions ?? null,
   max_hold_days: detail.max_hold_days,
 })
@@ -375,6 +377,7 @@ function ExitReasonBadge({ reason, signalId, signalNames }: { reason: string; si
     take_profit: { label: '止盈', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
     trailing_stop: { label: '移损', cls: 'bg-orange-500/10 text-orange-400 border-orange-500/30' },
     trailing_take_profit: { label: '回撤止盈', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+    close_breakeven: { label: '收盘守成本', cls: 'bg-orange-500/10 text-orange-400 border-orange-500/30' },
     max_hold: { label: '超期', cls: 'bg-amber-400/10 text-amber-400 border-amber-400/30' },
     pending_exit: { label: '待卖', cls: 'bg-orange-400/10 text-orange-400 border-orange-400/30' },
     end: { label: '期末', cls: 'bg-secondary/10 text-secondary border-border' },
@@ -2306,6 +2309,9 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
                 )}
                 {result.strategy_info.max_hold_days != null && (
                   <span className="text-[10px] text-secondary">最长 {result.strategy_info.max_hold_days} 天</span>
+                )}
+                {result.strategy_info.close_breakeven_activate_pct != null && (
+                  <span className="text-[10px] text-secondary">收盘守成本 {fmtPct(result.strategy_info.close_breakeven_activate_pct)}</span>
                 )}
                 {resultTradeDays > 0 && (
                   <span className="ml-auto flex items-center gap-2 text-[11px] text-muted">

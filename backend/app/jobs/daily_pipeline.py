@@ -962,6 +962,21 @@ def _run_quantx_after_pipeline() -> dict | None:
     return result
 
 
+def _run_stock_pools_after_pipeline() -> dict | None:
+    app_state = _get_app_state()
+    repo = getattr(app_state, "repo", None) if app_state is not None else None
+    if repo is None:
+        return None
+    latest = repo.latest_enriched_date("stock")
+    if latest is None:
+        return None
+    from app.stock_pools.publisher import publish_stock_pool
+
+    result = publish_stock_pool(repo, latest)
+    logger.info("dependent stock-pool result: %s", result)
+    return result
+
+
 def _scheduled_pipeline_task(pipeline_fn) -> None:
     """Run dependent QuantX and weekly mining after the daily pipeline succeeds."""
     if not _run_tracked(pipeline_fn, "daily_pipeline"):
@@ -970,6 +985,10 @@ def _scheduled_pipeline_task(pipeline_fn) -> None:
         _run_quantx_after_pipeline()
     except Exception:
         logger.exception("dependent QuantX run failed; daily pipeline remains succeeded")
+    try:
+        _run_stock_pools_after_pipeline()
+    except Exception:
+        logger.exception("dependent stock-pool run failed; daily pipeline remains succeeded")
     try:
         from app.services.mining_schedule import run_weekly_mining
 

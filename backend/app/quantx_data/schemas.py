@@ -29,6 +29,7 @@ class SourceSpec:
     dependency_modules: tuple[str, ...] = ()
     timeout_seconds: float = 30.0
     rate_limit_rpm: int | None = None
+    degrades_when_missing: bool = True
 
 
 @dataclass

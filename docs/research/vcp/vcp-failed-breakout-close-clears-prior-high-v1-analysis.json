@@ -1,0 +1,77 @@
+{
+  "experiment": "vcp-failed-breakout-close-clears-prior-high-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\vcp-failed-breakout-close-clears-prior-high-v1.json",
+  "change": {
+    "id": "close_clears_prior_high",
+    "kind": "突破",
+    "attacked_path": "失败突破",
+    "definition": "On the frozen 179 fills, keep if the signal-day close is strictly above the prior market session high. Equal close does not clear. A hole on the prior market session does not roll to an earlier stock bar. Missing signal or prior bar is not kept."
+  },
+  "training_2016_2022": {
+    "baseline": {
+      "n_trades": 179,
+      "win_rate": 0.273743,
+      "profit_factor": 4.58,
+      "avg_pnl": 0.019889,
+      "avg_win": 0.172602,
+      "avg_loss": 0.037671
+    },
+    "variant": {
+      "n_trades": 140,
+      "win_rate": 0.278571,
+      "profit_factor": 3.99,
+      "avg_pnl": 0.015247,
+      "avg_win": 0.155644,
+      "avg_loss": 0.038965
+    },
+    "kept": 140,
+    "dropped_fails_prior_high": 39,
+    "missing_bar": 0,
+    "delta": {
+      "avg_pnl": -0.004642,
+      "win_rate": 0.004828,
+      "profit_factor": -0.59
+    },
+    "rule": "drop",
+    "dropped_short_legs": 142,
+    "missing_reconstruction": 0,
+    "upper_half_n": 321,
+    "book_n": 179
+  },
+  "validation_2023_2026": {
+    "baseline": {
+      "n_trades": 149,
+      "win_rate": 0.255034,
+      "profit_factor": 4.45,
+      "avg_pnl": 0.015638,
+      "avg_win": 0.178473,
+      "avg_loss": 0.040107
+    },
+    "variant": {
+      "n_trades": 121,
+      "win_rate": 0.22314,
+      "profit_factor": 4.12,
+      "avg_pnl": 0.005604,
+      "avg_win": 0.162408,
+      "avg_loss": 0.039435
+    },
+    "kept": 121,
+    "dropped_fails_prior_high": 28,
+    "missing_bar": 0,
+    "delta": {
+      "avg_pnl": -0.010034,
+      "win_rate": -0.031894,
+      "profit_factor": -0.33
+    },
+    "rule": "drop",
+    "dropped_short_legs": 109,
+    "missing_reconstruction": 0,
+    "upper_half_n": 258,
+    "book_n": 149,
+    "incomplete_excluded": 0
+  },
+  "validation_note": "exposure, not clean OOS",
+  "rule": "drop",
+  "gaps": []
+}

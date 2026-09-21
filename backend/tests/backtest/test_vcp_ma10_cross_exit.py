@@ -99,6 +99,29 @@ def test_stock_hole_on_market_session_does_not_roll() -> None:
     assert applied["pnl"] == 0.06
 
 
+def test_breakeven_after_5pct_sells_when_close_falls_back_through_entry() -> None:
+    days = _weekdays(5)
+    sessions = [
+        {"date": days[0], "open": 10.0, "high": 10.2, "low": 9.9, "close": 10.1, "volume": 1e6},
+        {"date": days[1], "open": 10.2, "high": 10.8, "low": 10.1, "close": 10.6, "volume": 1e6},
+        {"date": days[2], "open": 10.5, "high": 10.6, "low": 9.8, "close": 9.9, "volume": 1e6},
+        {"date": days[3], "open": 9.95, "high": 10.1, "low": 9.8, "close": 10.0, "volume": 1e6},
+        {"date": days[4], "open": 11.0, "high": 11.2, "low": 10.8, "close": 11.0, "volume": 1e6},
+    ]
+    applied = MODULE.apply_breakeven_after_gain_to_fill(
+        entry_date=days[0],
+        exit_date=days[4],
+        entry_price=10.0,
+        baseline_pnl=0.10,
+        sessions=sessions,
+        market_calendar=days,
+        config=CONFIG,
+        activate_pct=0.05,
+    )
+    assert applied["shortened"] is True
+    assert applied["early_exit_date"] == days[3].isoformat()
+
+
 def test_breakout_bullish_bar_is_close_above_open() -> None:
     days = _weekdays(2)
     sessions = [

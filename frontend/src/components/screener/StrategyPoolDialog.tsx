@@ -261,8 +261,8 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose }: Props) {
                         </span>
                         <span className="text-[10px] text-muted truncate block">{s.description}</span>
                       </span>
-                      <span className={`text-[8px] px-1 py-px rounded border leading-tight shrink-0 ${SOURCE_CLS[s.source] ?? SOURCE_CLS.builtin}`}>
-                        {SOURCE_LABEL[s.source] ?? '内置'}
+                      <span className={`text-[8px] px-1 py-px rounded border leading-tight shrink-0 ${s.catalog_origin === 'project' ? 'bg-sky-500/10 text-sky-400 border-sky-500/30' : (SOURCE_CLS[s.source] ?? SOURCE_CLS.builtin)}`}>
+                        {s.catalog_origin === 'project' ? (s.catalog_label || '右侧') : (SOURCE_LABEL[s.source] ?? '内置')}
                       </span>
                       {s.timeframes?.includes('1m') && (
                         <span className={TF_BADGE_CLS}>分钟</span>
@@ -317,8 +317,8 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose }: Props) {
                             <span className="flex-1 min-w-0 text-[12px] text-foreground truncate">
                               {s?.name ?? id} <span className="text-[10px] text-muted font-mono">{id}</span>
                             </span>
-                            <span className={`text-[8px] px-1 py-px rounded border leading-tight shrink-0 ${SOURCE_CLS[src] ?? SOURCE_CLS.builtin}`}>
-                              {SOURCE_LABEL[src] ?? '内置'}
+                            <span className={`text-[8px] px-1 py-px rounded border leading-tight shrink-0 ${s?.catalog_origin === 'project' ? 'bg-sky-500/10 text-sky-400 border-sky-500/30' : (SOURCE_CLS[src] ?? SOURCE_CLS.builtin)}`}>
+                              {s?.catalog_origin === 'project' ? (s.catalog_label || '右侧') : (SOURCE_LABEL[src] ?? '内置')}
                             </span>
                             {s?.timeframes?.includes('1m') && (
                               <span className={TF_BADGE_CLS}>分钟</span>

@@ -1,0 +1,21 @@
+{
+  "experiment": "vcp-failed-breakout-close-clears-prior-high-v1",
+  "thought": "VCP 179 upper-half ∩ 5% breakeven ∩ ≥3-leg book. Failed-breakout losers never printed +3% high and finished ≤ 0 (42 train fills, −5.07%). One 突破买点, 信号日可见: keep only if the breakout close is strictly above the prior market session high. Not 收盘位置 recut, not 阳线, not 守前日低点, not a post-entry 止损. Do not change frozen observer defaults.",
+  "hypothesis": "A close that fails to stand above yesterday's high is an unaccepted breakout; dropping those signal bars lifts independent avg_pnl versus +1.99% by cutting 失败突破 at the trigger, not after the fill.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close AND breakeven_after_5pct AND len(legs)>=3",
+    "n_train": 179,
+    "avg_pnl": 0.019889
+  },
+  "change": {
+    "id": "close_clears_prior_high",
+    "kind": "突破",
+    "attacked_path": "失败突破",
+    "definition": "On the frozen 179 fills, keep if the signal-day close is strictly above the prior market session high. Equal close does not clear. A hole on the prior market session does not roll to an earlier stock bar. Missing signal or prior bar is not kept."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +1.99% (0.019889) baseline and remains positive. A tightening that flips validation negative is thrown. If keep, report 2023-2026 as exposure not clean OOS.",
+    "fail": "Drop. VCP main book stays 179 / +1.99%. Cup 2,034 stays put. Do not restack 阳线, 守前日低点, or 入场日收盘止损."
+  }
+}

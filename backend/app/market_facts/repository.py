@@ -246,6 +246,12 @@ class MarketFactRepository:
     def get_screening_candidates(self, trade_date: date) -> pl.DataFrame:
         return self._read_date(DatasetId.SCREENING_CANDIDATE_DAILY, trade_date)
 
+    def get_security_popularity(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.SECURITY_POPULARITY_DAILY, trade_date)
+
+    def get_stock_logic_evidence(self, trade_date: date) -> pl.DataFrame:
+        return self._read_date(DatasetId.STOCK_LOGIC_EVIDENCE_DAILY, trade_date)
+
     def get_range(
         self,
         dataset_id: DatasetId,

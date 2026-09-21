@@ -19,6 +19,7 @@ export function buildDefaultOverrides(detail: StrategyDetail): Record<string, an
     trailing_stop: detail.trailing_stop,
     trailing_take_profit_activate: detail.trailing_take_profit_activate,
     trailing_take_profit_drawdown: detail.trailing_take_profit_drawdown,
+    close_breakeven_activate_pct: detail.close_breakeven_activate_pct ?? null,
     score_min: null,
     score_max: null,
     max_hold_days: detail.max_hold_days,

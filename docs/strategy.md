@@ -8,6 +8,8 @@
 
 ## 内置策略
 
+选股列表默认 **32** 个：Tick Stock Panel 源策略仍标「内置」；本仓库后加的右侧形态标「右侧」。每个右侧方向只留「观察」和「买入名单」（高旗没有买入名单）。冻结观察器和简化突破仍注册，但不进默认列表。
+
 **25 个内置策略**,每个策略一个独立 Python 文件,基于 Polars 表达式向量化实现(`backend/app/strategy/builtin/`):
 
 | 类型        | 代表策略                                                 |
@@ -17,6 +19,20 @@
 | 反转 / 波动 | 超跌反弹 · 超卖反转 · 新低反转 · 低波动趋势延续 · 回踩 MA20 · 回踩支撑 · 强势开盘 · MACD 零下回升 · 长下影反击 · RSI 中轴回踩 |
 
 内置目录 `backend/app/strategy/builtin/` 还包含一个仅供挖掘 worker 使用的受控因子排名研究模板。它不出现在普通选股列表，也不能通过普通策略 API 直接运行或保存 override；挖掘结果发布时会生成独立策略。详见 [因子与策略挖掘](./mining.md)。
+
+右侧形态的**可买入**选股与全量候选池分开注册，避免把观察/待突破当成买入：
+
+| 页面名称 | 策略 ID | 用来干什么 |
+| :------- | :------ | :--------- |
+| VCP · 观察 | `quants_vcp_legacy_v1` | 全量形态 |
+| VCP · 买入名单 | `vcp_leader_tradable_v1` | 只出可买的票 |
+| 杯柄 · 观察 | `quants_cup_handle_legacy_v1` | 全量形态 |
+| 杯柄 · 买入名单 | `cup_handle_leader_v1` | 只出可买的票 |
+| 回踩 · 全市场 | `launch_pullback_support` | 全量回踩 |
+| 回踩 · 买入名单 | `launch_pullback_leader_v1` | 只出可买的票 |
+| 高旗 · 观察 | `quants_high_tight_flag_legacy_v1` | 全量形态；没有买入名单 |
+
+这些可买入策略尚未取得实盘准入。冻结观察策略 `vcp_leader_breakout` 的默认阈值不能改。
 
 内置目录 `backend/app/strategy/builtin/` 由项目维护,**AI 生成的策略不会落入此目录**。
 

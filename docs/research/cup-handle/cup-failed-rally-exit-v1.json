@@ -1,0 +1,13 @@
+{
+  "experiment": "cup-failed-rally-exit-v1",
+  "frozen_at": "2026-09-12",
+  "hypothesis_source": "AI after held-swing-low exit failed: it improved giveback mean but damaged winner mean more. Test an actual failed rally before support failure; not independent discovery.",
+  "baseline_run": "20260909T133226351846Z",
+  "baseline": "Original 2034 independent cup thin-book fills, mean net +0.5438%; rejected swing exit is not stacked onto baseline",
+  "change": "One failed-rally structural exit: held high H1, intervening low L, then strictly lower high H2; each is a strict three-bar pivot confirmed only at its right bar close. At H2 confirmation arm L if pivot indices satisfy H1<L<H2. Close below L exits next market open. Current high above H2 invalidates the setup. Newly confirmed highs replace the preceding high; no profit threshold or numeric buffer.",
+  "execution": "A confirmation and break may both be observed at the same close, but never filled before next market open. Original earlier exit retains precedence. T+1 and frozen fees, no delayed fill on stock holes or conservative one-price blocked fills.",
+  "training": "2016-2022; same source and membership as preceding swing exit. No later bars or validation claims.",
+  "initial_gate": "At least 100 changed fills, positive average net strictly above original baseline, signal-day equal-weight actual net no worse, no reduction in positive-net years. Otherwise drop this representation and neighbouring widths/buffers. Passing only creates a research candidate.",
+  "diagnostics": "All entries and original path labels; changed winners, giveback impact, yearly and signal-day means. Labels are retrospective analysis only.",
+  "constraints": ["No VCP or product changes", "No position sizing", "No 5% breakeven", "No tuning pivot width, comparison buffers or confirmation delays"]
+}

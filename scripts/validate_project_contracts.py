@@ -25,6 +25,7 @@ INTERNAL_FACT_SOURCES = {
     "tickflow_published_fact",
     "quantx_deterministic_v1",
     "quantx_rule_screen_v1",
+    "stock_logic_evidence",
 }
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)]+)\)")
 PRODUCTION_ROOTS = (REPO_ROOT / "backend" / "app", REPO_ROOT / "frontend" / "src")

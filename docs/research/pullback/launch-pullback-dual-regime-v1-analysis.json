@@ -1,0 +1,32 @@
+{
+  "experiment": "launch-pullback-dual-regime-v1",
+  "baseline_run": "20260909T053715693165Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\pullback\\launch-pullback-dual-regime-v1.json",
+  "training_2016_2022": {
+    "skipped": 24730,
+    "baseline": {
+      "n_trades": 32086,
+      "win_rate": 0.25014,
+      "profit_factor": 2.25,
+      "avg_pnl": -0.009777,
+      "avg_win": 0.117306,
+      "avg_loss": 0.05217
+    },
+    "variant": {
+      "n_trades": 7356,
+      "win_rate": 0.294725,
+      "profit_factor": 2.31,
+      "avg_pnl": -0.001267,
+      "avg_win": 0.120526,
+      "avg_loss": 0.052162
+    },
+    "delta": {
+      "avg_pnl": 0.00851,
+      "win_rate": 0.044585,
+      "profit_factor": 0.06
+    },
+    "rule": "drop"
+  },
+  "rule": "drop",
+  "gaps": []
+}

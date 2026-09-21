@@ -1,0 +1,11 @@
+{
+  "experiment": "cup-armed-ma20-exit-v1",
+  "frozen_at": "2026-09-12",
+  "hypothesis_source": "AI after cup-exit-duties-v1 found 475 entry signals already below MA20; same exposed development data, no independent validation claim",
+  "baseline": "2034 original cup thin-book independent entries, mean net +0.5438%",
+  "change": "Stateful MA20 protection: armed at entry when signal-day close>=MA20; otherwise arm on first held daily close>=MA20. Once armed, close<MA20 produces next-market-open exit. The arming state never resets. No changed MA length, confirmation delay, price buffer or profit threshold.",
+  "execution": "Paired replay every original entry through the existing independent matcher, baseline close<MA20 vs armed exit. Preserve 7% hard stop, 30-bar maximum hold, T+1, commission 0.0003, slippage 10bps and historical stamp tax. Allow later exits and preserve blocked-sell rules. Use complete remaining training tail; incomplete positions explicitly reported.",
+  "training": "All data and completed exits <=2022-12-31; no clean OOS claim",
+  "gate": "Same completed-entry coverage, at least 100 changed exits, positive mean net strictly above baseline, signal-day equal-weight actual net no worse and no fewer positive years. Passing is research candidate only; require paired robustness before adoption.",
+  "failure": "Reject stateful MA20 arming and confirmation/MA-length/buffer neighbours. No baseline or product change."
+}

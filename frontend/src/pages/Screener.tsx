@@ -823,6 +823,8 @@ export function Screener() {
                   name={s.name}
                   description={s.description}
                   source={s.source}
+                  catalogOrigin={s.catalog_origin}
+                  catalogLabel={s.catalog_label}
                   active={activeStrategy === s.id}
                   count={hitCounts[id]}
                   expiredCount={expiredCounts[id]}

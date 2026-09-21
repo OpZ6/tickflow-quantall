@@ -1,0 +1,15 @@
+{
+  "experiment": "cup-held-swing-low-exit-v1",
+  "frozen_at": "2026-09-12",
+  "hypothesis_source": "AI following the frozen cup autopsy: 352 giveback trades, mean held MFE +9.26%, mean net -4.46%. Results for this exit have not been read.",
+  "baseline_run": "20260909T133226351846Z",
+  "baseline": "All 2034 independent thin-book cup trades, average net 0.005438; exact membership from the preceding complete selection ledger, checked against original frozen fills",
+  "change": "One structural exit: after entry, a low strictly below both adjacent market-session lows becomes confirmed only at the right-hand bar close. Maintain the highest confirmed low. A subsequent close strictly below that level signals next-market-open exit. No pre-entry swing, no profit threshold, no buffer, no window search.",
+  "execution": "Original entry and earlier original exit retain precedence; T+1 and original historical costs. A missing bar, invalid price, zero-volume or conservative one-price blocked early fill retains baseline and is reported, with no rolling to a later stock session.",
+  "training": "2016-2022; all original exits and loaded bars <=2022-12-31",
+  "diagnostics": "Same 2034 entries, by original loss-path label, yearly mean, signal-day equal-weight actual net, changed winners and giveback trades. Future path labels never control exit decisions.",
+  "initial_gate": "At least 100 changed fills, positive mean net strictly above baseline, signal-day equal-weight actual net not below baseline, and no reduction in positive-net years. Passing only creates a research candidate requiring further execution and robustness checks; it does not replace VCP or qualify a product.",
+  "failure_action": "Drop the representation and adjacent swing widths/buffers; retain original cup baseline. Do not retune three-bar confirmation.",
+  "validation": "Frozen source has no 2023+ validation fills; no clean OOS claim",
+  "constraints": ["No VCP changes", "No position sizing", "No 5% breakeven or entry-day close stop", "No future-confirmed pivot on earlier dates"]
+}

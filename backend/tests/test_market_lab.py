@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.api.market_lab import router
 from app.market_facts.registry import DatasetId
+from app.market_time import cn_today
 from app.services.market_lab import (
     build_etf_momentum,
     calculate_drawdown,
@@ -22,6 +23,7 @@ from app.services.market_lab import (
     sector_members_from_repo,
     sector_radar_from_repo,
 )
+from app.tickflow.repository import DataStore, KlineRepository
 
 
 def _etf_frame(symbol: str = "510300.SH", n: int = 70) -> pl.DataFrame:
@@ -264,6 +266,40 @@ def test_macro_dispersion_uses_daily_industry_cross_section_and_seven_indices() 
     assert result["contribution_windows"]["1"]["high"][0]["name"] in {"电子", "煤炭"}
     assert "同花顺二级" in result["basis"]
     assert "当前成分快照回看历史" in result["basis"]
+
+
+def test_macro_dispersion_includes_live_day_after_quote_flush(tmp_path) -> None:
+    repo = KlineRepository(DataStore(tmp_path))
+    repo._instruments_cache = pl.DataFrame({
+        "symbol": ["A", "B"],
+        "name": ["甲", "乙"],
+        "total_shares": [1_000_000.0, 1_000_000.0],
+        "float_shares": [1_000_000.0, 1_000_000.0],
+    })
+    today = cn_today()
+    days = [today - timedelta(days=offset) for offset in range(40, 0, -1)]
+    records = []
+    for index, day in enumerate(days):
+        records.append({"symbol": "A", "industry": "电子", "date": day, "close": 10.0 + index * 0.1})
+        records.append({"symbol": "B", "industry": "银行", "date": day, "close": 10.0 - index * 0.05})
+    repo._enriched_history_cache = pl.DataFrame(records)
+    repo._enriched_history_start = days[0]
+    repo._enriched_history_generation = repo.get_matrix_data_generation("stock")
+
+    repo.flush_live_enriched_asset("stock", pl.DataFrame({
+        "symbol": ["A", "B"],
+        "industry": ["电子", "银行"],
+        "date": [today, today],
+        "open": [15.0, 9.0], "high": [15.0, 9.0], "low": [15.0, 9.0], "close": [15.0, 9.0],
+        "volume": [1000.0, 1000.0], "amount": [15000.0, 9000.0],
+        "raw_close": [15.0, 9.0], "raw_high": [15.0, 9.0], "raw_low": [15.0, 9.0],
+    }))
+
+    result = macro_dispersion_from_repo(repo)
+
+    assert result["available"] is True
+    assert result["as_of"] == today.isoformat()
+    assert result["history"][-1]["date"] == today.isoformat()
 
 
 def test_sector_flow_keeps_strongest_inflow_and_outflow_sides() -> None:

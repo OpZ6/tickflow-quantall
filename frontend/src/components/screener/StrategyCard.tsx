@@ -77,6 +77,8 @@ interface StrategyCardProps {
   name: string
   description?: string
   source?: string
+  catalogOrigin?: string | null
+  catalogLabel?: string | null
   active: boolean
   count?: number
   /** 今日曾命中总数 */
@@ -97,7 +99,7 @@ interface StrategyCardProps {
 }
 
 export function StrategyCard({
-  name, description, source, active, count, expiredCount,
+  name, description, source, catalogOrigin, catalogLabel, active, count, expiredCount,
   loading, cardSize,
   onRun, disabled, onSettings, monitored, onToggleMonitor, timeframeBadge,
 }: StrategyCardProps) {
@@ -108,8 +110,13 @@ export function StrategyCard({
   const countCls = count === 0
     ? 'text-muted'
     : 'bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent'
-  const srcLabel = cardSize === 'mini' ? (SRC_MAP[source ?? ''] ?? '内') : (SRC_MAP[source ?? ''] ?? '内置')
-  const badgeCls = BADGE_CLS_MAP[source ?? 'builtin'] ?? BADGE_CLS_MAP.builtin
+  const isProject = catalogOrigin === 'project'
+  const srcLabel = isProject
+    ? (cardSize === 'mini' ? '右' : (catalogLabel || '右侧'))
+    : (cardSize === 'mini' ? (SRC_MAP[source ?? ''] ?? '内') : (SRC_MAP[source ?? ''] ?? '内置'))
+  const badgeCls = isProject
+    ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+    : (BADGE_CLS_MAP[source ?? 'builtin'] ?? BADGE_CLS_MAP.builtin)
 
   // 失效数 > 0 时显示
   const hasExpired = expiredCount != null && expiredCount > 0

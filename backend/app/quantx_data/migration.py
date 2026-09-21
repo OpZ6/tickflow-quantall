@@ -110,7 +110,10 @@ def migrate_quantx_history(
     dataset_ids = (
         tuple(dict.fromkeys(DatasetId(item) for item in datasets))
         if datasets
-        else tuple(DatasetId)
+        else tuple(
+            item for item in DatasetId
+            if item != DatasetId.SECURITY_POPULARITY_DAILY
+        )
     )
     result = {
         "dry_run": not apply,

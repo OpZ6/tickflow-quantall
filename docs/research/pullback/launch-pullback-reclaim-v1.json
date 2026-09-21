@@ -1,0 +1,16 @@
+{
+  "experiment": "launch-pullback-reclaim-v1",
+  "frozen_at": "2026-09-12",
+  "hypothesis_source": "AI reading the original first-touch state machine and thin baseline; development research, no independent discovery claim",
+  "baseline_run": "20260909T053715693165Z",
+  "baseline": "1421 original independent fills, dual-regime gate AND RS>=85, mean net +0.0351%; recreate complete first-touch signals before changing entry",
+  "change": "After the first qualifying pullback, freeze that launch midpoint and wait for a later market-session close to cross from <= midpoint to > midpoint. Buy next market open. No same-touch-day entry. The recovery day need not satisfy the earlier pullback's small-change/low-volume condition. One entry at most per original launch opportunity.",
+  "expiry": "A new launch, the original launch-lookback expiry, missing stock bar, or close below the original midpoint failure-buffer level cancels the pending opportunity. No new waiting duration, threshold or buffer is introduced.",
+  "filters": "Existing effective basic filters, frozen source symbol universe, market gate and RS>=85 all evaluated on the new signal day. An emitted signal consumes the opportunity even when those filters or next-open execution reject it, matching original ordering.",
+  "execution": "Existing independent MarketMatrix matcher, original support-failure exit stream, 6% stop and 20-bar maximum hold; T+1, commission 0.0003, 10bps slippage and historical stamp tax. Recompute every changed entry and exit, without position limits. No filtering old fills to simulate delayed entries.",
+  "training": "Entry signal 2016-01-04..2022-12-30, all execution bars <=2022-12-31. No terminal marked-to-market trade is counted as a completed trade. Unfilled/pending entries reported.",
+  "baseline_equivalence": "Same original filled-event keys, entry/exit dates and net returns within one 6-decimal stored unit; current forward-adjustment price scaling reported. Both arms use identical current data.",
+  "initial_gate": "At least 100 completed variant fills, positive average net strictly better than recreated baseline, signal-day equal-weight actual net no worse, and no fewer positive-net years. Passing creates only a research candidate requiring fixed-window and robustness checks; failure stops this reclaim representation and its waiting/price-buffer neighbours.",
+  "diagnostics": "Original failure paths; complete old/new signal counts and unfilled reasons; same-symbol original launch association, coverage lost or newly gained, winner retention and annual net. No 2023+ validation claim.",
+  "constraints": ["VCP frozen", "No product changes", "No volume/RS threshold search", "No upper-half, prior-high or bullish-candle filter"]
+}

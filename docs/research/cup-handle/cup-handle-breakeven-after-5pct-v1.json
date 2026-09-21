@@ -1,0 +1,19 @@
+{
+  "experiment": "cup-handle-breakeven-after-5pct-v1",
+  "thought": "Same 2,034 cup-handle fills on dual-regime-open RS>=85 upper-half days. One sell: after a close >= +5% from entry, any later close back below entry exits next open. Same definition as the VCP 321 keep. Do not scan 5%.",
+  "hypothesis": "Locking cost after +5% cuts give-back on the cup 2,034 book without dropping avg_pnl below +0.54%.",
+  "baseline": {
+    "run_id": "20260909T133226351846Z",
+    "selection": "dual_regime_open AND rs>=85 AND upper-half close",
+    "n_train": 2034,
+    "avg_pnl": 0.005438
+  },
+  "change": {
+    "id": "breakeven_after_5pct_close",
+    "definition": "From entry session, if any completed close >= entry_price * 1.05, then the first later close < entry_price exits at the next market open if strictly before original exit. Holes / one-price limit-down do not roll. Missing bars keep the original fill."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +0.54% baseline and remains positive. If keep, report 2023-2026 as exposure not clean OOS.",
+    "fail": "Drop. Thin cup book stays 2,034 / +0.54%. Do not restack another sell on this cup book. VCP 321 is not replaced."
+  }
+}

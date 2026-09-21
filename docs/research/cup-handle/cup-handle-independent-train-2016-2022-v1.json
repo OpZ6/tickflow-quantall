@@ -1,0 +1,8 @@
+{
+  "experiment": "cup-handle-independent-train-2016-2022-v1",
+  "purpose": "Open the cup-handle dialect as its own independent-trade baseline. No rule change.",
+  "source_run": "20260909T133226351846Z",
+  "strategy_id": "quants_cup_handle_legacy_v1",
+  "training": "entry 2016-01-01..2022-12-31 and original exit <= 2022-12-31",
+  "note": "All-market default stream. Independent avg_pnl is the starting book, not a live strategy. 10/20-day EW autopsy already stopped this stream as a selector; this round records the same fills' round-trip mean."
+}

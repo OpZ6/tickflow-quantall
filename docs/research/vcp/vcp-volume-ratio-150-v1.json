@@ -1,0 +1,19 @@
+{
+  "experiment": "vcp-volume-ratio-150-v1",
+  "thought": "VCP 179 upper-half ∩ 5% breakeven ∩ ≥3-leg book. One demand filter: causal detector primary.volume_ratio ≥ 1.50 at entry_signal_date. Do not scan 1.50. Do not change frozen observer breakout_volume_ratio_min (1.25).",
+  "hypothesis": "Requiring more breakout volume than the detector's 1.25 executable floor lifts independent avg_pnl versus +1.99%.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close AND breakeven_after_5pct AND len(legs)>=3",
+    "n_train": 179,
+    "avg_pnl": 0.019889
+  },
+  "change": {
+    "id": "volume_ratio_ge_1_50",
+    "definition": "Reconstruct with shipped detect() and frozen-run defaults (breakout_volume_ratio_min still 1.25). Keep if primary.volume_ratio >= 1.50 at entry_signal_date. Missing signal bar or missing volume_ratio is not kept. Keep the 5% breakeven pnl on survivors. Do not scan 1.50."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +1.99% (0.019889) baseline and remains positive. If keep, report 2023-2026 as exposure not clean OOS.",
+    "fail": "Drop. VCP main book stays 179 / +1.99%. Do not restack 1.60/1.75. Cup 2,034 stays put."
+  }
+}

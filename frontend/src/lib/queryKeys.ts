@@ -36,6 +36,10 @@ export const QK = {
   quantxNewHighMembers: (date: string, dimension: string, window: number, name: string) => ['quantx-new-high-members', date, dimension, window, name] as const,
   quantxTables:     (date: string) => ['quantx-tables', date] as const,
   quantxObservability: (date: string) => ['quantx-observability', date] as const,
+  stockPoolCatalog:    ['stock-pools', 'catalog'] as const,
+  stockPoolSummary:    (date: string) => ['stock-pools', 'summary', date] as const,
+  stockPoolCandidates: (date: string) => ['stock-pools', 'candidates', date] as const,
+  stockPoolDetail:     (date: string, symbol: string) => ['stock-pools', 'detail', date, symbol] as const,
 
   // Watchlist
   watchlist:            ['watchlist'] as const,

@@ -1,0 +1,89 @@
+{
+  "n": 87,
+  "all_original_exits_signal": true,
+  "raised_support": 87,
+  "mean_delta": 0.0011075402298850556,
+  "recovery_groups": {
+    "True": {
+      "n": 56,
+      "improved": 32,
+      "mean_delta": 0.043094553571428565
+    },
+    "False": {
+      "n": 31,
+      "improved": 6,
+      "mean_delta": -0.0747399677419355
+    }
+  },
+  "scope": "Exploratory signal-day distributions against exposed future labels; no threshold search or trading rule",
+  "signal_day_distributions": {
+    "True": {
+      "signal_volume_to_launch": {
+        "n": 56,
+        "q25_median_q75": [
+          0.4428574740886688,
+          0.5862873196601868,
+          0.7845162153244019
+        ]
+      },
+      "signal_volume_to_prior": {
+        "n": 56,
+        "q25_median_q75": [
+          0.644505649805069,
+          0.7926781177520752,
+          1.0991980135440826
+        ]
+      },
+      "signal_return": {
+        "n": 56,
+        "q25_median_q75": [
+          -0.07442444562911987,
+          -0.04972338676452637,
+          -0.02621687948703766
+        ]
+      },
+      "signal_close_location": {
+        "n": 55,
+        "q25_median_q75": [
+          0.08161798119544983,
+          0.18120816349983215,
+          0.3339327573776245
+        ]
+      }
+    },
+    "False": {
+      "signal_volume_to_launch": {
+        "n": 31,
+        "q25_median_q75": [
+          0.4334915429353714,
+          0.6226134896278381,
+          0.7385028600692749
+        ]
+      },
+      "signal_volume_to_prior": {
+        "n": 31,
+        "q25_median_q75": [
+          0.7409182190895081,
+          0.877580463886261,
+          0.9615003764629364
+        ]
+      },
+      "signal_return": {
+        "n": 31,
+        "q25_median_q75": [
+          -0.08715823292732239,
+          -0.057502031326293945,
+          -0.03389555215835571
+        ]
+      },
+      "signal_close_location": {
+        "n": 31,
+        "q25_median_q75": [
+          0.03865370154380798,
+          0.10344813764095306,
+          0.29422692209482193
+        ]
+      }
+    }
+  }
+}

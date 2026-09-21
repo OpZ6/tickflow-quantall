@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from datetime import datetime
 from typing import Any
 
@@ -38,19 +39,33 @@ def _market_code(value: Any) -> str:
     return ""
 
 
+_FETCH_RETRIES = 3
+_FETCH_WAIT = [5, 15]  # seconds between retries
+
+
 def _fetch(url: str) -> str:
-    response = requests.get(url, headers={"User-Agent": UA}, timeout=20)
-    response.raise_for_status()
-    if response.encoding and response.encoding.lower() != "iso-8859-1":
-        response.encoding = response.encoding
-    else:
-        # Server didn't declare charset — try utf-8, fall back to gbk for CN sites
+    last_exc: Exception | None = None
+    for attempt in range(_FETCH_RETRIES):
         try:
-            response.content.decode("utf-8")
-            response.encoding = "utf-8"
-        except UnicodeDecodeError:
-            response.encoding = "gbk" if "zhangtingke" in url or "duanxianxia" in url else response.apparent_encoding
-    return response.text
+            response = requests.get(url, headers={"User-Agent": UA}, timeout=20)
+            response.raise_for_status()
+            if response.encoding and response.encoding.lower() != "iso-8859-1":
+                response.encoding = response.encoding
+            else:
+                # Server didn't declare charset — try utf-8, fall back to gbk for CN sites
+                try:
+                    response.content.decode("utf-8")
+                    response.encoding = "utf-8"
+                except UnicodeDecodeError:
+                    response.encoding = "gbk" if "zhangtingke" in url or "duanxianxia" in url else response.apparent_encoding
+            return response.text
+        except Exception as exc:
+            last_exc = exc
+            if attempt < _FETCH_RETRIES - 1:
+                wait = _FETCH_WAIT[attempt]
+                print(f"  [zhangtingke] fetch {url} attempt {attempt + 1}/{_FETCH_RETRIES} failed: {exc}, retry in {wait}s")
+                time.sleep(wait)
+    raise last_exc  # type: ignore[misc]
 
 
 def _extract_js_object(text: str, var_name: str) -> dict[str, Any]:
@@ -136,27 +151,40 @@ def _ladder_row(item: dict[str, Any], trade_date: str) -> dict[str, Any]:
     }
 
 
+_SCRAPE_RETRIES = 3
+_SCRAPE_WAIT = [5, 15]  # seconds between retries when ladder is empty
+
+
 def scrape(trade_date: str) -> dict[str, Any]:
-    height_html = _fetch(HEIGHT_URL)
-    ladder_html = _fetch(LADDER_URL.format(date=trade_date))
-    height_raw = _extract_js_object(height_html, "lbgd_dict")
-    ladder_raw = _extract_js_object(ladder_html, "dictData")
+    ladder_stocks: list[dict[str, Any]] = []
+    height_rows: list[dict[str, Any]] = []
+    for attempt in range(_SCRAPE_RETRIES):
+        height_html = _fetch(HEIGHT_URL)
+        ladder_html = _fetch(LADDER_URL.format(date=trade_date))
+        height_raw = _extract_js_object(height_html, "lbgd_dict")
+        ladder_raw = _extract_js_object(ladder_html, "dictData")
 
-    height_headers = list(height_raw.get("lbgd_header") or [])
-    height_rows = [
-        _height_row(_row_dict(height_headers, row))
-        for row in (height_raw.get("lbgd_lst") or [])
-        if isinstance(row, list)
-    ]
-    height_rows = [row for row in height_rows if row.get("date")]
+        height_headers = list(height_raw.get("lbgd_header") or [])
+        height_rows = [
+            _height_row(_row_dict(height_headers, row))
+            for row in (height_raw.get("lbgd_lst") or [])
+            if isinstance(row, list)
+        ]
+        height_rows = [row for row in height_rows if row.get("date")]
 
-    ladder_headers = list(ladder_raw.get("lbtd_header") or [])
-    ladder_date = str(ladder_raw.get("date") or trade_date)
-    ladder_stocks = [
-        _ladder_row(_row_dict(ladder_headers, row), ladder_date)
-        for row in (ladder_raw.get("lbtd_lst") or [])
-        if isinstance(row, list)
-    ]
+        ladder_headers = list(ladder_raw.get("lbtd_header") or [])
+        ladder_date = str(ladder_raw.get("date") or trade_date)
+        ladder_stocks = [
+            _ladder_row(_row_dict(ladder_headers, row), ladder_date)
+            for row in (ladder_raw.get("lbtd_lst") or [])
+            if isinstance(row, list)
+        ]
+        if ladder_stocks:
+            break
+        if attempt < _SCRAPE_RETRIES - 1:
+            wait = _SCRAPE_WAIT[attempt]
+            print(f"  [zhangtingke] ladder empty for {trade_date}, retry {attempt + 1}/{_SCRAPE_RETRIES} in {wait}s")
+            time.sleep(wait)
 
     ladder_by_height: dict[str, list[dict[str, Any]]] = {}
     for stock in ladder_stocks:

@@ -331,19 +331,25 @@ export function ScreenerTable({
       }
       case 'signals': {
         const signals = getSignals(r)
+        const buyReady = r.buy_ready === true || r.vcp_entry_triggered === true
         const vcpLabels: Record<string, string> = {
-          executable: r.vcp_setup === 'cheat' ? 'VCP 提前试探' : 'VCP 放量突破',
+          executable: r.vcp_setup === 'cheat' ? 'VCP 提前试探（未买入）' : 'VCP 放量突破（未买入）',
           wait_breakout: 'VCP 待突破', wait_support: 'VCP 待量能/支撑确认',
           watch: 'VCP 观察', extended_do_not_chase: 'VCP 超出追价区',
         }
-        const vcpLabel = vcpLabels[r.vcp_status]
+        const vcpLabel = buyReady ? '可买入' : vcpLabels[r.vcp_status]
+        const stateClass = buyReady ? 'text-accent' : 'text-amber-400'
         return (
           <td key={col.id} className="px-3 py-2">
             {vcpLabel && (
               <div className="mb-1 text-xs" data-testid="vcp-candidate-state"
-                title={`${r.vcp_leg_count} 段收缩 · ${r.vcp_scale} · 仅为策略状态，不代表成交`}>
-                <span className={r.vcp_status === 'executable' ? 'text-accent' : 'text-amber-400'}>{vcpLabel}</span>
-                <span className="ml-1 text-muted">枢轴 {fmtPrice(r.vcp_pivot)}</span>
+                title={buyReady
+                  ? '已通过该策略的真正买入条件，次日开盘成交，不代表已成交'
+                  : `${r.vcp_leg_count ?? ''} 段收缩 · ${r.vcp_scale ?? ''} · 候选状态，不是买入`}>
+                <span className={stateClass}>{vcpLabel}</span>
+                {r.vcp_pivot != null && (
+                  <span className="ml-1 text-muted">枢轴 {fmtPrice(r.vcp_pivot)}</span>
+                )}
               </div>
             )}
             {signals.length > 0 ? (

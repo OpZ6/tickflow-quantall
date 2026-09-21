@@ -1,0 +1,132 @@
+{
+  "run_id": "20260913T020510923171Z",
+  "reference": "vcp-frozen-chronology-rebase-v1-raw-midpoints",
+  "product_trades": 329,
+  "expected_trades": 329,
+  "missing": [],
+  "extra": [],
+  "mismatches": [],
+  "exit_reasons": {
+    "stop_loss": 123,
+    "close_breakeven": 22,
+    "signal": 80,
+    "staged_profit_lock": 98,
+    "max_hold": 6
+  },
+  "scope": "Full-universe product execution vs independently reconstructed frozen membership and fills; exposed history",
+  "periods": {
+    "training": {
+      "n_trades": 180,
+      "win_rate": 0.294444,
+      "profit_factor": 4.29,
+      "avg_pnl": 0.021067,
+      "avg_win": 0.162043,
+      "avg_loss": 0.037765,
+      "signal_days": 114,
+      "signal_day_equal_weight_net": 0.02057400950292398,
+      "years": {
+        "2016": {
+          "n_trades": 26,
+          "win_rate": 0.153846,
+          "profit_factor": 3.86,
+          "avg_pnl": -0.007412,
+          "avg_win": 0.113342,
+          "avg_loss": 0.029367
+        },
+        "2017": {
+          "n_trades": 43,
+          "win_rate": 0.348837,
+          "profit_factor": 3.9,
+          "avg_pnl": 0.027184,
+          "avg_win": 0.149439,
+          "avg_loss": 0.038309
+        },
+        "2018": {
+          "n_trades": 9,
+          "win_rate": 0.222222,
+          "profit_factor": 1.9,
+          "avg_pnl": -0.016885,
+          "avg_win": 0.089764,
+          "avg_loss": 0.047356
+        },
+        "2019": {
+          "n_trades": 55,
+          "win_rate": 0.363636,
+          "profit_factor": 4.58,
+          "avg_pnl": 0.039919,
+          "avg_win": 0.17768,
+          "avg_loss": 0.038801
+        },
+        "2020": {
+          "n_trades": 39,
+          "win_rate": 0.282051,
+          "profit_factor": 4.53,
+          "avg_pnl": 0.022864,
+          "avg_win": 0.185054,
+          "avg_loss": 0.040853
+        },
+        "2021": {
+          "n_trades": 6,
+          "win_rate": 0.166667,
+          "profit_factor": 3.33,
+          "avg_pnl": -0.010409,
+          "avg_win": 0.124591,
+          "avg_loss": 0.037409
+        },
+        "2022": {
+          "n_trades": 2,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "avg_pnl": -0.028505,
+          "avg_win": 0.0,
+          "avg_loss": 0.028505
+        }
+      }
+    },
+    "exposed_validation": {
+      "n_trades": 149,
+      "win_rate": 0.268456,
+      "profit_factor": 4.28,
+      "avg_pnl": 0.016712,
+      "avg_win": 0.171316,
+      "avg_loss": 0.040024,
+      "signal_days": 92,
+      "signal_day_equal_weight_net": 0.01915475634057971,
+      "years": {
+        "2023": {
+          "n_trades": 30,
+          "win_rate": 0.2,
+          "profit_factor": 7.08,
+          "avg_pnl": 0.02437,
+          "avg_win": 0.279989,
+          "avg_loss": 0.039535
+        },
+        "2024": {
+          "n_trades": 28,
+          "win_rate": 0.285714,
+          "profit_factor": 7.08,
+          "avg_pnl": 0.03797,
+          "avg_win": 0.20539,
+          "avg_loss": 0.028998
+        },
+        "2025": {
+          "n_trades": 77,
+          "win_rate": 0.311688,
+          "profit_factor": 3.28,
+          "avg_pnl": 0.014539,
+          "avg_win": 0.14232,
+          "avg_loss": 0.043324
+        },
+        "2026": {
+          "n_trades": 14,
+          "win_rate": 0.142857,
+          "profit_factor": 1.27,
+          "avg_pnl": -0.030262,
+          "avg_win": 0.056951,
+          "avg_loss": 0.044797
+        }
+      }
+    }
+  },
+  "passed": true
+}

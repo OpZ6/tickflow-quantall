@@ -8,9 +8,9 @@ from _quants_vcp import ENTRY_IDS, EXIT_IDS, QuantsLegacyVcpStrategy
 
 META = {
     "id": "quants_vcp_legacy_v1",
-    "name": "VCP 宽泛候选池（股票魔法师形态）",
+    "name": "VCP · 观察",
     "version": "legacy-v1",
-    "description": "盘后识别多段波动收缩与末段枢轴，输出观察、待突破、提前试探和放量突破等候选状态。默认冻结宽泛筛选口径，研究中的市场状态、入场与退出优化不会改变本候选池默认值。候选不等同于买入指令。",
+    "description": "收缩形态候选，含观察和待突破，不是买入名单。",
     "tags": ["VCP", "股票魔法师形态", "宽泛候选池", "盘后筛选"],
     "strategy_role": "candidate_screener",
     "live_qualified": False,

@@ -371,6 +371,8 @@ export interface IndexQuote {
 
 // ===== Screener =====
 export interface ScreenerStrategy {
+  catalog_origin?: 'upstream' | 'project' | null
+  catalog_label?: string | null
   id: string
   name: string
   description: string
@@ -758,6 +760,8 @@ export interface StrategyDetail {
   description: string
   tags: string[]
   source: 'builtin' | 'custom' | 'ai' | 'composite'
+  catalog_origin?: 'upstream' | 'project' | null
+  catalog_label?: string | null
   execution_backend: 'polars_expr' | 'matrix_native' | 'python_history_legacy' | 'composite' | 'minute_filter'
   asset_types: string[]
   timeframes: string[]
@@ -784,6 +788,7 @@ export interface StrategyDetail {
     floor_return_pct?: number
     trailing_drawdown_pct?: number
   }> | null
+  close_breakeven_activate_pct?: number | null
   recommended_max_positions?: number | null
   max_hold_days: number | null
   display_limit?: number
@@ -1568,6 +1573,7 @@ export interface StrategyBacktestResult {
     trailing_stop: number | null
     trailing_take_profit_activate: number | null
     trailing_take_profit_drawdown: number | null
+    close_breakeven_activate_pct?: number | null
     score_min: number | null
     score_max: number | null
     max_hold_days: number | null
@@ -4208,6 +4214,7 @@ export interface PipelineJob {
     minute_rows: number
     skipped_stages?: string[]
     quantx?: { trade_date: string; status: string } | null
+    stock_pools?: { trade_date: string; status: string; candidate_count: number } | null
   } | null
   error: string | null
 }
@@ -4860,4 +4867,114 @@ export const quantxApi = {
 
   getObservability: (date: string, pipelineJobId?: string | null) =>
     request<QuantXObservability>(`/api/quantx-data/observability/${encodeURIComponent(date)}${pipelineJobId ? `?pipeline_job_id=${encodeURIComponent(pipelineJobId)}` : ''}`),
+}
+
+export interface StockPoolSourceStat {
+  id: string
+  label: string
+  stage: string
+  expiry: string
+  count: number
+  overlap_count: number
+  status: string
+}
+
+export interface StockPoolSubgroup {
+  name: string
+  count: number
+  symbols: string[]
+}
+
+export interface StockPoolCluster {
+  name: string
+  dimension?: string
+  count: number
+  event_count: number
+  up_count: number
+  mean_pct_chg: number
+  stage_counts: Record<string, number>
+  symbols: string[]
+  catalysts?: string[]
+  subgroups?: StockPoolSubgroup[]
+  research_background?: Array<Record<string, unknown>>
+  research_count?: number
+}
+
+export interface StockPoolSummary {
+  trade_date: string
+  rule_version: string
+  status: 'complete' | 'degraded'
+  degraded_sources: string[]
+  input_generation: string
+  market_count?: number
+  eligible_count: number
+  candidate_count: number
+  raw_hit_count: number
+  overlap_count: number
+  event_count: number
+  source_stats: StockPoolSourceStat[]
+  stage_stats: Array<{ stage: string; count: number }>
+  tier_stats: Record<string, number>
+  clusters: StockPoolCluster[]
+  daily_changes: { status: string; previous_date: string | null; counts: Record<string, number>; exits: unknown[] }
+  source_quality: Record<string, string>
+}
+
+export interface StockPoolMemberships {
+  concept: string[]
+  industry_level1: string[]
+  industry_level2: string[]
+  attribute: string[]
+}
+
+export interface StockPoolCandidate {
+  symbol: string
+  code: string
+  name: string
+  exchange: string
+  price: number
+  pct_chg: number
+  amount_yi: number
+  market_cap_yi: number
+  turnover_pct: number
+  volume_ratio: number
+  source_ids: string[]
+  sources: string[]
+  primary_stage: string
+  tier: 'core' | 'focus' | 'all'
+  freshness: string
+  topics: string[]
+  industry: string
+  memberships?: StockPoolMemberships
+  primary_concept?: string | null
+  evidence?: string
+  observation_window?: string
+  change_types: string[]
+  research_count?: number
+}
+
+export interface StockPoolCandidateDetail extends StockPoolCandidate {
+  source_events: Array<{
+    source_id: string
+    source: string
+    stage: string
+    event_date: string
+    event_age: number
+    anchor_price: number | null
+    expires: string
+    evidence: string
+    details: Record<string, unknown>
+  }>
+  topic_evidence: Array<Record<string, unknown>>
+  research: Array<Record<string, unknown>>
+}
+
+export const stockPoolApi = {
+  getCatalog: () => request<{ dates: string[]; latest_date: string | null }>('/api/stock-pools'),
+  getSummary: (date: string) => request<StockPoolSummary>(`/api/stock-pools/${encodeURIComponent(date)}`),
+  getCandidates: (date: string) => request<{ trade_date: string; total: number; rows: StockPoolCandidate[] }>(`/api/stock-pools/${encodeURIComponent(date)}/candidates`),
+  getCandidate: (date: string, symbol: string) => request<StockPoolCandidateDetail>(`/api/stock-pools/${encodeURIComponent(date)}/candidates/${encodeURIComponent(symbol)}`),
+  rebuild: (tradeDate?: string) => request<Record<string, unknown>>('/api/stock-pools/runs', {
+    method: 'POST', body: JSON.stringify({ trade_date: tradeDate ?? null }),
+  }),
 }

@@ -4,15 +4,12 @@ from _quants_vcp import ENTRY_IDS, EXIT_IDS, QuantsLegacyVcpStrategy
 
 META = {
     "id": "vcp_leader_breakout",
-    "name": "VCP 领涨突破（前向观察）",
+    "name": "VCP · 标记买入",
     "version": "forward-v2",
-    "description": (
-        "从宽泛VCP候选池中，仅交易市场早期复苏的首次枢轴突破，或强势市场中的中长周期VCP；"
-        "拥挤日优先选择收缩递减更充分的形态。盈利达到10%后保护成本线，达到20%后按峰值回撤10%保护利润。"
-        "当前用于冻结规则后的前向观察，尚未取得实盘准入。"
-    ),
+    "description": "冻结规则的全量候选；信号列标谁可买。不是只出买入名单。",
     "tags": ["VCP", "股票魔法师形态", "领涨突破", "前向观察"],
     "strategy_role": "complete_strategy",
+    "research_only": True,
     "live_qualified": False,
     "completed_daily_only": True,
     "realtime_supported": False,

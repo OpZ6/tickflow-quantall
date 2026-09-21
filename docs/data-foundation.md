@@ -33,10 +33,16 @@
 13. `screening_candidate_daily`
 14. `security_listing_history`（手动研究来源，不加入日常采集）
 15. `security_name_history`（手动研究来源，不加入日常采集）
+16. `security_popularity_daily`（同花顺、雪球、东财、百度个股热榜；可选来源）
+17. `stock_logic_evidence_daily`（涨停梯队解读、同花顺热点理由、同花顺个股异动解读的逐股逻辑原文；可选来源）
 
 `sector_breadth_daily` 同时保存 `sw_level1` 与 `sw_level2`。乐咕乐股宽度响应包含滚动历史时，日流水线必须将最近 30 个交易日展开为独立事实分区，而不是只落目标日；每个分区仍按 `(trade_date, dimension, sector_id)` 唯一。历史修复使用 `scripts/backfill_sector_breadth_history.py`：默认仅预检，`--apply` 前备份被替换分区到 `data/.fact_backups/`，再通过 `FactPublication` 原子发布。
 
 `limit_event_daily.limit_reason` 保存事件来源给出的短理由；`limit_ladder_daily.theme_reason` 保存题材级催化，`interpretation` 保存个股级涨停解读。三者缺失时保持空字符串，不得由展示层补写推测性理由。历史低版本分区通过 union-by-name 兼容读取，新采集分区分别使用事件 schema v2 与梯队 schema v3。
+
+`security_popularity_daily`按`(trade_date, symbol, source_name, list_type)`保存各来源的独立名次，不合并重排。网页实时接口只能采集上海时区当天；历史日期必须由`scripts/import_security_popularity_snapshot.py`显式导入当时已冻结的快照，禁止用当前榜单冒充历史观察。该事实设置`degrades_when_missing=false`，缺失时依赖它的页面能力显示`unavailable`，不阻断其余市场事实和股票池发布。
+
+`stock_logic_evidence_daily`按`(trade_date, evidence_source, symbol, evidence_kind)`合并逐股逻辑原文，`evidence_source`为`limit_ladder`（涨停梯队解读）、`ths_hot`（同花顺热点理由）、`fuyao_anomaly`（同花顺个股异动解读）或`ths_hot_list`（同花顺热榜解读，降级）。`match_text`是允许确定性题材关键词规则匹配的来源专属文本：梯队用`theme_name`、热点用`reason`、异动用`keyword_list`拼接、热榜降级用整段理由。`text`保存展示原文，异动的长篇业务解读不参与匹配以免过度归类。`catalyst`保存梯队题材催化，`tag`保存异动标签。同花顺异动接口只返回当日快照，历史日期必须由`scripts/import_fuyao_anomaly_snapshot.py`导入冻结响应；两个导入脚本都会把来源快照写回`quantx/<date>/normalized/`，使后续`--recompute`复用而不是发布空分区。热榜解读与异动解读是同一上游分析：同股同文时只保留异动行；仅在异动来源缺失或未覆盖该股时保留热榜行，并标记`is_fallback=true`、`quality_level=fallback`。该事实设置`degrades_when_missing=false`，缺失时股票池只保留可用来源并标记降级。
 
 以 `backend/app/market_facts/registry.py` 为唯一机器可读权威。文档列表仅用于导航。
 
@@ -52,6 +58,7 @@
 - 完整 Polars `storage_schema`；
 - 所有非显然数值的 `field_units`；
 - 新鲜度语义；
+- 缺失是否使整体运行降级（`degrades_when_missing`）；
 - `SourceRoute` 中的主来源和备用来源顺序。
 
 公共溯源字段由统一 schema 提供：`source`、`source_record_id`、`observed_at`、`ingested_at`、`run_id`、`schema_version`、`quality_level`、`is_fallback`。
@@ -81,6 +88,7 @@ QuantX 专项来源在 `collectors.py` 声明 `SourceSpec`，由 `SourceManager`
 - dependency modules；
 - timeout、rate limit 和 retry metadata；
 - freshness 和最小记录数。
+- 缺失是否使整体运行降级（`degrades_when_missing`）。
 
 Source Manager 是唯一执行入口。它复用已发布快照，执行依赖检查，隔离来源异常，并输出稳定的 `error_kind`：
 

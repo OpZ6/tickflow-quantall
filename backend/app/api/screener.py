@@ -243,10 +243,15 @@ def strategies(
             continue
         sid = meta["id"]
         overrides = strategy_config.load_override(data_dir, sid)
+        from app.strategy.catalog import catalog_label_for, catalog_origin
+
+        origin = catalog_origin(sid, meta.get("source"))
         presets.append({
             **meta,
             "name": overrides.get("name") or meta["name"],
             "description": overrides.get("description") or meta.get("description", ""),
+            "catalog_origin": origin,
+            "catalog_label": catalog_label_for(origin),
         })
 
     return {"presets": presets, "load_errors": engine.load_errors()}

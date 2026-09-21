@@ -783,5 +783,8 @@ def test_vcp_leader_breakout_freezes_forward_observation_defaults():
     ]
     assert defaults["a_share_dual_regime"] is True
     assert defaults["contraction_strength_rank_weight"] == 0.25
+    assert defaults["breakout_close_location_min"] == 0.0
+    assert defaults["min_legs"] == 2
+    assert defaults["breakout_volume_ratio_min"] == 1.25
     assert definition.stop_loss == -0.05
     assert definition.max_hold_days == 40

@@ -1,0 +1,67 @@
+{
+  "experiment": "cup-handle-breakeven-after-5pct-v1",
+  "baseline_run": "20260909T133226351846Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\cup-handle\\cup-handle-breakeven-after-5pct-v1.json",
+  "training_2016_2022": {
+    "baseline": {
+      "n_trades": 2034,
+      "win_rate": 0.339725,
+      "profit_factor": 2.32,
+      "avg_pnl": 0.005438,
+      "avg_win": 0.09965,
+      "avg_loss": 0.043036
+    },
+    "variant": {
+      "n_trades": 2034,
+      "win_rate": 0.334317,
+      "profit_factor": 2.3,
+      "avg_pnl": 0.004237,
+      "avg_win": 0.095681,
+      "avg_loss": 0.041688
+    },
+    "shortened": 69,
+    "blocked_kept_baseline": 13,
+    "delta": {
+      "avg_pnl": -0.001201,
+      "win_rate": -0.005408,
+      "profit_factor": -0.02
+    },
+    "rule": "drop",
+    "upper_half_n": 2034,
+    "lower_half": 1712,
+    "missing_signal_bar": 4
+  },
+  "validation_2023_2026": {
+    "baseline": {
+      "n_trades": 0,
+      "win_rate": null,
+      "profit_factor": null,
+      "avg_pnl": null,
+      "avg_win": null,
+      "avg_loss": null
+    },
+    "variant": {
+      "n_trades": 0,
+      "win_rate": null,
+      "profit_factor": null,
+      "avg_pnl": null,
+      "avg_win": null,
+      "avg_loss": null
+    },
+    "shortened": 0,
+    "blocked_kept_baseline": 0,
+    "delta": {
+      "avg_pnl": null,
+      "win_rate": null,
+      "profit_factor": null
+    },
+    "rule": "drop",
+    "upper_half_n": 0,
+    "lower_half": 0,
+    "missing_signal_bar": 0,
+    "incomplete_excluded": 0
+  },
+  "validation_note": "exposure, not clean OOS",
+  "rule": "drop",
+  "gaps": []
+}

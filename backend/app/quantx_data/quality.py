@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.market_facts.builders import FactBatch
-from app.market_facts.registry import DatasetId, get_route
+from app.market_facts.registry import DatasetId, get_dataset, get_route
 
 from .schemas import RunStatus, SourceResult, SourceSpec
 
@@ -29,7 +29,7 @@ def validate_sources(specs: list[SourceSpec], results: dict[str, SourceResult]) 
             detail = result.error if result and result.error else f"status={result.status if result else 'missing'}, records={result.record_count if result else 0}"
             message = f"{spec.name}: {detail}"
             warnings.append(message)
-            optional_failure = True
+            optional_failure = optional_failure or spec.degrades_when_missing
         elif result.status in {"partial", "degraded"} or result.used_fallback:
             detail = f"{spec.name}: degraded source payload"
             warnings.append(detail)
@@ -64,7 +64,8 @@ def validate_fact_batches(batches: list[FactBatch], sources: dict[str, dict]) ->
             errors.append(f"required dataset unavailable: {dataset_id.value}")
             continue
         if dataset_id not in required and not available:
-            warnings.append(f"optional dataset unavailable: {dataset_id.value}")
+            if get_dataset(dataset_id).degrades_when_missing:
+                warnings.append(f"optional dataset unavailable: {dataset_id.value}")
             continue
         if batch is None or batch.frame.is_empty() or "source" not in batch.frame.columns:
             continue

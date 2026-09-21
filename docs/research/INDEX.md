@@ -7,7 +7,6 @@
 | 层级 | 位置 | 用途 |
 | --- | --- | --- |
 | 当前任务 | `../../goal.md` | 本轮结论、下一步与禁止项；`/goal` 入口 |
-| 启动指令 | [`../../goal-launch-prompt.txt`](../../goal-launch-prompt.txt) | 可全选复制；从当前枪做到「当天买谁」+ 手册 |
 | 迭代助手用法 | [strategy-iteration-assistant.md](strategy-iteration-assistant.md) | 回测/诊断/提案/实现对基线记账；雏形不准换 |
 | 宇宙全买决策 | [v1](leader-universe-market-gate-v1-decision.md) / [v2](leader-universe-market-gate-v2-decision.md) | 全买选择器已停；注视名单保留 |
 | 短中窗验尸 | [right-side-short-window-autopsy-2016-2022-v1-decision.md](right-side-short-window-autopsy-2016-2022-v1-decision.md) | 顺序 1 已完成；五条默认流停止当选择器 |

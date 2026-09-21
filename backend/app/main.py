@@ -43,6 +43,7 @@ from app.api import (
     settings as settings_api,
     signals,
     stock_analysis,
+    stock_pools,
     strategy,
     watchlist,
 )
@@ -188,6 +189,8 @@ async def _application_lifespan(app: FastAPI):
         scheduler = daily_pipeline.start_scheduler(repo, capset)
         from app.quantx_data.scheduler import register as register_quantx_data_scheduler
         register_quantx_data_scheduler(scheduler, store.data_dir)
+        from app.stock_pools.scheduler import register as register_stock_pool_scheduler
+        register_stock_pool_scheduler(scheduler, repo)
         app.state.scheduler = scheduler
     except Exception as e:  # noqa: BLE001
         logger.warning("scheduler not started: %s", e)
@@ -508,6 +511,7 @@ app.include_router(alerts.router)
 app.include_router(rps.router)
 app.include_router(quantx.router)
 app.include_router(quantx_data.router)
+app.include_router(stock_pools.router)
 
 # 二次开发路由与小粒度策略在所有核心路由后注册, 禁止覆盖核心路径。
 extension_registry, extension_load_errors = configure_backend_extensions(app)

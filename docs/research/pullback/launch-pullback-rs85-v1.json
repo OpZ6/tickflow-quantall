@@ -1,0 +1,20 @@
+{
+  "experiment": "launch-pullback-rs85-v1",
+  "thought": "放量突破·缩量回踩. Same frozen launch_pullback_support fills. One filter: RS percentile >= 85 using the same trend_context ranks as vcp_leader_breakout (trend_filter off).",
+  "hypothesis": "The all-market pullback book averages -0.98% because it is not a leader book. Keeping RS>=85 should lift independent avg_pnl.",
+  "baseline": {
+    "run_id": "20260909T053715693165Z",
+    "strategy_id": "launch_pullback_support",
+    "n_train": 32086,
+    "avg_pnl": -0.009777
+  },
+  "change": {
+    "id": "rs_percentile_ge_85",
+    "signal_day": "entry_signal_date if present else the market session before entry_date",
+    "definition": "Keep if that day's RS rank >= 85. Missing rank is not kept (no roll). Do not scan 85."
+  },
+  "pass_fail": {
+    "pass": "variant avg_pnl not below baseline and remains positive. If keep, also report 2023-2026 completed fills.",
+    "fail": "Drop RS85 on this book. Baseline stays all-market pullback. Next still this dialect or return to frozen VCP 321."
+  }
+}

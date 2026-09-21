@@ -1243,12 +1243,21 @@ class KlineRepository:
         # 验证缓存覆盖完整范围 (含 warmup)。lookback_days 是交易日语义, 用 ×2 日历日
         # 放宽确保覆盖 (节假日/周末), 与 warmup 60 一起留足余量。
         warmup_start = target_date - timedelta(days=(lookback_days + 60) * 2)
-        if cache_min > warmup_start or cache_max < target_date:
+        live_extends = cache_max < target_date and self._live_snapshot_covers_range_end(
+            cache_max, target_date
+        )
+        if cache_min > warmup_start or (cache_max < target_date and not live_extends):
             return None
         # 按交易日计数裁剪: 从数据里实际存在的交易日序列取最后 lookback_days 个交易日。
         # 不能用 timedelta(days=N) (自然日), 否则周末/节假日会让窗口只有 ~N×5/7 个交易日,
         # 导致 filter_history 策略的滚动窗口/行号差(_gap)漏算, 与回测结果不一致。
         trading_dates = cache["date"].unique().sort()
+        if live_extends:
+            # 实时快照补齐的目标日计入交易日序列, 窗口天数与缓存已含目标日时一致
+            trading_dates = pl.concat([
+                trading_dates,
+                pl.Series([target_date], dtype=trading_dates.dtype),
+            ])
         if len(trading_dates) > lookback_days:
             lookback_start = trading_dates[-(lookback_days + 1)]
         else:
@@ -1280,6 +1289,34 @@ class KlineRepository:
             how="diagonal_relaxed",
         ).sort(["symbol", "date"])
 
+    def _live_snapshot_covers_range_end(self, cache_max: date, end: date) -> bool:
+        """历史缓存右端早于 end 时, 实时最新日快照能否无缺口地把区间补到 end。
+
+        盘中实时 flush 会把 _enriched_cache 推进到今天, 而 _enriched_history_cache
+        仍停在上一交易日; 区间读取应接受两者并集 (读路径已有 _overlay_live_enriched),
+        否则行情一更新, 以最新日为右端的调用方 (宏观离散度/板块成分等) 都会误报
+        本地历史不足。仅当历史缓存之后、end 之前不存在任何已落盘的 enriched 分区时
+        才成立, 避免把中间缺交易日的区间静默拼成完整数据。
+        """
+        live = getattr(self, "_enriched_cache", None)
+        live_date = getattr(self, "_enriched_cache_date", None)
+        if live is None or live.is_empty() or live_date != end:
+            return False
+        data_dir = getattr(getattr(self, "store", None), "data_dir", None)
+        if data_dir is None:
+            return False
+        root = data_dir / "kline_daily_enriched"
+        if not root.exists():
+            return False
+        for partition in root.glob("date=*"):
+            try:
+                day = date.fromisoformat(partition.name.removeprefix("date="))
+            except ValueError:
+                continue
+            if cache_max < day < end:
+                return False
+        return True
+
     def get_enriched_range(
         self,
         start: date,
@@ -1287,7 +1324,11 @@ class KlineRepository:
         symbols: list[str] | None = None,
         columns: list[str] | None = None,
     ) -> pl.DataFrame | None:
-        """从预计算 enriched 历史缓存返回完整区间；缓存不覆盖时返回 None。"""
+        """从预计算 enriched 历史缓存返回完整区间；缓存不覆盖时返回 None。
+
+        右端允许由实时最新日快照补齐 (见 _live_snapshot_covers_range_end),
+        其余情况仍要求缓存自身覆盖完整区间。
+        """
         if self._enriched_history_cache is None:
             if self._enriched_warming:
                 # 后台预热中: 返回 None (缓存不覆盖), 调用方各自走慢路径;
@@ -1309,7 +1350,9 @@ class KlineRepository:
 
         cache_min = cache["date"].min()
         cache_max = cache["date"].max()
-        if cache_min > start or cache_max < end:
+        if cache_min > start or (
+            cache_max < end and not self._live_snapshot_covers_range_end(cache_max, end)
+        ):
             return None
 
         df = cache.filter((pl.col("date") >= start) & (pl.col("date") <= end))

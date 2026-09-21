@@ -7,10 +7,11 @@ from app.backtest.matrix import MarketDataMatrix, SignalMatrix, make_signal_matr
 
 META = {
     "id": "cup_handle_breakout",
-    "name": "杯柄突破（简化交易版）",
+    "name": "杯柄 · 简化突破",
     "version": "1.0.0",
-    "description": "固定窗口识别杯体、浅柄和放量突破，用于直接回测的简化交易版。",
+    "description": "固定窗口突破，另一套算法，不是观察池。",
     "strategy_role": "complete_strategy",
+    "research_only": True,
     "tags": ["杯柄", "突破"],
     "asset_types": ["stock", "etf"],
     "timeframes": ["1d"],

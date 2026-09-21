@@ -65,6 +65,7 @@ class MatcherConfig:
     trailing_take_profit_drawdown_pct: float | None = None
     entry_risk_profiles: dict[str, dict[str, float | None]] | None = None
     profit_lock_steps: list[dict[str, float]] | None = None
+    close_breakeven_activate_pct: float | None = None
     max_hold_days: int | None = None
     max_positions: int = 10
     max_exposure_pct: float = 1.0
@@ -111,6 +112,22 @@ def _entry_risk_value(config: MatcherConfig, pos: dict, key: str, fallback):
     return profile.get(key, fallback)
 
 
+def _scheduled_open_exit(config: MatcherConfig, exit_signal: bool, hold_days: int) -> bool:
+    """A scheduled open sale cannot be preempted by that session's later high/low."""
+    return (config.exit_fill == "open_t+1" and not config.minute_fill
+            and (exit_signal or (config.max_hold_days is not None and hold_days >= config.max_hold_days)))
+
+
+def _update_close_breakeven(config: MatcherConfig, pos: dict, close: float, on_date: str) -> None:
+    activate = config.close_breakeven_activate_pct
+    if activate is None or not np.isfinite(close) or close <= 0:
+        return
+    if close >= pos["entry_price"] * (1 + activate):
+        pos["close_breakeven_armed"] = True
+    if pos.get("close_breakeven_armed") and close < pos["entry_price"]:
+        pos.setdefault("close_breakeven_signal_date", on_date)
+
+
 def _profit_lock_lines(
     config: MatcherConfig,
     entry_price: float,
@@ -148,7 +165,7 @@ class TradeRecord:
     pnl_pct: float
     duration: int
     exit_reason: str  # "signal" | "stop_loss" | "take_profit" | "trailing_stop" | "trailing_take_profit" | "staged_profit_lock" | "max_hold" | "end"
-    # 退出优先级 (高→低): pending_exit(历史挂单) > 风控(止损/移动止损/移动止盈) > signal(卖点) > max_hold(到期) > end
+    # Pending orders first; open risk > scheduled open exit > intraday risk > close exit > end.
     name: str = ""
     shares: float = 0.0
     lots: float = 0.0
@@ -984,6 +1001,8 @@ class BacktestEngine:
             open_price = float(matrix.open[time_id, asset_id])
             low_price = float(matrix.low[time_id, asset_id])
             high_price = float(matrix.high[time_id, asset_id])
+            if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(config, bool(matrix.exit[time_id, asset_id]), pos["hold_days"]):
+                low_price = high_price = open_price
             peak_price = float(pos["max_high"])
             lines: list[tuple[float, str]] = []
             if config.stop_loss_pct is not None:
@@ -1025,6 +1044,8 @@ class BacktestEngine:
             signal_date: str,
             override: float | None = None,
         ) -> bool:
+            if reason == "close_breakeven":
+                override = float(matrix.open[time_id, asset_id])
             signal_id = (
                 _signal_id(int(matrix.exit_signal_code[time_id, asset_id]), matrix.exit_signal_ids)
                 if reason == "signal" else None
@@ -1147,6 +1168,7 @@ class BacktestEngine:
                 "blocked_exit_days": 0,
             }
             closed = False
+            _update_close_breakeven(config, pos, float(matrix.close[time_id, asset_id]), entry_date)
             for future in future_times:
                 pos["hold_days"] += 1
                 date_text = matrix.timestamp_labels[future][:10]
@@ -1159,6 +1181,9 @@ class BacktestEngine:
                 if pos.get("pending_exit_reason"):
                     reason = str(pos["pending_exit_reason"])
                     signal_date = str(pos.get("pending_exit_signal_date") or date_text)
+                elif pos.get("close_breakeven_signal_date"):
+                    reason = "close_breakeven"
+                    signal_date = pos["close_breakeven_signal_date"]
                 elif matrix.exit[future, asset_id]:
                     reason = "signal"
                     signal_date = _signal_date(int(matrix.exit_signal_time[future, asset_id]), date_text)
@@ -1172,6 +1197,7 @@ class BacktestEngine:
                 high_price = float(matrix.high[future, asset_id])
                 if _valid_price(high_price):
                     pos["max_high"] = max(float(pos["max_high"]), high_price)
+                _update_close_breakeven(config, pos, float(matrix.close[future, asset_id]), date_text)
             if not closed and not pos.get("pending_exit_reason"):
                 last_time = future_times[-1]
                 _try_close(
@@ -1411,6 +1437,8 @@ class BacktestEngine:
             open_price = float(open_prices[idx])
             low_price = float(low_prices[idx])
             high_price = float(high_prices[idx])
+            if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(config, bool(ext[idx]), pos["hold_days"]):
+                low_price = high_price = open_price
             peak_price = float(pos.get("max_high", entry_price))
             risk_lines: list[tuple[float, str]] = []
 
@@ -1456,6 +1484,8 @@ class BacktestEngine:
             return None, None
 
         def _try_close(pos: dict, idx: int, reason: str, signal_date: str, exit_price_override: float | None = None) -> bool:
+            if reason == "close_breakeven":
+                exit_price_override = float(open_prices[idx])
             ok, block_reason = _can_sell(idx, exit_price_override)
             if not ok:
                 if not pos.get("pending_exit_reason"):
@@ -1558,14 +1588,17 @@ class BacktestEngine:
 
             closed = False
             last_idx = entry_idx
+            _update_close_breakeven(config, pos, float(close_prices[entry_idx]), pos["entry_date"])
             for idx in rows[start_pos + 1:]:
                 last_idx = idx
                 pos["hold_days"] = int(pos["hold_days"]) + 1
                 d_str = self._date_str(panel_dates[idx])
 
-                def _scheduled_reason() -> tuple[str | None, str]:
+                def _scheduled_reason(pos=pos, d_str=d_str, idx=idx, rows=rows) -> tuple[str | None, str]:
                     if pos.get("pending_exit_reason"):
                         return str(pos["pending_exit_reason"]), str(pos.get("pending_exit_signal_date") or d_str)
+                    if pos.get("close_breakeven_signal_date"):
+                        return "close_breakeven", pos["close_breakeven_signal_date"]
                     # 卖点信号优先于到期: 策略主动离场先于 max_hold 兜底。
                     if ext[idx]:
                         return "signal", str(exit_signal_dates[idx] or d_str)
@@ -1589,6 +1622,7 @@ class BacktestEngine:
                 hi = float(high_prices[idx])
                 if _valid_price(hi):
                     pos["max_high"] = max(float(pos.get("max_high", entry_price)), hi)
+                _update_close_breakeven(config, pos, float(close_prices[idx]), d_str)
 
             if not closed:
                 if last_idx == entry_idx:
@@ -1989,6 +2023,8 @@ class BacktestEngine:
             sold_today: set[int],
             override: float | None = None,
         ) -> bool:
+            if reason == "close_breakeven":
+                override = float(matrix.open[time_id, asset_id])
             signal_id = (
                 _signal_id(int(matrix.exit_signal_code[time_id, asset_id]), matrix.exit_signal_ids)
                 if reason == "signal" else None
@@ -2068,6 +2104,8 @@ class BacktestEngine:
                 open_price = float(matrix.open[time_id, asset_id])
                 low_price = float(matrix.low[time_id, asset_id])
                 high_price = float(matrix.high[time_id, asset_id])
+                if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(config, bool(matrix.exit[time_id, asset_id]), pos["hold_days"]):
+                    low_price = high_price = open_price
                 entry_price = float(pos["entry_price"])
                 peak_price = float(pos["max_high"])
                 risk_lines: list[tuple[float, str]] = []
@@ -2114,6 +2152,9 @@ class BacktestEngine:
                 if pos.get("pending_exit_reason"):
                     reason = str(pos["pending_exit_reason"])
                     signal_date = str(pos.get("pending_exit_signal_date") or date_text)
+                elif pos.get("close_breakeven_signal_date"):
+                    reason = "close_breakeven"
+                    signal_date = pos["close_breakeven_signal_date"]
                 elif matrix.exit[time_id, asset_id]:
                     reason = "signal"
                     signal_date = _signal_date(int(matrix.exit_signal_time[time_id, asset_id]), date_text)
@@ -2223,6 +2264,7 @@ class BacktestEngine:
                 high_price = float(matrix.high[time_id, asset_id])
                 if _valid_price(high_price):
                     pos["max_high"] = max(float(pos["max_high"]), high_price)
+                _update_close_breakeven(config, pos, float(matrix.close[time_id, asset_id]), date_text)
             valid_closes = np.isfinite(matrix.close[time_id]) & (matrix.close[time_id] > 0)
             last_close[valid_closes] = matrix.close[time_id, valid_closes]
 
@@ -2573,6 +2615,8 @@ class BacktestEngine:
                 _mark_pending(sym, reason, signal_date)
                 _count("sell_suspended")
                 return False
+            if reason == "close_breakeven":
+                exit_price_override = float(open_prices[idx])
             ok, block_reason = _can_sell(idx, exit_price_override)
             if not ok:
                 _mark_pending(sym, reason, signal_date)
@@ -2597,6 +2641,9 @@ class BacktestEngine:
                 if pos.get("pending_exit_reason"):
                     reason = str(pos["pending_exit_reason"])
                     signal_date = str(pos.get("pending_exit_signal_date") or d_str)
+                elif pos.get("close_breakeven_signal_date"):
+                    reason = "close_breakeven"
+                    signal_date = pos["close_breakeven_signal_date"]
                 # 卖点信号优先于到期: 策略主动离场先于 max_hold 兜底。
                 elif idx is not None and ext[idx]:
                     reason = "signal"
@@ -2621,6 +2668,8 @@ class BacktestEngine:
                 open_price = float(open_prices[idx])
                 low_price = float(low_prices[idx])
                 high_price = float(high_prices[idx])
+                if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(config, bool(ext[idx]), pos["hold_days"]):
+                    low_price = high_price = open_price
                 entry_price = float(pos["entry_price"])
                 peak_price = float(pos.get("max_high", entry_price))
                 risk_lines: list[tuple[float, str]] = []
@@ -2810,6 +2859,7 @@ class BacktestEngine:
                     hi = float(high_prices[idx])
                     if _valid_price(hi):
                         pos["max_high"] = max(float(pos.get("max_high", pos["entry_price"])), hi)
+                    _update_close_breakeven(config, pos, float(close_prices[idx]), d_str)
 
             for i in idxs:
                 c = float(close_prices[i])

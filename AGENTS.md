@@ -15,7 +15,7 @@
 
 涉及代码二次开发、前端插槽、后端可替换策略、扩展注册或上游升级兼容时，还必须阅读 [`docs/secondary-development.md`](docs/secondary-development.md)。该文档区分当前已实现能力与目标扩展契约；不得根据设计示例虚构尚不存在的 API。
 
-量化策略 `/goal` 必须先读 [`goal.md`](goal.md) 与 [`docs/research/strategy-iteration-assistant.md`](docs/research/strategy-iteration-assistant.md)。无限迭代直到确认有效策略。思想是 VCP / 杯柄 / 高旗 / 放量突破·缩量回调，选股与进出代码可改、思想保留。TickFlow 全量独立回测，看胜率、盈亏比、平均收益，不管仓位。不得改成无关思想。启动指令见 [`goal-launch-prompt.txt`](goal-launch-prompt.txt)。
+量化策略 `/goal` 必须先读 [`goal.md`](goal.md) 与 [`docs/research/strategy-iteration-assistant.md`](docs/research/strategy-iteration-assistant.md)。无限迭代直到确认有效策略。思想是 VCP / 杯柄 / 高旗 / 放量突破·缩量回调，选股与进出代码可改、思想保留。TickFlow 全量独立回测，看胜率、盈亏比、平均收益，不管仓位。不得改成无关思想。不得把检测器内部连续字段再切阈值当下一轮。
 
 同时遵守以下规则：
 

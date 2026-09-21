@@ -1137,6 +1137,10 @@ class StrategyBacktestService:
             "profit_lock_steps",
             s.meta.get("profit_lock_steps"),
         )
+        close_breakeven_activate_pct = self._normalize_pct(
+            self._override_value(overrides, "close_breakeven_activate_pct", s.meta.get("close_breakeven_activate_pct")),
+            0.005, 2.0,
+        )
         max_hold_days = self._override_value(overrides, "max_hold_days", s.max_hold_days)
         score_min, score_max = self._normalize_score_range(
             overrides.get("score_min"),
@@ -1331,6 +1335,7 @@ class StrategyBacktestService:
             trailing_take_profit_drawdown_pct=trailing_take_profit_drawdown,
             entry_risk_profiles=overrides.get("entry_risk_profiles"),
             profit_lock_steps=profit_lock_steps,
+            close_breakeven_activate_pct=close_breakeven_activate_pct,
             max_hold_days=max_hold_days,
             max_positions=config.max_positions,
             max_exposure_pct=config.max_exposure_pct,
@@ -1769,6 +1774,7 @@ class StrategyBacktestService:
             "trailing_take_profit_activate": trailing_take_profit_activate,
             "trailing_take_profit_drawdown": trailing_take_profit_drawdown,
             "profit_lock_steps": profit_lock_steps,
+            "close_breakeven_activate_pct": close_breakeven_activate_pct,
             "max_hold_days": max_hold_days,
             "full_horizon_days": full_horizon_days,
             "score_min": score_min,

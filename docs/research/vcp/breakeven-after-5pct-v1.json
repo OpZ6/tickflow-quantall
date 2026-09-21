@@ -1,0 +1,19 @@
+{
+  "experiment": "vcp-breakeven-after-5pct-v1",
+  "thought": "VCP 321 upper-half original-exit book. One sell: after a close >= +5% from entry, any later close back below entry exits next open. Tighter than the frozen +10% cost-lock, not a scan.",
+  "hypothesis": "Locking cost after +5% cuts give-back versus waiting for +10% activation, without the MA10 right-tail massacre.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close",
+    "n_train": 321,
+    "avg_pnl": 0.0124
+  },
+  "change": {
+    "id": "breakeven_after_5pct_close",
+    "definition": "From entry session, if any completed close >= entry_price * 1.05, then the first later close < entry_price exits at the next market open if strictly before original exit. Holes / limit-down do not roll."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below 321-trade baseline. If keep, report 2023-2026 upper-half fills.",
+    "fail": "Drop. VCP baseline stays 321 original-exit upper-half."
+  }
+}

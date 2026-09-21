@@ -121,6 +121,80 @@ def apply_two_bar_no_demand_to_fill(
     }
 
 
+def apply_breakeven_after_gain_to_fill(
+    *,
+    entry_date: date,
+    exit_date: date,
+    entry_price: float,
+    baseline_pnl: float,
+    sessions: list[dict],
+    market_calendar: list[date],
+    config: MatcherConfig = COST_CONFIG,
+    activate_pct: float = 0.05,
+    last_bar: date | None = None,
+) -> dict:
+    """After a close reaches +activate_pct, sell next open if close falls back below entry."""
+    by_date = {_as_date(row["date"]): row for row in sessions}
+    calendar = sorted({_as_date(day) for day in market_calendar})
+    if last_bar is not None:
+        calendar = [day for day in calendar if day <= last_bar]
+    unchanged = {"pnl": float(baseline_pnl), "shortened": False, "reason": "no_breakeven"}
+    if entry_date not in calendar or not np.isfinite(entry_price) or entry_price <= 0:
+        return {**unchanged, "reason": "missing_entry_bar"}
+    start = calendar.index(entry_date)
+    armed = False
+    for i in range(start, len(calendar)):
+        day = calendar[i]
+        if day >= exit_date:
+            break
+        bar = by_date.get(day)
+        if bar is None:
+            return {**unchanged, "reason": "missing_bar"}
+        close = float(bar.get("close") or 0.0)
+        if not np.isfinite(close) or close <= 0:
+            return {**unchanged, "reason": "missing_close"}
+        if close >= float(entry_price) * (1.0 + activate_pct):
+            armed = True
+        if not armed or close >= float(entry_price):
+            continue
+        if i + 1 >= len(calendar):
+            return {**unchanged, "reason": "missing_exit_bar"}
+        next_day = calendar[i + 1]
+        if next_day >= exit_date:
+            return {**unchanged, "reason": "baseline_already_out"}
+        fill = by_date.get(next_day)
+        if fill is None:
+            return {**unchanged, "reason": "missing_exit_bar"}
+        open_px = float(fill.get("open") or 0.0)
+        volume = float(fill.get("volume") or 0.0)
+        if (
+            not np.isfinite(open_px)
+            or open_px <= 0
+            or volume <= 0
+            or one_price_limit_down(
+                open_px,
+                float(fill.get("high") or 0.0),
+                float(fill.get("low") or 0.0),
+                float(fill.get("close") or 0.0),
+            )
+        ):
+            return {**unchanged, "reason": "early_exit_blocked"}
+        pnl = net_round_trip(
+            open_px / float(entry_price) - 1.0,
+            config.buy_cost_pct(),
+            config.sell_cost_pct(next_day),
+        )
+        return {
+            "pnl": float(pnl),
+            "shortened": True,
+            "reason": "breakeven_after_gain",
+            "signal_date": day.isoformat(),
+            "early_exit_date": next_day.isoformat(),
+            "early_exit_price": open_px,
+        }
+    return unchanged
+
+
 def apply_ma_cross_exit_to_fill(
     *,
     entry_date: date,

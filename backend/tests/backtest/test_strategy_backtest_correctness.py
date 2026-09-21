@@ -111,6 +111,7 @@ class _EngineStub:
         cancel_event=None,
         options=None,
     ) -> SimResult:
+        self.sim_config = config
         self.sim_matrix = matrix
         return SimResult(
             equity_curve=[{"date": "2024-01-01", "value": config.initial_capital}],
@@ -119,6 +120,23 @@ class _EngineStub:
             per_symbol_stats=[],
             stats={"total_return": 0.0, "n_trades": 0},
         )
+
+
+def test_close_breakeven_metadata_reaches_matcher():
+    start = date(2024, 1, 1)
+    panel = pl.DataFrame([
+        {"symbol": "A", "date": start + timedelta(days=i), "open": 10., "high": 11.,
+         "low": 9., "close": 10., "volume": 100_000, "amount": 1000.}
+        for i in range(4)
+    ])
+    definition = _strategy()
+    definition.meta["close_breakeven_activate_pct"] = .05
+    engine = _EngineStub(panel)
+    result = StrategyBacktestService(engine, _StrategyEngineStub(definition)).run(
+        StrategyBacktestConfig(strategy_id="test", symbols=None, start=start,
+                               end=start + timedelta(days=3), mode="position"))
+    assert result.error is None
+    assert engine.sim_config.close_breakeven_activate_pct == .05
 
 
 def test_basic_filter_only_limits_entries_not_panel_rows():

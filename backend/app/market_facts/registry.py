@@ -25,6 +25,8 @@ class DatasetId(StrEnum):
     MARKET_STATE_DAILY = "market_state_daily"
     MARKET_SIGNAL_DAILY = "market_signal_daily"
     SCREENING_CANDIDATE_DAILY = "screening_candidate_daily"
+    SECURITY_POPULARITY_DAILY = "security_popularity_daily"
+    STOCK_LOGIC_EVIDENCE_DAILY = "stock_logic_evidence_daily"
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,7 @@ class DatasetSpec:
     storage_schema: Mapping[str, pl.DataType]
     field_units: Mapping[str, str]
     freshness: str = "trade_date"
+    degrades_when_missing: bool = True
 
 
 @dataclass(frozen=True)
@@ -500,6 +503,62 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 }
             ),
         ),
+        DatasetId.SECURITY_POPULARITY_DAILY: DatasetSpec(
+            dataset_id=DatasetId.SECURITY_POPULARITY_DAILY,
+            description="Source-level daily security popularity rankings",
+            schema_version=1,
+            primary_key=("trade_date", "source_name", "symbol", "list_type"),
+            partition_keys=("trade_date",),
+            required_columns=("trade_date", "source_name", "symbol", "rank", "list_type"),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "source_name": pl.String,
+                    "symbol": pl.String,
+                    "name": pl.String,
+                    "rank": pl.UInt32,
+                    "list_type": pl.String,
+                    "rank_change": pl.Float64,
+                    "heat_value": pl.Float64,
+                    "reason": pl.String,
+                    "source_updated_at": pl.String,
+                }
+            ),
+            field_units=MappingProxyType({"rank": "ordinal", "rank_change": "places"}),
+            degrades_when_missing=False,
+        ),
+        DatasetId.STOCK_LOGIC_EVIDENCE_DAILY: DatasetSpec(
+            dataset_id=DatasetId.STOCK_LOGIC_EVIDENCE_DAILY,
+            description="Per-stock daily trading-logic evidence text observed from upstream sources",
+            schema_version=1,
+            primary_key=("trade_date", "evidence_source", "symbol", "evidence_kind"),
+            partition_keys=("trade_date",),
+            required_columns=(
+                "trade_date",
+                "evidence_source",
+                "symbol",
+                "evidence_kind",
+                "match_text",
+            ),
+            storage_schema=_schema(
+                {
+                    "trade_date": pl.Date,
+                    "symbol": pl.String,
+                    "exchange": pl.String,
+                    "name": pl.String,
+                    "evidence_source": pl.String,
+                    "evidence_kind": pl.String,
+                    "match_text": pl.String,
+                    "text": pl.String,
+                    "keywords": pl.String,
+                    "catalyst": pl.String,
+                    "tag": pl.String,
+                    "observed_at": pl.String,
+                }
+            ),
+            field_units=MappingProxyType({}),
+            degrades_when_missing=False,
+        ),
     }
 )
 
@@ -567,6 +626,14 @@ ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
                 "pywencai",
                 "tickflow_enriched_aggregate",
             ),
+        ),
+        DatasetId.SECURITY_POPULARITY_DAILY: SourceRoute(
+            DatasetId.SECURITY_POPULARITY_DAILY,
+            ("security_popularity",),
+        ),
+        DatasetId.STOCK_LOGIC_EVIDENCE_DAILY: SourceRoute(
+            DatasetId.STOCK_LOGIC_EVIDENCE_DAILY,
+            ("stock_logic_evidence",),
         ),
     }
 )

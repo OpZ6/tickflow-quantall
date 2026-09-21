@@ -35,7 +35,7 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 ## 支持文档
 
 - [量化策略研发通用规范](research/strategy-development-methodology.md)：所有选股与交易策略共用的研究顺序、时间隔离、Alpha 评价、适用期验证、反过拟合和证据要求。
-- [右侧中短线波段方向合同](research/right-side-swing-operating-system-20260910.md)：身份与停止边界。迭代用法见[策略迭代助手](research/strategy-iteration-assistant.md)。当前枪见 `goal.md` 与 [`goal-launch-prompt.txt`](../goal-launch-prompt.txt)。
+- [右侧中短线波段方向合同](research/right-side-swing-operating-system-20260910.md)：身份与停止边界。迭代用法见[策略迭代助手](research/strategy-iteration-assistant.md)。
 - [量化选股策略迭代主计划](research/quant-development-plan.md)：当前策略队列、数据状态与阶段计划；具体正在执行的任务见根目录 `goal.md`。
 - [VCP 研究记录](research/vcp/README.md)：交易闭环配置、独立运行归档、首轮诊断和正式优化的数据前置条件。
 
@@ -45,6 +45,7 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 - [quantx-single-day-canonical-view-plan.md](quantx-single-day-canonical-view-plan.md)：QuantX 单日富图表从兼容 JSON 迁移到权威事实与确定性 ViewBuilder 的分批执行计划和验收清单。
 - [quantx-unified-dashboard-design.md](quantx-unified-dashboard-design.md)：QuantX 多日驾驶舱与单日富图表合并为统一高密度看板的内容、排版和零丢失设计。
 - [quantx-static-export.md](quantx-static-export.md)：把指定日期 QuantX 看板导出为保留图表、筛选和下钻交互且无本地服务依赖的单文件 HTML，并通过 Edge 做断网验收。
+- [股票池正式实现与运行说明](research/stock-pools/implementation-plan.md)：九路召回、统一候选快照、题材与阶段工作台、API、每日发布和恢复入口。
 - [quantx-unified-dashboard-execution-plan.md](quantx-unified-dashboard-execution-plan.md)：统一看板按可回滚批次实施的文件边界、数据调用链、验证矩阵和完成定义。
 - [secondary-development.md](secondary-development.md)：原项目二次开发、插槽和扩展契约。
 - [configuration.md](configuration.md)、[deployment.md](deployment.md)：配置与部署。

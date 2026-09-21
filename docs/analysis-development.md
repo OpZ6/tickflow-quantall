@@ -66,6 +66,10 @@ API handler 保持薄层：校验参数、调用 Service、映射响应。新增
 - 明确 loading、empty、error、disabled、stale 和 degraded。
 - A 股颜色和单位必须与现有页面一致。
 
+股票池是与QuantX平级的确定性派生面板。`app.stock_pools`只能读取`KlineRepository`、`MarketFactRepository`和通用Research索引，按交易日向`data/stock_pools/date=YYYY-MM-DD/`原子发布`summary.json`、`candidates.json`、`details.json`及manifest；API和React页面不得读取研究账本、QuantX展示JSON、外部项目目录或导入`legacy_scrapers`。正式路由为`/stock-pools`，数据接口为`GET /api/stock-pools`、`GET /api/stock-pools/{date}`、候选列表、候选详情及`POST /api/stock-pools/runs`。盘后自动任务和`POST /api/pipeline/run`都必须在QuantX事实发布后调用同一股票池发布器。
+
+股票池的基础过滤固定为总市值20—3000亿元、当日成交额不少于1亿元、换手率不少于1%并排除当日可识别ST。总市值和展示价优先使用`raw_close`，技术形态使用连续复权序列；当日涨跌幅为原始收盘价相对上一交易日原始收盘价。来源标签只表达召回理由，`primary_stage`表达当前状态，题材只聚合已召回股票。详情中的Research材料必须按目标交易日截断，页面请求不即时调用模型或供应商。
+
 QuantX 页面分享统一调用 `frontend/src/lib/exportStaticHtml.ts`：它从现有 QuantX API 收集一个交易日的已发布响应，内嵌页面样式和由 `frontend/src/portable/quantxPortable.tsx` 启动的 React/ECharts 便携运行时，在浏览器内生成一个不依赖后端的交互式 HTML。便携运行时只把内嵌响应映射回既有 `quantxApi` 契约，不复制指标计算或另建报告数据流水线；批量百日新高成员使用 `GET /api/quantx-data/new-high/{trade_date}/member-bundle`，避免导出时逐聚类请求。页面按钮与 `scripts/export_quantx_static.py` 必须复用这一实现；命令行脚本需使用 Edge 在断网浏览器上下文重新加载文件，验证图表重绘、悬浮提示、筛选、下钻、折叠区、本机地址和网络请求、控制台错误及页面级横向溢出。操作说明见 `docs/quantx-static-export.md`。
 
 单日 QuantX V2 必须额外区分字段来源：可复用数值来自 Repository，页面专用摘要进入版本化 ViewBuilder，标题和布局进入前端常量。V2 从 `QuantXReviewResponseV2.empty(trade_date)` 构建，禁止深拷贝展示缓存；新增前端消费字段必须通过 `scripts/audit_quantx_review_consumers.py`，并在 schema endpoint `GET /api/quantx/review/schema/v2` 中声明来源、单位、空值和排序。默认响应的 fallback 和 implicit cache 必须始终为空。

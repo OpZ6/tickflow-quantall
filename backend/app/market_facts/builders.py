@@ -1289,6 +1289,213 @@ def _build_screening_candidates(
     )
 
 
+def _build_security_popularity(
+    trade_date: str,
+    sources: dict[str, dict[str, Any]],
+    run_id: str,
+    ingested_at: str,
+) -> FactBatch:
+    payload = sources.get("security_popularity") or {}
+    rows = []
+    for item in _records(payload, "records", "rows", "items"):
+        symbol = _stock_code(item.get("code") or item.get("symbol"))
+        source_name = str(item.get("source_root") or item.get("source_name") or "").strip()
+        try:
+            rank = int(item.get("rank") or 0)
+        except (TypeError, ValueError):
+            rank = 0
+        if not symbol or not source_name or rank <= 0:
+            continue
+        list_type = str(item.get("list_type") or "normal")
+        rows.append(
+            {
+                "trade_date": _trade_date(trade_date),
+                "source_name": source_name,
+                "symbol": symbol,
+                "name": str(item.get("name") or ""),
+                "rank": rank,
+                "list_type": list_type,
+                "rank_change": _number(item.get("rank_change")),
+                "heat_value": _number(item.get("heat_value")),
+                "reason": str(item.get("reason") or ""),
+                "source_updated_at": str(item.get("source_updated_at") or ""),
+                **_metadata(
+                    source="security_popularity",
+                    source_record_id=f"{source_name}:{trade_date}:{list_type}:{symbol}",
+                    observed_at=str(item.get("observed_at") or ingested_at),
+                    ingested_at=ingested_at,
+                    run_id=run_id,
+                    quality_level="observed",
+                ),
+            }
+        )
+    frame = _frame(DatasetId.SECURITY_POPULARITY_DAILY, rows)
+    if not frame.is_empty():
+        frame = frame.unique(
+            subset=["trade_date", "source_name", "symbol", "list_type"],
+            keep="first", maintain_order=True,
+        ).sort(["source_name", "rank", "symbol"])
+    return FactBatch(DatasetId.SECURITY_POPULARITY_DAILY, _trade_date(trade_date), frame)
+
+
+def _build_stock_logic_evidence(
+    trade_date: str,
+    sources: dict[str, dict[str, Any]],
+    ladder: pl.DataFrame,
+    run_id: str,
+    ingested_at: str,
+) -> FactBatch:
+    """Merge per-stock daily logic text from every observed upstream source.
+
+    ``match_text`` is the source-specific text the deterministic topic rules are
+    allowed to match; ``text`` keeps the original evidence for display. Anomaly
+    analysis only exposes its keyword list to matching so long business
+    descriptions cannot over-match topics.
+    """
+    rows: list[dict[str, Any]] = []
+
+    def add(
+        *,
+        symbol: str,
+        name: str,
+        evidence_source: str,
+        evidence_kind: str,
+        match_text: str,
+        text: str,
+        observed_at: str,
+        keywords: str = "",
+        catalyst: str = "",
+        tag: str = "",
+        is_fallback: bool = False,
+    ) -> None:
+        code = _stock_code(symbol)
+        if not code:
+            return
+        rows.append(
+            {
+                "trade_date": _trade_date(trade_date),
+                "symbol": code,
+                "exchange": _exchange(code),
+                "name": name,
+                "evidence_source": evidence_source,
+                "evidence_kind": evidence_kind,
+                "match_text": match_text.strip(),
+                "text": text.strip(),
+                "keywords": keywords.strip(),
+                "catalyst": catalyst.strip(),
+                "tag": tag.strip(),
+                "observed_at": observed_at,
+                **_metadata(
+                    source="stock_logic_evidence",
+                    source_record_id=f"{evidence_source}:{trade_date}:{code}:{evidence_kind}",
+                    observed_at=observed_at,
+                    ingested_at=ingested_at,
+                    run_id=run_id,
+                    is_fallback=is_fallback,
+                ),
+            }
+        )
+
+    if not ladder.is_empty():
+        for item in ladder.to_dicts():
+            theme_name = str(item.get("theme_name") or "").strip()
+            interpretation = str(item.get("interpretation") or "").strip()
+            theme_reason = str(item.get("theme_reason") or "").strip()
+            add(
+                symbol=str(item.get("symbol") or ""),
+                name=str(item.get("name") or ""),
+                evidence_source="limit_ladder",
+                evidence_kind="limit_interpretation",
+                match_text=theme_name,
+                text=interpretation or theme_reason or theme_name,
+                catalyst=theme_reason,
+                observed_at=str(item.get("observed_at") or ""),
+            )
+
+    ths_hot = sources.get("ths_hot") or {}
+    for item in _records(ths_hot, "stocks", "records"):
+        reason = str(item.get("reason") or "").strip()
+        if not reason:
+            continue
+        add(
+            symbol=str(item.get("code") or ""),
+            name=str(item.get("name") or ""),
+            evidence_source="ths_hot",
+            evidence_kind="hot_reason",
+            match_text=reason,
+            text=reason,
+            observed_at=_observed_at(ths_hot),
+        )
+
+    anomaly = sources.get("fuyao_anomaly") or {}
+    anomaly_texts: set[tuple[str, str]] = set()
+    for item in _records(anomaly, "records", "item"):
+        raw_keywords = item.get("keyword_list")
+        keywords = [str(value).strip() for value in raw_keywords] if isinstance(raw_keywords, list) else []
+        keywords = [value for value in keywords if value]
+        text = str(item.get("analysis_content") or "").strip()
+        code = _stock_code(item.get("thscode"))
+        if code and text:
+            anomaly_texts.add((code, text))
+        add(
+            symbol=str(item.get("thscode") or ""),
+            name=str(item.get("stock_name") or ""),
+            evidence_source="fuyao_anomaly",
+            evidence_kind="anomaly_analysis",
+            match_text="+".join(keywords),
+            text=text,
+            keywords="+".join(keywords),
+            tag=str(item.get("tag_name") or ""),
+            observed_at=_observed_at(anomaly),
+        )
+
+    # The hot list carries structured concept tags (the day's heat driver
+    # concepts) plus the same upstream analysis text without structured
+    # keywords. Concept tags are a primary structured source; the long-text
+    # reason is kept only where the anomaly source has no identical record
+    # and no concept tags are available, marked as fallback.
+    popularity = sources.get("security_popularity") or {}
+    for item in _records(popularity, "records", "rows", "items"):
+        if str(item.get("source_root") or item.get("source_name") or "") != "ths":
+            continue
+        code = _stock_code(item.get("code") or item.get("symbol"))
+        if not code:
+            continue
+        observed = str(item.get("observed_at") or _observed_at(popularity))
+        concept_tags = str(item.get("concept_tags") or "").strip()
+        if concept_tags:
+            add(
+                symbol=code,
+                name=str(item.get("name") or ""),
+                evidence_source="ths_hot_concepts",
+                evidence_kind="hot_concept_tag",
+                match_text=concept_tags,
+                text=str(item.get("reason") or "").strip(),
+                observed_at=observed,
+            )
+        reason = str(item.get("reason") or "").strip()
+        if reason and (code, reason) not in anomaly_texts and not concept_tags:
+            add(
+                symbol=code,
+                name=str(item.get("name") or ""),
+                evidence_source="ths_hot_list",
+                evidence_kind="hot_list_reason",
+                match_text=reason,
+                text=reason,
+                observed_at=observed,
+                is_fallback=True,
+            )
+
+    frame = _frame(DatasetId.STOCK_LOGIC_EVIDENCE_DAILY, rows)
+    if not frame.is_empty():
+        frame = frame.unique(
+            subset=["trade_date", "evidence_source", "symbol", "evidence_kind"],
+            keep="first",
+            maintain_order=True,
+        ).sort(["symbol", "evidence_source"])
+    return FactBatch(DatasetId.STOCK_LOGIC_EVIDENCE_DAILY, _trade_date(trade_date), frame)
+
+
 def build_initial_fact_batches(
     trade_date: str,
     sources: dict[str, dict[str, Any]],
@@ -1299,7 +1506,7 @@ def build_initial_fact_batches(
     """Build the first canonical fact slice used by the migration dual-write."""
     ingested_at = datetime.now(UTC).isoformat(timespec="seconds")
     structured = structured_tables or {}
-    return [
+    batches = [
         _build_trading_calendar(trade_date, sources, run_id, ingested_at),
         _build_market_breadth(trade_date, sources, run_id, ingested_at),
         _build_market_liquidity(
@@ -1321,4 +1528,15 @@ def build_initial_fact_batches(
         _build_screening_candidates(
             trade_date, sources, structured, run_id, ingested_at
         ),
+        _build_security_popularity(trade_date, sources, run_id, ingested_at),
     ]
+    ladder = next(
+        batch for batch in batches
+        if batch.dataset_id == DatasetId.LIMIT_LADDER_DAILY
+    )
+    batches.append(
+        _build_stock_logic_evidence(
+            trade_date, sources, ladder.frame, run_id, ingested_at
+        )
+    )
+    return batches

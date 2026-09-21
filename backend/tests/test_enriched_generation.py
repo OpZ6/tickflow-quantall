@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 from types import SimpleNamespace
 
@@ -68,6 +69,28 @@ def test_failed_multi_partition_publication_remains_fail_closed(
     assert not second.is_file()
     with pytest.raises(EnrichedGenerationUnavailableError, match="being published"):
         get_enriched_generation(tmp_path, "stock")
+
+
+def test_failed_first_partition_write_restores_ready_generation(tmp_path, monkeypatch) -> None:
+    repo = KlineRepository(DataStore(tmp_path))
+    generation = repo.get_matrix_data_generation("stock")
+    original_replace = os.replace
+
+    def fail_partition_replace(src, dst):
+        if str(dst).endswith("part.parquet"):
+            raise PermissionError(5, "injected replace failure")
+        return original_replace(src, dst)
+
+    monkeypatch.setattr("app.enriched_generation.os.replace", fail_partition_replace)
+
+    with pytest.raises(PermissionError, match="injected"):
+        repo.flush_live_enriched_asset("stock", _frame())
+
+    marker = json.loads(
+        (tmp_path / ".matrix_generation_stock.json").read_text(encoding="utf-8")
+    )
+    assert marker["state"] == "ready"
+    assert get_enriched_generation(tmp_path, "stock") == generation
 
 
 def test_recovery_replaces_stale_publication_but_not_active_owner(tmp_path) -> None:

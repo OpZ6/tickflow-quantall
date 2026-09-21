@@ -291,6 +291,13 @@ class EnrichedPublication:
                 os.replace(temporary, out)
                 _fsync_directory(out.parent)
                 self._changed = True
+        except Exception:
+            # 发布在产生任何数据变更前失败 (如 Windows 目标文件被占用): 恢复 ready
+            # 标记, 否则本进程内所有 enriched 区间读取都会因 publishing 状态
+            # fail-closed, 直到下一次成功发布或重启。已产生变更时 abandon 不改标记,
+            # 保持 fail-closed 语义。
+            self.abandon()
+            raise
         finally:
             temporary.unlink(missing_ok=True)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -21,6 +22,8 @@ from app.quantx_data.new_high_clusters import (
 )
 from app.quantx_data.pipeline import get_status, run_pipeline
 from app.quantx_data.repository import QuantXTableRepository
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/quantx-data", tags=["quantx-data"])
 
@@ -165,6 +168,19 @@ class RunRequest(BaseModel):
     recompute: bool = False
 
 
+def _rebuild_stock_pool(request: Request, trade_date: str) -> dict | None:
+    """Rebuild the same-day stock pool after a successful QuantX run."""
+    try:
+        from app.stock_pools.publisher import publish_stock_pool
+
+        repo = request.app.state.repo
+        day = datetime.strptime(trade_date, "%Y%m%d").date()
+        return publish_stock_pool(repo, day)
+    except Exception:
+        logger.exception("stock-pool rebuild failed after QuantX run for %s", trade_date)
+        return None
+
+
 def _run(
     request: Request,
     trade_date: str,
@@ -175,7 +191,7 @@ def _run(
     recompute: bool = False,
 ) -> dict:
     try:
-        return run_pipeline(
+        result = run_pipeline(
             _root(request).parent,
             trade_date,
             selected_sources=sources,
@@ -185,6 +201,9 @@ def _run(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result.get("status") in {"complete", "degraded"}:
+        result["stock_pools"] = _rebuild_stock_pool(request, trade_date)
+    return result
 
 
 @router.post("/runs")

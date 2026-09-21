@@ -1,0 +1,33 @@
+{
+  "experiment": "high-tight-flag-leader-open-v1",
+  "baseline_run": "20260909T130617820559Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\high-tight-flag\\high-tight-flag-leader-open-v1.json",
+  "kept": 147,
+  "training_2016_2022": {
+    "skipped": 1098,
+    "baseline": {
+      "n_trades": 1245,
+      "win_rate": 0.258635,
+      "profit_factor": 2.34,
+      "avg_pnl": -0.010655,
+      "avg_win": 0.182955,
+      "avg_loss": 0.078199
+    },
+    "variant": {
+      "n_trades": 147,
+      "win_rate": 0.251701,
+      "profit_factor": 2.13,
+      "avg_pnl": -0.016562,
+      "avg_win": 0.167295,
+      "avg_loss": 0.078405
+    },
+    "delta": {
+      "avg_pnl": -0.005907,
+      "win_rate": -0.006934,
+      "profit_factor": -0.21
+    },
+    "rule": "drop"
+  },
+  "rule": "drop",
+  "gaps": []
+}

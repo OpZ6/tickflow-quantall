@@ -14,10 +14,10 @@ from app.strategy.engine import StrategyEngine
 
 BUILTIN = Path(__file__).resolve().parents[1] / "app/strategy/builtin"
 NAMES = {
-    "quants_vcp_legacy_v1": "VCP 宽泛候选池（股票魔法师形态）",
+    "quants_vcp_legacy_v1": "VCP · 观察",
     "quants_growth_trend_legacy_v1": "成长趋势(经典 VCP)",
-    "quants_cup_handle_legacy_v1": "杯柄候选池（多尺度形态）",
-    "quants_high_tight_flag_legacy_v1": "高而紧旗形候选池（多尺度形态）",
+    "quants_cup_handle_legacy_v1": "杯柄 · 观察",
+    "quants_high_tight_flag_legacy_v1": "高旗 · 观察",
     "quants_pullback_low_absorb_legacy_v1": "回调低吸候选池（龙吸水·需资金流）",
 }
 

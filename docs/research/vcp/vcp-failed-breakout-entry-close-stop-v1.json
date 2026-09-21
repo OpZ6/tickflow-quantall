@@ -1,0 +1,21 @@
+{
+  "experiment": "vcp-failed-breakout-entry-close-stop-v1",
+  "thought": "VCP 179 upper-half ∩ 5% breakeven ∩ ≥3-leg book. Failed-breakout losers never printed +3% high and finished ≤ 0 (42 train fills, −5.07%). One 止损: if the entry day's close is strictly below the fill price, sell next market open. Not two-bar no-demand, not underwater two-bar, not a +3% MFE recut. Do not change frozen observer defaults.",
+  "hypothesis": "A first-session close still below cost means the breakout was not accepted that day; cutting there lifts independent avg_pnl versus +1.99% by shrinking the −5% failed-breakout tail without waiting for the plan stop.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close AND breakeven_after_5pct AND len(legs)>=3",
+    "n_train": 179,
+    "avg_pnl": 0.019889
+  },
+  "change": {
+    "id": "entry_day_close_below_cost",
+    "kind": "止损",
+    "attacked_path": "失败突破",
+    "definition": "On the frozen 179 fills, if the entry-day close is strictly below entry price, sell next market open (earlier than baseline). Equal close does not fire. Does not look at a second bar or a +3% high print. Holes and one-price limit-down do not roll."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +1.99% (0.019889) baseline and remains positive. A tightening that flips validation negative is thrown. If keep, report 2023-2026 as exposure not clean OOS.",
+    "fail": "Drop. VCP main book stays 179 / +1.99%. Cup 2,034 stays put. Do not restack two-bar no-demand or 给回 利润保护."
+  }
+}

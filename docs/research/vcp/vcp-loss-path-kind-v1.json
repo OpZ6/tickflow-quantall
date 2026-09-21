@@ -1,0 +1,21 @@
+{
+  "experiment": "vcp-loss-path-kind-v1",
+  "thought": "VCP 179 upper-half ∩ 5% breakeven ∩ ≥3-leg book. First autopsy training losers into 给回 / 失败突破 / 磨掉 from held bars, then change exactly one buy or sell kind targeting the largest loser path. Do not recut volume_ratio / tightness / dry_volume / RS. Do not change frozen observer defaults.",
+  "hypothesis": "Naming the dominant losing path in market-behavior language lets one 买点 or 卖点 种类 lift independent avg_pnl versus +1.99%.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close AND breakeven_after_5pct AND len(legs)>=3",
+    "n_train": 179,
+    "avg_pnl": 0.019889
+  },
+  "change": {
+    "id": "high_print_breakeven",
+    "kind": "利润保护",
+    "attacked_path": "给回",
+    "definition": "On the frozen 179 fills, after any held-bar high prints ≥ entry×1.05, sell next market open if a later (or same-bar) close is below entry. Earlier than the baseline close-based 5% 守成本. Holes and one-price limit-down do not roll. Do not scan 5%."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +1.99% (0.019889) baseline and remains positive. A tightening that flips validation negative is thrown. If keep, report 2023-2026 as exposure not clean OOS.",
+    "fail": "Drop. VCP main book stays 179 / +1.99%. Cup 2,034 stays put. Do not restack a detector-score cut."
+  }
+}

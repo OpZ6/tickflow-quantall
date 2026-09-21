@@ -53,7 +53,7 @@ def _concept_dimension(value: str) -> str:
     return "attribute" if _CONCEPT_ATTRIBUTE.search(value) else "concept"
 
 
-def _load_memberships(data_dir) -> dict[str, dict[str, set[str]]]:
+def load_security_memberships(data_dir) -> dict[str, dict[str, set[str]]]:
     memberships: dict[str, dict[str, set[str]]] = {
         dimension: defaultdict(set) for dimension in DIMENSIONS
     }
@@ -244,7 +244,7 @@ def build_new_high_cluster_members(
     if not cluster_name:
         raise ValueError("cluster name must not be empty")
 
-    memberships = _load_memberships(facts.data_dir)
+    memberships = load_security_memberships(facts.data_dir)
     available = [
         value
         for value in facts.available_dates(DatasetId.SCREENING_CANDIDATE_DAILY)
@@ -320,7 +320,7 @@ def build_new_high_cluster_member_bundle(
     trade_date: date,
 ) -> dict[str, Any]:
     """Return every published cluster drill-down while loading the 20-day window once."""
-    memberships = _load_memberships(facts.data_dir)
+    memberships = load_security_memberships(facts.data_dir)
     available = [
         value
         for value in facts.available_dates(DatasetId.SCREENING_CANDIDATE_DAILY)
@@ -354,7 +354,7 @@ def build_new_high_clusters(
     trade_date: date,
 ) -> dict[str, Any]:
     """Build multi-window new-high clusters from canonical candidates and local mappings."""
-    memberships = _load_memberships(facts.data_dir)
+    memberships = load_security_memberships(facts.data_dir)
     available = [
         value
         for value in facts.available_dates(DatasetId.SCREENING_CANDIDATE_DAILY)

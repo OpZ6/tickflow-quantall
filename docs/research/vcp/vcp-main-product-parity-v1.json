@@ -1,0 +1,29 @@
+{
+  "experiment": "vcp-main-product-parity-v1",
+  "purpose": "Verify the product buy screen and per-position close breakeven against the frozen, chronology-corrected main book; no new strategy hypothesis",
+  "universe_date": "2015-12-31",
+  "universe_mode": "historical_union",
+  "sample_size": 0,
+  "data_directory": "",
+  "universe_suffixes": [".SH", ".SZ"],
+  "backtest": {
+    "strategy_id": "vcp_leader_tradable_v1",
+    "symbols": null,
+    "start": "2016-01-04",
+    "end": "2026-06-30",
+    "params": null,
+    "overrides": {},
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_policy": "a_share_historical",
+    "slippage_bps": 10.0,
+    "max_positions": 4,
+    "mode": "full",
+    "asset_type": "stock",
+    "minute_fill": false
+  },
+  "comparison": "Compare all executable event keys with the original source filtered by signal close upper-half and original selected primary leg count. Compare every common full fill with vcp-frozen-chronology-rebase-v1. Explicitly report boundary or coverage differences, never silently discard extra entries.",
+  "exposure": "Existing exposed development interval. Full-mode execution tail may extend beyond the signal end. Training summaries include only completed exits through 2022-12-31; validation evidence is not clean OOS."
+}

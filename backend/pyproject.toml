@@ -107,6 +107,10 @@ ignore = ["E501"]   # 长行交给 fmt
 # the adapter boundary instead of reformatting their implementation.
 [tool.ruff.lint.per-file-ignores]
 "app/quantx_data/legacy_scrapers/*.py" = ["ALL"]
+# Topic labels keep the demo's fullwidth separators so both panels stay comparable.
+"app/stock_pools/topics.py" = ["RUF001"]
+"tests/test_stock_pools.py" = ["RUF001"]
+"tests/test_research_materials.py" = ["RUF001"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
