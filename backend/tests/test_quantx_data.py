@@ -34,7 +34,8 @@ from app.services.ext_data import ExtConfig, ExtConfigStore, ExtField
 
 SOURCE_NAMES = (
     "tushare", "akshare", "ths_hot", "zhangtingke", "zhangtingjun", "pywencai",
-    "duanxianxia", "deepq", "legulegu", "quicktiny", "dabanke", "sector_fund_flow_s4",
+    "duanxianxia", "deepq", "security_popularity", "fuyao_anomaly",
+    "legulegu", "quicktiny", "dabanke", "sector_fund_flow_s4",
 )
 
 
@@ -81,6 +82,8 @@ def _fixture(root: Path, trade_date: str = "20260825") -> Path:
         "pywencai": {"trade_date": trade_date, "status": "ok", "limit_up": {"count": 1, "stocks": [{"code": "000001", "name": "甲", "limit_times": 2, "concepts": ["人工智能"]}], "ladder": {"2": ["甲"]}, "themes": [{"name": "人工智能", "count": 1}]}, "broken_board": {"count": 0, "stocks": []}, "limit_down": {"count": 0, "stocks": []}, "seal_rate": 100, "broken_rate": 0},
         "duanxianxia": {"trade_date": trade_date, "status": "ok"},
         "deepq": {"trade_date": trade_date, "status": "ok"},
+        "security_popularity": {"trade_date": trade_date, "status": "ok", "records": []},
+        "fuyao_anomaly": {"trade_date": trade_date, "status": "ok", "records": []},
         "legulegu": {
             "trade_date": trade_date,
             "status": "ok",
@@ -161,6 +164,8 @@ def test_pipeline_publishes_structured_snapshot_without_editorial_artifacts(tmp_
         "market_state_daily",
         "market_signal_daily",
         "screening_candidate_daily",
+        "security_popularity_daily",
+        "stock_logic_evidence_daily",
     }
     fact_repo = MarketFactRepository(root)
     assert fact_repo.get_market_breadth(date(2026, 8, 25))["up_count"].to_list() == [1]
@@ -545,12 +550,13 @@ def test_observability_api_reports_source_fact_view_and_publication_lineage(tmp_
     payload = response.json()
     assert payload["pipeline_job_id"] == "job-demo"
     assert payload["quantx_run_id"].startswith("20260825-")
-    assert len(payload["sources"]) == 12
-    assert len(payload["facts"]) == 13
-    assert payload["fact_summary"]["present_partition_count"] == 13
+    assert len(payload["sources"]) == len(SOURCE_NAMES)
+    assert len(payload["facts"]) == len(DatasetId)
+    assert payload["fact_summary"]["present_partition_count"] == 14
     assert payload["view"]["schema_version"] == "quantx-review.v2"
     assert payload["view"]["fallback_count"] == 0
-    assert payload["reconciliation"]["status"] == "ok"
+    assert payload["reconciliation"]["status"] == "gaps"
+    assert payload["reconciliation"]["gap_count"] == 3
     assert payload["multiday"]["published"] is True
     assert payload["catalog"]["published"] is True
     tushare = next(item for item in payload["sources"] if item["source_id"] == "tushare")

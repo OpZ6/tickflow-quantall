@@ -81,6 +81,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 "source_status": pl.String,
             }),
             field_units=MappingProxyType({}), freshness="as_of_date",
+            degrades_when_missing=False,
         ),
         DatasetId.SECURITY_NAME_HISTORY: DatasetSpec(
             dataset_id=DatasetId.SECURITY_NAME_HISTORY,
@@ -96,6 +97,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 "coverage_until": pl.Date, "is_st_name": pl.Boolean,
             }),
             field_units=MappingProxyType({}), freshness="as_of_date",
+            degrades_when_missing=False,
         ),
         DatasetId.TRADING_CALENDAR: DatasetSpec(
             dataset_id=DatasetId.TRADING_CALENDAR,

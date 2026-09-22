@@ -102,7 +102,7 @@ def enrich_and_persist_strategy_result(
             "input_fingerprint": input_fingerprint,
             "reason_codes": list(dict.fromkeys((signals or [f"strategy_{event_type}"]) + detail.get("reason_codes", []))),
             "metrics": _row_metrics(row, params, signals) + detail.get("metrics", []),
-            "anchors": [{"date": result.as_of.isoformat(), "role": event_type, "ohlc": {key: row.get(key) for key in ("open", "high", "low", "close")}}, *detail.get("anchors", [])],
+            "anchors": [{"date": result.as_of.isoformat() if hasattr(result.as_of, "isoformat") else str(result.as_of), "role": event_type, "ohlc": {key: row.get(key) for key in ("open", "high", "low", "close")}}, *detail.get("anchors", [])],
             "levels": levels + detail.get("levels", []),
             "pattern_refs": detail.get("pattern_refs", []),
             "observed_at": datetime.now(),

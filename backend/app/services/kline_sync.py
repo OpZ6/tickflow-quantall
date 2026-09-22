@@ -7,12 +7,17 @@
 """
 from __future__ import annotations
 
+import contextlib
 import logging
+import shutil
+import time
+import uuid
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
 import polars as pl
 
+from app.config import settings
 from app.data_providers.base import AssetType
 from app.indicators.pipeline import filter_halt_days
 from app.market_time import CN_TZ, cn_now, cn_today
@@ -86,6 +91,73 @@ def _normalize_daily(df_in, default_symbol: str | None = None) -> pl.DataFrame:
     # 只保留 canonical 列
     keep = [c for c in CANONICAL_DAILY_COLS if c in df.columns]
     return df.select(keep)
+
+
+def _instruments_symbol_index(data_dir) -> dict[str, list[str]] | None:
+    """裸代码 → instruments 维表完整符号列表; 维表缺失/不可读返回 None。"""
+    path = data_dir / "instruments" / "instruments.parquet"
+    if not path.exists():
+        return None
+    try:
+        symbols = pl.read_parquet(path, columns=["symbol"])["symbol"].drop_nulls().to_list()
+    except Exception as e:
+        logger.warning("instruments 维表读取失败, 裸符号无法补全后缀: %s", e)
+        return None
+    index: dict[str, list[str]] = {}
+    for s in symbols:
+        code, _, _suffix = str(s).partition(".")
+        if code:
+            index.setdefault(code, []).append(str(s))
+    return index
+
+
+def _normalize_bare_symbols(
+    symbols: list[str], data_dir,
+) -> tuple[list[str], dict[str, str], list[str]]:
+    """裸符号(无交易所后缀, 如 600000)按 instruments 维表补全为 600000.SH (#302)。
+
+    返回 (规范化后的去重请求列表, {裸符号: 补全后符号}, 被跳过的裸符号)。
+    上游对裸符号返回 200 空 payload, 本地静默写 0 行 — 补全失败时显式跳过并告警,
+    不再带着已知无效的符号发请求。全部带后缀时不读维表, 行为与开销同旧版;
+    带后缀符号原样透传, 由上游照常处理。
+    """
+    bare = [s for s in symbols if "." not in s]
+    if not bare:
+        return symbols, {}, []
+
+    index = _instruments_symbol_index(data_dir)
+    resolved: dict[str, str] = {}
+    skipped: list[str] = []
+    for s in bare:
+        matches = (index or {}).get(s, [])
+        if len(matches) == 1:
+            resolved[s] = matches[0]
+        else:
+            skipped.append(s)
+
+    if index is None:
+        logger.warning(
+            "日K同步: instruments 维表不可用, %d 个裸符号(无交易所后缀)将被跳过 — "
+            "请先同步标的维表, 或改用带后缀符号 (如 600000.SH)", len(skipped))
+    elif skipped:
+        logger.warning(
+            "日K同步: %d 个裸符号在维表中无唯一匹配(不支持或非股票), 已跳过: %s",
+            len(skipped), skipped[:20])
+    if resolved:
+        logger.info("日K同步: 已按维表补全 %d 个裸符号后缀 (样例: %s)",
+                    len(resolved), list(resolved.items())[:5])
+
+    out: list[str] = []
+    seen: set[str] = set()
+    skipped_set = set(skipped)
+    for s in symbols:
+        if s in skipped_set:
+            continue  # 无法补全的裸符号不发请求 (上游必然 200 空 payload)
+        full = resolved.get(s, s)
+        if full not in seen:
+            seen.add(full)
+            out.append(full)
+    return out, resolved, skipped
 
 
 def sync_daily_batch(symbols: list[str],
@@ -204,17 +276,81 @@ def sync_and_persist_daily_batch(
     start_date: datetime | None = None,
     end_date: datetime | None = None,
     on_chunk_done: Callable[[int, int], None] | None = None,
+    zero_row_out: list[str] | None = None,
 ) -> int:
     """批量同步日 K 并落到 Parquet。返回写入的行数。
 
     start_date/end_date: 外部传入的时间范围(由 pipeline 根据已有数据计算)。
     未传入时默认拉最近 1 年。
+    zero_row_out: 可选出参。本轮实际入库 0 行的标的(含无法识别被跳过的裸符号、
+                  上游 200 空 payload 的静默 0 行)按调用方原始写法追加进该 list,
+                  供上层 fail-loud 展示, 不再"显示成功实则全空" (#302)。
     """
+    seen: set[str] = set()
+    failed_syms: list[str] = []
+    skipped_bare: list[str] = []
+
+    def _finalize(written: int) -> int:
+        zero_full = [s for s in requested if s not in seen and s not in failed_syms]
+        if zero_full or skipped_bare:
+            zero = [orig_by_full.get(s, s) for s in zero_full] + skipped_bare
+            logger.warning(
+                "日K批量同步: %d/%d 标的本轮入库 0 行 (符号无法识别/停牌/窗口内无数据; 样例: %s)",
+                len(zero), len(requested) + len(skipped_bare), zero[:10])
+            if zero_row_out is not None:
+                zero_row_out.extend(zero)
+        return written
+
+    original = list(symbols)
+    store = getattr(repo, "store", None)
+    data_dir = getattr(store, "data_dir", settings.data_dir)
+    symbols, resolved, skipped_bare = _normalize_bare_symbols(symbols, data_dir)
+    requested = symbols
+    # 完整符号 → 调用方原始写法: 0 行回报用用户输入的形式, 裸符号也能对上
+    orig_by_full: dict[str, str] = {}
+    for orig in original:
+        orig_by_full.setdefault(resolved.get(orig, orig), orig)
+
     if not symbols:
-        return 0
+        return _finalize(0)
 
     from app.data_providers import custom as custom_sources
     from app.data_providers import routing
+
+    provider_name = preferences.get_daily_data_provider()
+    if provider_name != "tickflow":
+        if custom_sources.provider_has_dataset(provider_name, "daily"):
+            provider = custom_sources.get_provider(provider_name)
+            end_time = end_date or datetime.now()
+            days = count or 365
+            start_time = start_date or (end_time - timedelta(days=days))
+            iter_daily = getattr(provider, "iter_daily", None)
+            if callable(iter_daily):
+
+                def _tracking_chunks(chunks):
+                    for df in chunks:
+                        if not df.is_empty() and "symbol" in df.columns:
+                            seen.update(df["symbol"].cast(pl.Utf8).unique().to_list())
+                        yield df
+
+                try:
+                    written = _persist_daily_chunks(
+                        _tracking_chunks(iter_daily(
+                            symbols,
+                            start_time=start_time,
+                            end_time=end_time,
+                            on_chunk_done=on_chunk_done,
+                        )),
+                        repo,
+                    )
+                except Exception as exc:
+                    routing.record_failure("daily", provider_name, str(exc))
+                    raise
+                routing.record_publication(
+                    "daily", provider_name, rows=written,
+                    scope=f"{start_time.date()}..{end_time.date()}",
+                )
+                return _finalize(written)
 
     end_time = end_date or datetime.now()
     start_time = start_date or (end_time - timedelta(days=count or 365))
@@ -230,23 +366,24 @@ def sync_and_persist_daily_batch(
         if not capset.has(Cap.KLINE_DAILY_BATCH):
             raise RuntimeError("TickFlow daily capability unavailable")
         limit = resolve_limit(capset, Cap.KLINE_DAILY_BATCH, default_batch=100)
-        failed_symbols: list[str] = []
         frame = sync_daily_batch(
             symbols, count=count, batch_size=limit.batch, rpm=limit.rpm,
             start_time=start_time, end_time=end_time,
-            on_chunk_done=on_chunk_done, failed_out=failed_symbols,
+            on_chunk_done=on_chunk_done, failed_out=failed_syms,
         )
-        if frame.is_empty() and failed_symbols:
+        if frame.is_empty() and failed_syms:
             raise RuntimeError(
-                f"日K同步失败: {len(failed_symbols)}/{len(symbols)} 只标的未获取, 已保留旧数据"
+                f"日K同步失败: {len(failed_syms)}/{len(symbols)} 只标的未获取, 已保留旧数据"
             )
         return frame
 
     df, provider_name = routing.run_with_failover(
         "daily", fetch, is_success=lambda _value: True,
     )
+    if not df.is_empty() and "symbol" in df.columns:
+        seen.update(df["symbol"].cast(pl.Utf8).unique().to_list())
     if df.is_empty():
-        return 0
+        return _finalize(0)
 
     repo.append_daily(df)
     routing.record_publication(
@@ -263,7 +400,50 @@ def sync_and_persist_daily_batch(
     except Exception as e:  # noqa: BLE001
         logger.warning("refresh view failed: %s", e)
 
-    return df.height
+    return _finalize(df.height)
+
+
+def _persist_daily_chunks(chunks, repo: KlineRepository) -> int:
+    """先把流式 provider 结果写入私有 staging,完整取数后再提交正式分区。"""
+    staging_base = repo.store.data_dir / ".daily_sync_staging"
+    _sweep_stale_daily_staging(staging_base)
+    root = staging_base / uuid.uuid4().hex
+    written = 0
+    try:
+        for index, df in enumerate(chunks):
+            if df.is_empty():
+                continue
+            for date_df in df.partition_by("date"):
+                dt = date_df["date"][0]
+                ds = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
+                out = root / f"date={ds}" / f"part-{index}.parquet"
+                out.parent.mkdir(parents=True, exist_ok=True)
+                date_df.write_parquet(out)
+                written += date_df.height
+
+        for date_dir in sorted(root.glob("date=*")):
+            files = sorted(date_dir.glob("*.parquet"))
+            if files:
+                repo.append_daily(pl.scan_parquet(files).collect(engine="streaming"))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        with contextlib.suppress(OSError):
+            root.parent.rmdir()
+
+    return written
+
+
+def _sweep_stale_daily_staging(staging_base, max_age_s: int = 24 * 60 * 60) -> None:
+    """清理崩溃遗留的旧同步目录,不碰仍可能活跃的新目录。"""
+    if not staging_base.exists():
+        return
+    cutoff = time.time() - max_age_s
+    for run_dir in staging_base.iterdir():
+        try:
+            if run_dir.is_dir() and run_dir.stat().st_mtime < cutoff:
+                shutil.rmtree(run_dir)
+        except OSError:
+            logger.warning("failed to clean stale daily staging: %s", run_dir)
 
 
 def sync_daily_by_quotes(repo: KlineRepository) -> int:
@@ -298,11 +478,15 @@ def sync_daily_by_quotes(repo: KlineRepository) -> int:
             "close": q.get("last_price"),
             "volume": q.get("volume"),
             "amount": q.get("amount"),
+            # 快照时刻标记: data_integrity 靠 quote_ts 区分盘中快照与盘后权威历史,
+            # 缺失会让盘中覆写的分区在停机后被当成完整历史, 永远不进修复。
+            "quote_ts": q.get("timestamp"),
         })
 
     df = pl.DataFrame(records)
     if df.is_empty():
         return 0
+    df = df.with_columns(pl.col("quote_ts").cast(pl.Int64, strict=False))
 
     # 分区日期用北京交易日 (与 quote_service._build_daily 的 cn_today 一致),
     # 避免 UTC 服务器在盘中把日分区写成服务器本地日期。
@@ -702,9 +886,16 @@ def _write_minute_partition(df: pl.DataFrame, minute_dir) -> int:
             existing = pl.read_parquet(out)
             if "datetime" in existing.columns:
                 existing = existing.filter(pl.col("datetime").is_not_null())
-            day_df = pl.concat([existing, day_df.drop("_trade_date")]).unique(
+            new_rows = day_df.drop("_trade_date")
+            # 只对本次触及的 symbol 合并去重, 未触及行原样保留: 单股补齐时避免
+            # 为合并几行数据把全市场分区整体 unique 的写放大 (issue #305)。
+            touched = new_rows["symbol"].unique().to_list()
+            same = existing.filter(pl.col("symbol").is_in(touched))
+            other = existing.filter(~pl.col("symbol").is_in(touched))
+            merged = pl.concat([same, new_rows]).unique(
                 subset=["symbol", "datetime"], keep="last",
             )
+            day_df = pl.concat([other, merged])
         else:
             day_df = day_df.drop("_trade_date")
         day_df = day_df.sort("symbol", "datetime")
@@ -755,10 +946,8 @@ def _try_custom_minute(
       (None, True)   → 未配自定义源 / 未配 minute dataset / 自定义源异常 → 走 TickFlow
       (df, False)    → 自定义源成功(含空 df) → 直接用, 不回退
 
-    降级策略 (C): 自定义源异常时无条件 fall through 到 TickFlow,
-    由 TickFlow 路径自身 try/except 兜底。Pro+ 用户 TickFlow 成功返回数据,
-    None 档用户 TickFlow 失败返回空。不显式判断 tier, 避免 #126 augmented
-    capability 逻辑干扰。
+    自定义源异常时返回 fallback=True。单股拉取调用方另行检查 TickFlow 原生
+    能力, 避免自定义源增广能力误放行无权限请求。
 
     resolver 异常边界由 _resolve_minute_provider 统一兜底; 业务调用
     (provider.get_minute) 仍在本函数 try 块内, 与 resolver 异常分离
@@ -854,6 +1043,13 @@ def sync_minute_batch(
         return df
 
     tf = get_client()
+
+    # naive 窗口按北京墙钟解释 (同 _as_beijing): /api/kline/minute-batch 以 naive 北京墙钟
+    # 构造窗口, 直接交给 _datetime_to_ms 会按服务器本地时区换算, UTC 主机上整体晚 8 小时
+    if start_time is not None:
+        start_time = _as_beijing(start_time)
+    if end_time is not None:
+        end_time = _as_beijing(end_time)
 
     # TickFlow count 上限 10000 根/股, 1 天 240 根 → 单次最多约 41 个交易日。
     # 按 segment_trading_days 交易日分段 (交易日→自然日 ×7/5 换算, 含节假日余量)。
@@ -1222,8 +1418,14 @@ def fetch_minute_single(
     symbol: str,
     trade_date: date,
     asset_type: AssetType = "stock",
+    *,
+    capset: CapabilitySet,
 ) -> pl.DataFrame:
-    """实时拉取单股单日分钟 K(不写入本地)。优先自定义分钟源, 回退 TickFlow。"""
+    """实时拉取单股单日分钟 K(不写入本地)。
+
+    优先使用当前自定义分钟源。仅当 TickFlow 原生单股分钟能力存在时才允许
+    回退 TickFlow; 自定义源增广只授予 batch 能力, 不会误放行该回退路径。
+    """
     from datetime import datetime
     # 北京时间窗口必须带时区: naive datetime 会被 .timestamp() 按服务器本地时区解释,
     # UTC 容器上窗口整体偏移 8 小时, 分时补拉必然为空。
@@ -1239,6 +1441,9 @@ def fetch_minute_single(
     if not fallback:
         # 见 sync_minute_batch 同分支注释: df 在此必非 None。
         return df if df is not None else pl.DataFrame()
+
+    if not capset.has(Cap.KLINE_MINUTE_BY_SYMBOL):
+        return pl.DataFrame()
 
     tf = get_client()
     try:
@@ -1272,29 +1477,38 @@ def fetch_adj_factor_single(symbol: str) -> pl.DataFrame:
     return _normalize_adj_factor(raw)
 
 
+def _as_beijing(d: datetime) -> datetime:
+    """落盘的分钟 datetime 是北京墙钟 naive, 带上北京时区再交给取数窗口。
+
+    naive 值经 _datetime_to_ms 会被 .timestamp() 按服务器本地时区解释, 与同
+    窗口另一端的服务器本地时间混用后整体错位 (UTC 容器上错 8 小时)。
+    """
+    return d if d.tzinfo is not None else d.replace(tzinfo=CN_TZ)
+
+
 def _latest_minute_datetime(repo: KlineRepository) -> datetime | None:
-    """本地分钟 K 数据的最新时间。"""
+    """本地分钟 K 数据的最新时间 (北京时区)。"""
     try:
         res = repo.execute_one("SELECT max(datetime) FROM kline_minute")
         if res and res[0]:
             d = res[0]
             if isinstance(d, datetime):
-                return d
-            return datetime.fromisoformat(str(d))
+                return _as_beijing(d)
+            return _as_beijing(datetime.fromisoformat(str(d)))
     except Exception:  # noqa: BLE001
         pass
     return None
 
 
 def _earliest_minute_datetime(repo: KlineRepository) -> datetime | None:
-    """本地分钟 K 数据的最早时间 (用于向前扩展的起点)。"""
+    """本地分钟 K 数据的最早时间 (北京时区, 用于向前扩展的起点)。"""
     try:
         res = repo.execute_one("SELECT min(datetime) FROM kline_minute")
         if res and res[0]:
             d = res[0]
             if isinstance(d, datetime):
-                return d
-            return datetime.fromisoformat(str(d))
+                return _as_beijing(d)
+            return _as_beijing(datetime.fromisoformat(str(d)))
     except Exception:  # noqa: BLE001
         pass
     return None
@@ -1416,7 +1630,9 @@ def sync_and_persist_minute(
     # 迁移:旧版按 symbol= 分区转为 date= 分区
     _migrate_symbol_to_date_partition(repo)
 
-    now = datetime.now()
+    # 窗口两端统一为北京时区: 起止点会与本地分钟 K 的北京墙钟混用, 用服务器
+    # 本地时间会让窗口整体错位 (UTC 容器上起点晚于终点, 增量补拉一个请求都发不出)。
+    now = cn_now()
 
     if extend_backward:
         # 向前扩展模式: 从本地最早数据往前补, 叠加已有数据避免缺口。

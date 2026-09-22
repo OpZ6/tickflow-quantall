@@ -2,16 +2,18 @@
 
 > **稳定 Tag 硬约束（2026-08-31 起）**：Quantall 每次上游合并只允许选择上游已发布的稳定 Tag；禁止直接合并 `upstream/main`、功能分支或未打 Tag 的单独提交。若最新稳定 Tag 不满足需求，停止合并并由维护者决定是否等待下一稳定版本。
 
-## 最新同步记录（2026-09-06）
+## 最新同步记录（2026-09-22）
 
 | 项目 | 值 |
 | --- | --- |
-| 同步目标 | `v0.2.3` |
-| Tag commit | `e0cd625ef455bd1ca1fcf36a8748813e53bdea09` |
-| 集成分支 | `sync/upstream-v0.2.3` |
-| 明确排除 | `v0.2.3` 之后的 `upstream/main` 提交 |
+| 同步目标 | `v0.3.0` |
+| Tag commit | `4fa83aea79e3fb9957e3963f6cd1ce45c0199fb4` |
+| 集成分支 | `sync/upstream-v0.3.0` |
+| 历史桥接 | 上游重写后的 `v0.2.3` commit `7eba93e75f3a6f25ed8df230c3104480094575eb` |
+| 回退点 | `checkpoint/pre-upstream-v0.3.0-20260922`、`backup/pre-upstream-v0.3.0-20260922`、`.git/backups/pre-upstream-v0.3.0-20260922.bundle` |
+| 明确排除 | `v0.3.0` 之后的 `upstream/main` 提交 |
 
-本次同步保留 Quantall 的 QuantX、市场实验室、Market Facts、本地全市场历史财务、统一 K 线和策略证据链、Quants/VCP 策略及数据源优先级，并接入稳定版的因子平台、全量分钟路由、指数补充、流式增强历史重建和因子归因。逐文件冲突决策与验证结果见历史归档 [`upstream-v0.2.3-integration.md`](archive/20260907/upstream-v0.2.3-integration.md)。
+本次同步保留 Quantall 的 QuantX、股票池、市场实验室、Market Facts、本地全市场历史财务、统一 K 线和策略证据链、Quants/VCP 策略及数据源优先级，并接入稳定版的 AI 助手、板块轮动、原子写入、增强历史窗口、流式日线同步、任务心跳和并发队列等更新。由于上游重写了 `v0.2.3` 之前的历史，集成分支先用 `ours` merge 桥接同版本的新历史，再正常合并固定的 `v0.3.0` commit；不依赖可变 Tag 指针作为回退依据。上一版逐文件冲突决策见历史归档 [`upstream-v0.2.3-integration.md`](archive/20260907/upstream-v0.2.3-integration.md)。
 
 状态：权威升级流程。目标是持续跟踪 `shy3130/tick-stock-panel`，同时保留 Quantall 的 QuantX、实验室和自有功能。
 

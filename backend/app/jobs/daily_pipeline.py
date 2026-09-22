@@ -24,7 +24,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.indicators.pipeline import filter_halt_days, run_pipeline
 from app.config import settings
-from app.services import index_sync, instrument_sync, kline_sync, preferences as _prefs
+from app.indicators.pipeline import filter_halt_days, run_pipeline
+from app.services import index_sync, instrument_sync, kline_sync
+from app.services import preferences as _prefs
 from app.tickflow.capabilities import Cap, CapabilitySet
 from app.tickflow.pools import DEMO_SYMBOLS, get_pool
 from app.tickflow.repository import KlineRepository
@@ -39,40 +41,33 @@ def _prune_partial_enriched_partitions(daily_dir: Path, enriched_dir: Path) -> l
 
     自选实时路径会在全市场 enriched 生成前提前创建当日分区 (只有几只自选),
     仅按日期目录计数比较会把它误判为完整分区而跳过计算, 造成日K缺失与
-    均线错误。enriched 按契约会过滤停牌占位行，因此行数少于 raw 不能单独
-    证明覆盖不全；只有过滤合法停牌后的预期证券集合仍有缺失才删除分区。
+    均线错误。按与加工相同的停牌过滤口径检查 symbol 覆盖, 不能直接比较
+    行数: 正常剔除停牌记录会让 enriched 少行, 导致每次管道都删除重算。
+    删除后 run_pipeline(new_dates_only=True) 会把它们当"新日期"全市场补齐。
     daily 同日分区不存在 (今日日K尚未同步) 时不处理, 留给当日正常流程。
     """
     import shutil
-
-    import pyarrow.parquet as pq
-
-    def _rows(part_dir: Path) -> int:
-        total = 0
-        for f in part_dir.glob("*.parquet"):
-            try:
-                total += pq.ParquetFile(f).metadata.num_rows
-            except Exception:  # noqa: BLE001
-                return -1  # 不可读 → 不动, 交给既有完整性检查兜底
-        return total
 
     pruned: list[str] = []
     for part in enriched_dir.glob("date=*"):
         daily_part = daily_dir / part.stem
         if not daily_part.exists():
             continue
-        e_rows, d_rows = _rows(part), _rows(daily_part)
-        if e_rows < 0 or d_rows <= 0 or e_rows >= d_rows:
-            continue
         try:
-            daily = pl.read_parquet(daily_part / "*.parquet")
-            expected = set(filter_halt_days(daily).get_column("symbol").to_list())
-            actual = set(
-                pl.read_parquet(part / "*.parquet", columns=["symbol"])
-                .get_column("symbol")
-                .to_list()
-            )
-        except Exception:  # noqa: BLE001
+            expected: set[str] = set()
+            # 每次只读单文件的停牌判定列, 不加载全历史或指标宽表。
+            for path in daily_part.glob("*.parquet"):
+                schema = pl.read_parquet_schema(path)
+                if not {"symbol", "open", "high"}.issubset(schema):
+                    raise ValueError("daily 缺少 symbol/open/high, 无法判断有效标的覆盖")
+                columns = [c for c in ("symbol", "open", "high", "volume", "amount") if c in schema]
+                daily = pl.read_parquet(path, columns=columns)
+                expected.update(filter_halt_days(daily)["symbol"].drop_nulls().to_list())
+            actual: set[str] = set()
+            for path in part.glob("*.parquet"):
+                actual.update(pl.read_parquet(path, columns=["symbol"])["symbol"].drop_nulls().to_list())
+        except Exception as e:
+            logger.warning("enriched 覆盖检查跳过 %s, 保留分区: %s", part.name, e)
             continue
         if expected - actual:
             shutil.rmtree(part, ignore_errors=True)
@@ -452,7 +447,7 @@ def run_now(
     #     - 首次 (enriched 目录不存在) → 全量
     #     - 往前扩展历史 (新日期 < enriched 已有最早日期) → 全量
     #       前面的除权因子会改变累积因子链,影响后面所有日期的复权价格
-    #     - 往后新增日期 (新日期 > enriched 已有最晚日期)
+    #     - 往后新增日期或已有历史区间内的缺口
     #       → 增量补新区块(所有标的) + 受除权影响个股全日期重算
     #     - 无新日期 + 有新除权因子 → 增量: 只重算受影响个股的全部日期
     #     - 无新日期 + 无变化 → 跳过
@@ -530,6 +525,10 @@ def run_now(
         logger.info("compute_enriched: skip (no new daily, no adj_factor changes)")
     _refresh_single_view(repo, "kline_enriched")
     _invalidate("enriched")
+
+    # Step 2.1: 数据充足性可见化 (#303) — 空库首跑/仅当日实时覆写 1 天的库,
+    # 均线/动量/量比等指标暖机不足, 管道各 stage 都"成功"但选股会静默全 0。
+    enriched_total_days = warn_if_enriched_too_thin(repo.store.data_dir)
 
     # Step 2.3: 指数 / ETF 同步 — 物理分开存储；ETF 可复权，指数不复权。
     written_index_daily = 0
@@ -809,6 +808,7 @@ def run_now(
         "regime_days": regime_days,
         "mainline_rows": mainline_rows,
         "lagging_symbols": len(lagging_symbols),
+        "enriched_total_days": enriched_total_days,
         "integrity_repair_from": repair_start.isoformat() if repair_start else None,
         "integrity_issues": len(integrity_issues),
         "skipped_stages": skipped,
@@ -821,6 +821,23 @@ def run_now(
         raise PipelineStageError(stage_errors)
 
     return result
+
+
+def warn_if_enriched_too_thin(data_dir: Path) -> int:
+    """enriched 总覆盖天数; 低于常见指标暖机窗口时 WARN 引导全量回填 (#303)。
+
+    返回天数供管道 result 上报。目录列举 O(天数), 不在热路径。
+    """
+    from app.services.screener import MIN_INDICATOR_WARMUP_DAYS, enriched_history_days
+
+    days = enriched_history_days(data_dir)
+    if days < MIN_INDICATOR_WARMUP_DAYS:
+        logger.warning(
+            "enriched 仅覆盖 %d 个交易日 (<%d): 指标暖机不足, 选股可能全部 0 命中且无提示 — "
+            "建议全量回填 (同步标的维表 → 日K批量同步(带后缀符号) → 重算 enriched)",
+            days, MIN_INDICATOR_WARMUP_DAYS,
+        )
+    return days
 
 
 def _refresh_views(repo: KlineRepository) -> None:
@@ -909,7 +926,7 @@ def _run_tracked(fn, job_label: str) -> bool:
     重任务执行槽: 再挡一层僵尸并发(reap 后线程仍活时不得并行写 parquet)。
     返回 True 仅表示任务已成功并且执行槽已释放。
     """
-    from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, try_acquire_run_slot
+    from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, run_with_capacity, try_acquire_run_slot
 
     job_id, is_new = job_store.create()
     if not is_new:
@@ -926,8 +943,7 @@ def _run_tracked(fn, job_label: str) -> bool:
 
     succeeded = False
     try:
-        job_store.start(job_id)
-        result = fn(on_progress=progress)
+        result = run_with_capacity(job_id, lambda: fn(on_progress=progress))
         job_store.succeed(job_id, result)
         succeeded = True
         logger.info("scheduled %s completed: job_id=%s", job_label, job_id)
@@ -1055,9 +1071,11 @@ async def _run_scheduled_review(repo) -> None:
             quote_service.push_review_event(json.dumps(
                 {"type": "done", "archived": True}, ensure_ascii=False))
 
-        # 推送到飞书(可选): 运行时读取配置, 用户改设置下次触发即生效。
+        # 推送门控: review_push_mode=manual 时定时复盘只归档不推送,
+        # 由用户对当日报告显式确认后才推; auto 时保持既有自动推送行为。
         # 失败静默降级, 不影响已归档的报告。
-        _maybe_push_review(content, meta)
+        if _prefs.get_review_push_mode() == "auto":
+            _maybe_push_review(content, meta)
     except Exception as e:  # noqa: BLE001
         logger.exception("scheduled review failed: %s", e)
         # 兜底: 异常时通知前端停止「生成中」状态, 避免页面卡在 streaming
@@ -1137,11 +1155,12 @@ def _maybe_push_review(content: str, meta: dict) -> None:
     """复盘报告归档后, 按 review_push_channels 选定的外部工具逐个推送完整报告。
 
     定时生成与手动生成共用本函数 (手动归档端点 POST /api/market-recap/reports 也会调用)。
-    channels 为空则不推送; 'feishu' 复用监控中心的全局飞书 Webhook 通道。
+    channels 为空则不推送; 复用监控中心的全局外部渠道配置。
     推送失败静默降级 (Webhook 是辅助通道), 不影响已归档的报告。
     """
     try:
-        from app.services import preferences, webhook_adapter
+        from app import secrets_store
+        from app.services import email_adapter, preferences, webhook_adapter
 
         channels = preferences.get_review_push_channels()
         if not channels:
@@ -1173,6 +1192,33 @@ def _maybe_push_review(content: str, meta: dict) -> None:
                     url, "每日复盘", full_body
                 )
                 logger.info("review push(wecom) %s", "sent" if ok else "failed")
+            elif ch == "custom":
+                url = preferences.get_custom_webhook_url()
+                if not url:
+                    logger.info("review push(custom) skipped: webhook not configured")
+                    continue
+                ok = webhook_adapter.send_custom(
+                    url,
+                    "每日复盘",
+                    content,
+                    "market_review",
+                    meta,
+                    secrets_store.get_custom_webhook_secret(),
+                )
+                logger.info("review push(custom) %s", "sent" if ok else "failed")
+            elif ch == "email":
+                config = preferences.get_email_smtp_config()
+                if not email_adapter.is_configured(config):
+                    logger.info("review push(email) skipped: SMTP not configured")
+                    continue
+                email_body = (f"{subtitle}\n\n{content}" if subtitle else content)
+                ok = email_adapter.send_email(
+                    config,
+                    secrets_store.get_email_smtp_password(),
+                    "每日复盘",
+                    email_body,
+                )
+                logger.info("review push(email) %s", "sent" if ok else "failed")
             # 未来更多渠道在此追加分支
     except Exception as e:  # noqa: BLE001
         logger.warning("review push error: %s", e)

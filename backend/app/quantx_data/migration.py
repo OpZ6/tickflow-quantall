@@ -112,7 +112,11 @@ def migrate_quantx_history(
         if datasets
         else tuple(
             item for item in DatasetId
-            if item != DatasetId.SECURITY_POPULARITY_DAILY
+            if item not in {
+                DatasetId.SECURITY_LISTING_HISTORY,
+                DatasetId.SECURITY_NAME_HISTORY,
+                DatasetId.SECURITY_POPULARITY_DAILY,
+            }
         )
     )
     result = {

@@ -5,7 +5,13 @@ from types import SimpleNamespace
 from app.services.depth_service import DepthService
 
 
+def _reset_depth_health():
+    from app.data_providers import routing
+    routing.reset_health()
+
+
 def test_depth5_routes_to_selected_plugin(monkeypatch):
+    _reset_depth_health()
     provider = SimpleNamespace(
         get_depth5=lambda symbols: {
             symbols[0]: {"ask_volumes": [0], "bid_volumes": [100]},
@@ -38,6 +44,7 @@ def test_depth5_routes_to_selected_plugin(monkeypatch):
 
 
 def test_depth5_tickflow_route_keeps_capability_gate(monkeypatch):
+    _reset_depth_health()
     monkeypatch.setattr(
         "app.services.preferences.get_depth5_data_provider", lambda: "tickflow",
     )
@@ -52,6 +59,7 @@ def test_depth5_tickflow_route_keeps_capability_gate(monkeypatch):
 
 
 def test_depth5_fails_over_to_next_provider(monkeypatch):
+    _reset_depth_health()
     broken = SimpleNamespace(get_depth5=lambda _symbols: (_ for _ in ()).throw(TimeoutError("down")))
     healthy = SimpleNamespace(
         get_depth5=lambda symbols: {symbols[0]: {"ask_volumes": [0], "bid_volumes": [100]}},

@@ -292,40 +292,56 @@ class DepthService:
             self._persist(enriched_date)
 
     def _call_depth_batch(self, symbols: list[str]) -> dict:
-        """按当前能力路由拉取五档。返回统一的 {symbol: depth-record}。"""
-        from app.services import preferences
+        """按五档专用优先级取数; 单批失败隔离, 整源无结果时才切换后备源。"""
         from app.data_providers import custom as custom_sources
         from app.data_providers import routing
 
+        capset = self._get_capset()
+        limit = resolve_limit(capset, Cap.DEPTH5_BATCH, default_batch=100, default_rpm=30)
+
         def fetch(provider_name: str) -> dict:
-            if provider_name != "tickflow":
+            if provider_name == "tickflow":
+                if not capset.has(Cap.DEPTH5_BATCH):
+                    raise RuntimeError("TickFlow depth5 capability unavailable")
+                from app.data_providers.registry import get_provider
+
+                provider = get_provider("tickflow")
+            else:
                 if not custom_sources.provider_has_dataset(provider_name, "depth5"):
                     raise RuntimeError("provider does not declare depth5")
                 provider = custom_sources.get_provider(provider_name)
-                method = getattr(provider, "get_depth5", None)
-                if not callable(method):
-                    raise RuntimeError("provider does not implement get_depth5")
-                return method(symbols) or {}
 
-            capset = self._get_capset()
-            if not capset.has(Cap.DEPTH5_BATCH):
-                raise RuntimeError("TickFlow depth5 capability unavailable")
-            from app.tickflow.client import get_client
+            fetch_depth = getattr(provider, "get_depth_batch", None)
+            if not callable(fetch_depth):
+                fetch_depth = getattr(provider, "get_depth5", None)
+            if not callable(fetch_depth):
+                raise RuntimeError("provider does not implement a depth batch method")
 
-            tf = get_client()
-            limit = resolve_limit(
-                capset, Cap.DEPTH5_BATCH, default_batch=100, default_rpm=30,
-            )
             result: dict = {}
-            for index, symbol_chunk in enumerate(chunked(symbols, limit.batch)):
-                sleep_between_batches(index, limit.rpm, default_interval=2.0)
-                data = tf.depth.batch(symbol_chunk)
-                if isinstance(data, dict):
-                    result.update(data)
+            for i, symbol_chunk in enumerate(chunked(symbols, limit.batch)):
+                sleep_between_batches(i, limit.rpm, default_interval=2.0)
+                try:
+                    data = fetch_depth(symbol_chunk)
+                    if isinstance(data, dict):
+                        result.update(data)
+                    else:
+                        logger.warning(
+                            "depth provider %s 第 %d 批返回非 dict, 已跳过",
+                            provider_name,
+                            i + 1,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "depth provider %s 第 %d 批失败(%d 只): %s",
+                        provider_name,
+                        i + 1,
+                        len(symbol_chunk),
+                        exc,
+                    )
             return result
 
         try:
-            data, provider_name = routing.run_with_failover(
+            result, provider_name = routing.run_with_failover(
                 "depth5", fetch, is_success=bool,
             )
         except routing.ProviderChainExhaustedError as exc:
@@ -333,7 +349,7 @@ class DepthService:
             return {}
         return {
             symbol: {**record, "source": provider_name}
-            for symbol, record in data.items()
+            for symbol, record in result.items()
         }
 
     def finalize(self) -> None:

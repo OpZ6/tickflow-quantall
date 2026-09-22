@@ -10,16 +10,71 @@ const BASE = ''
 type RequestOptions = RequestInit & {
   /** 为 true 时不弹错误 toast（由调用方自行汇总提示，如多图串行队列） */
   quiet?: boolean
+  /** 请求超时毫秒数; null 关闭。默认 30s — 后端依赖 polars, 偶发挂起时无超时
+   *  会占满浏览器同源连接池, 拖垮整页所有请求 (表现为全部排队"已停止")。 */
+  timeoutMs?: number | null
 }
 
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+/**
+ * 把浏览器 fetch 抛出的裸网络错误文案翻译成可操作的提示。
+ * 各浏览器文案不同: Chrome "Failed to fetch" / Safari "network error" / "Load failed"。
+ * 典型根因: 后端等 AI 首包期间流式连接被代理/网关按空闲超时切断, 或 AI 服务繁忙。
+ */
+export function friendlyStreamError(message: string | undefined | null): string {
+  if (!message) return ''
+  if (/failed to fetch|network error|load failed|networkerror/i.test(message)) {
+    return '网络连接中断: 通常是 AI 服务繁忙, 或代理/网关超时切断了长连接, 请重试'
+  }
+  return message
+}
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+/** 同步计算型接口 (回测/筛选等) 的放宽超时: 合法耗时可能远超轮询类接口。 */
+const COMPUTE_REQUEST_TIMEOUT_MS = 300_000
+/** 扩展数据拉取类长请求: 跟随后端配置的单次超时 (timeoutSeconds, 默认 30s) + 10s 解析/写盘缓冲。
+ *  浏览器端 fetch 默认 30s abort 会先于后端超时触发, 大响应接口 (如全量集合竞价
+ *  /day, 后端超时 120s) 必须把这层同步放宽。 */
+const extPullTimeoutMs = (timeoutSeconds?: number) => (timeoutSeconds ?? 30) * 1000 + 10_000
+
 async function request<T>(path: string, init?: RequestOptions): Promise<T> {
-  const { quiet, ...fetchInit } = init ?? {}
+  const { quiet, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...fetchInit } = init ?? {}
   const isFormData = fetchInit.body instanceof FormData
   const headers: Record<string, string> = {}
   if (!isFormData) headers['Content-Type'] = 'application/json'
   // 合并调用方传入的 headers (此前会被整体覆盖丢弃)
   Object.assign(headers, fetchInit.headers as Record<string, string> | undefined)
-  const res = await fetch(`${BASE}${path}`, { ...fetchInit, headers })
+  // 自带 signal 的调用方 (上传/串行队列) 由其自行控制中止; 其余走默认超时。
+  const ctl = timeoutMs == null || fetchInit.signal ? undefined : new AbortController()
+  const timeoutSeconds = Math.round((timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)
+  let timer: number | undefined
+  if (ctl && timeoutMs != null) timer = window.setTimeout(() => ctl.abort(), timeoutMs)
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...fetchInit,
+      headers,
+      ...(ctl ? { signal: ctl.signal } : {}),
+    })
+  } catch (err) {
+    if (ctl && err instanceof DOMException && err.name === 'AbortError') {
+      const msg = `请求超时（${timeoutSeconds}s）· ${path.split('?')[0]}`
+      if (!quiet) toast(msg, 'error')
+      throw new ApiError(msg, 0)
+    }
+    throw err
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer)
+  }
   if (!res.ok) {
     let detail = ''
     try {
@@ -37,7 +92,7 @@ async function request<T>(path: string, init?: RequestOptions): Promise<T> {
     const msg = detail || `${res.status} ${res.statusText}`
     // 401 (未登录/会话过期) 不弹 toast — 由全局认证拦截器统一跳登录页, 避免刷屏
     if (res.status !== 401 && !quiet) toast(msg, 'error')
-    throw new Error(msg)
+    throw new ApiError(msg, res.status)
   }
   return res.json() as Promise<T>
 }
@@ -239,7 +294,7 @@ export interface MinuteKlineRow {
   low: number
   close: number
   volume: number
-  amount: number
+  amount: number | null
 }
 
 export interface MinuteKlineSession {
@@ -404,6 +459,8 @@ export interface ScreenerResult {
 export interface ScreenerResultSummary {
   total: number
   as_of: string
+  /** 渐进式 run_all 写入的计算时间戳 (Unix ms); 监控实时叠加等来源无此字段 */
+  computed_at?: number | null
 }
 
 export interface ScreenerCachedSummary {
@@ -411,6 +468,20 @@ export interface ScreenerCachedSummary {
   results: Record<string, ScreenerResultSummary>
   today_ever_counts: Record<string, number>
   updated_at: number | null
+}
+
+/** run_all 渐进式返回: 快策略已算完, 慢策略后台继续算 */
+export interface ScreenerRunAllSummary {
+  as_of: string | null
+  results: Record<string, ScreenerResultSummary>
+  /** 尚未算完的策略 (后台继续, 逐个写入缓存) */
+  pending?: string[]
+  /** 全部算完时为 true */
+  complete?: boolean
+  /** 后台执行出错时的错误信息 (部分结果仍会返回) */
+  error?: string | null
+  /** 本次执行起点 (Unix ms, 后端时钟), 用于判断缓存结果是否属于本轮 */
+  started_at?: number | null
 }
 
 export interface ScreenerCachedResult {
@@ -762,6 +833,7 @@ export interface StrategyDetail {
   source: 'builtin' | 'custom' | 'ai' | 'composite'
   catalog_origin?: 'upstream' | 'project' | null
   catalog_label?: string | null
+  research_only?: boolean
   execution_backend: 'polars_expr' | 'matrix_native' | 'python_history_legacy' | 'composite' | 'minute_filter'
   asset_types: string[]
   timeframes: string[]
@@ -813,6 +885,7 @@ export type StrategyBuildStreamEvent =
   | { type: 'delta'; content: string }
   | ({ type: 'result' } & StrategyBuildResult)
   | { type: 'error'; message: string }
+  | { type: 'ping' }
 
 export interface StrategyCodeSaveResult {
   ok: boolean
@@ -820,6 +893,21 @@ export interface StrategyCodeSaveResult {
   source: 'ai' | 'custom' | 'composite'
   path: string
   meta: Record<string, any>
+  research_only?: boolean
+}
+
+/** AI 迭代每一轮的回测证据 (stats 为比率, 0.15 = 15%) */
+export interface AiIterateRound {
+  round: number
+  stats: Record<string, number> | null
+  change_summary: string
+}
+
+export interface AiIterateResult {
+  draft_strategy_id: string
+  rounds: AiIterateRound[]
+  final_code: string
+  final_meta: Record<string, any>
 }
 
 // ===== Custom Signals (自定义信号) =====
@@ -850,6 +938,9 @@ export interface CustomSignalOptions {
   groups?: CustomSignalFieldGroup[]
   maxDays?: number
   operators: string[]
+  /** string 扩展字段 (概念/行业归属): 这些字段用 stringOperators + 字符串右值 */
+  stringFields?: string[]
+  stringOperators?: string[]
   kinds: { key: string; label: string }[]
 }
 
@@ -974,7 +1065,7 @@ export interface MonitorRule {
   message: string
   webhook_url?: string
   webhook_enabled?: boolean  // 兼容老规则, 已由 webhook_channels 取代
-  webhook_channels?: string[]  // 命中时推送的外部渠道 (合法值 'feishu' | 'wecom')
+  webhook_channels?: string[]  // 合法值: feishu | wecom | custom | email
   created_at?: string
   runtime_warning?: string
   // ladder 专属: 封单监控; volume_delta 复用 metric 表示阈值口径 (volume=手数, amount=金额)
@@ -2077,6 +2168,7 @@ export interface Preferences {
   depth_finalize_time: { hour: number; minute: number }
   review_schedule: { enabled: boolean; hour: number; minute: number }
   review_push_channels: string[]
+  review_push_mode?: 'auto' | 'manual'
   sse_refresh_pages: Record<string, boolean>
   strategy_monitor_enabled: boolean
   strategy_monitor_ids: string[]
@@ -2084,6 +2176,10 @@ export interface Preferences {
   feishu_webhook_url?: string
   feishu_webhook_secret?: string
   wecom_webhook_url?: string
+  custom_webhook_url?: string
+  custom_webhook_secret_set?: boolean
+  email_smtp_config?: EmailSmtpConfig
+  email_smtp_password_set?: boolean
   wecom_bot_id?: string
   wecom_bot_secret?: string
   wecom_bot_enabled?: boolean
@@ -2095,6 +2191,15 @@ export interface Preferences {
   minute_intraday_refresh: boolean
   minute_intraday_refresh_interval: number
   monitor_ext_fields: { concept: MonitorExtFieldItem | null; industry: MonitorExtFieldItem | null }
+}
+
+export interface EmailSmtpConfig {
+  host: string
+  port: number
+  security: 'ssl' | 'starttls' | 'none'
+  username: string
+  from_address: string
+  to_addresses: string[]
 }
 
 /** 监控中心 ext 字段单项配置 (行业/概念标签的来源 + 显示裁剪) */
@@ -2397,6 +2502,81 @@ export interface SimulationResult {
     halve_probability_pct: number; p10_path: number[]; median_path: number[]; p90_path: number[]; sample_paths: number[][]
   }[]
   distribution: { bins: { from: number; to: number; count: number; density: number }[] }
+}
+
+// ===== 板块切换 (盘中轮动, 全量分钟聚合) =====
+export interface SectorRotationPoint {
+  time: string
+  rotation: number
+  leader: string
+  leader_pct: number | null
+  market_pct: number | null
+  /** 该桶上穿 0 轴 (转强) 的板块数 */
+  cross_up?: number
+  /** 该桶下穿 0 轴 (转弱) 的板块数 */
+  cross_down?: number
+}
+
+/** 0 轴穿越事件 (涨跌切换): dir=up 转强 / down 转弱 */
+export interface SectorCrossEvent {
+  time: string
+  name: string
+  dir: 'up' | 'down'
+  pct: number | null
+}
+
+export interface SectorRotationSector {
+  name: string
+  pct_now: number | null
+  pct_prev: number | null
+  rank_now: number | null
+  rank_prev: number | null
+  rank_change: number | null
+  flow: number | null
+  score: number | null
+  n_members: number
+  n_members_with_bars: number
+}
+
+export interface SectorRotation {
+  status: 'ok' | 'no_data' | 'empty'
+  reason?: string
+  date?: string
+  kind?: 'concept' | 'industry'
+  basis?: string
+  flow_field?: string | null
+  flow_available?: boolean
+  bucket_minutes?: number
+  member_count?: number
+  /** 内置属性板块排除名单 (供前端编辑器预填/恢复默认) */
+  default_exclude_sectors?: string[]
+  /** 自动活跃榜成员数上限 */
+  max_auto_members?: number
+  as_of?: string
+  timeline: SectorRotationPoint[]
+  /** 0 轴穿越事件 (全市场板块, 最新在前, 封顶 120 条) */
+  cross_events?: SectorCrossEvent[]
+  sectors: SectorRotationSector[]
+  /** 热度板块 × 分钟桶涨幅矩阵 (行序同 sectors, 供热力图按分钟轮动展示) */
+  series?: {
+    buckets: string[]
+    /** 展示板块名 (活跃榜 TopN 或自定义监控清单, 涨幅走势线模式共用) */
+    sectors: string[]
+    /** matrix[行][列] = 该板块该桶涨幅; 无行情为 null */
+    matrix: (number | null)[][]
+  }
+  /** 全部板块清单按活跃度降序 (近 30 分钟成分股成交额合计; 量额缺失为 null 排后; 永不剔除) */
+  universe?: SectorRotationUniverseItem[]
+}
+
+export interface SectorRotationUniverseItem {
+  name: string
+  pct_now: number | null
+  activity: number | null
+  n_members: number
+  n_members_with_bars: number
+  /** 被自动活跃榜过滤 (排除名单/成员数超限); 仅影响自动选取, 仍可手动加入自定义 */
+  excluded?: boolean
 }
 
 // ===== API surface =====
@@ -2720,7 +2900,17 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ url }),
     }),
-  sendTestWebhook: (channel: 'feishu' | 'wecom') =>
+  updateCustomWebhook: (url: string, secret?: string) =>
+    request<{ custom_webhook_url: string; custom_webhook_secret_set: boolean }>('/api/settings/preferences/custom-webhook', {
+      method: 'PUT',
+      body: JSON.stringify({ url, ...(secret !== undefined ? { secret } : {}) }),
+    }),
+  updateEmailSmtp: (config: EmailSmtpConfig, password?: string) =>
+    request<{ email_smtp_config: EmailSmtpConfig; email_smtp_password_set: boolean }>('/api/settings/preferences/email-smtp', {
+      method: 'PUT',
+      body: JSON.stringify({ ...config, ...(password !== undefined ? { password } : {}) }),
+    }),
+  sendTestWebhook: (channel: 'feishu' | 'wecom' | 'custom' | 'email') =>
     request<{ ok: boolean; detail: string }>('/api/settings/preferences/webhook-test', {
       method: 'POST',
       body: JSON.stringify({ channel }),
@@ -2760,10 +2950,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ enabled, hour, minute }),
     }),
-  updateReviewPush: (channels: string[]) =>
-    request<{ review_push_channels: string[] }>('/api/settings/preferences/review-push', {
+  updateReviewPush: (channels: string[], mode?: 'auto' | 'manual') =>
+    request<{ review_push_channels: string[]; review_push_mode: 'auto' | 'manual' }>('/api/settings/preferences/review-push', {
       method: 'PUT',
-      body: JSON.stringify({ channels }),
+      body: JSON.stringify({ channels, mode: mode ?? null }),
     }),
   updateDepthPollingInterval: (interval: number) =>
     request<{ depth_polling_interval: number }>('/api/settings/preferences/depth-polling-interval', {
@@ -3077,16 +3267,18 @@ export const api = {
   screenerRunPreset: (strategy_id: string, pool?: string[], asOf?: string, extColumns?: string, assetType: 'stock' | 'etf' = 'stock', timeframe: '1d' | '1m' = '1d') =>
     request<ScreenerResult>('/api/screener/run_preset', {
       method: 'POST',
+      timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
       body: JSON.stringify({ strategy_id, pool, as_of: asOf ?? null, ext_columns: extColumns || null, asset_type: assetType, timeframe }),
     }),
   screenerRunCustom: (conditions: string[], orderBy?: string, limit = 30, pool?: string[], extColumns?: string, assetType: 'stock' | 'etf' = 'stock') =>
     request<ScreenerResult>('/api/screener/run', {
       method: 'POST',
+      timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
       body: JSON.stringify({ conditions, order_by: orderBy, limit, pool, ext_columns: extColumns || null, asset_type: assetType }),
     }),
   screenerRunAll: (asOf?: string, strategyIds?: string[], assetType: 'stock' | 'etf' = 'stock') =>
-    request<{ as_of: string | null; results: Record<string, ScreenerResultSummary> }>(
-      '/api/screener/run_all', { method: 'POST', body: JSON.stringify({ as_of: asOf ?? null, strategy_ids: strategyIds ?? null, asset_type: assetType, timeframe: '1d', summary_only: true }) },
+    request<ScreenerRunAllSummary>(
+      '/api/screener/run_all', { method: 'POST', timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS, body: JSON.stringify({ as_of: asOf ?? null, strategy_ids: strategyIds ?? null, asset_type: assetType, timeframe: '1d', summary_only: true }) },
     ),
   screenerCachedSummary: () =>
     request<ScreenerCachedSummary>('/api/screener/cached-summary'),
@@ -3127,7 +3319,8 @@ export const api = {
     if (start) params.set('start', start)
     if (end) params.set('end', end)
     const qs = params.toString()
-    return request<{ ok: boolean; computed: number; phase_days?: number; mainline_rows?: number }>(`/api/regime/recompute${qs ? `?${qs}` : ''}`, { method: 'POST' })
+    // 补算需扫 enriched 全市场数据, 大区间耗时超过默认超时, 放宽到 5 分钟
+    return request<{ ok: boolean; computed: number; phase_days?: number; mainline_rows?: number }>(`/api/regime/recompute${qs ? `?${qs}` : ''}`, { method: 'POST', timeoutMs: 300_000 })
   },
   regimePhases: (start?: string, end?: string) => {
     const params = new URLSearchParams()
@@ -3176,6 +3369,7 @@ export const api = {
   }) =>
     request<BacktestResult>('/api/backtest/run', {
       method: 'POST',
+      timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
       body: JSON.stringify(payload),
     }),
 
@@ -3269,6 +3463,7 @@ export const api = {
   }) =>
     request<FactorBacktestResult>('/api/backtest/factor/run', {
       method: 'POST',
+      timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
       body: JSON.stringify(payload),
     }),
 
@@ -3286,6 +3481,7 @@ export const api = {
   }) =>
     request<FactorBatchResult>('/api/backtest/factor/batch', {
       method: 'POST',
+      timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
       body: JSON.stringify(payload),
     }),
 
@@ -3482,6 +3678,20 @@ export const api = {
     return request<DimensionMembersResult>(`/api/ext-data/${encodeURIComponent(id)}/dimension-members?${qs.toString()}`)
   },
 
+  // ===== 板块切换 (盘中轮动) =====
+  sectorRotation: (params: { kind: 'concept' | 'industry'; flow?: string; top?: number; bucket?: number; seriesNames?: string[]; autoRows?: number; excludeSectors?: string[]; sortBy?: 'activity' | 'score' | 'pct' | 'rank_change' | 'momentum' | 'flow' }) => {
+    const query = new URLSearchParams({ kind: params.kind })
+    if (params.flow) query.set('flow', params.flow)
+    if (params.top != null) query.set('top', String(params.top))
+    if (params.bucket != null) query.set('bucket', String(params.bucket))
+    if (params.seriesNames?.length) query.set('series_names', JSON.stringify(params.seriesNames))
+    // autoRows/excludeSectors/sortBy 仅自动模式生效; excludeSectors 传空数组 = 清空名称过滤
+    if (params.autoRows != null) query.set('auto_rows', String(params.autoRows))
+    if (params.excludeSectors != null) query.set('exclude_sectors', JSON.stringify(params.excludeSectors))
+    if (params.sortBy) query.set('sort_by', params.sortBy)
+    return request<SectorRotation>(`/api/sector-rotation?${query}`)
+  },
+
   dimensionIntraday: (id: string, opts: { field: string; value: string; date?: string }) => {
     const qs = new URLSearchParams({ field: opts.field, value: opts.value })
     if (opts.date) qs.set('date', opts.date)
@@ -3547,22 +3757,47 @@ export const api = {
     response_path?: string; field_map?: Record<string, string>;
     schedule_minutes?: number; enabled?: boolean;
     time_window_start?: string | null; time_window_end?: string | null;
+    date_param?: string | null;
+    time_field?: string | null;
+    auth?: ExtPullAuth;
+    timeout_seconds?: number;
   }) =>
     request<{ status: string; pull: PullConfig }>(
       `/api/ext-data/${id}/pull`,
       { method: 'PUT', body: JSON.stringify(body) },
     ),
 
-  extDataPullTest: (id: string) =>
-    request<{ status: string; total_rows: number; preview: Record<string, unknown>[]; has_symbol: boolean }>(
-      `/api/ext-data/${id}/pull/test`,
-      { method: 'POST' },
+  /** 查询拉取接口 API Key 状态 (脱敏, 不返回明文) */
+  extDataApiKey: (id: string) =>
+    request<{ key_set: boolean; masked_key: string }>(
+      `/api/ext-data/${encodeURIComponent(id)}/api-key`,
     ),
 
-  extDataPullRun: (id: string) =>
+  /** 设置 (或空串清除) 拉取接口的 API Key */
+  extDataApiKeySet: (id: string, key: string) =>
+    request<{ status: string; key_set: boolean; masked_key: string }>(
+      `/api/ext-data/${encodeURIComponent(id)}/api-key`,
+      { method: 'PUT', body: JSON.stringify({ key }) },
+    ),
+
+  extDataPullTest: (id: string, timeoutSeconds?: number) =>
+    request<{ status: string; total_rows: number; preview: Record<string, unknown>[]; has_symbol: boolean }>(
+      `/api/ext-data/${id}/pull/test`,
+      { method: 'POST', timeoutMs: extPullTimeoutMs(timeoutSeconds) },
+    ),
+
+  extDataPullRun: (id: string, timeoutSeconds?: number) =>
     request<{ status: string; rows: number; date: string }>(
       `/api/ext-data/${id}/pull/run`,
-      { method: 'POST' },
+      { method: 'POST', timeoutMs: extPullTimeoutMs(timeoutSeconds) },
+    ),
+
+  /** 历史回补: 按本地交易日逐日拉取写入 timeseries 分区 (需 pull.date_param)。
+   *  timeoutMs 由调用方按 天数×单日超时 估算传入 (服务端逐日串行, 总耗时随天数线性)。 */
+  extDataBackfill: (id: string, start: string, end: string, timeoutMs?: number) =>
+    request<ExtDataBackfillResult>(
+      `/api/ext-data/${encodeURIComponent(id)}/backfill?start=${start}&end=${end}`,
+      { method: 'POST', timeoutMs: timeoutMs ?? 600_000 },
     ),
 
   // 内置预设 (概念/行业) 手动获取数据: 走结构转换, 保证 schema 一致
@@ -3585,6 +3820,7 @@ export const api = {
     request<ExtDataDetectUrlResult>('/api/ext-data/detect-url', {
       method: 'POST',
       body: JSON.stringify(body),
+      timeoutMs: extPullTimeoutMs(body.timeout_seconds),
     }),
 
   extDataFixSymbol: (id: string) =>
@@ -3690,7 +3926,7 @@ export const api = {
    * 用 ReadableStream 解析(而非 SSE EventSource),支持 POST body 且更简单。
    */
   async *financialAnalyzeStream(symbol: string, focus?: string): AsyncGenerator<{
-    type: 'meta' | 'delta' | 'error' | 'done'
+    type: 'meta' | 'delta' | 'error' | 'done' | 'ping'
     symbol?: string
     summary?: string
     periods?: number
@@ -3761,7 +3997,7 @@ export const api = {
    * meta 里额外带 levels(关键价位)供图表回放。
    */
   async *stockAnalyzeStream(symbol: string, focus?: string): AsyncGenerator<{
-    type: 'meta' | 'delta' | 'error' | 'done'
+    type: 'meta' | 'delta' | 'error' | 'done' | 'ping'
     symbol?: string
     summary?: string
     levels?: Record<LevelType, PriceLevel[]>
@@ -3822,6 +4058,7 @@ export const api = {
   reviewReportSave: (r: {
     as_of: string; focus?: string; content: string
     summary?: string; emotion_score?: number | null; emotion_label?: string
+    push?: boolean
   }) =>
     request<{ ok: boolean; report: AiReviewReport }>('/api/market-recap/reports', {
       method: 'POST', body: JSON.stringify(r),
@@ -3835,7 +4072,7 @@ export const api = {
    * meta 里带 as_of / emotion_score / emotion_label / summary,供前端先渲染信号灯。
    */
   async *reviewStream(asOf?: string, focus?: string): AsyncGenerator<{
-    type: 'meta' | 'delta' | 'error' | 'done'
+    type: 'meta' | 'delta' | 'error' | 'done' | 'ping'
     as_of?: string
     emotion_score?: number
     emotion_label?: string
@@ -3879,7 +4116,7 @@ export const api = {
 
   /** AI 概念轮动分析 — 流式 NDJSON。 */
   async *rotationAnalyzeStream(days: number, focus?: string, kind?: 'concept' | 'industry', level?: number): AsyncGenerator<{
-    type: 'meta' | 'delta' | 'error' | 'done'
+    type: 'meta' | 'delta' | 'error' | 'done' | 'ping'
     days?: number
     summary?: string
     content?: string
@@ -3920,10 +4157,11 @@ export const api = {
   },
 
   // ===== Strategy Engine =====
-  strategyList: (assetType?: 'stock' | 'etf', timeframe: '1d' | '1m' | 'all' = '1d') => {
+  strategyList: (assetType?: 'stock' | 'etf', timeframe: '1d' | '1m' | 'all' = '1d', includeResearch = false) => {
     const params = new URLSearchParams()
     if (assetType) params.set('asset_type', assetType)
     if (timeframe && timeframe !== 'all') params.set('timeframe', timeframe)
+    if (includeResearch) params.set('include_research', 'true')
     const qs = params.toString()
     return request<{ strategies: StrategyDetail[]; load_errors?: StrategyLoadError[] }>(
       `/api/strategies${qs ? `?${qs}` : ''}`,
@@ -3932,6 +4170,10 @@ export const api = {
 
   strategyGet: (id: string) =>
     request<StrategyDetail>(`/api/strategies/${id}`),
+
+  /** 发布 research_only 的 AI 草稿策略(翻转为公开) */
+  strategyPublish: (strategyId: string) =>
+    request<{ ok: boolean; strategy_id: string }>(`/api/strategies/${encodeURIComponent(strategyId)}/publish`, { method: 'POST' }),
 
   strategyRun: (strategyId: string, params?: Record<string, any>, asOf?: string, pool?: string[]) =>
     request<ScreenerResult>('/api/strategies/run', {
@@ -4191,6 +4433,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ strategy_id: strategyId, code, name: meta?.name ?? '', description: meta?.description ?? '' }),
     }),
+
+  /** AI 迭代: 生成 v1 → 跑回测 → 诊断 → 修改 的有界闭环, 草稿已落盘 data/strategies/ai/ */
+  strategyAiIterate: (payload: {
+    name?: string
+    description?: string
+    direction?: string
+    rules?: string
+    execution_backend?: 'polars_expr' | 'matrix_native'
+    max_rounds?: number
+  }) =>
+    request<AiIterateResult>('/api/strategies/ai/iterate', {
+      method: 'POST',
+      timeoutMs: null,
+      body: JSON.stringify(payload),
+    }),
 }
 
 // ===== Pipeline =====
@@ -4302,6 +4559,13 @@ export interface ExtDataField {
   label: string
 }
 
+/** 拉取接口鉴权方式; Key 本体存 secrets_store, 不出现在配置里 */
+export interface ExtPullAuth {
+  type: 'none' | 'bearer' | 'header' | 'query'
+  header?: string
+  param?: string
+}
+
 export interface PullConfig {
   url: string
   method: string
@@ -4318,6 +4582,25 @@ export interface PullConfig {
   next_run?: string | null
   time_window_start?: string | null
   time_window_end?: string | null
+  /** 接口按日查询的参数名 (如 "date"): 配置后支持历史回补 */
+  date_param?: string | null
+  /** 日期参数值的格式: iso=YYYY-MM-DD / compact=YYYYMMDD / ts_s=unix秒 / ts_ms=unix毫秒 (该交易日北京 00:00) */
+  date_format?: string
+  /** 日内序列表时间列名 (如 "ts"): 配置后同 symbol 允许多行 (按 symbol+时间列去重), 用于集合竞价等多盘数据 */
+  time_field?: string | null
+  auth?: ExtPullAuth | null
+  /** 单次拉取请求超时 (秒), 默认 30 */
+  timeout_seconds?: number
+}
+
+export interface ExtDataBackfillResult {
+  status: string
+  total_days: number
+  fetched: number
+  skipped_existing: number
+  empty: number
+  failed: { date: string; reason: string }[]
+  rows_written: number
 }
 
 export interface ExtDataDetectUrlRequest {
@@ -4327,6 +4610,8 @@ export interface ExtDataDetectUrlRequest {
   body?: string
   response_path?: string
   field_map?: Record<string, string>
+  /** 探测超时 (秒), 默认 30 */
+  timeout_seconds?: number
 }
 
 export interface ExtDataDetectUrlResult {

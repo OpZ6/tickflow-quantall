@@ -13,6 +13,11 @@ from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from app.db_safe import is_valid_ext_ident, quote_ident
+from app.price_limits import (
+    polars_is_risk_warning_name,
+    polars_limit_price,
+    polars_price_limit_pct,
+)
 from app.services import watchlist
 from app.services.watchlist_csv import import_watchlist_codes, import_watchlist_csv
 from app.services.watchlist_ocr import import_watchlist_image
@@ -40,6 +45,28 @@ _IMPORT_CSV_TYPES = {
     "text/plain",
     "application/csv",
 }
+# 上传分块读取粒度 (与 ext_data 上传一致)
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+async def _read_upload_capped(file: UploadFile, max_bytes: int, too_large: str) -> bytes:
+    """分块读取上传内容, 累计超过 max_bytes 立即拒绝(400), 返回完整字节。
+
+    与 ext_data._write_upload_capped 同类保护: 一次性 `await file.read()` 会先把整个
+    文件读入内存再比较长度, 上限在那之后才生效, 一个远超上限的上传照样把进程内存
+    顶满; 分块读取在越过上限的那一块就停止, 内存占用不超过上限 + 一块。
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(400, too_large)
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 class AddRequest(BaseModel):
@@ -186,11 +213,9 @@ async def import_from_image(request: Request, file: UploadFile = File(...)):
     if not ok_type and not ok_ext:
         raise HTTPException(400, "仅支持 JPG / PNG / WebP / BMP / GIF 图片")
 
-    data = await file.read()
+    data = await _read_upload_capped(file, _MAX_IMPORT_IMAGE_BYTES, "图片过大（上限 12MB）")
     if not data:
         raise HTTPException(400, "空文件")
-    if len(data) > _MAX_IMPORT_IMAGE_BYTES:
-        raise HTTPException(400, "图片过大（上限 12MB）")
 
     existing = {r["symbol"] for r in watchlist.list_symbols()}
     data_dir = request.app.state.repo.store.data_dir
@@ -242,11 +267,9 @@ async def import_from_csv(request: Request, file: UploadFile = File(...)):
     if not ok_type and not ok_ext:
         raise HTTPException(400, "仅支持 CSV / TXT 文件")
 
-    data = await file.read()
+    data = await _read_upload_capped(file, _MAX_IMPORT_CSV_BYTES, "文件过大（上限 5MB）")
     if not data:
         raise HTTPException(400, "空文件")
-    if len(data) > _MAX_IMPORT_CSV_BYTES:
-        raise HTTPException(400, "文件过大（上限 5MB）")
 
     data_dir = request.app.state.repo.store.data_dir
     # 解码与自选/instruments parquet 读取为同步 CPU/IO，挪线程池避免卡事件循环
@@ -334,7 +357,8 @@ def clear_all():
 
 # 自选页需要的列
 _WATCHLIST_COLS = [
-    "symbol", "close", "open", "high", "low", "change_pct", "change_amount", "amount",
+    "symbol", "close", "open", "high", "low", "prev_close", "volume",
+    "change_pct", "change_amount", "amount",
     "turnover_rate",
     "amplitude", "annual_vol_20d",
     "vol_ratio_5d",
@@ -444,6 +468,33 @@ def watchlist_enriched(
     # 选择内置需要的列
     keep = [c for c in _WATCHLIST_COLS + ["name", "float_shares", "asset_type"] if c in df.columns]
     df = df.select(keep)
+
+    # 涨跌停价 (交易所整数分半进位口径, 仅股票): prev_close/名称已在行上, 对自选的
+    # 几十~几百行向量化现算为亚毫秒级, 不写回 enriched 存储。ETF (跨境/债券 5% 等)
+    # 与指数的涨跌幅规则不在 price_limits 覆盖内, 置 null 由前端渲染 "—"。
+    as_of_date = as_of if isinstance(as_of, date) else None
+    if as_of_date is None and as_of:
+        try:
+            as_of_date = date.fromisoformat(str(as_of)[:10])
+        except ValueError:
+            as_of_date = None
+    if {"symbol", "prev_close", "name", "asset_type"}.issubset(df.columns) and as_of_date is not None:
+        pct = polars_price_limit_pct(
+            pl.col("symbol"),
+            pl.lit(as_of_date),
+            polars_is_risk_warning_name(pl.col("name")),
+        )
+        stock_with_prev = (pl.col("asset_type") == "stock") & pl.col("prev_close").is_not_null()
+        df = df.with_columns(
+            pl.when(stock_with_prev)
+            .then(polars_limit_price(pl.col("prev_close"), pct, up=True))
+            .otherwise(None)
+            .alias("limit_up_price"),
+            pl.when(stock_with_prev)
+            .then(polars_limit_price(pl.col("prev_close"), pct, up=False))
+            .otherwise(None)
+            .alias("limit_down_price"),
+        )
 
     # 动态 JOIN 扩展数据表
     ext_specs = _parse_ext_columns(ext_columns) if ext_columns else []

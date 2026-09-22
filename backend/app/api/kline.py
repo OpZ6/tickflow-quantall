@@ -17,7 +17,7 @@ from app.indicators.pipeline import compute_enriched, compute_enriched_single
 from app.market_time import cn_now, cn_today, in_continuous_session
 from app.price_limits import is_risk_warning_name, price_limit_pct
 from app.db_safe import is_valid_ext_ident
-from app.services import kline_sync
+from app.services import kline_sync, trading_day
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ def get_chart_data(
 def _gzip_payload(request: Request, payload: dict, *, pref_key: str) -> dict | Response:
     """大 JSON 响应的传输压缩: 偏好开启 + 客户端接受 gzip + 响应超阈值才压。
 
-    分时/日K批量各自独立偏好键 (网络设置里大开关批量、子开关单独控制)。
+    分时/日K各自使用独立偏好键 (沿用已有 *_batch_compress 存储键保证兼容)。
     level 6 实测 13MB ≈ 290ms CPU 压掉 87%; level 9 要 2.5s 不可用。
     datetime → isoformat, 与 FastAPI jsonable_encoder 输出一致
     (前端 since 增量按字符串字典序比较, 格式必须与非压缩路径相同)。
@@ -481,7 +481,11 @@ def get_daily(
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"TickFlow fetch failed: {e}") from e
         if raw.is_empty():
-            return {"symbol": symbol, "name": stock_name, "stock_info": stock_info, "rows": []}
+            return _gzip_payload(
+                request,
+                {"symbol": symbol, "name": stock_name, "stock_info": stock_info, "rows": []},
+                pref_key="daily_batch_compress",
+            )
         # 拉除权因子做前复权 (Starter+ 有权限), 否则空 df → compute_enriched 退回未复权
         factors = pl.DataFrame()
         capset = getattr(request.app.state, "capabilities", None)
@@ -496,7 +500,11 @@ def get_daily(
         # 即使 live 模式也尝试追加实时蜡烛
         rows = _maybe_inject_live_candle(request, symbol, rows, asset_type)
         resp = {"symbol": symbol, "name": stock_name, "stock_info": stock_info, "rows": rows, "source": "live"}
-        return _attach_ext(resp, repo, symbol, ext_columns)
+        return _gzip_payload(
+            request,
+            _attach_ext(resp, repo, symbol, ext_columns),
+            pref_key="daily_batch_compress",
+        )
 
     rows = df.to_dicts()
 
@@ -504,7 +512,11 @@ def get_daily(
     rows = _maybe_inject_live_candle(request, symbol, rows, asset_type)
 
     resp = {"symbol": symbol, "name": stock_name, "stock_info": stock_info, "rows": rows, "source": "enriched"}
-    return _attach_ext(resp, repo, symbol, ext_columns)
+    return _gzip_payload(
+        request,
+        _attach_ext(resp, repo, symbol, ext_columns),
+        pref_key="daily_batch_compress",
+    )
 
 
 def _attach_ext(resp: dict, repo, symbol: str, ext_columns: Optional[str]) -> dict:
@@ -771,7 +783,9 @@ def get_minute_batch(request: Request, body: dict):
     #  节假日当日分区恒为空, 不影响该回退判据。)
     if not trade_date_str:
         today = cn_today()
-        need_fallback = today.weekday() >= 5  # 周六/周日必非交易日
+        # 周六/周日必非交易日; 工作日休市 (国庆等) 以交易日探针的「确定休市」为准,
+        # 与 /api/index/minute 同口径 — 未知 (None) 维持下方收盘后判据
+        need_fallback = today.weekday() >= 5 or trading_day.is_trading_day() is False
         if not need_fallback:
             now_cn = cn_now()
             after_close = now_cn.hour > 15 or (now_cn.hour == 15 and now_cn.minute >= 30)
@@ -805,7 +819,7 @@ def get_minute_batch(request: Request, body: dict):
         expected = 240
     elif h < 9 or (h == 9 and m < 30):
         expected = 0
-    elif h < 12 or (h == 12 and m == 0):
+    elif h < 11 or (h == 11 and m <= 30):
         expected = (h - 9) * 60 + m - 30
     elif h < 13:
         expected = 120
@@ -817,12 +831,19 @@ def get_minute_batch(request: Request, body: dict):
     # 本地状态分类 (补拉已改为取到即落盘, 完整性判定随之收紧):
     # - fresh:  根数 >= 期望-2 (时间边界容差), 直接用本地。原 0.9 比例阈值会让
     #           持久化数据在 90% 处冻结尾巴, 必须按根数差判。
-    # - holes:  中间缺K (相邻间距非 1 分钟 / 非午休 91 分钟) → 全天重拉回填,
-    #           否则"最后一根+1min"的增量窗口永远不会回看中间的洞。
+    # - holes:  缺K → 全天重拉回填, 否则"最后一根+1min"的增量窗口永远不会
+    #           回看洞。含两种: 中间的洞 (相邻间距非 1 分钟 / 非午休 91 分钟)
+    #           与前部的洞 (首根显著晚于开盘 — 盘中重启/停机跨开盘的残留,
+    #           连续的尾部K会被增量锚定锁死, 同样必须全天重拉)。
     # - stale:  仅尾部落后 → 增量拉, 请求量从"每轮全天"降为"每轮一根"量级。
     _LUNCH_GAP_MIN = 91  # 11:30 → 13:01
+    # 前部洞基准: 开盘后 6 分钟 (容许无集合竞价K的数据源)。晚开/停牌复牌的票
+    # 也会命中 → 全天拉幂等, 至多多一次批量请求, 与中间洞同一代价模型。
+    day_open_floor = datetime(trade_date.year, trade_date.month, trade_date.day, 9, 36, 0)
 
     def _has_holes(sub: pl.DataFrame) -> bool:
+        if not sub.is_empty() and sub["datetime"][0] > day_open_floor:
+            return True
         gaps = sub["datetime"].diff().dt.total_minutes().drop_nulls()
         return gaps.filter((gaps != 1) & (gaps != _LUNCH_GAP_MIN)).len() > 0
 
@@ -851,14 +872,15 @@ def get_minute_batch(request: Request, body: dict):
         svc = getattr(request.app.state, "minute_refresh", None)
         full_minute_healthy = bool(svc is not None and svc.is_healthy())
     if full_minute_healthy:
-        # 股票缺口不补拉, 本地有多少给多少 (服务下一轮写入补全);
-        # ETF 不在 universe 内, 维持补拉
-        for sym in [*full_pull, *stale_last]:
+        # 纯尾部落后 (stale_last): 服务的增量轮下一轮就会补上, 股票不补拉省请求。
+        # 空洞 (full_pull: 空分区 / 中间洞 / 前部洞): 服务增量锚定本地最新时间,
+        # 永远不会回看洞 → 不压制, 由端点全天拉取并落盘修复。
+        # ETF 不在服务 universe 内, 两类均维持补拉。
+        for sym in stale_last:
             if sym not in etf_set:
                 sub = local_parts.get(sym)
                 if sub is not None and not sub.is_empty():
                     result[sym] = sub.to_dicts()
-        full_pull = [s for s in full_pull if s in etf_set]
         stale_last = {s: t for s, t in stale_last.items() if s in etf_set}
 
     # Step 2: 补拉并落盘 (取到即写, upsert 语义; 下一轮命中本地, 请求量骤降)。
@@ -967,13 +989,21 @@ def get_minute_range(
 
     # 指数分钟 K 不落本地仓库, 最新分时仍由 /api/index/minute 实时读取。
     if asset_type == "index":
-        return {**base_response, "sessions": [], "source": "none"}
+        return _gzip_payload(
+            request,
+            {**base_response, "sessions": [], "source": "none"},
+            pref_key="minute_batch_compress",
+        )
 
     end = cn_today()
     start = end - timedelta(days=days * 3 + 20)
     minute = repo.get_minute_range([symbol], start, end, asset_type=asset_type)
     if minute.is_empty() or "datetime" not in minute.columns:
-        return {**base_response, "sessions": [], "source": "none"}
+        return _gzip_payload(
+            request,
+            {**base_response, "sessions": [], "source": "none"},
+            pref_key="minute_batch_compress",
+        )
 
     minute = minute.with_columns(
         pl.col("datetime").dt.date().alias("_trade_date"),
@@ -1002,11 +1032,15 @@ def get_minute_range(
                 "rows": rows,
             })
 
-    return {
-        **base_response,
-        "sessions": sessions,
-        "source": "local" if sessions else "none",
-    }
+    return _gzip_payload(
+        request,
+        {
+            **base_response,
+            "sessions": sessions,
+            "source": "local" if sessions else "none",
+        },
+        pref_key="minute_batch_compress",
+    )
 
 
 @router.get("/minute")
@@ -1019,12 +1053,14 @@ def get_minute(
     """读取某只股票某天的分钟 K 线。
 
     - 本地有完整数据(240条) → 直接返回
-    - 本地无数据或不完整 → 从 TickFlow 实时拉取返回（不写入）
+    - 本地无数据或不完整 → 从有效分钟数据源实时拉取返回(不写入)
+    - 自定义源失败时, 仅具备 TickFlow 单股分钟能力才回退 TickFlow
     - live=true 且当日连续竞价时段 → 跳过本地优先直接实时拉取:
       盘中分钟增量落盘的本地分区按 ≥60s 轮次更新, 90% 完整度启发式会让
       详情分时图停在上一增量轮, 与行情列表的节奏脱节
     """
     repo = request.app.state.repo
+    capset = request.app.state.capabilities
     asset_type = repo.resolve_asset_type(symbol)
     stock_info = _get_stock_info(repo, symbol) if asset_type == "stock" else _get_asset_info(repo, symbol, asset_type)
     stock_name = stock_info.get("name")
@@ -1033,7 +1069,8 @@ def get_minute(
         # 默认看今天, 而不是本地落盘的最近日 (盘中后者是昨天)。
         # 非交易日(周末/节假日)才回退到本地最近有数据的交易日。
         today = cn_today()
-        need_fallback = today.weekday() >= 5  # 周六/周日必非交易日
+        # 同 /minute-batch: 周末必回退, 工作日休市以交易日探针「确定休市」为准
+        need_fallback = today.weekday() >= 5 or trading_day.is_trading_day() is False
         if not need_fallback:
             now_cn = cn_now()
             after_close = now_cn.hour > 15 or (now_cn.hour == 15 and now_cn.minute >= 30)
@@ -1049,22 +1086,29 @@ def get_minute(
         else:
             trade_date = today
     if trade_date is None:
-        # 本地无任何分钟K，尝试从 TickFlow 拉取当天
+        # 本地无任何分钟K, 尝试从当前有效分钟源拉取当天
         trade_date = cn_today()
-        df = kline_sync.fetch_minute_single(symbol, trade_date, asset_type=asset_type)
+        df = kline_sync.fetch_minute_single(
+            symbol, trade_date, asset_type=asset_type, capset=capset,
+        )
         price_limit = _get_price_limit_info(
             repo, symbol, trade_date, asset_type, stock_name,
         )
         prev_close = _get_previous_closes(
             repo, symbol, [trade_date], asset_type,
         ).get(trade_date)
-        return {
-            "symbol": symbol, "name": stock_name, "stock_info": stock_info,
-            "date": str(trade_date), "rows": df.to_dicts(), "source": "live",
-            "asset_type": asset_type,
-            "price_limit": price_limit,
-            "prev_close": prev_close,
-        }
+        return _gzip_payload(
+            request,
+            {
+                "symbol": symbol, "name": stock_name, "stock_info": stock_info,
+                "date": str(trade_date), "rows": df.to_dicts(),
+                "source": "live" if not df.is_empty() else "none",
+                "asset_type": asset_type,
+                "price_limit": price_limit,
+                "prev_close": prev_close,
+            },
+            pref_key="minute_batch_compress",
+        )
 
     prev_close = _get_previous_closes(
         repo, symbol, [trade_date], asset_type,
@@ -1076,14 +1120,20 @@ def get_minute(
     if live and trade_date == cn_today() and in_continuous_session():
         # 详情分时轮询: 当日盘中实时拉取最新一根K, 不落盘; 拉空(源侧延迟/
         # 时段边界)则落回下方本地优先路径。
-        live_df = kline_sync.fetch_minute_single(symbol, trade_date, asset_type=asset_type)
+        live_df = kline_sync.fetch_minute_single(
+            symbol, trade_date, asset_type=asset_type, capset=capset,
+        )
         if not live_df.is_empty():
-            return {
-                "symbol": symbol, "name": stock_name, "stock_info": stock_info,
-                "date": str(trade_date), "rows": live_df.to_dicts(),
-                "source": "live", "asset_type": asset_type,
-                "price_limit": price_limit, "prev_close": prev_close,
-            }
+            return _gzip_payload(
+                request,
+                {
+                    "symbol": symbol, "name": stock_name, "stock_info": stock_info,
+                    "date": str(trade_date), "rows": live_df.to_dicts(),
+                    "source": "live", "asset_type": asset_type,
+                    "price_limit": price_limit, "prev_close": prev_close,
+                },
+                pref_key="minute_batch_compress",
+            )
 
     df = repo.get_minute(symbol, trade_date, asset_type=asset_type)
 
@@ -1095,7 +1145,7 @@ def get_minute(
         h, m = now.hour, now.minute
         if h < 9 or (h == 9 and m < 30):
             expected = 0  # 还没开盘
-        elif h < 12 or (h == 12 and m == 0):
+        elif h < 11 or (h == 11 and m <= 30):
             expected = (h - 9) * 60 + m - 30  # 9:30 起
         elif h < 13:
             expected = 120  # 午休
@@ -1107,24 +1157,34 @@ def get_minute(
     is_complete = not df.is_empty() and len(df) >= expected * 0.9  # 允许 10% 容差
 
     if is_complete:
-        return {
+        return _gzip_payload(
+            request,
+            {
+                "symbol": symbol, "name": stock_name, "stock_info": stock_info,
+                "date": str(trade_date), "rows": df.to_dicts(), "source": "local",
+                "asset_type": asset_type,
+                "price_limit": price_limit,
+                "prev_close": prev_close,
+            },
+            pref_key="minute_batch_compress",
+        )
+
+    # 本地不完整或无数据 → 从当前有效分钟源实时拉取
+    live_df = kline_sync.fetch_minute_single(
+        symbol, trade_date, asset_type=asset_type, capset=capset,
+    )
+    return _gzip_payload(
+        request,
+        {
             "symbol": symbol, "name": stock_name, "stock_info": stock_info,
-            "date": str(trade_date), "rows": df.to_dicts(), "source": "local",
+            "date": str(trade_date), "rows": live_df.to_dicts(),
+            "source": "live" if not live_df.is_empty() else "none",
             "asset_type": asset_type,
             "price_limit": price_limit,
             "prev_close": prev_close,
-        }
-
-    # 本地不完整或无数据 → 从 TickFlow 实时拉取
-    live_df = kline_sync.fetch_minute_single(symbol, trade_date, asset_type=asset_type)
-    return {
-        "symbol": symbol, "name": stock_name, "stock_info": stock_info,
-        "date": str(trade_date), "rows": live_df.to_dicts(),
-        "source": "live" if not live_df.is_empty() else "none",
-        "asset_type": asset_type,
-        "price_limit": price_limit,
-        "prev_close": prev_close,
-    }
+        },
+        pref_key="minute_batch_compress",
+    )
 
 
 @router.post("/sync")
@@ -1136,8 +1196,12 @@ def sync_symbol(
     """手动触发单股同步(Free 用户在 K 线页用)。"""
     repo = request.app.state.repo
     capset = request.app.state.capabilities
-    n = kline_sync.sync_and_persist_daily_batch([symbol], repo, capset, count=days)
-    return {"symbol": symbol, "rows_written": n}
+    zero: list[str] = []
+    n = kline_sync.sync_and_persist_daily_batch([symbol], repo, capset, count=days, zero_row_out=zero)
+    resp = {"symbol": symbol, "rows_written": n}
+    if zero:
+        resp["zero_row_symbols"] = zero
+    return resp
 
 
 @router.post("/sync_daily_single")
@@ -1229,8 +1293,14 @@ def sync_batch(
 ):
     repo = request.app.state.repo
     capset = request.app.state.capabilities
-    n = kline_sync.sync_and_persist_daily_batch(symbols, repo, capset, count=days)
-    return {"symbols": symbols, "rows_written": n}
+    zero: list[str] = []
+    n = kline_sync.sync_and_persist_daily_batch(symbols, repo, capset, count=days, zero_row_out=zero)
+    resp = {"symbols": symbols, "rows_written": n}
+    if zero:
+        # fail-loud (#302): 裸符号被跳过/上游 200 空数据的标的显式列出,
+        # 不再"回填显示成功、实际全库 0 行"
+        resp["zero_row_symbols"] = zero
+    return resp
 
 
 @router.post("/refresh_views")
@@ -1250,7 +1320,7 @@ async def sync_minute(request: Request):
     """
     import asyncio
 
-    from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, try_acquire_run_slot
+    from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, run_with_capacity, try_acquire_run_slot
     from app.api.data import invalidate_storage_cache
     from app.services.preferences import get_minute_sync_days
     from app.tickflow.capabilities import Cap
@@ -1287,7 +1357,6 @@ async def sync_minute(request: Request):
             job_store.progress(job_id, stage, pct, msg)
 
         try:
-            job_store.start(job_id)
             progress("sync_minute", 5, "解析标的池…")
             universe = sorted(set(get_pool("watchlist")) | set(get_pool("CN_Equity_A")))
             # 补充 instruments 全量标的，覆盖北交所、新股等
@@ -1320,7 +1389,7 @@ async def sync_minute(request: Request):
                     on_chunk_done=_on_chunk,
                 )
 
-            written = await loop.run_in_executor(_long_task_executor, _run)
+            written = await loop.run_in_executor(_long_task_executor, run_with_capacity, job_id, _run)
 
             # 刷新视图
             from app.jobs.daily_pipeline import _refresh_single_view
@@ -1456,7 +1525,7 @@ async def extend_history(request: Request):
             raise HTTPException(status_code=403, detail="需要 Pro+ 权限 (batch K-line)")
 
         from app.services.extend_history import run_extend_history
-        from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, try_acquire_run_slot
+        from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, run_with_capacity, try_acquire_run_slot
         from app.api.data import invalidate_storage_cache
 
         job_id, is_new = job_store.create()
@@ -1475,9 +1544,8 @@ async def extend_history(request: Request):
                                    stage_pct=stage_pct, skip_log=skip_log)
 
             try:
-                job_store.start(job_id)
                 result = await loop.run_in_executor(
-                    _long_task_executor,
+                    _long_task_executor, run_with_capacity, job_id,
                     lambda: run_extend_history(repo, capset, value, unit, on_progress=progress),
                 )
                 if "error" in result:
@@ -1538,7 +1606,7 @@ async def repair_daily(request: Request):
             raise HTTPException(status_code=403, detail="需要 Pro+ 权限 (batch K-line)")
 
         from app.services.repair_daily import run_repair_daily
-        from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, try_acquire_run_slot
+        from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, run_with_capacity, try_acquire_run_slot
         from app.api.data import invalidate_storage_cache
 
         job_id, is_new = job_store.create()
@@ -1565,8 +1633,7 @@ async def repair_daily(request: Request):
                 return run_repair_daily(repo, capset, start_date, on_progress=progress)
 
             try:
-                job_store.start(job_id)
-                result = await loop.run_in_executor(_long_task_executor, _run)
+                result = await loop.run_in_executor(_long_task_executor, run_with_capacity, job_id, _run)
                 if "error" in result:
                     job_store.fail(job_id, result["error"])
                 else:
@@ -1601,7 +1668,7 @@ async def rebuild_enriched(request: Request):
     try:
         repo = request.app.state.repo
 
-        from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, try_acquire_run_slot
+        from app.services.pipeline_jobs import JobCancelledError, job_store, release_run_slot, run_with_capacity, try_acquire_run_slot
         from app.api.data import invalidate_storage_cache
 
         job_id, is_new = job_store.create()
@@ -1620,7 +1687,6 @@ async def rebuild_enriched(request: Request):
                                    stage_pct=stage_pct, skip_log=skip_log)
 
             try:
-                job_store.start(job_id)
                 progress("rebuild_enriched", 10, "全量计算 enriched…")
                 from app.indicators.pipeline import run_pipeline
 
@@ -1631,7 +1697,7 @@ async def rebuild_enriched(request: Request):
                              stage_pct=int(100 * cur / tot), skip_log=True)
 
                 written = await loop.run_in_executor(
-                    _long_task_executor,
+                    _long_task_executor, run_with_capacity, job_id,
                     lambda: run_pipeline(on_batch_done=_batch_progress),
                 )
 

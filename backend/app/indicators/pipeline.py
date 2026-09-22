@@ -467,16 +467,21 @@ def compute_indicators(
 
     # Pass 3: KDJ
     if "kdj_k" in want:
-        _kdj_rsv = (
-            100 * (pl.col("close") - pl.col("_kdj_ln"))
-            / (pl.col("_kdj_hn") - pl.col("_kdj_ln")).fill_null(1e-12)
+        # 9 日内最高价=最低价 (场内货币 ETF、长期无成交标的) 时分母是 0 而不是空值,
+        # fill_null 拦不住: 0/0 得到 NaN, 再被 ewm 递推永久传染。与矩阵路径口径一致 ——
+        # 该日 RSV 置空, EWM 跳过空值后继续递推。
+        _kdj_range = pl.col("_kdj_hn") - pl.col("_kdj_ln")
+        _kdj_rsv = pl.when(_kdj_range > 0).then(
+            100 * (pl.col("close") - pl.col("_kdj_ln")) / _kdj_range
         )
         df = df.with_columns([
-            _kdj_rsv.ewm_mean(alpha=1.0 / 3, adjust=False).over("symbol").alias("kdj_k"),
+            _kdj_rsv.ewm_mean(alpha=1.0 / 3, adjust=False, ignore_nulls=True)
+            .over("symbol").alias("kdj_k"),
         ])
     if "kdj_d" in want:
         df = df.with_columns([
-            pl.col("kdj_k").ewm_mean(alpha=1.0 / 3, adjust=False).over("symbol").alias("kdj_d"),
+            pl.col("kdj_k").ewm_mean(alpha=1.0 / 3, adjust=False, ignore_nulls=True)
+            .over("symbol").alias("kdj_d"),
         ])
     if "kdj_j" in want:
         df = df.with_columns([
@@ -667,6 +672,11 @@ def compute_signals(df: pl.DataFrame, needed: set[str] | None = None) -> pl.Data
         df = df.with_columns([expressions[name] for name in SIGNAL_DEPENDENCIES if name in want])
 
     # 自定义信号（用户配置的字段+运算符+值组合，编译为布尔列）。
+    # 扩展表数值列先行 join (ext_ 因子列 = 帧上已有列): 信号条件与评分引用
+    # 都按列存在性解析。历史多日帧仅注入时序模式 —— 快照代表"最新值",
+    # 历史回看注入会引入未来数据 (CONTRIBUTING §5.3)。
+    from app.factors import ext_factors
+    df = ext_factors.attach_ext_columns(df, include_snapshot=False)
     # 条件引用的注册表因子列先复用评分物化管线补算 (虚拟/自定义/复合均可)。
     from app.strategy import custom_signals
     exprs = _get_custom_signal_exprs()
@@ -711,7 +721,8 @@ def compute_limit_signals(
         instrument_needs.add("name")
     if "turnover_rate" in want:
         instrument_needs.add("float_shares")
-    if need_up:
+    if need_price_limits:
+        # limit_up 哨兵值 (>= 10000) 同时标记跌停侧「无涨跌停限制」, 只算跌停信号时也要带上
         instrument_needs.add("limit_up")
     if need_down:
         instrument_needs.add("limit_down")
@@ -804,9 +815,13 @@ def compute_limit_signals(
     else:
         authoritative_date = pl.col("date") == pl.col("date").max()
     if "limit_up" in df.columns:
+        # >0 与实时路径 (_compute_limit_signals_today) 同守卫: 维表 limit_up 为 0
+        # (数据源未提供该字段的占位值) 不是权威价, 直接采用会让 raw_close >= -0.005
+        # 恒成立, 全部标的被判涨停。
         effective_limit_up = pl.when(
             authoritative_date
             & pl.col("limit_up").is_not_null()
+            & (pl.col("limit_up") > 0)
             & (pl.col("limit_up") < _SENTINEL)
             & (
                 ~valid_prev_raw
@@ -822,6 +837,7 @@ def compute_limit_signals(
         effective_limit_down = pl.when(
             authoritative_date
             & pl.col("limit_down").is_not_null()
+            & (pl.col("limit_down") > 0)
             & (pl.col("limit_down") < _SENTINEL)
             & (
                 ~valid_prev_raw
@@ -833,7 +849,16 @@ def compute_limit_signals(
         ).then(pl.col("limit_down")).otherwise(pl.col("_theoretical_limit_down"))
     else:
         effective_limit_down = pl.col("_theoretical_limit_down")
-    effective_exprs: list[pl.Expr] = []
+    # 维表 limit_up 为哨兵值 = 当日无涨跌停限制 (注册制新股上市前 5 日), 与实时路径
+    # _compute_limit_signals_today 同口径: 涨停/跌停/炸板/翘板一律不成立, 不回退理论价
+    no_price_limit = pl.lit(False)
+    if "limit_up" in df.columns:
+        no_price_limit = (
+            authoritative_date
+            & pl.col("limit_up").is_not_null()
+            & (pl.col("limit_up") >= _SENTINEL)
+        )
+    effective_exprs: list[pl.Expr] = [no_price_limit.fill_null(False).alias("_no_price_limit")]
     if need_up:
         effective_exprs.append(effective_limit_up.alias("_effective_limit_up"))
     if need_down:
@@ -843,7 +868,8 @@ def compute_limit_signals(
     # ── signal_limit_up ──
     if need_up:
         df = df.with_columns(
-        pl.when(
+        pl.when(pl.col("_no_price_limit")).then(False)
+        .when(
             pl.col("_prev_raw_close").is_not_null()
             & (pl.col("_prev_raw_close") > 0)
             & (pl.col("raw_close") > 0)
@@ -879,7 +905,8 @@ def compute_limit_signals(
     # ── signal_limit_down ──
     if need_down:
         df = df.with_columns(
-        pl.when(
+        pl.when(pl.col("_no_price_limit")).then(False)
+        .when(
             pl.col("_prev_raw_close").is_not_null()
             & (pl.col("_prev_raw_close") > 0)
             & (pl.col("raw_close") > 0)
@@ -916,7 +943,8 @@ def compute_limit_signals(
     # 条件: 当日最低价曾触及跌停价 + 最终没有跌停 + 收阳
     if "signal_limit_down_recovery" in want:
         df = df.with_columns(
-        pl.when(
+        pl.when(pl.col("_no_price_limit")).then(False)
+        .when(
             pl.col("_prev_raw_close").is_not_null()
             & (pl.col("_prev_raw_close") > 0)
             & (pl.col("raw_low") > 0)
@@ -932,7 +960,8 @@ def compute_limit_signals(
     # 条件: 最高价曾触及涨停价 + 最终没有封住涨停
     if "signal_broken_limit_up" in want:
         df = df.with_columns(
-        pl.when(
+        pl.when(pl.col("_no_price_limit")).then(False)
+        .when(
             pl.col("_prev_raw_close").is_not_null()
             & (pl.col("_prev_raw_close") > 0)
             & (pl.col("raw_high") > 0)
@@ -946,7 +975,7 @@ def compute_limit_signals(
     # 清理临时列 + JOIN 引入的 instruments 列 (不存入 enriched)
     cleanup = ["_prev_raw_close", "_limit_pct",
                "_theoretical_limit_up", "_theoretical_limit_down",
-               "_effective_limit_up", "_effective_limit_down",
+               "_effective_limit_up", "_effective_limit_down", "_no_price_limit",
                "_grp_up", "_grp_down", "_instrument_as_of"]
     if "_is_st" in df.columns:
         cleanup.append("_is_st")
@@ -1469,12 +1498,13 @@ def compute_enriched_history_window(
     instruments: pl.DataFrame | None = None,
     historical_shares: pl.DataFrame | None = None,
     sym_batch: int | None = None,
+    *,
+    include_instrument_metadata: bool = False,
 ) -> pl.DataFrame:
     """按 symbol 分批执行历史窗口计算: 指标 → 偏离列 → 信号 → 涨跌停。
 
-    与整帧顺序执行完全等价 (各步骤均 over("symbol") 分组), 分批只约束
-    峰值内存: repository._refresh_enriched 的 300 天窗口在 5500 只、
-    210 交易日下整帧宽表 ~1.2GB, 小内存机器启动即 OOM (#208)。
+    分批约束计算中间表, 最终完整历史仍常驻内存。排序和可选元数据关联
+    均在单批完成, 避免合并后再复制整张宽表。
     sym_batch 显式传入时跳过自适应 (测试用)。
     """
     if df_hist.is_empty() or "symbol" not in df_hist.columns:
@@ -1498,9 +1528,52 @@ def compute_enriched_history_window(
                 else historical_shares
             )
             part = compute_limit_signals(part, inst_batch, historical_shares=shares_batch)
-        parts.append(part)
-    out = parts[0] if len(parts) == 1 else pl.concat(parts, how="diagonal_relaxed")
-    return out.sort(["symbol", "date"])
+            if include_instrument_metadata:
+                inst_cols = [c for c in ("name", "total_shares", "float_shares")
+                             if c in inst_batch.columns and c not in part.columns]
+                if inst_cols:
+                    part = part.join(
+                        inst_batch.select("symbol", *inst_cols).unique(subset=["symbol"]),
+                        on="symbol", how="left",
+                    )
+        # 连续、互不重叠的已排序 symbol 批次, 拼接后天然有序。
+        parts.append(part.sort(["symbol", "date"]))
+    return parts[0] if len(parts) == 1 else pl.concat(parts, how="diagonal_relaxed", rechunk=False)
+
+
+def _compute_storage_batches(
+    raw: pl.DataFrame,
+    *,
+    factors: pl.DataFrame,
+    instruments: pl.DataFrame,
+    historical_shares: pl.DataFrame,
+) -> pl.DataFrame:
+    """保留完整标的历史输入, 单批计算宽表后仅累积落盘窄表。"""
+    from app.services import preferences
+
+    if raw.is_empty():
+        return _select_storage_cols(raw)
+    symbols = raw["symbol"].unique().sort().to_list()
+    rows_per_sym = max(1, -(-raw.height // len(symbols)))
+    batch_size = _adaptive_sym_batch(preferences.get_enriched_batch_size(), rows_per_sym)
+    parts = []
+    for start in range(0, len(symbols), batch_size):
+        batch = symbols[start:start + batch_size]
+        part = compute_enriched(
+            raw.filter(pl.col("symbol").is_in(batch)),
+            factors=factors.filter(pl.col("symbol").is_in(batch)) if not factors.is_empty() else factors,
+            instruments=(instruments.filter(pl.col("symbol").is_in(batch))
+                         if not instruments.is_empty() else instruments),
+            historical_shares=(historical_shares.filter(pl.col("symbol").is_in(batch))
+                               if not historical_shares.is_empty() else historical_shares),
+        )
+        # 下一批开始前释放宽表; 分区发布仍在所有计算批次成功之后。
+        if not part.is_empty():
+            parts.append(_select_storage_cols(part))
+        del part
+    if not parts:
+        return _select_storage_cols(raw.head(0))
+    return pl.concat(parts, how="diagonal_relaxed", rechunk=False)
 
 
 def run_pipeline(data_dir: Path | None = None,
@@ -1597,7 +1670,7 @@ def run_pipeline(data_dir: Path | None = None,
             else:
                 raw_full = raw_new
 
-            enriched_new = compute_enriched(
+            enriched_new = _compute_storage_batches(
                 raw_full,
                 factors=factors,
                 instruments=instruments,
@@ -1628,6 +1701,7 @@ def run_pipeline(data_dir: Path | None = None,
                     written += date_df.height
                 t_write_new = _t.perf_counter()
                 logger.info("增量写入: %.2fs, %d 行", t_write_new - t_new, written)
+            del raw_new, hist_df, raw_full, enriched_new
 
         # 3. 受除权因子影响的个股: 重算全部已有日期 (累积因子链变了)
         if symbols:
@@ -1639,7 +1713,7 @@ def run_pipeline(data_dir: Path | None = None,
                 factors_sym = factors.filter(pl.col("symbol").is_in(list(sym_set))) if not factors.is_empty() else factors
                 inst_sym = instruments.filter(pl.col("symbol").is_in(list(sym_set))) if not instruments.is_empty() else instruments
                 shares_sym = historical_shares.filter(pl.col("symbol").is_in(list(sym_set))) if not historical_shares.is_empty() else historical_shares
-                enriched_sym = compute_enriched(
+                enriched_sym = _compute_storage_batches(
                     raw_sym,
                     factors=factors_sym,
                     instruments=inst_sym,
@@ -1759,7 +1833,7 @@ def run_pipeline(data_dir: Path | None = None,
             if not enriched.is_empty():
                 if symbols:
                     # 局部模式: 直接按日期合并写入
-                    for date_df in enriched.partition_by("date"):
+                    for date_df in _select_storage_cols(enriched).partition_by("date"):
                         dt = date_df["date"][0]
                         ds = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
                         out = base / f"date={ds}" / "part.parquet"
@@ -2019,7 +2093,8 @@ def compute_enriched_today(
     boll_sum = pl.col("_boll_partial_sum") + pl.col("close")
     boll_sq_sum = pl.col("_boll_partial_sq_sum") + pl.col("close") ** 2
     boll_ma = boll_sum / 20
-    boll_var = boll_sq_sum / 20 - boll_ma ** 2
+    # 样本方差 (ddof=1), 与全量 rolling_std(20) / 回测矩阵 ddof=1 同口径
+    boll_var = (boll_sq_sum - boll_sum ** 2 / 20) / 19
     boll_std = pl.when(boll_var > 0).then(boll_var.sqrt()).otherwise(0.0)
     df = df.with_columns([
         (boll_ma + 2 * boll_std).alias("boll_upper"),
@@ -2081,14 +2156,14 @@ def compute_enriched_today(
         ((pl.col("volume") * time_factor) / vol_ma5_prev).alias("vol_ratio_5d"),
     ])
 
-    # ---- 极值 60 日 ----
+    # ---- 极值 60 日 (收盘价口径, 与全量 close.rolling_max/min(60) 一致) ----
     df = df.with_columns([
         pl.when(has_history_state)
-          .then(pl.max_horizontal(pl.col("_high_59d"), pl.col("high")))
+          .then(pl.max_horizontal(pl.col("_high_59d"), pl.col("close")))
           .otherwise(None)
           .alias("high_60d"),
         pl.when(has_history_state)
-          .then(pl.min_horizontal(pl.col("_low_59d"), pl.col("low")))
+          .then(pl.min_horizontal(pl.col("_low_59d"), pl.col("close")))
           .otherwise(None)
           .alias("low_60d"),
     ])
@@ -2113,14 +2188,32 @@ def compute_enriched_today(
     today_ret = pl.col("close") / pl.col("prev_close") - 1
     total_sum = pl.col("_vol_19d_pct_sum").fill_null(0.0) + today_ret
     total_sq_sum = pl.col("_vol_19d_pct_sq_sum").fill_null(0.0) + today_ret ** 2
-    vol_mean = total_sum / 20
-    vol_var = total_sq_sum / 20 - vol_mean ** 2
+    # 样本方差 (ddof=1), 与全量 _daily_pct.rolling_std(20) / 回测矩阵 ddof=1 同口径
+    vol_var = (total_sq_sum - total_sum ** 2 / 20) / 19
     df = df.with_columns(
         pl.when(has_history_state & (vol_var > 0))
           .then(vol_var.sqrt() * (252 ** 0.5))
           .otherwise(None)
           .alias("annual_vol_20d"),
     )
+
+    # ---- 窗口不满置空 ----
+    # live_agg 的部分和 / 极值 / N 日前收盘用 tail(N) 取, 历史 K 线不足 N 根 (次新股) 时
+    # 取到的是残缺窗口; 全量 rolling_*(N) / shift(N) 窗口不满为空, 按窗口内实际根数同口径置空。
+    min_history_bars = {
+        "ma5": 4, "ma10": 9, "ma20": 19, "ma30": 29, "ma60": 59,
+        "vol_ma5": 4, "vol_ma10": 9, "vol_ratio_5d": 5,
+        "boll_upper": 19, "boll_lower": 19, "high_60d": 59, "low_60d": 59,
+        "momentum_3d": 3, "momentum_5d": 5, "momentum_10d": 10,
+        "momentum_20d": 20, "momentum_30d": 30, "momentum_60d": 60,
+        "annual_vol_20d": 20,
+    }
+    if "_window_len" in df.columns:
+        df = df.with_columns([
+            pl.when(pl.col("_window_len") >= need).then(pl.col(column)).otherwise(None).alias(column)
+            for column, need in min_history_bars.items()
+            if column in df.columns
+        ])
 
     # ---- 信号 (需要昨天的指标值判断交叉) ----
     if not prev_enriched.is_empty():
@@ -2209,6 +2302,12 @@ def compute_enriched_today(
         "_has_history_state",
     ]
     df = df.drop([c for c in drop_cols if c in df.columns])
+
+    # 扩展表数值列注入: 当日单日帧, 时序按当日分区对齐 + 快照最新值
+    # (include_snapshot 仅此处为 True —— 单日帧不存在"回看历史"的未来函数问题)。
+    # 帧缓存由 ext_factors 按分区/文件签名管理, 写入端变更自动失效。
+    from app.factors import ext_factors
+    df = ext_factors.attach_ext_columns(df, include_snapshot=True)
 
     # 自定义信号（日级实时路径同样注入, 但不支持日期偏移条件 → allow_shift=False）
     # 复用模块级缓存 _custom_signal_exprs_today: 增量热路径每秒级执行,

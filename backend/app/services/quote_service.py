@@ -35,6 +35,7 @@ import polars as pl
 
 from app.market_time import CN_TZ, cn_now, cn_today
 from app.parquet import scan_daily_parquet
+from app.polars_guard import guarded_collect
 from app.services.index_const import CORE_INDEX_SYMBOLS
 from app.strategy.intraday_signals import IntradaySignalEvaluator
 from app.strategy.monitor import format_alert_quote
@@ -1278,10 +1279,12 @@ class QuoteService:
                     # 独立 try —— ETF 轮任何异常都不得丢弃本轮已算出的股票告警。
                     # refresh=False —— 不在轮询线程上触发 ETF 冷缓存的同步重算 (缓存由 ETF 实时
                     # flush 焐热; 未焐热说明无 ETF 实时数据, 跳过本轮 ETF 评估)。
+                    # 日期守卫同指数轮: 自选/选股等页面会把磁盘上一交易日的 ETF 快照读进缓存,
+                    # ETF 实时拉取关闭 (默认) 或休市时它不会被当日数据替换, 不得当作当日评估。
                     if engine.has_asset_rules("etf") and self._repo is not None:
                         try:
-                            etf_enriched, _ = self._repo.get_enriched_latest_asset("etf", refresh=False)
-                            if not etf_enriched.is_empty():
+                            etf_enriched, etf_date = self._repo.get_enriched_latest_asset("etf", refresh=False)
+                            if not etf_enriched.is_empty() and etf_date == cn_today():
                                 etf_enriched = self._inject_intraday_signals(etf_enriched, engine, "etf")
                                 rule_events = rule_events + engine.evaluate(
                                     etf_enriched, asset_type="etf", reset_strategy_results=False,
@@ -1290,7 +1293,7 @@ class QuoteService:
                             logger.warning("ETF 监控评估失败 (不影响股票告警): %s", e)
                     # 指数规则轮: 复刻 ETF 轮。快照由指数实时 flush 焐热;
                     # refresh=False 冷缓存不同步重算; 显式日期守卫防陈旧 parquet 误告警
-                    # (ETF 轮靠空表隐式跳过, 指数轮更显式, 行为等价)。
+                    # (与 ETF 轮同口径)。
                     if engine.has_asset_rules("index") and self._repo is not None:
                         try:
                             index_enriched, index_date = self._repo.get_enriched_latest_asset("index", refresh=False)
@@ -1494,8 +1497,19 @@ class QuoteService:
             prev_close=prev_close,
             asset_type=asset_type,
             now=now,
+            signals=self._load_intraday_signal_defs(),
         )
         return self._intraday_signal_evaluator.inject(enriched, signals)
+
+    def _load_intraday_signal_defs(self) -> list[dict]:
+        """加载自定义盘中信号定义(带指纹缓存); 失败时退化为仅内置 4 信号。"""
+        try:
+            from app.strategy import custom_signals
+
+            return custom_signals.load_intraday_all(self._repo.store.data_dir)
+        except Exception as e:
+            logger.warning("load intraday signal defs failed: %s", e)
+            return []
 
     @staticmethod
     def _continuous_session_start_ms() -> float:
@@ -1618,7 +1632,7 @@ class QuoteService:
     def _maybe_send_webhook(self, rule_events: list[dict], engine) -> None:
         """把告警通过 Webhook 推送到外部 IM (由规则 webhook_channels 指定渠道)。
 
-        - 飞书 / 企业微信任一已配置即生效 (两个都没配才跳过)
+        - 飞书 / 企业微信 / 第三方 Webhook / 邮件均按规则独立选择
         - 仅推送 webhook_channels 非空的规则触发的告警, 且只投递被勾选的渠道
         - 失败静默, 不阻断主流程
         - 去重: 复用 MonitorRuleEngine 的 cooldown, 此处不重复去重
@@ -1627,14 +1641,17 @@ class QuoteService:
         以便反查引擎规则判断是否启用推送。
         """
         try:
-            from app.services import preferences
-            from app.services import webhook_adapter
+            from app import secrets_store
+            from app.services import email_adapter, preferences, webhook_adapter
 
             feishu_url = preferences.get_feishu_webhook_url()
             feishu_secret = preferences.get_feishu_webhook_secret()
             wecom_url = preferences.get_wecom_webhook_url()
-            # 两个通道都没配置才跳过
-            if not feishu_url and not wecom_url:
+            custom_url = preferences.get_custom_webhook_url()
+            custom_secret = secrets_store.get_custom_webhook_secret()
+            email_config = preferences.get_email_smtp_config()
+            email_password = secrets_store.get_email_smtp_password()
+            if not any((feishu_url, wecom_url, custom_url, email_adapter.is_configured(email_config))):
                 return
 
             # 反查规则, 过滤出启用推送的事件
@@ -1642,7 +1659,7 @@ class QuoteService:
             enqueued = 0
             for ev in rule_events:
                 rule = rules.get(ev.get("rule_id"))
-                # webhook_channels 指定命中的渠道 (['feishu'] / ['wecom'] / ['feishu','wecom'] / []).
+                # webhook_channels 指定本规则需要投递的外部渠道。
                 # 空列表 = 该规则不推送。仅推送「渠道已选 + 对应地址已配置」的组合。
                 channels = rule.get("webhook_channels") if rule else None
                 if not channels:
@@ -1657,7 +1674,7 @@ class QuoteService:
                 # 补上触发时的现价/涨跌幅, 让推送可执行 (止损到底触发在哪个价位)
                 body = _body_with_quote(body, ev)
                 # 提交到独立线程池, 不阻塞行情轮询线程 (webhook 慢/重试不拖累实时行情+告警)。
-                # 按渠道独立投递: 飞书 / 企业微信谁被勾选且已配置就推谁。
+                # 按渠道独立投递: 只投递同时“已勾选 + 已配置”的渠道。
                 # 应用内 alerts.jsonl 记录与 SSE 已在前面完成, 不依赖 webhook 成败,
                 # 失败由 webhook_adapter 记 WARNING(可见)。
                 if feishu_url and "feishu" in channels:
@@ -1665,6 +1682,26 @@ class QuoteService:
                     enqueued += 1
                 if wecom_url and "wecom" in channels:
                     _WEBHOOK_EXECUTOR.submit(webhook_adapter.send_wecom, wecom_url, title, body)
+                    enqueued += 1
+                if custom_url and "custom" in channels:
+                    _WEBHOOK_EXECUTOR.submit(
+                        webhook_adapter.send_custom,
+                        custom_url,
+                        title,
+                        body,
+                        "monitor_alert",
+                        ev,
+                        custom_secret,
+                    )
+                    enqueued += 1
+                if email_adapter.is_configured(email_config) and "email" in channels:
+                    _WEBHOOK_EXECUTOR.submit(
+                        email_adapter.send_email,
+                        email_config,
+                        email_password,
+                        title,
+                        body,
+                    )
                     enqueued += 1
             if enqueued:
                 logger.info("Webhook 已提交 %d 条 (异步投递, 按渠道独立投递, 失败记 WARNING)", enqueued)
@@ -1773,6 +1810,7 @@ class QuoteService:
             if not use_incremental:
                 from datetime import timedelta
                 from app.indicators.pipeline import compute_enriched
+                from app.tickflow.repository import _live_agg_window_start
 
                 logger.info("enriched 全量计算 (live_agg=%s, 上次日期=%s)",
                             "ok" if not live_agg.is_empty() else "空", prev_date)
@@ -1781,17 +1819,21 @@ class QuoteService:
                 table = {"etf": "kline_etf_daily", "index": "kline_index_daily"}.get(asset_type, "kline_daily")
                 daily_glob = str(self._repo.store.data_dir / table / "**" / "*.parquet")
                 ohlcv_cols = ["symbol", "date", "open", "high", "low", "close", "volume", "amount", "quote_ts"]
-                hist_df = (
+                hist_df = guarded_collect(
                     scan_daily_parquet(daily_glob)
-                    .filter(pl.col("date") >= cutoff)
-                    .sort(["symbol", "date"])
-                    .collect()
+                    # 多读一段自然日, 再按交易日计数确定窗口起点 (长假前后 90 个自然日不足 60 个交易日)
+                    .filter(pl.col("date") >= cutoff - timedelta(days=60))
+                    .sort(["symbol", "date"]),
+                    priority="background",
                 )
                 if hist_df.is_empty():
                     return
 
                 hist_cols = [c for c in ohlcv_cols if c in hist_df.columns]
                 hist_df = hist_df.select(hist_cols).filter(pl.col("date") != today)
+                # 与股票盘中递推窗口同口径: 至少覆盖 60 个交易日, 否则 MA60/60 日极值/60 日动量为空
+                window_start = _live_agg_window_start(hist_df["date"], today, cutoff)
+                hist_df = hist_df.filter(pl.col("date") >= window_start)
                 daily_ohlcv = daily_df.select([c for c in ohlcv_cols if c in daily_df.columns])
                 full_df = pl.concat([hist_df, daily_ohlcv], how="diagonal_relaxed")
                 full_df = full_df.sort(["symbol", "date"])

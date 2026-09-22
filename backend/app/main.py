@@ -41,6 +41,7 @@ from app.api import (
     rps,
     screener,
     settings as settings_api,
+    sector_rotation,
     signals,
     stock_analysis,
     stock_pools,
@@ -150,11 +151,6 @@ async def _application_lifespan(app: FastAPI):
     # instruments/index/ETF 仍同步 (毫秒级)。应用立即 ready, 指标算完后自动替换。
     repo.refresh_cache(background=True)
 
-    # 能力探测
-    capset = detect_capabilities()
-    app.state.capabilities = capset
-    logger.info("ready; %d capabilities active", len(capset.all()))
-
     # 自定义数据源配置(可选): 失败只记录错误, 不影响 TickFlow 基准路径。
     try:
         from app.data_providers import custom as custom_sources
@@ -162,6 +158,11 @@ async def _application_lifespan(app: FastAPI):
         logger.info("custom data sources loaded: %d", len(custom_sources.list_sources()))
     except Exception as e:  # noqa: BLE001
         logger.warning("custom data sources init failed: %s", e)
+
+    # 自定义源必须先注册,能力探测才能补充其数据集能力。
+    capset = detect_capabilities()
+    app.state.capabilities = capset
+    logger.info("ready; %d capabilities active", len(capset.all()))
 
     # 全局行情服务
     qs = QuoteService()
@@ -257,6 +258,10 @@ async def _application_lifespan(app: FastAPI):
     financial_scheduler.start(store.data_dir, capset)
     app.state.financial_scheduler = financial_scheduler
 
+    # 自愈看门狗: 探测 polars 闸与写锁, 僵死时退出交由 supervisor 拉起 (兜底层)。
+    from app.watchdog import start_watchdog
+    app.state.watchdog = start_watchdog(app.state, repo)
+
     # 策略引擎
     from app.strategy.engine import StrategyEngine
     from app.strategy import config as strategy_config
@@ -303,7 +308,7 @@ async def _application_lifespan(app: FastAPI):
                     return
 
                 with shared_heavy_job_limiter.slot(
-                    "normal",
+                    "exclusive",
                     cancel_event=matrix_prewarm_owner.cancel_event,
                 ):
                     result = prewarm_matrix_cache(
@@ -374,6 +379,9 @@ async def _application_lifespan(app: FastAPI):
         yield
     finally:
         repo._on_refresh_done = None  # noqa: SLF001
+        wd = getattr(app.state, "watchdog", None)
+        if wd:
+            await wd.stop()
         if not matrix_prewarm_owner.shutdown(timeout=5.0):
             logger.warning("matrix cache prewarm did not stop within 5 seconds")
         mmanager = getattr(app.state, "mining_manager", None)
@@ -512,6 +520,7 @@ app.include_router(rps.router)
 app.include_router(quantx.router)
 app.include_router(quantx_data.router)
 app.include_router(stock_pools.router)
+app.include_router(sector_rotation.router)
 
 # 二次开发路由与小粒度策略在所有核心路由后注册, 禁止覆盖核心路径。
 extension_registry, extension_load_errors = configure_backend_extensions(app)

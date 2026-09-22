@@ -936,7 +936,7 @@ def _resolve_matrix_storage_fields(
     dataset: pads.Dataset,
     wanted_fields: frozenset[str],
     instruments: pl.DataFrame | None,
-    share_history: pl.DataFrame | None,
+    share_history: pl.DataFrame | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     available = set(dataset.schema.names)
     parquet_fields = sorted(

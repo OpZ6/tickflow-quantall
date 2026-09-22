@@ -18,6 +18,7 @@ from app.services.financial_sync import (
     get_financial_df,
     provider_info,
 )
+from app.services.ndjson_heartbeat import with_heartbeat
 from app.tickflow.capabilities import Cap
 
 logger = logging.getLogger(__name__)
@@ -266,7 +267,7 @@ async def analyze_financials(request: Request, req: AnalyzeRequest):
     data_dir = request.app.state.repo.store.data_dir
 
     async def stream_gen():
-        async for chunk in analyze_financials_stream(data_dir, req.symbol, req.focus):
+        async for chunk in with_heartbeat(analyze_financials_stream(data_dir, req.symbol, req.focus)):
             yield chunk + "\n"
 
     return StreamingResponse(

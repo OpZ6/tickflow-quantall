@@ -82,3 +82,6 @@ class MarketDataProvider(Protocol):
         timestamp. Volumes use shares and timestamp uses epoch milliseconds.
         Implementations may return an empty dict on an isolated upstream failure.
         """
+
+    def get_depth_batch(self, symbols: list[str]) -> dict[str, dict]:
+        """Return five-level order books keyed by symbol."""

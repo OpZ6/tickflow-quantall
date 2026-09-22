@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { api } from './api'
+import { api, friendlyStreamError } from './api'
 
 /**
  * AI 财务分析 —— 全局任务/报告 store(与 UI 解耦)。
@@ -262,7 +262,7 @@ async function runStream(id: string, symbol: string, focus: string) {
     const msg = String(e?.message ?? '分析失败')
     patchTask(id, {
       phase: 'error',
-      error: normalizeAiError(msg),
+      error: normalizeAiError(friendlyStreamError(msg)),
     })
   }
 }
