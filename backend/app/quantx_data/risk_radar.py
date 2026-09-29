@@ -166,11 +166,11 @@ def build_risk_radar(
         daily_change = (current["total_amount_yi"] / previous[-1] - 1) * 100 if previous[-1] > 0 else None
         metrics = [
             _metric("当日成交", f"{current['total_amount_yi']:,.0f} 亿"),
-            _metric("相对前 5 日", f"{ratio:.1f}%", tone),
+            _metric("相对前 5 日", f"{ratio:.1f}%", "red" if ratio < 80 or ratio > 150 else tone),
             _metric("前 5 日均额", f"{sum(previous) / 5:,.0f} 亿"),
         ]
         if daily_change is not None:
-            metrics.append(_metric("较前日", f"{daily_change:+.1f}%", "amber" if abs(daily_change) >= 10 else "green"))
+            metrics.append(_metric("较前日", f"{daily_change:+.1f}%", "red" if abs(daily_change) >= 15 else "amber" if abs(daily_change) >= 10 else "green"))
         if concentration is not None:
             metrics.append(_metric("前 5% 成交占比", f"{concentration:.1f}%"))
         if current.get("top20_amount_ratio_pct") is not None:
@@ -209,7 +209,7 @@ def build_risk_radar(
                 "kind": "sentiment", "code": code, "name": name,
                 "deviation_pct": deviation, "change_pct": row.get("change_pct"),
                 "close": row.get("close"), "ma10": row.get("ma10"),
-                "zone": zone, "tone": "green" if 0 < deviation < high else "amber",
+                "zone": zone, "tone": "red" if deviation >= high or deviation <= low else "green" if deviation > 0 else "amber",
             })
     all_a = indices.get(ALL_A_INDEX)
     above = None
@@ -223,8 +223,8 @@ def build_risk_radar(
             "trend", "指数趋势与背离", tone,
             {"red": "趋势同步走弱", "amber": "趋势尚待修复", "green": "趋势正常"}[tone],
             [
-                _metric("普通指数站上 MA10", f"{above} / {len(ordinary)}", "amber" if above <= 2 else "green"),
-                *([_metric("四情绪站上 MA10", f"{sum(row['deviation_pct'] > 0 for row in sentiment)} / 4", "amber" if sum(row['deviation_pct'] > 0 for row in sentiment) <= 1 else "green")] if len(sentiment) == 4 else []),
+                _metric("普通指数站上 MA10", f"{above} / {len(ordinary)}", "red" if above == 0 else "amber" if above <= 2 else "green"),
+                *([_metric("四情绪站上 MA10", f"{sum(row['deviation_pct'] > 0 for row in sentiment)} / 4", "red" if all(row["deviation_pct"] <= 0 for row in sentiment) else "amber" if sum(row['deviation_pct'] > 0 for row in sentiment) == 1 else "green")] if len(sentiment) == 4 else []),
                 *([_metric("全 A 当日", f"{change:+.2f}%", "red" if change <= -3 else "amber" if change < 0 else "green")] if change is not None else []),
                 *[_metric(row["name"], f"{row['deviation_pct']:+.2f}%", row["tone"]) for row in sentiment],
             ],

@@ -41,13 +41,16 @@ def test_index_ma10_uses_only_ten_completed_bars_and_requires_target_day():
 
 def test_five_dimensions_classify_two_contrasting_published_days():
     down_day = date(2026, 9, 28)
+    stressed_indices = _indices(-2.73)
+    stressed_indices["880699.SH"]["deviation_pct"] = -4.1
+    stressed_indices["880880.SH"]["deviation_pct"] = 8.4
     stressed = build_risk_radar(
         down_day,
         breadth={"up_count": 896, "down_count": 4555, "flat_count": 105, "total_count": 5557, "up_ratio_pct": 16.12},
         state={"limit_down_count": 56, "premium_rate_pct": -1.95, "advance_rate_pct": 13.5, "seal_rate_pct": 75.0},
         liquidity=_liquidity(down_day, 17167, 19494),
         ladder=[{"board_height": 1, "count": 26}, {"board_height": 2, "count": 3}, {"board_height": 3, "count": 3}, {"board_height": 5, "count": 1}],
-        indices=_indices(-2.73),
+        indices=stressed_indices,
     )
     assert stressed["headline"] == "普跌与接力亏损共振"
     assert [row["tone"] for row in stressed["dimensions"]] == ["red", "red", "amber", "amber", "amber"]
@@ -57,6 +60,9 @@ def test_five_dimensions_classify_two_contrasting_published_days():
     assert len(stressed["dimensions"][0]["metrics"]) == 6
     assert all("tone" in metric for row in stressed["dimensions"] for metric in row["metrics"])
     assert len(stressed["dimensions"][4]["series"]) == 12
+    stressed_trend = {item["label"]: item["tone"] for item in stressed["dimensions"][4]["metrics"]}
+    assert stressed_trend["普通指数站上 MA10"] == "red"
+    assert stressed_trend["龙头情绪"] == stressed_trend["题材效应"] == "red"
 
     recover_day = date(2026, 9, 29)
     recovering = build_risk_radar(
@@ -71,6 +77,8 @@ def test_five_dimensions_classify_two_contrasting_published_days():
     assert recovering["headline"] == "广度与接力修复，量能继续收缩"
     assert [row["tone"] for row in recovering["dimensions"]] == ["green", "green", "amber", "amber", "amber"]
     assert "前日 13.5%" in recovering["counter_evidence"]
+    recovering_liquidity = {item["label"]: item["tone"] for item in recovering["dimensions"][3]["metrics"]}
+    assert recovering_liquidity["相对前 5 日"] == recovering_liquidity["较前日"] == "red"
 
 
 def test_missing_input_is_reported_without_a_false_normal_state():
