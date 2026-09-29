@@ -702,6 +702,19 @@ def run_now(
     elif not index_fallback_attempted:
         skipped.append("sync_index")
 
+    # The four non-exchange sentiment series are TDX-only and feed the QuantX
+    # risk view. Keep their failure isolated from ordinary index/ETF sync.
+    try:
+        sentiment_day = repo.latest_enriched_date("stock") or today
+        sentiment_rows = index_sync.sync_quantx_sentiment_indices(
+            repo, end_date=_dt.combine(sentiment_day, _dt.min.time()),
+        )
+        _invalidate("index_daily")
+        emit("sync_index", 89, f"QuantX 四情绪指数完成，{sentiment_rows} 行")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("QuantX sentiment indices unavailable: %s", exc)
+        emit("sync_index", 89, "QuantX 四情绪指数暂不可用")
+
     # Step 2.5: 分钟 K 同步(可选) — 未启用或无 capability 时静默跳过(不 emit)
     from app.services import preferences
     minute_on = preferences.get_minute_sync_enabled()

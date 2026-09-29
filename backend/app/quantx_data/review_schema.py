@@ -68,6 +68,7 @@ class Section1(_StrictModel):
 class Section2(_StrictModel):
     participation: dict[str, Any] | None = None
     ebb_risk: dict[str, Any] | None = None
+    risk_radar: dict[str, Any] | None = None
     themes_pywencai: list[dict[str, Any]] = Field(default_factory=list)
     themes_ths: list[dict[str, Any]] = Field(default_factory=list)
     new_high: dict[str, Any] | None = None

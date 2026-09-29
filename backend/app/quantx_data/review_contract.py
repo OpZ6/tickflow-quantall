@@ -34,6 +34,7 @@ V2_FIELD_CONTRACTS: dict[str, str] = {
     "sections.s1.congestion": "canonical_fact",
     "sections.s2.participation": "canonical_fact",
     "sections.s2.ebb_risk": "canonical_fact",
+    "sections.s2.risk_radar": "derived_view",
     "sections.s2.themes_pywencai": "canonical_fact",
     "sections.s2.themes_ths": "canonical_fact",
     "sections.s2.new_high": "canonical_fact",

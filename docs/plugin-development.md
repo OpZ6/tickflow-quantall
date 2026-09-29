@@ -339,7 +339,7 @@ uv run --extra dev python -m ruff check app/plugins/<your_plugin>/ tests/test_<y
   - mirror 网络异常会先重试一次;单次接口失败后才回退原 Tushare
   - `client.py` 同时供标准 provider 和 QuantX 兼容采集入口使用,避免两条链路路由不一致
 - **`backend/app/plugins/tdx/`** — 通达信(免费行情, runtime: python, 依赖 eltdx)
-  - 提供 `realtime`(A 股 L1 全市场快照)、`minute`(逐标的 1 分钟 K, 270 个交易日历史)、`depth5`(五档 L1 快照, 不代表逐笔/委托队列 L2); 不声明 `daily`, 该数据集自动回退 TickFlow
+  - 提供 `realtime`(A 股 L1 全市场快照)、`minute`(逐标的 1 分钟 K, 270 个交易日历史)、`depth5`(五档 L1 快照, 不代表逐笔/委托队列 L2); 不声明全市场 `daily`, 该数据集自动回退 TickFlow。QuantX 四条通达信情绪指数由 `index_sync.sync_quantx_sentiment_indices` 定向调用 Provider 的 `get_daily`，校验目标日四条齐全后写入标准指数日 K；日 K 的 `volume` 按项目契约保持“手”。
   - `provider.py` — 直接调用 eltdx `TdxClient`(probe_hosts 自动选路); `TDX_HOSTS` 可配置 host:port 列表; `get_instruments` 可作 A 股标的维表来源
   - MIT 许可的 [eltdx](https://github.com/electkismet/eltdx) 连接公共行情服务器, 可用性/数据许可由部署者自行确认
 - **`backend/app/plugins/local_financial/`** — 本地财务(AkShare + Tushare, runtime: python, 无 TickFlow Expert 依赖)

@@ -4762,6 +4762,23 @@ export interface QuantXReviewIndexRow {
   pct_chg: number | null
 }
 
+export interface QuantXRiskRadar {
+  headline: string
+  summary: string
+  algorithm_version: string
+  missing: string[]
+  dimensions: Array<{
+    key: string
+    title: string
+    tone: 'red' | 'amber' | 'green' | null
+    status: string
+    metrics: Array<{ label: string; value: string }>
+    explanation: string
+    details: Array<{ label: string; value: string }>
+    source: string
+  }>
+}
+
 export interface QuantXReviewDataV2 {
   trade_date: string
   metric_strip: {
@@ -4806,6 +4823,7 @@ export interface QuantXReviewDataV2 {
     }
     s2: {
       participation: { conditions: Array<{ name: string; value: unknown; ok: boolean | null; available: boolean | null }>; verdict: string; satisfied: number; total: number } | null
+      risk_radar: QuantXRiskRadar | null
       ebb_risk: { verdict: string; signal_count: number } | null
       themes_pywencai: Array<{ name: string; count: number | null; rank: number | null }>
       themes_ths: Array<{ tag: string; count: number | null; rank: number | null }>

@@ -25,6 +25,10 @@ from .review_contract import (
     audit_review_fields,
 )
 from .review_schema import REVIEW_V2_SCHEMA_VERSION, QuantXReviewResponseV2
+from .risk_radar import (
+    ALL_A_INDEX, MARKET_INDICES, SENTIMENT_INDICES,
+    build_risk_radar, index_ma10,
+)
 from .review_view import (
     VIEW_ALGORITHM_VERSION,
     apply_deterministic_review_view,
@@ -49,6 +53,14 @@ class IndexRepository(Protocol):
     def get_index_daily(
         self,
         symbol: str,
+        start: date,
+        end: date,
+        columns: list[str] | None = None,
+    ) -> pl.DataFrame: ...
+
+    def get_index_daily_batch(
+        self,
+        symbols: list[str],
         start: date,
         end: date,
         columns: list[str] | None = None,
@@ -153,6 +165,7 @@ def _clear_canonical_cache_fields(snapshot: dict[str, Any]) -> None:
         "s2": (
             "participation",
             "ebb_risk",
+            "risk_radar",
             "themes_pywencai",
             "themes_ths",
             "new_high",
@@ -261,11 +274,15 @@ class QuantXReviewRepository:
         self._apply_kline_history(snapshot, selected_day, canonical_fields)
         self._apply_indexes(snapshot, selected_day, canonical_fields)
 
+        radar = self._build_risk_radar(selected_day)
+        _section(snapshot, "s2")["risk_radar"] = radar
+
         loss_effect = snapshot.get("emotion", {}).get("loss_effect", {})
         derived_fields = apply_deterministic_review_view(
             snapshot,
             loss_severity=str(loss_effect.get("severity") or ""),
         )
+        derived_fields.append("sections.s2.risk_radar")
         if _section(snapshot, "s5").get("candidate_funnel") is not None:
             derived_fields.extend(
                 [
@@ -308,6 +325,78 @@ class QuantXReviewRepository:
                 DEPRECATION_SCHEDULE
             )
         return snapshot
+
+    def _build_risk_radar(self, day: date) -> dict[str, Any]:
+        breadth = _preferred(
+            self.facts.get_market_breadth(day), DatasetId.MARKET_BREADTH_DAILY,
+        )
+        state = self.facts.get_market_state(day)
+        liquidity = _preferred_by_day(
+            self.facts.get_range(
+                DatasetId.MARKET_LIQUIDITY_DAILY, day - timedelta(days=45), day,
+            ),
+            DatasetId.MARKET_LIQUIDITY_DAILY,
+        )
+        ladder = _preferred(
+            self.facts.get_limit_ladder(day), DatasetId.LIMIT_LADDER_DAILY,
+        )
+        events = _preferred(
+            self.facts.get_limit_events(day), DatasetId.LIMIT_EVENT_DAILY,
+        )
+        ladder_rows = ladder.to_dicts()
+        covered = {row["symbol"] for row in ladder_rows}
+        for row in events.to_dicts():
+            if (
+                row.get("event_type") == "limit_up"
+                and row.get("symbol") not in covered
+                and row.get("board_height") is not None
+            ):
+                ladder_rows.append(row)
+                covered.add(row["symbol"])
+        counts: dict[int, int] = {}
+        for row in ladder_rows:
+            height = int(row["board_height"])
+            counts[height] = counts.get(height, 0) + 1
+        heights = [
+            {"board_height": height, "count": count}
+            for height, count in sorted(counts.items())
+        ]
+        indices: dict[str, dict[str, float | None]] = {}
+        if self.indexes is not None:
+            symbols = (*MARKET_INDICES, ALL_A_INDEX, *(row[0] for row in SENTIMENT_INDICES))
+            if hasattr(self.indexes, "get_index_daily_batch"):
+                try:
+                    batch = self.indexes.get_index_daily_batch(
+                        list(symbols), day - timedelta(days=45), day,
+                        ["date", "close"],
+                    )
+                except (OSError, RuntimeError, ValueError):
+                    batch = pl.DataFrame()
+                frames = {
+                    symbol: batch.filter(pl.col("symbol") == symbol)
+                    for symbol in symbols
+                } if not batch.is_empty() else {}
+            else:
+                frames = {}
+                for symbol in symbols:
+                    try:
+                        frames[symbol] = self.indexes.get_index_daily(
+                            symbol, day - timedelta(days=45), day,
+                            ["date", "close"],
+                        )
+                    except (OSError, RuntimeError, ValueError):
+                        continue
+            for symbol, frame in frames.items():
+                if not frame.is_empty():
+                    measure = index_ma10(frame.to_dicts(), day)
+                    if measure is not None:
+                        indices[symbol] = measure
+        return build_risk_radar(
+            day,
+            breadth=breadth.row(0, named=True) if not breadth.is_empty() else None,
+            state=state.row(0, named=True) if not state.is_empty() else None,
+            liquidity=liquidity.to_dicts(), ladder=heights, indices=indices,
+        )
 
     def _apply_market(
         self,

@@ -33,6 +33,10 @@ _EXCHANGES = ["SH", "SZ", "BJ"]
 QUANTX_ALL_A_DISPLAY_SYMBOL = "000985.CSI"
 QUANTX_ALL_A_STORAGE_SYMBOL = "000985.SH"
 
+QUANTX_SENTIMENT_SYMBOLS = (
+    "880699.SH", "880880.SH", "880823.SH", "880003.SH",
+)
+
 _REQUIRED_INDEX_INSTRUMENTS = (
     {
         "symbol": QUANTX_ALL_A_STORAGE_SYMBOL,
@@ -305,6 +309,49 @@ def sync_quantx_all_a_fallback(
         QUANTX_ALL_A_STORAGE_SYMBOL,
         raw.height,
     )
+    return raw.height
+
+
+def sync_quantx_sentiment_indices(repo: KlineRepository, *, end_date: datetime) -> int:
+    """Persist the four TDX-only QuantX sentiment indices as standard index bars."""
+    from app.plugins.tdx.provider import TdxProvider, availability
+
+    available, reason = availability()
+    if not available:
+        raise RuntimeError(f"TDX sentiment index source unavailable: {reason}")
+    start_date = end_date - timedelta(days=365)
+    latest_days = []
+    for symbol in QUANTX_SENTIMENT_SYMBOLS:
+        existing = repo.get_index_daily(
+            symbol, start_date.date(), end_date.date(), ["date"],
+        )
+        if existing.is_empty():
+            break
+        latest_days.append(existing["date"].max())
+    if len(latest_days) == len(QUANTX_SENTIMENT_SYMBOLS):
+        start_date = datetime.combine(
+            min(latest_days) - timedelta(days=14), datetime.min.time(),
+        )
+    provider = TdxProvider()
+    try:
+        raw = provider.get_daily(
+            list(QUANTX_SENTIMENT_SYMBOLS),
+            start_date,
+            end_date,
+            asset_type="index",
+        )
+    finally:
+        provider.close()
+    if raw.is_empty():
+        raise RuntimeError("TDX sentiment index source returned no daily bars")
+    current_symbols = set(
+        raw.filter(pl.col("date") == end_date.date())["symbol"].to_list()
+    )
+    if current_symbols != set(QUANTX_SENTIMENT_SYMBOLS):
+        raise RuntimeError("TDX sentiment index source is missing target-day bars")
+    repo.append_index_daily(raw)
+    repo.append_index_enriched(compute_enriched(raw, factors=None, instruments=None))
+    repo.refresh_index_views()
     return raw.height
 
 

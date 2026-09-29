@@ -100,3 +100,22 @@ def test_close_releases_eltdx_client():
     client = FakeClient()
     TdxProvider(client=client).close()
     assert client.closed is True
+
+
+def test_daily_index_uses_requested_dates_and_canonical_columns():
+    class DailyClient:
+        def get_kline(self, period, code, *, start, count, kind):
+            assert (period, code, start, count, kind) == ("1d", "sh880699", 0, 800, "index")
+            return SimpleNamespace(items=[
+                SimpleNamespace(time=datetime(2026, 9, 28, tzinfo=SHANGHAI), open_price=90, high_price=101, low_price=89, close_price=100, volume=1000, amount=2000),
+                SimpleNamespace(time=datetime(2026, 9, 29, tzinfo=SHANGHAI), open_price=100, high_price=103, low_price=99, close_price=102, volume=1100, amount=2100),
+            ])
+
+    frame = TdxProvider(client=DailyClient()).get_daily(
+        ["880699.SH"], datetime(2026, 9, 29), datetime(2026, 9, 29), asset_type="index",
+    )
+    assert frame.to_dicts() == [{
+        "symbol": "880699.SH", "date": datetime(2026, 9, 29).date(),
+        "open": 100.0, "high": 103.0, "low": 99.0, "close": 102.0,
+        "volume": 1100.0, "amount": 2100.0, "data_source": "tdx",
+    }]

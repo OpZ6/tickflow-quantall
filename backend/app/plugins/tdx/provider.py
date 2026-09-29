@@ -12,7 +12,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import polars as pl
@@ -219,6 +219,52 @@ class TdxProvider:
             }
         return result
 
+    def get_daily(
+        self,
+        symbols: list[str],
+        start_time: datetime | None,
+        end_time: datetime | None,
+        asset_type: AssetType = "stock",
+    ) -> pl.DataFrame:
+        """Return completed TDX daily bars in the shared index/stock K-line shape."""
+        if asset_type not in {"stock", "index", "etf"}:
+            raise ValueError(f"unsupported TDX daily asset type: {asset_type}")
+        start_day = _beijing_naive(start_time).date() if start_time else None
+        end_day = _beijing_naive(end_time).date() if end_time else None
+        if start_day and end_day and start_day > end_day:
+            raise ValueError("start_time must not be after end_time")
+        rows: list[dict[str, Any]] = []
+        kind = "index" if asset_type == "index" else "stock"
+        for symbol in symbols:
+            code = _to_tdx_code(symbol)
+            offset = 0
+            seen: set[date] = set()
+            while offset < 65_536:
+                with self._client_lock:
+                    page = self._get_client().get_kline(
+                        "1d", code, start=offset, count=_KLINE_PAGE_SIZE, kind=kind,
+                    ).items
+                if not page:
+                    break
+                for item in page:
+                    bar_day = _beijing_naive(item.time).date()
+                    if bar_day in seen or (start_day and bar_day < start_day) or (end_day and bar_day > end_day):
+                        continue
+                    seen.add(bar_day)
+                    rows.append({
+                        "symbol": symbol.upper(), "date": bar_day,
+                        "open": float(item.open_price), "high": float(item.high_price),
+                        "low": float(item.low_price), "close": float(item.close_price),
+                        "volume": float(item.volume),
+                        "amount": float(item.amount), "data_source": self.name,
+                    })
+                if len(page) < _KLINE_PAGE_SIZE or (start_day and min(_beijing_naive(item.time).date() for item in page) <= start_day):
+                    break
+                if start_day is None:
+                    break
+                offset += len(page)
+        return pl.DataFrame(rows).sort(["date", "symbol"]) if rows else pl.DataFrame()
+
     def get_minute(
         self,
         symbols: list[str],
@@ -311,6 +357,14 @@ class TdxProvider:
                 "dataset": dataset,
                 "rows": df.height,
                 "columns": df.columns,
+                "preview": df.head(5).to_dicts() if not df.is_empty() else [],
+            }
+        if dataset == "daily":
+            end = datetime.now()
+            df = self.get_daily(test_symbols, end - timedelta(days=20), end)
+            return {
+                "provider": self.name, "dataset": dataset,
+                "rows": df.height, "columns": df.columns,
                 "preview": df.head(5).to_dicts() if not df.is_empty() else [],
             }
         raise ValueError(f"TDX 不支持数据集: {dataset}")

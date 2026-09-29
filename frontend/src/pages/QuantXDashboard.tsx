@@ -3,9 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Activity,
-  AlertTriangle,
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -33,6 +31,7 @@ import {
   type WindowSize,
 } from '@/components/quantx/MultidayPanels'
 import { AdvancedPanels, type AdvancedCardLayout } from '@/components/quantx/AdvancedPanels'
+import { RiskRadar } from '@/components/quantx/RiskRadar'
 import { quantxApi, type QuantXCandidate, type QuantXMultidaySnapshot, type QuantXReviewData } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { downloadQuantXInteractiveHtml } from '@/lib/exportStaticHtml'
@@ -339,56 +338,6 @@ function CongestionOverview({ data }: { data: any }) {
   </div>
 }
 
-const EBB_LABELS: Record<string, string> = {
-  ladder_compressed: '梯队压缩',
-  loss_effect_expanding: '亏钱效应扩散',
-  relay_payoff_weak: '接力收益转弱',
-  seal_quality_weak: '封板质量转弱',
-}
-
-const PARTICIPATION_LABELS: Record<string, string> = {
-  direction_aligned: '趋势方向一致',
-  height_ge_4: '最高连板达到 4 板',
-  ladder_complete: '连板梯队完整',
-  volume_stable: '成交额保持稳定',
-}
-
-function signalDetail(signal: any): string {
-  if (signal.evidence) return String(signal.evidence)
-  const value = signal.value == null ? '' : typeof signal.value === 'object' ? JSON.stringify(signal.value) : `当前 ${signal.value}`
-  const baseline = signal.baseline == null ? '' : typeof signal.baseline === 'object' ? JSON.stringify(signal.baseline) : `基准 ${signal.baseline}`
-  return [value, baseline].filter(Boolean).join(' · ') || '等待更多样本'
-}
-
-function RiskSignalBoard({ ebb, crash, participation }: { ebb: any[]; crash: any[]; participation: any[] }) {
-  const groups = [
-    { key: 'ebb', title: '退潮信号', rows: ebb, tone: 'orange' },
-    { key: 'crash', title: '崩塌信号', rows: crash, tone: 'red' },
-  ] as const
-  return (
-    <section data-testid="quantx-risk-signals" className="xl:[grid-column:span_16/span_16] overflow-hidden rounded-lg border border-border bg-elevated/25">
-      <header className="flex items-center gap-2 border-b border-border/70 px-3 py-2"><ShieldAlert className="h-4 w-4 text-orange-400" /><h2 className="text-xs font-semibold">情绪风险与参与度雷达</h2><span className="text-[10px] text-muted">退潮、崩塌与行情参与条件统一监控</span></header>
-      <div className="grid gap-2 p-2.5 xl:grid-cols-3">
-        {groups.map(group => <section key={group.key} className="min-w-0 rounded-md border border-border/60 bg-base/20 p-2"><h3 className="mb-1.5 text-[10px] font-semibold text-muted">{group.title}</h3><div className="grid min-w-0 gap-1.5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-          {group.rows.map((signal, index) => {
-            const active = Boolean(signal.triggered)
-            return <article key={`${signal.name}-${index}`} className={cn('min-w-0 rounded-md border px-2.5 py-2', active ? group.tone === 'red' ? 'border-red-500/45 bg-red-500/10' : 'border-orange-500/45 bg-orange-500/10' : 'border-border/70 bg-base/35')}>
-              <div className="flex items-center gap-1.5">{active ? <AlertTriangle className={cn('h-3.5 w-3.5 shrink-0', group.tone === 'red' ? 'text-red-400' : 'text-orange-400')} /> : <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-400" />}<span className="truncate text-[11px] font-semibold">{EBB_LABELS[signal.name] || signal.name || group.title}</span><span className={cn('ml-auto shrink-0 rounded px-1.5 py-0.5 text-[9px]', active ? group.tone === 'red' ? 'bg-red-500/20 text-red-300' : 'bg-orange-500/20 text-orange-300' : 'bg-green-500/15 text-green-300')}>{active ? '已触发' : signal.status || '正常'}</span></div>
-              <p className="mt-1 truncate text-[9px] text-muted" title={signalDetail(signal)}>{signalDetail(signal)}</p>
-            </article>
-          })}
-          {!group.rows.length && <div className="rounded border border-border/70 bg-base/35 px-3 py-4 text-center text-[10px] text-muted">{group.title}暂无可用规则</div>}
-        </div></section>)}
-        <section data-testid="quantx-participation-signals" className="min-w-0 rounded-md border border-border/60 bg-base/20 p-2"><h3 className="mb-1.5 text-[10px] font-semibold text-muted">参与度条件</h3><div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">{participation.map((item, index) => {
-          const available = item.available !== false
-          const passed = available && Boolean(item.ok)
-          return <article key={`${item.name}-${index}`} className={cn('rounded-md border px-2.5 py-2', !available ? 'border-border/70 bg-base/35' : passed ? 'border-green-500/40 bg-green-500/10' : 'border-orange-500/40 bg-orange-500/10')}><div className="flex items-center gap-1.5"><span className="truncate text-[11px] font-semibold">{PARTICIPATION_LABELS[item.name] || item.name || `条件 ${index + 1}`}</span><span className={cn('ml-auto shrink-0 rounded px-1.5 py-0.5 text-[9px]', !available ? 'bg-elevated text-muted' : passed ? 'bg-green-500/15 text-green-300' : 'bg-orange-500/15 text-orange-300')}>{!available ? '不可用' : passed ? '达标' : '未达标'}</span></div><p className="mt-1 truncate font-mono text-[9px] text-muted" title={displayCell(item.value)}>当前 {displayCell(item.value)}</p></article>
-        })}{!participation.length && <div className="rounded border border-border/70 bg-base/35 px-3 py-4 text-center text-[10px] text-muted">参与度暂无可用条件</div>}</div></section>
-      </div>
-    </section>
-  )
-}
-
 function NewHighPanel({ date, data }: { date: string; data: QuantXReviewData['sections']['s2']['new_high'] }) {
   const [dimension, setDimension] = useState<'concept' | 'attribute' | 'industry_level1' | 'industry_level2'>('concept')
   const [window, setWindow] = useState<1 | 5 | 10 | 20>(5)
@@ -643,7 +592,7 @@ export function QuantXDashboard() {
           <div className="grid gap-2 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
             <Panel testId="quantx-market-pulse" title="市场脉搏" hint="全A趋势 · MA · CCI5" icon={<TrendingUp className="h-3.5 w-3.5" />} className="xl:[grid-column:span_8/span_8]"><KlineChart history={s.s1.kline_history} height={236} /></Panel>
             <Panel testId="quantx-theme-mainline" title="题材主线" hint="按多源归一化强度降序 · 连续性 · 生命周期" icon={<Layers3 className="h-3.5 w-3.5" />} className="xl:[grid-column:span_8/span_8]"><ThemeMainline review={review} multiday={multiday} /></Panel>
-            <RiskSignalBoard ebb={s.s3.ebb_signals} crash={s.s3.crash_signals} participation={s.s2.participation?.conditions || []} />
+            <RiskRadar radar={s.s2.risk_radar} />
           </div>
         </AnalysisDomainSection>
 

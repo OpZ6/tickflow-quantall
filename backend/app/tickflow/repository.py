@@ -1665,6 +1665,31 @@ class KlineRepository:
             df = df.select(existing)
         return df
 
+    def get_index_daily_batch(
+        self,
+        symbols: list[str],
+        start: date,
+        end: date,
+        columns: list[str] | None = None,
+    ) -> pl.DataFrame:
+        """Read several index series with one bounded parquet scan."""
+        if not symbols or end < start:
+            return pl.DataFrame()
+        try:
+            frame = scan_enriched_parquet(
+                self._index_enriched_glob,
+                cast_options=pl.ScanCastOptions(integer_cast="allow-float"),
+            ).filter(
+                pl.col("symbol").is_in(symbols)
+                & pl.col("date").is_between(start, end)
+            )
+            if columns:
+                frame = frame.select(["symbol", *[column for column in columns if column != "symbol"]])
+            return guarded_collect(frame.sort(["symbol", "date"]))
+        except (OSError, RuntimeError, ValueError, pl.exceptions.PolarsError):
+            logger.exception("index daily batch read failed")
+            return pl.DataFrame()
+
     def get_etf_daily(
         self,
         symbol: str,
