@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from app.stock_pools.evolution import build_evolution, candidate_history
 from app.stock_pools.publisher import publish_stock_pool
 from app.stock_pools.repository import StockPoolRepository
+from app.stock_pools.review import build_review
 
 router = APIRouter(prefix="/api/stock-pools", tags=["stock-pools"])
 
@@ -37,10 +39,13 @@ def catalog(request: Request) -> dict:
 
 @router.get("/{trade_date}")
 def summary(trade_date: str, request: Request) -> dict:
-    payload = _repository(request).get_summary(_day(trade_date))
+    repo = _repository(request)
+    payload = repo.get_summary(_day(trade_date))
     if payload is None:
         raise HTTPException(status_code=404, detail=f"no stock-pool snapshot for {trade_date}")
-    return payload
+    manifest = repo.get_manifest(_day(trade_date)) or {}
+    return {**payload, "published_at": manifest.get("published_at"),
+            "first_published_available": repo.first_date_dir(_day(trade_date)).is_dir()}
 
 
 @router.get("/{trade_date}/candidates")
@@ -77,9 +82,39 @@ def candidates(
     return {"trade_date": _day(trade_date).isoformat(), "total": len(filtered), "rows": filtered}
 
 
+@router.get("/{trade_date}/evolution")
+def evolution(
+    trade_date: str, request: Request,
+    mode: Literal["hot", "low"] = "hot",
+    topic: Annotated[str, Query(max_length=80)] = "",
+    window: Annotated[int, Query(ge=2, le=30)] = 10,
+) -> dict:
+    payload = build_evolution(_repository(request), _day(trade_date), mode, topic.strip(), window)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"no stock-pool snapshot for {trade_date}")
+    return payload
+
+
+@router.get("/{trade_date}/review")
+def review(
+    trade_date: str, request: Request,
+    window: Annotated[int, Query(ge=2, le=30)] = 20,
+    horizon: Annotated[int, Query(ge=1, le=5)] = 3,
+    cost_bps: Annotated[int, Query(ge=0, le=100)] = 0,
+) -> dict:
+    if horizon not in (1, 3, 5):
+        raise HTTPException(status_code=422, detail="horizon must be 1, 3 or 5")
+    payload = build_review(_repository(request), request.app.state.repo, _day(trade_date), window, horizon, cost_bps)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"no stock-pool snapshot for {trade_date}")
+    return payload
+
+
 @router.get("/{trade_date}/candidates/{symbol}")
-def candidate_detail(trade_date: str, symbol: str, request: Request) -> dict:
-    details = _repository(request).get_details(_day(trade_date))
+def candidate_detail(trade_date: str, symbol: str, request: Request,
+                     snapshot: Literal["current", "first"] = "current") -> dict:
+    repo = _repository(request)
+    details = repo.get_first_details(_day(trade_date)) if snapshot == "first" else repo.get_details(_day(trade_date))
     if details is None:
         raise HTTPException(status_code=404, detail=f"no stock-pool details for {trade_date}")
     normalized = symbol.upper()
@@ -89,6 +124,17 @@ def candidate_detail(trade_date: str, symbol: str, request: Request) -> dict:
     if item is None:
         raise HTTPException(status_code=404, detail=f"{symbol} is not a candidate on {trade_date}")
     return item
+
+
+@router.get("/{trade_date}/candidates/{symbol}/history")
+def history(
+    trade_date: str, symbol: str, request: Request,
+    window: Annotated[int, Query(ge=2, le=30)] = 10,
+) -> dict:
+    payload = candidate_history(_repository(request), _day(trade_date), symbol, window)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"{symbol} is not a candidate on {trade_date}")
+    return payload
 
 
 @router.post("/runs")

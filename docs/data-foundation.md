@@ -13,6 +13,7 @@
 | QuantX 展示兼容 | QuantX publish cache | `quantx/YYYYMMDD/*.json` |
 
 数据类型必须先分类再写代码。不得为了绕过 Dataset Contract 把长期事实塞入展示 JSON，也不得把普通 OHLCV 来源重复实现成 QuantX scraper。
+股票池`eligible.json`是同次基础过滤结果的派生快照，和`summary.json`、`candidates.json`、`details.json`一起发布；它不新增 Market Fact 或召回来源。新日期的首次发布完整留存在`stock_pools/first_published/date=YYYY-MM-DD/`，后续重算的当前版保留在`stock_pools/date=YYYY-MM-DD/`。首次发布的manifest标记`first_publication=true`，仅供当前版已写入而首版目录尚未写入时恢复原始快照；旧日期缺少此标记时不得以当前版冒充当日已见集合，详见`analysis-development.md`的股票池复盘口径。
 
 ## 2. 当前标准事实
 

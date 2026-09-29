@@ -33,6 +33,23 @@ EVENT_SOURCES = {
 }
 
 
+def _exchange_coverage(current: pl.DataFrame, eligible: pl.DataFrame, instruments: pl.DataFrame) -> tuple[dict[str, dict[str, int]], bool]:
+    listed = dict(instruments.group_by("exchange").len().iter_rows())
+    market = dict(current.group_by("exchange").len().iter_rows())
+    passed = dict(eligible.group_by("exchange").len().iter_rows())
+    coverage = {
+        exchange: {"listed": listed.get(exchange, 0), "market": market.get(exchange, 0), "eligible": passed.get(exchange, 0)}
+        for exchange in ("SH", "SZ", "BJ")
+    }
+    complete = all(
+        coverage[exchange]["listed"] >= 500
+        and coverage[exchange]["market"] >= coverage[exchange]["listed"] * .7
+        and coverage[exchange]["eligible"] > 0
+        for exchange in ("SH", "SZ")
+    )
+    return coverage, complete
+
+
 def _code(value: Any) -> str:
     digits = "".join(character for character in str(value or "") if character.isdigit())
     return digits[-6:] if len(digits) >= 6 else ""
@@ -44,6 +61,11 @@ def _safe_float(value: Any) -> float | None:
         return result if result == result else None
     except (TypeError, ValueError):
         return None
+
+
+def _pct_gap(value: Any, reference: Any) -> float | None:
+    numerator, denominator = _safe_float(value), _safe_float(reference)
+    return round((numerator / denominator - 1) * 100, 2) if numerator is not None and denominator and denominator > 0 else None
 
 
 def _features(history: pl.DataFrame) -> pl.DataFrame:
@@ -298,11 +320,19 @@ def build_candidates(
             "topics": [], "industry": "", "change_types": [],
             "memberships": {}, "primary_concept": None,
             "evidence": evidence, "observation_window": observation_window,
+            "price_context": {
+                "ma10_distance_pct": _pct_gap(now["close"], now.get("ma10")),
+                "ma20_distance_pct": _pct_gap(now["close"], now.get("ma20")),
+                "high20_drawdown_pct": _pct_gap(now["close"], now.get("high20")),
+                "return10_pct": round(now["return10"] * 100, 2) if _safe_float(now.get("return10")) is not None else None,
+            },
         }
         candidates.append(item)
         details[symbol] = {**item, "source_events": source_events, "topic_evidence": [], "research": []}
 
+    exchange_coverage, market_complete = _exchange_coverage(current, eligible, instruments)
     quality = {
+        "market_universe": "complete" if market_complete else "incomplete",
         "popularity": popularity_status,
         "limit_events": "complete" if limits.get(trade_date) else "unavailable",
         "logic_evidence": "complete" if not facts.get_stock_logic_evidence(trade_date).is_empty() else "unavailable",
@@ -311,4 +341,6 @@ def build_candidates(
         "quality": quality,
         "market_count": current.height,
         "eligible_count": len(eligible_symbols),
+        "eligible_symbols": sorted(eligible_symbols),
+        "exchange_coverage": exchange_coverage,
     }

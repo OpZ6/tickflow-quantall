@@ -24,6 +24,9 @@ class StockPoolRepository:
     def date_dir(self, value: str | date) -> Path:
         return self.root / f"date={self.normalize_date(value)}"
 
+    def first_date_dir(self, value: str | date) -> Path:
+        return self.root / "first_published" / f"date={self.normalize_date(value)}"
+
     def list_dates(self) -> list[str]:
         if not self.root.exists():
             return []
@@ -44,6 +47,30 @@ class StockPoolRepository:
         if not path.is_file():
             return None
         return json.loads(path.read_text(encoding="utf-8"))
+
+    def _read_first(self, value: str | date, name: str) -> Any:
+        path = self.first_date_dir(value) / name
+        if not path.is_file():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def get_review_snapshot(self, value: str | date) -> tuple[dict | None, list[dict] | None, dict | None, str]:
+        manifest = self._read_first(value, "manifest.json")
+        if isinstance(manifest, dict):
+            summary = self._read_first(value, "summary.json")
+            candidates = self._read_first(value, "candidates.json")
+            return summary, candidates, manifest, "first_published"
+        return self.get_summary(value), self.get_candidates(value), self.get_manifest(value), "replay"
+
+    def get_first_details(self, value: str | date) -> dict[str, dict[str, Any]] | None:
+        payload = self._read_first(value, "details.json")
+        return payload if isinstance(payload, dict) else None
+
+    def get_review_eligible(self, value: str | date) -> list[str] | None:
+        if not self._read_first(value, "manifest.json"):
+            return None
+        payload = self._read_first(value, "eligible.json")
+        return payload if isinstance(payload, list) and all(isinstance(item, str) for item in payload) else None
 
     def get_summary(self, value: str | date) -> dict[str, Any] | None:
         payload = self._read(value, "summary.json")

@@ -5152,10 +5152,10 @@ export const quantxApi = {
     request<QuantXMultidaySnapshot>(`/api/quantx-data/multiday/${encodeURIComponent(date)}`),
 
   getAdvanced: (date: string) =>
-    request<QuantXAdvancedSnapshot>(`/api/quantx-data/advanced/${encodeURIComponent(date)}`),
+    request<QuantXAdvancedSnapshot>(`/api/quantx-data/advanced/${encodeURIComponent(date)}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
 
   getReviewData: (date: string) =>
-    request<QuantXReviewData>(`/api/quantx/review/${encodeURIComponent(date)}/data`),
+    request<QuantXReviewData>(`/api/quantx/review/${encodeURIComponent(date)}/data`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
 
   getNewHighClusterMembers: (date: string, dimension: 'concept' | 'attribute' | 'industry_level1' | 'industry_level2', window: 1 | 5 | 10 | 20, name: string) =>
     request<QuantXNewHighClusterMembers>(`/api/quantx-data/new-high/${encodeURIComponent(date)}/members?dimension=${encodeURIComponent(dimension)}&window=${window}&name=${encodeURIComponent(name)}`),
@@ -5182,7 +5182,7 @@ export const quantxApi = {
     request<any>(`/api/quantx-data/runs/${date}/sources/${encodeURIComponent(source)}/retry`, { method: 'POST' }),
 
   getObservability: (date: string, pipelineJobId?: string | null) =>
-    request<QuantXObservability>(`/api/quantx-data/observability/${encodeURIComponent(date)}${pipelineJobId ? `?pipeline_job_id=${encodeURIComponent(pipelineJobId)}` : ''}`),
+    request<QuantXObservability>(`/api/quantx-data/observability/${encodeURIComponent(date)}${pipelineJobId ? `?pipeline_job_id=${encodeURIComponent(pipelineJobId)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
 }
 
 export interface StockPoolSourceStat {
@@ -5216,14 +5216,38 @@ export interface StockPoolCluster {
   research_count?: number
 }
 
+export interface StockPoolThemeContext {
+  basis: 'dated_logic' | 'latest_static_proxy'
+  window_start: string | null
+  sources: Array<{
+    source: string
+    status: 'ranked' | 'not_ranked' | 'unavailable' | 'ambiguous'
+    rank: number | null
+    list_size: number | null
+    previous_date: string | null
+    previous_rank: number | null
+    seen_days: number
+    available_days: number
+    raw_name: string | null
+    match_basis: 'name' | 'dated_term' | null
+    observed_at: string | null
+    quality_level: string | null
+    related_narrower?: Array<{ name: string; rank: number | null }>
+  }>
+}
+
 export interface StockPoolSummary {
   trade_date: string
+  published_at?: string | null
+  first_published_available?: boolean
   rule_version: string
   status: 'complete' | 'degraded'
   degraded_sources: string[]
   input_generation: string
+  instrument_generation?: string
   market_count?: number
   eligible_count: number
+  exchange_coverage?: Record<string, { listed: number; market: number; eligible: number }>
   candidate_count: number
   raw_hit_count: number
   overlap_count: number
@@ -5232,8 +5256,10 @@ export interface StockPoolSummary {
   stage_stats: Array<{ stage: string; count: number }>
   tier_stats: Record<string, number>
   clusters: StockPoolCluster[]
-  daily_changes: { status: string; previous_date: string | null; counts: Record<string, number>; exits: unknown[] }
+  daily_changes: { status: string; topic_status?: string; previous_date: string | null; counts: Record<string, number>; exits: unknown[] }
   source_quality: Record<string, string>
+  theme_context_version?: string
+  theme_contexts?: Record<string, StockPoolThemeContext>
 }
 
 export interface StockPoolMemberships {
@@ -5260,13 +5286,28 @@ export interface StockPoolCandidate {
   tier: 'core' | 'focus' | 'all'
   freshness: string
   topics: string[]
+  logic_evidence_count?: number
+  unclustered_terms?: string[]
   industry: string
   memberships?: StockPoolMemberships
   primary_concept?: string | null
   evidence?: string
   observation_window?: string
+  price_context?: {
+    ma10_distance_pct: number | null
+    ma20_distance_pct: number | null
+    high20_drawdown_pct: number | null
+    return10_pct: number | null
+  }
   change_types: string[]
   research_count?: number
+  research_breakdown?: { smnc_focused: number; audited_primary: number; counter: number }
+  research_focus?: {
+    title: string | null; excerpt: string | null; available_at: string | null; source_url: string | null
+    source_date?: string | null; age_days?: number | null
+    topic_mentions?: Array<{ label: string; surface: string; location: 'title' | 'excerpt' }>
+    counter?: { title: string | null; source_url: string | null } | null
+  } | null
 }
 
 export interface StockPoolCandidateDetail extends StockPoolCandidate {
@@ -5285,11 +5326,111 @@ export interface StockPoolCandidateDetail extends StockPoolCandidate {
   research: Array<Record<string, unknown>>
 }
 
+export interface StockPoolEvolution {
+  trade_date: string
+  previous_date: string | null
+  mode: 'hot' | 'low'
+  topic: string
+  basis: 'daily_membership' | 'current_cohort'
+  comparison_status: 'complete' | 'limited' | 'incompatible' | 'unavailable'
+  current_count: number
+  previous_count: number | null
+  counts: Record<'retained' | 'entered_topic' | 'entered_pool' | 'left_topic' | 'left_pool' | 'stage_changed' | 'source_changed', number>
+  stages: Array<{ stage: string; current: number; previous: number | null }>
+  flows: Array<{ key: string; kind: string; from_stage: string; to_stage: string; count: number; symbols: string[] }>
+  members: Array<{
+    symbol: string; name: string; kind: string; previous_stage: string | null; current_stage: string
+    added_sources: string[]; removed_sources: string[]; flow_key: string
+    pct_chg: number | null; price_context?: StockPoolCandidate['price_context']
+    research_count: number; freshness?: string; reentry: boolean
+  }>
+  exits: Array<{ symbol: string; name: string; kind: string; previous_stage: string; current_stage: string | null; flow_key: string }>
+  history: Array<{ date: string; count: number | null; event_count: number | null; stage_counts: Record<string, number> }>
+}
+
+export interface StockPoolCandidateHistory {
+  trade_date: string
+  symbol: string
+  timeline: Array<{
+    date: string; available: boolean; present: boolean; stage: string | null
+    sources: string[]; topics: string[]; pct_chg: number | null
+    price_context?: StockPoolCandidate['price_context']; research_count: number
+  }>
+}
+
+export interface StockPoolReviewRow {
+  date: string
+  symbol: string
+  name: string
+  labels: string[]
+  stage: string
+  previous_stage: string | null
+  source_ids: string[]
+  added_source_ids: string[]
+  removed_source_ids: string[]
+  research_count: number
+  research_breakdown: { smnc_focused?: number; audited_primary?: number; counter?: number }
+  research_breakdown_available: boolean
+  sources: string[]
+  added_sources: string[]
+  removed_sources: string[]
+  topics: string[]
+  price: number | null
+  snapshot_basis: 'first_published' | 'replay'
+  snapshot_status: 'recorded' | 'late' | 'early' | 'replay' | 'unknown'
+  prior_snapshot_status?: 'recorded' | 'late' | 'early' | 'replay' | 'unknown'
+  published_at: string | null
+  entry_date: string | null
+  target_date: string | null
+  target_stage: string | null
+  outcome_status: 'mature' | 'pending' | 'unavailable'
+  path: Array<{ date: string; stage: string | null; present: boolean }>
+  return_pct: number | null
+  open_proxy_pct: number | null
+  open_proxy_net_pct: number | null
+  max_adverse_pct: number | null
+  max_favorable_pct: number | null
+}
+
+export interface StockPoolReviewStats {
+  sample_count: number; matured_count: number; matured_dates: number; priced_count: number; unique_symbols: number; retained_count: number; recorded_count: number; recorded_transition_count?: number
+  pending_count: number; unavailable_count: number; up_count: number
+  mean_return_pct: number | null; median_return_pct: number | null; peer_diff_pct: number | null; peer_days: number
+  open_proxy_count: number; mean_open_proxy_pct: number | null; median_open_proxy_pct: number | null
+  mean_open_proxy_net_pct: number | null; median_open_proxy_net_pct: number | null
+  peer_open_diff_pct: number | null; peer_open_days: number
+  eligible_diff_pct: number | null; eligible_days: number
+  target_stages: Record<string, number>
+}
+
+export interface StockPoolReview {
+  as_of_date: string
+  window: number
+  horizon: 1 | 3 | 5
+  return_basis: 'adjusted_close_to_close'
+  open_proxy_basis: 'next_trading_day_adjusted_open_to_target_close'
+  cost_bps: number
+  audit_counts: Record<string, number>
+  eligible_baseline_days: number
+  research_breakdown_observations: number
+  anchor_dates: string[]
+  skipped_dates: Array<{ date: string; reason: string }>
+  groups: Record<string, StockPoolReviewStats>
+  attribution: Record<'sources' | 'added_sources' | 'transitions' | 'research', Record<string, StockPoolReviewStats & { label?: string }>>
+  rows: StockPoolReviewRow[]
+}
+
 export const stockPoolApi = {
   getCatalog: () => request<{ dates: string[]; latest_date: string | null }>('/api/stock-pools'),
   getSummary: (date: string) => request<StockPoolSummary>(`/api/stock-pools/${encodeURIComponent(date)}`),
   getCandidates: (date: string) => request<{ trade_date: string; total: number; rows: StockPoolCandidate[] }>(`/api/stock-pools/${encodeURIComponent(date)}/candidates`),
-  getCandidate: (date: string, symbol: string) => request<StockPoolCandidateDetail>(`/api/stock-pools/${encodeURIComponent(date)}/candidates/${encodeURIComponent(symbol)}`),
+  getCandidate: (date: string, symbol: string, snapshot: 'current' | 'first' = 'current') => request<StockPoolCandidateDetail>(`/api/stock-pools/${encodeURIComponent(date)}/candidates/${encodeURIComponent(symbol)}?snapshot=${snapshot}`),
+  getEvolution: (date: string, mode: 'hot' | 'low', topic: string, window: number) =>
+    request<StockPoolEvolution>(`/api/stock-pools/${encodeURIComponent(date)}/evolution?${new URLSearchParams({ mode, topic, window: String(window) })}`),
+  getCandidateHistory: (date: string, symbol: string, window: number) =>
+    request<StockPoolCandidateHistory>(`/api/stock-pools/${encodeURIComponent(date)}/candidates/${encodeURIComponent(symbol)}/history?window=${window}`),
+  getReview: (date: string, window: number, horizon: 1 | 3 | 5, costBps: number) =>
+    request<StockPoolReview>(`/api/stock-pools/${encodeURIComponent(date)}/review?${new URLSearchParams({ window: String(window), horizon: String(horizon), cost_bps: String(costBps) })}`),
   rebuild: (tradeDate?: string) => request<Record<string, unknown>>('/api/stock-pools/runs', {
     method: 'POST', body: JSON.stringify({ trade_date: tradeDate ?? null }),
   }),

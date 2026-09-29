@@ -36,16 +36,25 @@ def publish_stock_pool(repo: KlineRepository, trade_date: date) -> dict[str, Any
     root = Path(repo.store.data_dir).resolve() / "stock_pools"
     run_id = f"{trade_date:%Y%m%d}-{uuid.uuid4().hex[:12]}"
     staging = root / ".runs" / run_id
-    target = StockPoolRepository(repo.store.data_dir).date_dir(trade_date)
+    snapshots = StockPoolRepository(repo.store.data_dir)
+    target = snapshots.date_dir(trade_date)
+    first_target = snapshots.first_date_dir(trade_date)
+    first_staging = root / ".runs" / f"{run_id}-first"
     backup = root / f".backup-{trade_date:%Y%m%d}-{run_id}"
     try:
+        preserve_first = not target.exists() and not first_target.exists()
+        recover_first = (target.exists() and not first_target.exists()
+                         and (snapshots.get_manifest(trade_date) or {}).get("first_publication") is True)
         from app.research_materials.builder import refresh_if_configured
 
         refresh_if_configured(Path(repo.store.data_dir))
         payload = StockPoolService(repo).build(trade_date)
+        if payload["summary"]["source_quality"].get("market_universe") != "complete":
+            raise ValueError(f"incomplete stock market universe for {day}: {payload['summary']['exchange_coverage']}")
         staging.mkdir(parents=True, exist_ok=False)
         artifacts = []
-        for filename, key in (("summary.json", "summary"), ("candidates.json", "candidates"), ("details.json", "details")):
+        for filename, key in (("summary.json", "summary"), ("candidates.json", "candidates"),
+                              ("details.json", "details"), ("eligible.json", "eligible")):
             content = _encoded(payload[key])
             (staging / filename).write_bytes(content)
             artifacts.append({"path": filename, "bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()})
@@ -53,10 +62,16 @@ def publish_stock_pool(repo: KlineRepository, trade_date: date) -> dict[str, Any
             "schema_version": 1, "trade_date": day, "run_id": run_id,
             "status": payload["summary"]["status"], "rule_version": RULE_VERSION,
             "input_generation": payload["summary"]["input_generation"],
+            "instrument_generation": payload["summary"]["instrument_generation"],
             "published_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "first_publication": preserve_first,
             "artifacts": artifacts,
         }
         (staging / "manifest.json").write_bytes(_encoded(manifest))
+        if preserve_first:
+            shutil.copytree(staging, first_staging)
+        elif recover_first:
+            shutil.copytree(target, first_staging)
         root.mkdir(parents=True, exist_ok=True)
         if backup.exists():
             shutil.rmtree(backup)
@@ -64,12 +79,18 @@ def publish_stock_pool(repo: KlineRepository, trade_date: date) -> dict[str, Any
             os.replace(target, backup)
         try:
             os.replace(staging, target)
+            if preserve_first or recover_first:
+                first_target.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(first_staging, first_target)
         except Exception:
-            if backup.exists() and not target.exists():
+            if target.exists():
+                shutil.rmtree(target)
+            if backup.exists():
                 os.replace(backup, target)
             raise
         shutil.rmtree(backup, ignore_errors=True)
         return {**manifest, "candidate_count": payload["summary"]["candidate_count"]}
     finally:
         shutil.rmtree(staging, ignore_errors=True)
+        shutil.rmtree(first_staging, ignore_errors=True)
         lock.release()

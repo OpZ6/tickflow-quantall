@@ -1,28 +1,55 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, ChevronDown, ChevronUp, CircleDot, RefreshCw, Search, Telescope, X } from 'lucide-react'
-import { stockPoolApi, type StockPoolCandidate, type StockPoolCluster } from '@/lib/api'
+import { ChevronDown, ChevronUp, CircleDot, RefreshCw, Search, Telescope, X } from 'lucide-react'
+import { stockPoolApi, type StockPoolCandidate, type StockPoolCluster, type StockPoolThemeContext } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
+import { StageEvolution } from './StageEvolution'
+import { StockPoolHistoryReview } from './StockPoolHistoryReview'
+import { StockPoolMiniKline } from './StockPoolMiniKline'
 
 type PersonalState = 'unseen' | 'priority' | 'pending' | 'seen' | 'ignored'
-type View = 'workbench' | 'all'
+type View = 'workbench' | 'all' | 'review'
 type Perspective = 'hot' | 'low'
 type ChangeView = 'complete' | 'today'
 type QueueMode = 'topic_event' | 'signal' | 'low_buy' | 'research' | 'priority' | 'pending'
+type LowEvidence = 'all' | 'logic' | 'smnc' | 'static'
 
 const PERSONAL_LABELS: Record<PersonalState, string> = {
   unseen: '未处理', priority: '重点跟踪', pending: '待确认', seen: '已看', ignored: '暂不关注',
 }
 const LOW_STAGES = new Set(['趋势延续', '回踩整理', '企稳修复'])
+function lowBuyDistanceOrder(a: StockPoolCandidate, b: StockPoolCandidate): number {
+  const aDistance = a.price_context?.ma20_distance_pct == null ? Infinity : Math.abs(a.price_context.ma20_distance_pct)
+  const bDistance = b.price_context?.ma20_distance_pct == null ? Infinity : Math.abs(b.price_context.ma20_distance_pct)
+  return aDistance === bDistance ? 0 : aDistance < bDistance ? -1 : 1
+}
 const EVENT_SOURCES = new Set(['breakthrough', 'limit_ladder', 'abnormal_surge', 'divergence', 'failed_limit_repair', 'trend_pullback'])
-const STAGE_ZONES = [
-  { label: '线索观察', description: '尚未形成新的价格触发', stages: ['活跃观察', '人气观察'] },
-  { label: '触发启动', description: '突破或异动首次进入视野', stages: ['突破启动', '异动加速'] },
-  { label: '强化延续', description: '强度持续或趋势推进', stages: ['涨停强化', '趋势延续'] },
-  { label: '分歧整理', description: '强势后的分歧与承接', stages: ['高位分歧', '回踩整理'] },
-  { label: '修复再看', description: '分歧后出现修复迹象', stages: ['企稳修复'] },
-]
+const TOPIC_PREVIEW_LIMIT = 15
+const THEME_SOURCE_NAMES: Record<string, string> = { ths_hot: '同花顺热点', pywencai: '问财涨停题材', deepq: 'DeepQ题材' }
+
+function themeContextShort(context?: StockPoolThemeContext): string | null {
+  if (!context) return null
+  const ranked = context.sources.find(item => item.status === 'ranked')
+  if (ranked) return `${THEME_SOURCE_NAMES[ranked.source] || ranked.source} ${ranked.rank ? `第${ranked.rank}/${ranked.list_size}位` : '上榜'} · 近5日${ranked.seen_days}/${ranked.available_days}次`
+  if (context.sources.some(item => item.status === 'ambiguous')) return '外部名称存在歧义'
+  const related = context.sources.find(item => item.related_narrower?.length)
+  if (related) return `${THEME_SOURCE_NAMES[related.source] || related.source}相关细分：${related.related_narrower?.[0]?.name}`
+  return null
+}
+
+function ThemeContextPanel({ context, staticProxy = false }: { context?: StockPoolThemeContext; staticProxy?: boolean }) {
+  if (!context) return null
+  return <div className="mt-2.5 rounded-lg border border-[#303037] bg-[#111113] px-3 py-2 text-[10px]">
+    <div className="flex flex-wrap items-baseline justify-between gap-1"><strong className="text-secondary">外部题材观察</strong><span className="text-muted">各源仅为自身榜单；名次只与同源比较{staticProxy || context.basis === 'latest_static_proxy' ? ' · 当前关联含最新静态概念' : ''}</span></div>
+    <div className="mt-1.5 grid gap-1.5 sm:grid-cols-3">{context.sources.map(item => <div key={item.source} className="rounded border border-[#28282e] px-2 py-1.5">
+      <div className="font-medium text-secondary">{THEME_SOURCE_NAMES[item.source] || item.source}</div>
+      <div className="mt-0.5 text-foreground">{item.status === 'ranked' ? `今日第${item.rank ?? '—'}/${item.list_size ?? '—'}位` : item.status === 'not_ranked' ? '今日榜单未见' : item.status === 'ambiguous' ? '名称匹配有歧义' : '今日来源缺失'}{item.previous_date ? ` · ${item.previous_date.slice(5)} ${item.previous_rank ? `第${item.previous_rank}位` : '未上榜'}` : ''}</div>
+      <div className="mt-0.5 text-muted">{item.available_days ? `近5日可用${item.available_days}次 · 上榜${item.seen_days}次` : '近5日无可用榜单'}{item.raw_name ? ` · ${item.raw_name}` : ''}</div>
+      {Boolean(item.related_narrower?.length) && <div className="mt-0.5 text-amber-200">名称相关细分：{item.related_narrower?.map(value => `${value.name}${value.rank ? ` #${value.rank}` : ''}`).join('、')} · 未核对成员</div>}
+    </div>)}</div>
+  </div>
+}
 const STAGE_META: Record<string, { index: string; description: string; tone: string; bar: string }> = {
   '活跃观察': { index: '01', description: '近期活跃，等待新触发', tone: 'text-amber-300', bar: 'bg-amber-400' },
   '人气观察': { index: '02', description: '热榜关注，尚无结构确认', tone: 'text-violet-300', bar: 'bg-violet-400' },
@@ -79,8 +106,8 @@ const RANGE_DEFS: [keyof RangeState, string][] = [
 const QUEUE_META: Record<QueueMode, { label: string; note: string; copy: string }> = {
   topic_event: { label: '题材事件', note: '当日事件 + 题材 + 至少2类召回', copy: '默认队列只关注同时具备当日事件、明确题材和至少两类召回的交叉候选，用于先处理信息密度最高的股票。' },
   signal: { label: '全部当日信号', note: '查看所有事件触发', copy: '展示所有事件型召回，并保留题材、研究材料、来源数量和阶段状态，便于检查当天发生了什么。' },
-  low_buy: { label: '趋势低吸', note: '趋势延续、回踩或修复', copy: '聚合趋势延续、回踩整理和企稳修复状态；先看题材结构，再核对个股回踩质量。' },
-  research: { label: '有研究材料', note: '命中已发布Research', copy: '仅展示已有公司级 Research 材料的候选，题材背景不会冒充个股证据。' },
+  low_buy: { label: '趋势低吸', note: '趋势延续、回踩或修复', copy: '按阶段和距MA20由近及远排队，再核对近10日涨幅与研究材料；价格位置只用于浏览顺序。' },
+  research: { label: '有研究材料', note: '定向公司材料', copy: '汇总已审计主证据、辅助证据或SMNC标题单股材料；反证、多股罗列和正文提及可在个股详情核对。' },
   priority: { label: '重点跟踪', note: '你的个人名单', copy: '这是手动维护的注意力队列，不会改变候选召回和阶段判断。' },
   pending: { label: '待确认', note: '需要继续核对', copy: '集中处理仍需补证据或主观判断的候选。' },
 }
@@ -90,9 +117,23 @@ const FIELD_MAP: Record<keyof RangeState, (r: StockPoolCandidate) => number> = {
 }
 
 function storageKey(date: string) { return `stock-pools:personal:v1:${date}` }
+const trackedKey = 'stock-pools:tracked:v1'
 
 function readPersonal(date: string): Record<string, PersonalState> {
-  try { return JSON.parse(localStorage.getItem(storageKey(date)) || '{}') } catch { return {} }
+  try {
+    const daily = JSON.parse(localStorage.getItem(storageKey(date)) || '{}') as Record<string, PersonalState>
+    let tracked = JSON.parse(localStorage.getItem(trackedKey) || 'null') as Record<string, PersonalState> | null
+    if (!tracked) {
+      tracked = Object.fromEntries(Object.entries(daily).filter(([, state]) => state === 'priority' || state === 'pending'))
+      localStorage.setItem(trackedKey, JSON.stringify(tracked))
+    }
+    const merged = { ...daily }
+    for (const [symbol, state] of Object.entries(tracked)) {
+      if (state === 'priority' || state === 'pending') merged[symbol] = state
+      else if (merged[symbol] === 'priority' || merged[symbol] === 'pending') merged[symbol] = 'unseen'
+    }
+    return merged
+  } catch { return {} }
 }
 
 function Tag({ children, tone = 'normal' }: { children: React.ReactNode; tone?: 'normal' | 'accent' | 'warm' }) {
@@ -113,23 +154,44 @@ function SummaryMetric({ label, value, note, tone }: { label: string; value: str
   return <div className={`relative min-h-[76px] overflow-hidden rounded-lg border border-[#2a2a2f] bg-gradient-to-br from-[#18181b] to-[#131315] px-4 py-3 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 ${colors[tone]}`}><div className="text-[10px] text-muted">{label}</div><div className={`mt-2 font-mono text-2xl font-bold leading-none ${values[tone]}`}>{value}<span className="ml-2 text-[9px] font-normal text-secondary">{note}</span></div></div>
 }
 
+function lowTopicLabels(row: StockPoolCandidate): string[] {
+  if (row.topics.length) return row.topics
+  return [row.primary_concept || row.memberships?.concept?.[0]].filter((label): label is string => Boolean(label))
+}
+
 function clusterLow(rows: StockPoolCandidate[]): StockPoolCluster[] {
   const groups = new Map<string, StockPoolCandidate[]>()
   for (const row of rows.filter(item => LOW_STAGES.has(item.primary_stage))) {
-    const label = row.primary_concept || row.memberships?.concept?.[0]
-    if (label) groups.set(label, [...(groups.get(label) ?? []), row])
+    for (const label of lowTopicLabels(row)) groups.set(label, [...(groups.get(label) ?? []), row])
   }
-  return [...groups].map(([name, items]) => ({
-    name, dimension: 'concept', count: items.length, event_count: items.filter(item => item.source_ids.some(source => EVENT_SOURCES.has(source))).length,
-    up_count: items.filter(item => item.pct_chg > 0).length,
-    mean_pct_chg: items.reduce((sum, item) => sum + item.pct_chg, 0) / items.length,
-    stage_counts: Object.fromEntries([...new Set(items.map(item => item.primary_stage))].map(stage => [stage, items.filter(item => item.primary_stage === stage).length])),
-    symbols: items.map(item => item.symbol),
-  })).sort((a, b) => b.count - a.count || b.event_count - a.event_count || a.name.localeCompare(b.name))
+  return [...groups].filter(([, items]) => items.length >= 3).map(([name, items]) => {
+    const related = new Map<string, string[]>()
+    for (const item of items) for (const concept of item.memberships?.concept ?? []) {
+      if (concept !== name) related.set(concept, [...(related.get(concept) ?? []), item.symbol])
+    }
+    const subgroups = [...related].filter(([, symbols]) => symbols.length >= 2)
+      .map(([label, symbols]) => ({ name: label, count: symbols.length, symbols }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 10)
+    const logicCount = items.filter(item => item.topics.includes(name)).length
+    return {
+      name, dimension: logicCount === items.length ? 'logic' : logicCount ? 'mixed' : 'concept',
+      count: items.length, event_count: items.filter(item => item.source_ids.some(source => EVENT_SOURCES.has(source))).length,
+      up_count: items.filter(item => item.pct_chg > 0).length,
+      mean_pct_chg: items.reduce((sum, item) => sum + item.pct_chg, 0) / items.length,
+      stage_counts: Object.fromEntries([...new Set(items.map(item => item.primary_stage))].map(stage => [stage, items.filter(item => item.primary_stage === stage).length])),
+      symbols: items.map(item => item.symbol), subgroups,
+    }
+  }).sort((a, b) =>
+    ({ logic: 0, mixed: 1, concept: 2 }[a.dimension] ?? 3) - ({ logic: 0, mixed: 1, concept: 2 }[b.dimension] ?? 3)
+    || b.count - a.count || b.event_count - a.event_count || a.name.localeCompare(b.name))
 }
 
 function matchesPerspective(row: StockPoolCandidate, topic: string, perspective: Perspective) {
-  return perspective === 'hot' ? row.topics.includes(topic) : row.primary_concept === topic
+  return perspective === 'hot' ? row.topics.includes(topic) : lowTopicLabels(row).includes(topic)
+}
+
+function signedPct(value: number | null | undefined): string {
+  return value == null ? '—' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
 }
 
 function reviewSelect(symbol: string, personal: Record<string, PersonalState>, onPersonal: (s: string, v: PersonalState) => void) {
@@ -152,8 +214,11 @@ export function StockPoolsPage() {
   const [showAllTopics, setShowAllTopics] = useState(false)
   const [showAllQueue, setShowAllQueue] = useState(false)
   const [queueMode, setQueueMode] = useState<QueueMode>('topic_event')
+  const [lowEvidence, setLowEvidence] = useState<LowEvidence>('all')
   const [workbenchQuery, setWorkbenchQuery] = useState('')
+  const [evolutionWindow, setEvolutionWindow] = useState(10)
   const [selected, setSelected] = useState<StockPoolCandidate | null>(null)
+  const [historySelection, setHistorySelection] = useState<{ date: string; symbol: string; snapshot: 'current' | 'first' } | null>(null)
   const [personal, setPersonal] = useState<Record<string, PersonalState>>({})
 
   // All-candidates view state
@@ -172,6 +237,7 @@ export function StockPoolsPage() {
 
   useEffect(() => { if (!date && catalog.data?.latest_date) setDate(catalog.data.latest_date) }, [catalog.data?.latest_date, date])
   useEffect(() => { if (date) setPersonal(readPersonal(date)) }, [date])
+  useEffect(() => { setLowEvidence('all'); setShowAllQueue(false) }, [date])
   useEffect(() => {
     const job = pipelineRefresh.job
     if (job?.status !== 'succeeded') return
@@ -182,6 +248,16 @@ export function StockPoolsPage() {
   const summary = useQuery({ queryKey: QK.stockPoolSummary(date), queryFn: () => stockPoolApi.getSummary(date), enabled: Boolean(date) })
   const candidates = useQuery({ queryKey: QK.stockPoolCandidates(date), queryFn: () => stockPoolApi.getCandidates(date), enabled: Boolean(date) })
   const detail = useQuery({ queryKey: QK.stockPoolDetail(date, selected?.symbol ?? ''), queryFn: () => stockPoolApi.getCandidate(date, selected!.symbol), enabled: Boolean(date && selected) })
+  const historyDetail = useQuery({
+    queryKey: QK.stockPoolDetail(historySelection?.date ?? '', historySelection?.symbol ?? '', historySelection?.snapshot ?? 'current'),
+    queryFn: () => stockPoolApi.getCandidate(historySelection!.date, historySelection!.symbol, historySelection!.snapshot),
+    enabled: Boolean(historySelection),
+  })
+  const evolution = useQuery({
+    queryKey: QK.stockPoolEvolution(date, perspective, topic, evolutionWindow),
+    queryFn: () => stockPoolApi.getEvolution(date, perspective, topic, evolutionWindow),
+    enabled: Boolean(date && view === 'workbench'),
+  })
   const rows = candidates.data?.rows ?? []
   const lowClusters = useMemo(() => clusterLow(rows), [rows])
   const clusters = perspective === 'hot' ? summary.data?.clusters ?? [] : lowClusters
@@ -189,24 +265,28 @@ export function StockPoolsPage() {
   useEffect(() => {
     if (view === 'workbench' && topic && !clusters.some(item => item.name === topic)) { setTopic(''); setSubgroup('') }
   }, [clusters, topic, view])
-  useEffect(() => {
-    if (view === 'workbench' && !topic && clusters.length) { setTopic(clusters[0].name); setSubgroup('') }
-  }, [clusters, topic, view])
-
   const setPersonalState = (symbol: string, value: PersonalState) => {
     const next = { ...personal, [symbol]: value }
     setPersonal(next)
-    try { localStorage.setItem(storageKey(date), JSON.stringify(next)) } catch { /* current session remains usable */ }
+    try {
+      const tracked = JSON.parse(localStorage.getItem(trackedKey) || '{}') as Record<string, PersonalState>
+      if (value === 'priority' || value === 'pending') tracked[symbol] = value
+      else tracked[symbol] = 'unseen'
+      localStorage.setItem(trackedKey, JSON.stringify(tracked))
+      localStorage.setItem(storageKey(date), JSON.stringify(next))
+    } catch { /* current session remains usable */ }
   }
 
   // Workbench topic rows
-  const topicRows = useMemo(() => rows.filter(row => (!topic || matchesPerspective(row, topic, perspective)) && (perspective === 'hot' || LOW_STAGES.has(row.primary_stage))), [rows, topic, perspective])
+  const workbenchRows = useMemo(() => {
+    const needle = workbenchQuery.trim().toLowerCase()
+    return needle ? rows.filter(row => `${row.name} ${row.code} ${row.symbol} ${row.primary_stage} ${row.sources.join(' ')} ${row.topics.join(' ')} ${row.primary_concept ?? ''} ${(row.memberships?.concept ?? []).join(' ')}`.toLowerCase().includes(needle)) : rows
+  }, [rows, workbenchQuery])
   const displayTopic = topic || clusters[0]?.name || ''
-  const memberRows = useMemo(() => rows.filter(row => (!displayTopic || matchesPerspective(row, displayTopic, perspective)) && (perspective === 'hot' || LOW_STAGES.has(row.primary_stage))), [displayTopic, perspective, rows])
+  const memberRows = useMemo(() => workbenchRows.filter(row => (!displayTopic || matchesPerspective(row, displayTopic, perspective)) && (perspective === 'hot' || LOW_STAGES.has(row.primary_stage))), [displayTopic, perspective, workbenchRows])
   const memberStageRows = useMemo(() => memberRows.filter(row => !stage || row.primary_stage === stage), [memberRows, stage])
   const queueGroups = useMemo(() => {
-    const needle = workbenchQuery.trim().toLowerCase()
-    const base = needle ? rows.filter(row => `${row.name} ${row.code} ${row.symbol} ${row.primary_stage} ${row.sources.join(' ')} ${row.topics.join(' ')} ${row.primary_concept ?? ''} ${(row.memberships?.concept ?? []).join(' ')}`.toLowerCase().includes(needle)) : rows
+    const base = workbenchRows.filter(row => (!topic || matchesPerspective(row, topic, perspective)) && (!stage || row.primary_stage === stage))
     return {
       topic_event: base.filter(row => row.source_ids.some(item => EVENT_SOURCES.has(item)) && row.source_ids.length >= 2 && row.topics.length > 0),
       signal: base.filter(row => row.source_ids.some(item => EVENT_SOURCES.has(item))),
@@ -215,17 +295,23 @@ export function StockPoolsPage() {
       priority: base.filter(row => (personal[row.symbol] ?? 'unseen') === 'priority'),
       pending: base.filter(row => (personal[row.symbol] ?? 'unseen') === 'pending'),
     }
-  }, [personal, rows, workbenchQuery])
+  }, [personal, workbenchRows, topic, perspective, stage])
   const queue = useMemo(() => {
     const order: Record<string, number> = { '涨停强化': 0, '异动加速': 1, '突破启动': 2, '高位分歧': 3, '企稳修复': 4, '回踩整理': 5, '趋势延续': 6, '活跃观察': 7, '人气观察': 8 }
-    return [...queueGroups[queueMode]].sort((a, b) =>
+    const visible = queueMode === 'low_buy' ? queueGroups.low_buy.filter(row =>
+      lowEvidence === 'all' || (lowEvidence === 'logic' && row.topics.length > 0)
+      || (lowEvidence === 'smnc' && Boolean(row.research_focus))
+      || (lowEvidence === 'static' && row.topics.length === 0)
+    ) : queueGroups[queueMode]
+    return [...visible].sort((a, b) =>
       Number((personal[b.symbol] ?? 'unseen') === 'priority') - Number((personal[a.symbol] ?? 'unseen') === 'priority') ||
       Number((personal[b.symbol] ?? 'unseen') === 'pending') - Number((personal[a.symbol] ?? 'unseen') === 'pending') ||
-      (b.research_count ?? 0) - (a.research_count ?? 0) ||
+      (queueMode === 'low_buy' ? (order[a.primary_stage] ?? 99) - (order[b.primary_stage] ?? 99) : 0) ||
+      (queueMode === 'low_buy' ? lowBuyDistanceOrder(a, b) : (b.research_count ?? 0) - (a.research_count ?? 0)) ||
       b.source_ids.length - a.source_ids.length ||
       (order[a.primary_stage] ?? 99) - (order[b.primary_stage] ?? 99) ||
       b.amount_yi - a.amount_yi)
-  }, [personal, queueGroups, queueMode])
+  }, [personal, queueGroups, queueMode, lowEvidence])
 
   // All-candidates filtered rows
   const filtered = useMemo(() => {
@@ -291,10 +377,9 @@ export function StockPoolsPage() {
   }, [subgroupRows])
   const staticRelated = useMemo(() => {
     if (!displayTopic) return []
-    return rows.filter(row => perspective === 'hot'
-      ? (row.memberships?.concept ?? []).includes(displayTopic)
-      : row.topics.includes(displayTopic))
-  }, [displayTopic, perspective, rows])
+    const members = new Set(memberRows.map(row => row.symbol))
+    return workbenchRows.filter(row => !members.has(row.symbol) && (row.memberships?.concept ?? []).includes(displayTopic))
+  }, [displayTopic, memberRows, workbenchRows])
   const topicSourceCounts = useMemo(() => {
     const counts = new Map<string, number>()
     for (const row of memberRows) for (const label of row.sources) counts.set(label, (counts.get(label) ?? 0) + 1)
@@ -354,7 +439,7 @@ export function StockPoolsPage() {
       </select>
       <span className={`rounded-[7px] border px-2.5 py-[7px] text-[11px] ${data.status === 'complete' ? 'border-warning/35 bg-warning/[.05] text-[#fbc16b]' : 'border-danger/35 bg-danger/[.06] text-danger'}`}>{data.status === 'complete' ? `${date.slice(5).replace('-', '')}正式快照` : `降级：${data.degraded_sources.join('、')}`}</span>
       <div className="ml-auto flex items-center gap-2">
-        <label className="relative block w-64"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" size={14} /><input value={view === 'workbench' ? workbenchQuery : search} onChange={event => view === 'workbench' ? setWorkbenchQuery(event.target.value) : setSearch(event.target.value)} placeholder="搜索名称、代码或标签" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-8 text-xs text-foreground outline-none transition-colors placeholder:text-muted focus:border-accent/60" />{(view === 'workbench' ? workbenchQuery : search) && <button onClick={() => view === 'workbench' ? setWorkbenchQuery('') : setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted hover:text-foreground" aria-label="清除搜索"><X size={13} /></button>}</label>
+        {view !== 'review' && <label className="relative block w-64"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" size={14} /><input value={view === 'workbench' ? workbenchQuery : search} onChange={event => view === 'workbench' ? setWorkbenchQuery(event.target.value) : setSearch(event.target.value)} placeholder="搜索名称、代码或标签" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-8 text-xs text-foreground outline-none transition-colors placeholder:text-muted focus:border-accent/60" />{(view === 'workbench' ? workbenchQuery : search) && <button onClick={() => view === 'workbench' ? setWorkbenchQuery('') : setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted hover:text-foreground" aria-label="清除搜索"><X size={13} /></button>}</label>}
         <button title="更新数据" aria-label="更新数据" onClick={() => pipelineRefresh.refresh()} disabled={pipelineRefresh.isRefreshing} className="grid h-8 w-8 place-items-center rounded-[7px] border border-[#353539] bg-[#151517] text-foreground transition-colors hover:border-accent/60 hover:bg-elevated disabled:opacity-50">
           <RefreshCw size={15} className={pipelineRefresh.isRefreshing ? 'animate-spin' : ''} />
         </button>
@@ -362,28 +447,33 @@ export function StockPoolsPage() {
     </header>
 
     <div className="-mt-1 mb-3 flex w-max gap-1 rounded-[9px] border border-[#353539] bg-[#111113] p-1">
-      {([['workbench', '今日工作台'], ['all', '完整候选']] as const).map(([key, label]) => <button key={key} onClick={() => { setView(key); setStage(''); if (key === 'all') setTopic('') }} className={`min-w-32 rounded-md px-3.5 py-2 text-[11px] transition-colors ${view === key ? 'bg-accent/10 text-foreground shadow-[inset_0_0_0_1px_#3b82f655]' : 'text-muted hover:bg-elevated hover:text-foreground'}`}>{label}</button>)}
+      {([['workbench', '今日工作台'], ['all', '完整候选'], ['review', '历史复盘']] as const).map(([key, label]) => <button key={key} onClick={() => { setView(key); setStage(''); if (key === 'all') setTopic('') }} className={`min-w-32 rounded-md px-3.5 py-2 text-[11px] transition-colors ${view === key ? 'bg-accent/10 text-foreground shadow-[inset_0_0_0_1px_#3b82f655]' : 'text-muted hover:bg-elevated hover:text-foreground'}`}>{label}</button>)}
     </div>
 
-    {view === 'workbench' ? <section className="overflow-hidden rounded-[9px] border border-[#353539] bg-[#151517]">
+    {view === 'review' ? <StockPoolHistoryReview date={date} onOpen={(snapshotDate, symbol, snapshot) => setHistorySelection({ date: snapshotDate, symbol, snapshot })} /> : view === 'workbench' ? <section className="overflow-hidden rounded-[9px] border border-[#353539] bg-[#151517]">
       <div className="flex min-h-[38px] items-center justify-between border-b border-[#29292e] px-[11px] py-[7px]"><div className="flex items-baseline gap-2"><h2 className="text-xs font-semibold text-foreground">今日工作台</h2><span className="text-[10px] text-muted">先选方向，再看阶段，最后处理股票</span></div><span className="rounded-[5px] bg-accent/10 px-[7px] py-[3px] text-[10px] text-[#83afff]">{date.slice(5).replace('-', '')} 收盘</span></div>
+      {summary.data && <div className="border-b border-[#29292e] px-[11px] py-1.5 text-[10px] text-muted">当前快照发布于 {summary.data.published_at ? new Date(summary.data.published_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '时间未记录'} · {summary.data.first_published_available ? '首次版已留存' : '该日期没有首次版留存'}</div>}
 
       <div className="border-b border-[#29292e] p-[13px]">
-        <WorkbenchHeader index="01" title={perspective === 'hot' ? '今日热点题材' : '趋势低吸题材'} actions={<><span className="text-[10px] text-muted">{Math.min(10, clusters.length)}/{clusters.length}组</span>{clusters.length > 10 && <button onClick={() => setShowAllTopics(value => !value)} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">{showAllTopics ? '收起到10组' : `展开全部 · ${clusters.length}组`}</button>}</>} />
+        <WorkbenchHeader index="01" title={perspective === 'hot' ? '今日热点题材' : '趋势低吸题材'} actions={<><span className="text-[10px] text-muted">{clusters.length}组</span>{topic && <button onClick={() => { setTopic(''); setStage(''); setSubgroup('') }} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">清除题材筛选</button>}{clusters.length > TOPIC_PREVIEW_LIMIT && <button onClick={() => setShowAllTopics(value => !value)} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">{showAllTopics ? `收起到${TOPIC_PREVIEW_LIMIT}组` : '展开全部'}</button>}</>} />
         <div className="mt-2 grid w-80 grid-cols-2 gap-1 rounded-md bg-base p-[3px]">{([['hot', '热点启动'], ['low', '趋势低吸']] as const).map(([key, label]) => <button key={key} onClick={() => { setPerspective(key); setTopic(''); setStage(''); setSubgroup(''); setShowAllTopics(false); setQueueMode(key === 'low' ? 'low_buy' : 'topic_event') }} className={`cursor-pointer rounded-[5px] px-2 py-1.5 text-[9px] transition-colors ${perspective === key ? 'bg-elevated text-foreground' : 'text-muted hover:text-foreground'}`}>{label}</button>)}</div>
+        {perspective === 'low' && <p className="mt-2 text-[10px] text-muted">只展示至少3只股票共有的题材；未成组的候选仍在下方低吸队列。静态关联需逐股核对。</p>}
         <div className="mt-2 grid grid-cols-3 gap-2">
-          {(showAllTopics ? clusters : clusters.slice(0, 10)).map(cluster => {
+          {(showAllTopics ? clusters : clusters.slice(0, TOPIC_PREVIEW_LIMIT)).map(cluster => {
             const leading = Object.entries(cluster.stage_counts || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name]) => name).join('／')
             const subgroupHint = (cluster.subgroups ?? []).slice(0, 2).map(item => `${item.name} ${item.count}`).join(' · ')
-            return <button key={cluster.name} onClick={() => { setTopic(cluster.name); setStage(''); setSubgroup('') }} className={`grid min-h-[66px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded-[7px] border bg-[#111113] p-2.5 text-left transition-colors ${displayTopic === cluster.name ? 'border-accent/70 bg-accent/10' : 'border-[#29292e] hover:border-accent/45 hover:bg-elevated/60'}`}>
+            const basis = perspective === 'low' ? (cluster.dimension === 'logic' ? '当日逻辑' : cluster.dimension === 'mixed' ? '逻辑／静态' : '静态关联') : ''
+            const observation = themeContextShort(summary.data?.theme_contexts?.[cluster.name])
+            return <button key={cluster.name} onClick={() => { setTopic(cluster.name); setStage(''); setSubgroup('') }} className={`grid min-h-[66px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded-[7px] border bg-[#111113] p-2.5 text-left transition-colors ${topic === cluster.name ? 'border-accent/70 bg-accent/10' : 'border-[#29292e] hover:border-accent/45 hover:bg-elevated/60'}`}>
               <strong className="truncate text-[11px] text-foreground">{cluster.name}</strong><b className="font-mono text-[13px] text-[#aeb8ff]">{cluster.count}只</b>
-              <div className="col-span-2 mt-0.5 truncate text-[9px] text-muted">当日事件 {cluster.event_count} · {subgroupHint || leading || '阶段待确认'}</div>
+              <div className="col-span-2 mt-0.5 truncate text-[9px] text-muted">{basis ? `${basis} · ` : ''}当日事件 {cluster.event_count} · {subgroupHint || leading || '阶段待确认'}</div>
+              {observation && <div className="col-span-2 mt-0.5 truncate text-[9px] text-[#9ca9c6]">{observation}</div>}
             </button>
           })}
         </div>
       </div>
 
-      <StageMap rows={topic ? topicRows : rows} selected={stage} onSelect={setStage} title={topic ? `${topic} · 当前阶段 ${topicRows.length}只` : `全候选 · 当前阶段 ${rows.length}只`} />
+      <StageEvolution key={`${date}:${perspective}:${topic}`} data={evolution.data} loading={evolution.isLoading} error={evolution.isError} mode={perspective} topic={topic} selectedStage={stage} onSelectStage={setStage} candidates={rows} search={workbenchQuery} onOpen={setSelected} personal={personal} onPersonal={setPersonalState} window={evolutionWindow} onWindow={setEvolutionWindow} />
 
       <div className="border-b border-[#29292e] bg-[#818cf809] p-[13px]">
         <WorkbenchHeader index="03" title={`${displayTopic || '全候选'} · 当前成员`} note={`完整题材 ${activeCluster?.count ?? memberRows.length}只 · 当前待浏览 ${subgroupRows.length}只${topic ? '' : ' · 默认预览首个题材'}`} />
@@ -393,27 +483,28 @@ export function StockPoolsPage() {
           <span>当日事件 {activeCluster?.event_count ?? memberRows.filter(row => row.source_ids.some(sourceId => EVENT_SOURCES.has(sourceId))).length}</span>
           {topicSourceCounts.slice(0, 6).map(([label, count]) => <Tag key={label}>{label} {count}</Tag>)}
         </div>
-        {activeCluster?.subgroups?.length ? <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px]"><span className="text-muted">细分方向：</span>{[{ name: '', count: activeCluster.count }, ...activeCluster.subgroups].map(item => { const active = item.name ? subgroup === item.name : !subgroup; return <button key={item.name || '__all__'} onClick={() => setSubgroup(item.name)} className={`cursor-pointer rounded border px-2 py-1 transition-colors ${active ? 'border-accent/60 bg-accent/15 text-foreground' : 'border-border bg-base text-secondary hover:border-accent/50 hover:text-foreground'}`}>{item.name || '全部'} {item.count}</button> })}</div> : null}
+        <ThemeContextPanel context={summary.data?.theme_contexts?.[displayTopic]} staticProxy={perspective === 'low' && activeCluster?.dimension !== 'logic'} />
+        {activeCluster?.subgroups?.length ? <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px]"><span className="text-muted">{perspective === 'low' ? '静态概念交叉：' : '细分方向：'}</span>{[{ name: '', count: activeCluster.count }, ...activeCluster.subgroups].map(item => { const active = item.name ? subgroup === item.name : !subgroup; return <button key={item.name || '__all__'} onClick={() => setSubgroup(item.name)} className={`cursor-pointer rounded border px-2 py-1 transition-colors ${active ? 'border-accent/60 bg-accent/15 text-foreground' : 'border-border bg-base text-secondary hover:border-accent/50 hover:text-foreground'}`}>{item.name || '全部'} {item.count}</button> })}</div> : null}
         {topicOverlaps.length > 0 && <div className="mt-2 flex items-center gap-1.5 text-[9px] text-muted"><span>成员重叠：</span>{topicOverlaps.map(item => <button key={item.name} onClick={() => { setTopic(item.name); setStage(''); setSubgroup('') }} className="cursor-pointer rounded border border-border bg-base px-2 py-1 text-secondary hover:border-accent/50 hover:text-foreground">{item.name} · {item.shared}只 · {(item.ratio * 100).toFixed(0)}%</button>)}</div>}
         <div className="mt-2.5 grid grid-cols-2 items-start gap-[7px]">{roleGroups.map(({ role, members }, index) => <details key={`${displayTopic}-${role}`} open={index < 3 && members.length > 0} className="min-w-0 rounded-md border border-[#29292e] bg-[#111113] p-2"><summary className="cursor-pointer text-[11px] text-secondary">{role} · {members.length}只</summary><div className="mt-1.5 max-h-[180px] overflow-y-auto"><RoleMemberRows rows={members} personal={personal} onOpen={setSelected} /></div></details>)}</div>
         <div className="mt-2.5 rounded-lg border border-accent/30 bg-accent/[.04] px-3 py-2 text-[10px] text-secondary">来源强化：{[...new Set(memberRows.map(row => row.industry || row.topics[1]).filter(Boolean))].slice(0, 3).join('、') || '当前题材材料待补充'}</div>
-        <details open={Boolean(activeCluster?.research_background?.length)} className="mt-2.5 rounded-md border border-[#29292e] bg-[#111113] p-2.5">
+        {perspective === 'hot' ? <details open={Boolean(activeCluster?.research_background?.length)} className="mt-2.5 rounded-md border border-[#29292e] bg-[#111113] p-2.5">
           <summary className="cursor-pointer text-[11px] text-secondary">SMNC题材背景 {activeCluster?.research_background?.length ?? 0}条 · 研究线索</summary>
-          <div className="mt-2 divide-y divide-[#29292e]">{activeCluster?.research_background?.length ? activeCluster.research_background.slice(0, 3).map((item, index) => <div key={index} className="py-2 text-[10px]"><strong className="block text-foreground">{String(item.title || item.takeaway || '研究材料')}</strong><span className="mt-1 block text-[9px] text-muted">{String(item.takeaway || '')}</span></div>) : <div className="py-2 text-[9px] text-muted">当前题材暂无可展示的研究背景材料</div>}</div>
-        </details>
-        <details className="mt-1.5 rounded-md border border-[#29292e] bg-[#111113] px-2.5 py-2"><summary className="cursor-pointer text-[10px] text-secondary">仅静态关联 {staticRelated.length}只 · 不计入当前题材成员</summary></details>
+          <div className="mt-2 divide-y divide-[#29292e]">{activeCluster?.research_background?.length ? activeCluster.research_background.slice(0, 3).map((item, index) => <div key={index} className="py-2 text-[10px]"><div className="flex items-center gap-1.5"><strong className="min-w-0 flex-1 truncate text-foreground" title={String(item.title || '')}>{String(item.title || item.takeaway || '研究材料')}</strong><span className="shrink-0 text-[9px] text-muted">{item.topic_match_basis === 'audited' ? '已审计概念' : item.topic_match_basis === 'title' ? '标题直提' : item.topic_match_basis === 'title_alias' ? '标题术语' : '标题旧标签'}</span>{Boolean(item.source_url) && <a href={String(item.source_url)} target="_blank" rel="noreferrer" className="shrink-0 text-accent hover:underline">原文</a>}</div><span className="mt-1 block text-[9px] text-muted">{String(item.takeaway || '')}</span></div>) : <div className="py-2 text-[9px] text-muted">当前题材暂无可展示的研究背景材料</div>}</div>
+        </details> : <div className="mt-2.5 text-[10px] text-muted">公司级研究材料可在成员详情中核对；静态概念仅表示关联。</div>}
+        {staticRelated.length > 0 && <details className="mt-1.5 rounded-md border border-[#29292e] bg-[#111113] px-2.5 py-2"><summary className="cursor-pointer text-[10px] text-secondary">仅静态关联 {staticRelated.length}只 · 不计入当前题材成员</summary><div className="mt-2 max-h-[180px] overflow-y-auto"><RoleMemberRows rows={staticRelated} personal={personal} onOpen={setSelected} /></div></details>}
       </div>
 
       <div className="p-[13px]">
-        <WorkbenchHeader index="04" title={QUEUE_META[queueMode].label} note={`显示 ${showAllQueue ? queue.length : Math.min(30, queue.length)} / ${queue.length}只`} />
+        <WorkbenchHeader index="04" title={QUEUE_META[queueMode].label} note={`${topic ? `题材 ${topic} · ` : ''}${stage ? `阶段 ${stage} · ` : ''}显示 ${showAllQueue ? queue.length : Math.min(30, queue.length)} / ${queue.length}只`} />
         <div className="mt-2 grid grid-cols-3 gap-2">
-          {(Object.entries(QUEUE_META) as [QueueMode, typeof QUEUE_META[QueueMode]][]).map(([mode, meta]) => <button key={mode} onClick={() => { setQueueMode(mode); setShowAllQueue(false); if (mode === 'low_buy') setPerspective('low') }} className="cursor-pointer text-left"><MiniMetric label={meta.label} value={queueGroups[mode].length} note={meta.note} active={queueMode === mode} /></button>)}
+          {(Object.entries(QUEUE_META) as [QueueMode, typeof QUEUE_META[QueueMode]][]).map(([mode, meta]) => <button key={mode} onClick={() => { setQueueMode(mode); setShowAllQueue(false); if (mode === 'low_buy' && perspective !== 'low') { setPerspective('low'); setTopic(''); setStage(''); setSubgroup('') } }} className="cursor-pointer text-left"><MiniMetric label={meta.label} value={queueGroups[mode].length} note={meta.note} active={queueMode === mode} /></button>)}
         </div>
         <div className="mt-2 rounded-md border border-accent/25 bg-accent/5 px-3 py-2 text-[10px] leading-relaxed text-secondary">{QUEUE_META[queueMode].copy}</div>
-        <div className="mt-2 overflow-hidden rounded-md border border-border bg-base/25"><CompactCandidateRows rows={showAllQueue ? queue : queue.slice(0, 30)} personal={personal} onOpen={setSelected} onPersonal={setPersonalState} numbered /></div>
+        {queueMode === 'low_buy' && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]"><span className="mr-1 text-muted">线索范围</span>{([['all', '全部'], ['logic', '当日成组题材'], ['smnc', 'SMNC定向'], ['static', '无成组题材']] as const).map(([key, label]) => <button key={key} onClick={() => { setLowEvidence(key); setShowAllQueue(false) }} className={`rounded border px-2 py-1 ${lowEvidence === key ? 'border-accent/60 bg-accent/15 text-foreground' : 'border-border text-secondary hover:border-accent/40'}`}>{label}</button>)}<span className="ml-1 text-muted">只筛浏览线索</span></div>}
+        <div className="mt-2 overflow-hidden rounded-md border border-border bg-base/25"><CompactCandidateRows rows={showAllQueue ? queue : queue.slice(0, 30)} personal={personal} onOpen={setSelected} onPersonal={setPersonalState} numbered lowBuy={queueMode === 'low_buy'} /></div>
         {queue.length > 30 && <div className="mt-2 text-center"><button onClick={() => setShowAllQueue(value => !value)} className="cursor-pointer rounded-md border border-border bg-base px-4 py-1.5 text-xs text-secondary transition-colors hover:bg-elevated hover:text-foreground">{showAllQueue ? '收起到30只' : `展开全部 ${queue.length}只`}</button></div>}
       </div>
-      <details className="border-t border-border bg-base/20"><summary className="cursor-pointer px-3.5 py-3 text-[10px] text-secondary">更多聚类维度与完整题材卡</summary></details>
     </section> : <section className="space-y-4">
       <div className="grid grid-cols-5 gap-2">
         <SummaryMetric label="行情记录" value={(data.market_count ?? 0).toLocaleString()} note="当日日线" tone="slate" />
@@ -422,7 +513,7 @@ export function StockPoolsPage() {
         <SummaryMetric label="事件型候选" value={data.event_count.toLocaleString()} note="当日事件来源" tone="red" />
         <SummaryMetric label="多源重叠" value={data.overlap_count.toLocaleString()} note="至少两类" tone="amber" />
       </div>
-      <div className="flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/5 px-3 py-2 text-[10px] text-secondary"><strong className="text-accent">统一基础过滤</strong><span>总市值20—3000亿 · 成交额≥1亿 · 换手≥1% · 排除ST；全市场{data.market_count?.toLocaleString() ?? '—'}只 → 基础过滤{data.eligible_count.toLocaleString()}只 → 九池去重{data.candidate_count.toLocaleString()}只。</span><Tag tone="accent">{data.status === 'complete' ? '9完整 / 9来源' : `${9 - data.degraded_sources.length}完整 / 9来源`}</Tag></div>
+      <div className="flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/5 px-3 py-2 text-[10px] text-secondary"><strong className="text-accent">统一基础过滤</strong><span>总市值20—3000亿 · 成交额≥1亿 · 换手≥1% · 排除ST；全市场{data.market_count?.toLocaleString() ?? '—'}只 → 基础过滤{data.eligible_count.toLocaleString()}只 → 九池去重{data.candidate_count.toLocaleString()}只。</span><Tag tone="accent">9路召回</Tag>{data.exchange_coverage && <span>基础合格：沪{data.exchange_coverage.SH?.eligible ?? 0} · 深{data.exchange_coverage.SZ?.eligible ?? 0} · 北{data.exchange_coverage.BJ?.eligible ?? 0}</span>}</div>
       {/* 9 source cards */}
       <div className="overflow-hidden rounded-lg border border-[#2a2a2f] bg-[#151517]">
         <div className="flex min-h-10 items-center border-b border-[#2a2a2f] px-3"><h2 className="text-xs font-semibold">九个召回来源</h2><span className="ml-2 text-[9px] text-muted">点击筛选；多选取交集，保留全部来源理由</span><button onClick={() => setSources([])} className="ml-auto text-[10px] text-accent hover:text-accent/80">清除来源筛选</button></div>
@@ -442,7 +533,7 @@ export function StockPoolsPage() {
           {dc?.status === 'complete' ? `当日信号 ${rows.filter(r => r.change_types.length > 0).length} · 新增 ${dcCounts.new ?? 0} · 来源变化 ${dcCounts.source ?? 0} · 阶段变化 ${dcCounts.stage ?? 0} · 退出 ${dcCounts.exit ?? 0}` : '暂无同口径前日快照，当日信号仍可筛选'}
         </span>
         {changeView === 'today' && exits.length > 0 && <button onClick={() => setShowExitPanel(v => !v)} className="ml-auto inline-flex items-center gap-1 text-xs text-accent">{showExitPanel ? '收起退出区' : `退出 ${exits.length} 只`} {showExitPanel ? <ChevronUp size={13} /> : <ChevronDown size={13} />}</button>}
-        <div className="w-full border-t border-[#242429] pt-2 text-[9px] text-muted">当日信号指当前已有的事件触发分类，不等于首次入池。前后日回规则、基础过滤或来源覆盖状态不一致时，暂不判断成员变化。</div>
+        <div className="w-full border-t border-[#242429] pt-2 text-[9px] text-muted">当日信号指当前已有的事件触发分类，不等于首次入池。前后日回规则、基础过滤或来源覆盖状态不一致时，暂不判断成员变化。{dc?.topic_status === 'incompatible' && '题材聚类口径已变，本日不判题材变化。'}</div>
       </div>
       {changeView === 'today' && showExitPanel && exits.length > 0 && <div className="order-3 border-b border-[#2a2a2f] p-4">
         <div className="mb-2 text-sm font-semibold">退出候选 <span className="ml-1 text-xs font-normal text-muted">{exits.length}只 · 昨日有今日无</span></div>
@@ -464,7 +555,7 @@ export function StockPoolsPage() {
       <div className="order-4 border-b border-[#2a2a2f] bg-[#111113] p-3">
         <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">列表筛选</h3><button onClick={resetListFilters} className="text-xs text-muted hover:text-foreground">清除列表筛选</button></div>
         <div className="grid grid-cols-4 gap-3">
-          <label className="space-y-1"><span className="text-[11px] text-muted">交易所</span><select value={exchange} onChange={e => setExchange(e.target.value)} className="w-full rounded border border-border bg-base px-2 py-1.5 text-xs"><option value="">全部</option><option value="SSE">沪市</option><option value="SZSE">深市</option><option value="BSE">北交所</option></select></label>
+          <label className="space-y-1"><span className="text-[11px] text-muted">交易所</span><select value={exchange} onChange={e => setExchange(e.target.value)} className="w-full rounded border border-border bg-base px-2 py-1.5 text-xs"><option value="">全部</option><option value="SH">沪市</option><option value="SZ">深市</option><option value="BJ">北交所</option></select></label>
           <label className="space-y-1"><span className="text-[11px] text-muted">阶段</span><select value={stage} onChange={e => setStage(e.target.value)} className="w-full rounded border border-border bg-base px-2 py-1.5 text-xs"><option value="">全部阶段</option>{data.stage_stats.map(item => <option key={item.stage} value={item.stage}>{item.stage}</option>)}</select></label>
           <label className="space-y-1"><span className="text-[11px] text-muted">新鲜度</span><select value={freshFilter} onChange={e => setFreshFilter(e.target.value)} className="w-full rounded border border-border bg-base px-2 py-1.5 text-xs"><option value="">全部</option><option value="event">当日事件</option><option value="continuation">延续观察</option><option value="updated">信号有更新</option></select></label>
           <label className="space-y-1"><span className="text-[11px] text-muted">来源数量</span><select value={sourceCount} onChange={e => setSourceCount(Number(e.target.value))} className="w-full rounded border border-border bg-base px-2 py-1.5 text-xs"><option value="0">不限</option><option value="1">仅单源</option><option value="2">≥2源</option><option value="3">≥3源</option><option value="4">≥4源</option></select></label>
@@ -494,7 +585,10 @@ export function StockPoolsPage() {
       </div>
     </section>}
 
-    {selected && <DetailDrawer candidate={selected} detail={detail.data} loading={detail.isLoading} onClose={() => setSelected(null)} />}
+    {selected && <DetailDrawer date={date} candidate={selected} detail={detail.data} loading={detail.isLoading} onClose={() => setSelected(null)} />}
+    {historySelection && historyDetail.data && <DetailDrawer key={`${historySelection.date}:${historySelection.symbol}:${historySelection.snapshot}`} date={historySelection.date} candidate={historyDetail.data} detail={historyDetail.data} loading={historyDetail.isLoading} snapshot={historySelection.snapshot} onClose={() => setHistorySelection(null)} />}
+    {historySelection && historyDetail.isLoading && <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 text-sm text-foreground">正在读取历史个股详情…</div>}
+    {historySelection && historyDetail.isError && <div className="fixed inset-0 z-50 grid place-items-center bg-black/50"><div className="rounded border border-danger/40 bg-surface p-5 text-sm text-danger">历史个股详情读取失败<button className="ml-4 text-accent" onClick={() => setHistorySelection(null)}>关闭</button></div></div>}
   </div>
 }
 
@@ -506,27 +600,19 @@ function MiniMetric({ label, value, note, active }: { label: string; value: numb
   return <div className={`min-h-[86px] rounded-lg border p-[11px] transition-colors ${active ? 'border-accent/60 bg-accent/10' : 'border-[#29292e] bg-[#111113]'}`}><div className="text-[9px] text-muted">{label}</div><div className={`mt-2 font-mono text-[21px] font-bold leading-none ${active ? 'text-accent' : 'text-foreground'}`}>{value}</div><div className="mt-1.5 text-[9px] text-secondary">{note}</div></div>
 }
 
-function StageMap({ rows, selected, onSelect, title }: { rows: StockPoolCandidate[]; selected: string; onSelect: (stage: string) => void; title: string }) {
-  const counts = useMemo(() => Object.fromEntries(STAGE_ZONES.flatMap(zone => zone.stages).map(stage => [stage, rows.filter(row => row.primary_stage === stage).length])), [rows])
-  return <div className="border-b border-[#29292e] p-[13px]"><WorkbenchHeader index="02" title="阶段地图 · 当前处于哪里" note={title} actions={<><span className="rounded-[5px] bg-accent/10 px-[7px] py-[3px] text-[10px] text-[#83afff]">可能的演化顺序</span>{selected && <button onClick={() => onSelect('')} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">清除阶段筛选</button>}</>} />
-    <div className="mt-3 grid grid-cols-[1.1fr_1.1fr_1.1fr_1.1fr_.75fr] gap-[18px] p-0.5">{STAGE_ZONES.map((zone, zoneIndex) => <div key={zone.label} className="relative min-w-0 rounded-[9px] border border-[#29292e] bg-[#111113] p-2.5">{zoneIndex < STAGE_ZONES.length - 1 && <ArrowRight size={15} className="absolute -right-[17px] top-1/2 z-[2] -translate-y-1/2 text-[#66666f]" />}<div className="mb-[7px] min-h-[43px]"><strong className="block text-[11px] text-secondary">{zone.label}</strong><span className="mt-1 block text-[9px] leading-[1.35] text-muted">{zone.description}</span></div><div>{zone.stages.map(stage => { const meta = STAGE_META[stage]; const count = counts[stage] ?? 0; return <button key={stage} onClick={() => onSelect(selected === stage ? '' : stage)} className={`mt-[7px] min-h-[82px] w-full cursor-pointer rounded-[9px] border bg-gradient-to-br from-[#151517] to-[#101012] px-[11px] py-[9px] text-left transition-colors ${selected === stage ? 'border-accent bg-accent/10' : 'border-[#353539] hover:border-accent/60'}`}><span className={`font-mono text-[9px] font-bold leading-none ${meta?.tone || 'text-muted'}`}>{meta?.index}</span><div className="mt-1.5 text-[11px] font-semibold text-foreground">{stage}</div><div className="mt-1 flex items-baseline gap-1 font-mono text-[10px] text-secondary"><strong className="text-lg leading-none text-foreground">{count}</strong><span>只</span><span className="text-[8px] text-muted">{rows.length ? Math.round(count / rows.length * 100) : 0}%</span></div><div className="mt-1 text-[8px] leading-[1.4] text-muted">{meta?.description}</div></button>})}</div></div>)}</div>
-    <div className="mt-[9px] flex items-center gap-[7px] text-[10px] text-muted"><CircleDot size={13} className="shrink-0 text-accent" />五个区域表达可能的演化顺序，数量是当前截面，并非股票真实迁移流量；分歧、回踩和修复也可能直接失效。</div>
-  </div>
-}
-
 function RoleMemberRows({ rows, personal, onOpen }: { rows: StockPoolCandidate[]; personal: Record<string, PersonalState>; onOpen: (row: StockPoolCandidate) => void }) {
   if (!rows.length) return <div className="py-2 text-[9px] text-muted">当前筛选无成员</div>
   return <div className="divide-y divide-[#29292e]">{rows.map(row => <button key={row.symbol} onClick={() => onOpen(row)} className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_82px_58px] items-center gap-2 px-[3px] py-1.5 text-left hover:text-accent"><strong className="truncate text-[10px] text-foreground">{row.name}</strong><span className={`truncate text-[9px] ${STAGE_META[row.primary_stage]?.tone || 'text-muted'}`}>{row.primary_stage}</span><span className="truncate text-right text-[9px] text-muted">{PERSONAL_LABELS[personal[row.symbol] ?? 'unseen']}</span></button>)}</div>
 }
 
-function CompactCandidateRows({ rows, personal, onOpen, onPersonal, numbered }: { rows: StockPoolCandidate[]; personal: Record<string, PersonalState>; onOpen: (row: StockPoolCandidate) => void; onPersonal: (symbol: string, value: PersonalState) => void; numbered?: boolean }) {
+function CompactCandidateRows({ rows, personal, onOpen, onPersonal, numbered, lowBuy }: { rows: StockPoolCandidate[]; personal: Record<string, PersonalState>; onOpen: (row: StockPoolCandidate) => void; onPersonal: (symbol: string, value: PersonalState) => void; numbered?: boolean; lowBuy?: boolean }) {
   if (!rows.length) return <div className="py-5 text-center text-xs text-muted">当前条件下没有候选</div>
   return <div className="max-h-[610px] divide-y divide-[#29292e] overflow-auto [scrollbar-gutter:stable]">{rows.map((row, index) => <div key={row.symbol} className="grid min-h-[55px] grid-cols-[34px_150px_155px_minmax(200px,1fr)_150px_104px] items-center gap-2.5 px-2.5 py-2 transition-colors hover:bg-accent/10">
     <span className="font-mono text-[10px] font-semibold text-muted">{numbered ? String(index + 1).padStart(2, '0') : '·'}</span>
     <button onClick={() => onOpen(row)} className="min-w-0 cursor-pointer text-left"><div className="truncate text-xs font-semibold text-foreground hover:text-accent">{row.name}</div><div className="font-mono text-[9px] text-muted">{row.symbol}</div></button>
-    <div><span className={`inline-flex items-center gap-1.5 rounded border px-1.5 py-1 text-[9px] ${STAGE_CHIP[row.primary_stage] || 'border-border bg-elevated text-secondary'}`}><i className="h-1 w-1 rounded-full bg-current" />{row.primary_stage}</span><div className="mt-1 truncate text-[9px] text-muted">{row.topics.slice(0, 2).join('／') || row.primary_concept || '题材待确认'}</div></div>
-    <div className="min-w-0 truncate text-[9px] leading-[1.45] text-secondary" title={row.evidence || ''}>{row.evidence || row.sources.join(' · ')}</div>
-    <div className="text-[9px] text-muted">{row.source_ids.length}类召回{(row.research_count ?? 0) > 0 ? ` · 研究${row.research_count}条` : ''}<br /><span className={`font-semibold ${row.pct_chg >= 0 ? 'text-bull' : 'text-bear'}`}>{row.pct_chg >= 0 ? '+' : ''}{row.pct_chg.toFixed(2)}%</span> · {row.amount_yi.toFixed(1)}亿</div>
+    <div><span className={`inline-flex items-center gap-1.5 rounded border px-1.5 py-1 text-[9px] ${STAGE_CHIP[row.primary_stage] || 'border-border bg-elevated text-secondary'}`}><i className="h-1 w-1 rounded-full bg-current" />{row.primary_stage}</span><div className="mt-1 truncate text-[9px] text-muted">{lowBuy ? row.topics.length ? `当日逻辑 · ${row.topics.slice(0, 2).join('／')}` : row.unclustered_terms?.length ? '当日解读 · 未成组' : row.primary_concept ? `静态关联 · ${row.primary_concept}` : '题材待确认' : row.topics.slice(0, 2).join('／') || row.primary_concept || '题材待确认'}</div></div>
+    <div className="min-w-0 text-[9px] leading-[1.45] text-secondary"><div className="truncate" title={row.evidence || ''}>{row.evidence || row.sources.join(' · ')}</div>{lowBuy && row.price_context && <div className="truncate text-muted">距MA20 {signedPct(row.price_context.ma20_distance_pct)} · 近10日 {signedPct(row.price_context.return10_pct)}</div>}{lowBuy && !row.topics.length && Boolean(row.unclustered_terms?.length) && <div className="truncate text-amber-200">当日来源术语 · {row.unclustered_terms?.join('／')} · 未成组</div>}{lowBuy && row.research_focus?.title && <div className="truncate text-indigo-300" title={row.research_focus.title}>SMNC定向{row.research_focus.age_days != null ? ` · ${row.research_focus.age_days}天前可用` : ''}{row.research_focus.topic_mentions?.[0] ? ` · ${row.research_focus.topic_mentions[0].label}（${row.research_focus.topic_mentions[0].location === 'title' ? '标题' : '摘录'}提及）` : ''} · {row.research_focus.title}</div>}</div>
+    <div className="text-[9px] text-muted">{row.source_ids.length}类召回{(row.research_count ?? 0) > 0 ? ` · 定向材料${row.research_count}条` : ''}<br /><span className={`font-semibold ${row.pct_chg >= 0 ? 'text-bull' : 'text-bear'}`}>{row.pct_chg >= 0 ? '+' : ''}{row.pct_chg.toFixed(2)}%</span> · {row.amount_yi.toFixed(1)}亿</div>
     <div>{reviewSelect(row.symbol, personal, onPersonal)}</div>
   </div>)}</div>
 }
@@ -554,14 +640,34 @@ function CandidateTable({ rows, personal, onOpen, onPersonal }: { rows: StockPoo
   </div>
 }
 
-function DetailDrawer({ candidate, detail, loading, onClose }: { candidate: StockPoolCandidate; detail: Awaited<ReturnType<typeof stockPoolApi.getCandidate>> | undefined; loading: boolean; onClose: () => void }) {
+function DetailDrawer({ date, candidate, detail, loading, snapshot = 'current', onClose }: { date: string; candidate: StockPoolCandidate; detail: Awaited<ReturnType<typeof stockPoolApi.getCandidate>> | undefined; loading: boolean; snapshot?: 'current' | 'first'; onClose: () => void }) {
+  const [historyWindow, setHistoryWindow] = useState(10)
+  const history = useQuery({
+    queryKey: QK.stockPoolHistory(date, candidate.symbol, historyWindow),
+    queryFn: () => stockPoolApi.getCandidateHistory(date, candidate.symbol, historyWindow),
+    enabled: snapshot === 'current',
+  })
+  const anchorEvent = detail?.source_events.find(event => event.anchor_price != null)
+  const freshEvent = detail?.source_events.find(event => event.event_age === 0)
   useEffect(() => { const handler = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }; window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler) }, [onClose])
-  return <div className="fixed inset-0 z-50 bg-black/40" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><aside className="ml-auto h-full w-[560px] overflow-y-auto border-l border-border bg-surface shadow-2xl"><div className="sticky top-0 z-10 flex items-start justify-between border-b border-border bg-surface p-5"><div><div className="flex items-center gap-2"><h2 className="text-lg font-semibold">{candidate.name}</h2><span className="text-sm text-muted">{candidate.symbol}</span></div><div className="mt-2 flex gap-1"><Tag tone="accent">{candidate.primary_stage}</Tag><Tag>{candidate.tier}</Tag><Tag>{candidate.exchange}</Tag></div></div><button onClick={onClose} className="rounded p-2 text-muted hover:bg-elevated hover:text-foreground"><X size={18} /></button></div>
-    <div className="space-y-5 p-5"><div className="grid grid-cols-4 gap-2"><Metric label="收盘价" value={candidate.price.toFixed(2)} /><Metric label="涨跌" value={`${candidate.pct_chg >= 0 ? '+' : ''}${candidate.pct_chg.toFixed(2)}%`} /><Metric label="成交额" value={`${candidate.amount_yi.toFixed(1)}亿`} /><Metric label="换手" value={`${candidate.turnover_pct.toFixed(1)}%`} /></div>
+  return <div className="fixed inset-0 z-50 bg-black/40" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><aside className="ml-auto h-full w-full overflow-y-auto border-l border-border bg-surface shadow-2xl md:w-1/2 md:min-w-[560px]"><div className="sticky top-0 z-10 flex items-start justify-between border-b border-border bg-surface p-5"><div><div className="flex items-center gap-2"><h2 className="text-lg font-semibold">{candidate.name}</h2><span className="text-sm text-muted">{candidate.symbol}</span></div><div className="mt-2 flex gap-1"><Tag tone="accent">{candidate.primary_stage}</Tag><Tag>{candidate.tier}</Tag><Tag>{candidate.exchange}</Tag><a href={`/stock-analysis?symbol=${encodeURIComponent(candidate.symbol)}&name=${encodeURIComponent(candidate.name)}`} target="_blank" rel="noreferrer" className="rounded border border-accent/40 px-2 py-0.5 text-[10px] text-accent hover:bg-accent/10">查看K线与个股分析 ↗</a></div></div><button onClick={onClose} aria-label="关闭个股详情" className="rounded p-2 text-muted hover:bg-elevated hover:text-foreground"><X size={18} /></button></div>
+    <div className="space-y-5 p-5">{snapshot === 'first' && <div className="rounded border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] text-secondary">首次发布快照证据；此后重算的材料和阶段不回填至这里。</div>}<div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric label="收盘价" value={candidate.price.toFixed(2)} /><Metric label="涨跌" value={`${candidate.pct_chg >= 0 ? '+' : ''}${candidate.pct_chg.toFixed(2)}%`} /><Metric label="成交额" value={`${candidate.amount_yi.toFixed(1)}亿`} /><Metric label="换手" value={`${candidate.turnover_pct.toFixed(1)}%`} /></div>
+      <StockPoolMiniKline key={`${date}:${candidate.symbol}`} date={date} symbol={candidate.symbol} />
       <div className="grid grid-cols-3 gap-2"><Metric label="市值" value={`${candidate.market_cap_yi.toFixed(0)}亿`} /><Metric label="量比" value={candidate.volume_ratio.toFixed(1)} /><Metric label="来源数" value={candidate.source_ids.length} /></div>
+      {candidate.price_context && <div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric label="距MA10" value={signedPct(candidate.price_context.ma10_distance_pct)} /><Metric label="距MA20" value={signedPct(candidate.price_context.ma20_distance_pct)} /><Metric label="距20日高点" value={signedPct(candidate.price_context.high20_drawdown_pct)} /><Metric label="近10日" value={signedPct(candidate.price_context.return10_pct)} /></div>}
+      <section className="rounded border border-[#353539] bg-base p-3"><h3 className="text-sm font-semibold">次日核对卡</h3><div className="mt-2 grid gap-2 text-[11px] leading-5 sm:grid-cols-2"><div><span className="text-accent">等待确认</span><p className="text-secondary">{freshEvent ? `核对${freshEvent.source}当日事件能否延续` : `等待${candidate.primary_stage}出现新的有效触发`}；{candidate.topics[0] ? `观察“${candidate.topics[0]}”是否仍有同向成员` : '先核对题材证据'}。</p></div><div><span className="text-amber-300">重新评估</span><p className="text-secondary">{anchorEvent ? `若价格失守${anchorEvent.source}参考锚点 ${anchorEvent.anchor_price}，重新核对原召回理由` : '当前没有来源锚点，需自行明确价格失效条件'}；来源过期或题材证据改变时更新观察结论。</p></div></div>{candidate.research_focus?.title && <div className="mt-2 border-t border-[#303037] pt-2 text-[10px] text-secondary"><span className="text-indigo-300">SMNC定向线索：</span>{candidate.research_focus.source_url ? <a href={candidate.research_focus.source_url} target="_blank" rel="noreferrer" className="hover:text-accent">{candidate.research_focus.title}</a> : candidate.research_focus.title}{candidate.research_focus.source_date && <span className="ml-1 text-muted">· 来源发布 {candidate.research_focus.source_date}</span>}{candidate.research_focus.available_at && <span className="ml-1 text-muted">· 本地可用 {new Date(candidate.research_focus.available_at).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}</span>}{candidate.research_focus.topic_mentions?.length ? <div className="mt-1 flex flex-wrap gap-1">{candidate.research_focus.topic_mentions.map(item => <Tag key={`${item.label}:${item.location}`} tone="warm">{item.label} · {item.location === 'title' ? '标题' : '摘录'}“{item.surface}”</Tag>)}</div> : <div className="mt-1 text-muted">标题与摘录未明确命中当前题材词，需核对原文。</div>}{candidate.research_focus.excerpt && <div className="mt-1 text-muted">{candidate.research_focus.excerpt}</div>}{candidate.research_focus.counter?.title && <div className="mt-1 text-amber-300">已审计反证：{candidate.research_focus.counter.source_url ? <a href={candidate.research_focus.counter.source_url} target="_blank" rel="noreferrer" className="underline">{candidate.research_focus.counter.title}</a> : candidate.research_focus.counter.title}</div>}</div>}<p className="mt-2 text-[10px] text-muted">锚点来自原始事件，仅用于复核；开盘可买性与具体买卖价仍需盘中确认。</p></section>
+      {snapshot === 'current' && <section><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold">已发布快照中的个股轨迹</h3><div className="flex gap-1">{([5, 10, 30] as const).map(days => <button key={days} onClick={() => setHistoryWindow(days)} className={`cursor-pointer rounded border px-2 py-1 text-[10px] ${historyWindow === days ? 'border-accent/60 bg-accent/10 text-accent' : 'border-border text-muted'}`}>{days === 30 ? '全部' : `${days}日`}</button>)}</div></div>
+        {history.isLoading && <div className="text-xs text-muted">正在读取历史快照…</div>}
+        {history.isError && <div className="text-xs text-danger">历史快照读取失败</div>}
+        {history.data && <div className="flex gap-1.5 overflow-x-auto pb-2">{history.data.timeline.map(point => <div key={point.date} className={`min-w-[118px] rounded border p-2 text-[10px] ${point.present ? 'border-accent/35 bg-accent/5' : 'border-border bg-base text-muted'}`} title={point.sources.join('、')}>
+          <div className="font-mono text-muted">{point.date.slice(5)}</div><div className="mt-1 font-semibold">{!point.available ? '快照缺失' : point.present ? point.stage : '当日未入池'}</div>
+          {point.present && <><div className="mt-1 text-secondary">来源 {point.sources.length}类 · {point.pct_chg == null ? '—' : `${point.pct_chg >= 0 ? '+' : ''}${point.pct_chg.toFixed(1)}%`}</div><div className="mt-1 truncate text-muted">距MA20 {signedPct(point.price_context?.ma20_distance_pct)}</div></>}
+        </div>)}</div>}
+        <p className="mt-1 text-[10px] text-muted">空白日表示该股票未进入当日股票池；轨迹按已有交易日快照展示，不补造未发布日期。</p>
+      </section>}
       <section><h3 className="mb-2 text-sm font-semibold">召回与观察窗口</h3>{loading ? <div className="text-xs text-muted">加载证据…</div> : <div className="space-y-2">{detail?.source_events.map(event => <div key={event.source_id} className="rounded-card border border-border bg-base p-3"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><CircleDot size={13} className="text-accent" /><strong className="text-sm">{event.source}</strong><Tag>{event.stage}</Tag></div><span className="text-[11px] text-muted">{event.event_date} · 第{event.event_age}日</span></div><p className="mt-2 text-xs text-secondary">{event.evidence}</p><div className="mt-2 text-[11px] text-muted">有效期 {event.expires}{event.anchor_price != null ? ` · 锚点 ${event.anchor_price}` : ''}</div></div>)}</div>}</section>
       <section><h3 className="mb-2 text-sm font-semibold">当日交易逻辑</h3><div className="flex flex-wrap gap-1">{candidate.topics.length ? candidate.topics.map(value => <Tag key={value} tone="warm">{value}</Tag>) : <span className="text-xs text-muted">尚无当日题材证据</span>}</div>{detail?.topic_evidence.map((item, index) => { const labels = Array.isArray(item.topics) ? item.topics.map(String) : []; return <div key={index} className="mt-2 rounded border border-border p-2 text-xs text-secondary"><div className="flex items-center gap-1.5"><strong className="text-foreground">{String(item.source || '')}</strong>{item.tag ? <Tag>{String(item.tag)}</Tag> : null}{item.fallback ? <Tag tone="warm">降级材料</Tag> : null}</div>{labels.length ? <div className="mt-1 flex flex-wrap gap-1">{labels.map(value => <Tag key={value} tone="warm">{value}</Tag>)}</div> : null}<p className="mt-1 leading-relaxed">{String(item.text || '')}</p>{item.catalyst ? <div className="mt-1 text-[10px] text-muted">催化：{String(item.catalyst)}</div> : null}<div className="mt-1 text-[10px] text-muted">{String(item.observed_at || '')}</div></div> })}</section>
       <section><h3 className="mb-2 text-sm font-semibold">静态关联</h3><div className="space-y-2 text-xs">{[['细分概念', candidate.memberships?.concept], ['一级行业', candidate.memberships?.industry_level1], ['二级行业', candidate.memberships?.industry_level2], ['属性标签', candidate.memberships?.attribute]].map(([label, values]) => <div key={String(label)} className="flex items-start gap-2"><span className="mt-0.5 w-16 shrink-0 text-muted">{String(label)}</span><div className="flex flex-wrap gap-1">{(values as string[] | undefined)?.length ? (values as string[]).map(value => <Tag key={value}>{value}</Tag>) : <span className="text-muted">—</span>}</div></div>)}</div><p className="mt-2 text-[10px] text-muted">最新静态成分快照，不代表历史时点归属或当日上涨原因。</p></section>
-      <section><h3 className="mb-2 text-sm font-semibold">Research细致逻辑</h3>{detail?.research.length ? <div className="space-y-2">{detail.research.map((item, index) => <a key={String(item.item_id || index)} href={String(item.source_url || '#')} target="_blank" rel="noreferrer" className="block rounded-card border border-border bg-base p-3 hover:border-accent/40"><div className="text-sm font-medium">{String(item.title || '')}</div><p className="mt-1 text-xs text-secondary">{String(item.takeaway || '')}</p><div className="mt-2 text-[10px] text-muted">{String(item.created_at || '')} · {String(item.quality_grade || '')}</div></a>)}</div> : <div className="rounded border border-dashed border-border p-4 text-xs text-muted">暂无完成态Research索引命中；该层不会影响召回和阶段。</div>}</section>
+       <section><h3 className="mb-2 text-sm font-semibold">研究材料与市场提及</h3>{detail?.research.length ? <div className="space-y-2">{detail.research.map((item, index) => <a key={String(item.item_id || index)} href={String(item.source_url || '#')} target="_blank" rel="noreferrer" className="block rounded-card border border-border bg-base p-3 hover:border-accent/40"><div className="text-sm font-medium">{String(item.title || '')}</div><p className="mt-1 text-xs text-secondary">{String(item.match_excerpt || item.takeaway || '')}</p><div className="mt-2 text-[10px] text-muted">{String(item.created_at || '')} · {item.match_basis === 'mention' ? '正文提及' : item.match_basis === 'focused' ? '标题单股' : item.match_basis === 'basket' ? '标题多股' : item.match_basis === 'audited' ? `已审计${item.material_role === 'counter' ? '反证' : item.material_role === 'primary' ? '主证据' : item.material_role === 'supporting' ? '辅助证据' : item.material_role === 'background' ? '背景' : '公司映射'}` : '历史材料关联'}{item.quality_grade ? ` · ${String(item.quality_grade)}` : ''}</div></a>)}</div> : <div className="rounded border border-dashed border-border p-4 text-xs text-muted">暂无完成态Research索引命中；该层不会影响召回和阶段。</div>}</section>
     </div></aside></div>
 }

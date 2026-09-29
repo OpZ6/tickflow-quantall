@@ -48,7 +48,7 @@ INDUSTRY_THEMES = {
     "人工智能", "AI", "中国AI", "机器人概念", "芯片概念", "新能源汽车", "军工",
     "军民融合", "新能源", "数字经济", "碳中和", "高端装备", "物联网",
     "消费电子概念", "光伏概念", "绿色电力", "文化传媒概念", "医疗器械概念",
-    "旅游概念", "互联网金融",
+    "旅游概念", "互联网金融", "5G", "6G", "6G概念",
 }
 BACKGROUND_THEME = re.compile(
     r"(?:大开发|振兴|一带一路|自贸|新区|一体化|大湾区|示范区|共同富裕|统一大市场|"
@@ -81,6 +81,8 @@ def topic_labels(text: str) -> list[str]:
 
 
 def theme_level(label: str) -> str:
-    if label in BACKGROUND_EXACT or BACKGROUND_THEME.search(label):
+    name = label.strip()
+    with_suffix = name if name.endswith("概念") else f"{name}概念"
+    if name in BACKGROUND_EXACT or with_suffix in BACKGROUND_EXACT or BACKGROUND_THEME.search(name):
         return "background"
-    return "industry" if label in INDUSTRY_THEMES else "theme"
+    return "industry" if name in INDUSTRY_THEMES or with_suffix in INDUSTRY_THEMES else "theme"

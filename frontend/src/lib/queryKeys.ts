@@ -39,7 +39,10 @@ export const QK = {
   stockPoolCatalog:    ['stock-pools', 'catalog'] as const,
   stockPoolSummary:    (date: string) => ['stock-pools', 'summary', date] as const,
   stockPoolCandidates: (date: string) => ['stock-pools', 'candidates', date] as const,
-  stockPoolDetail:     (date: string, symbol: string) => ['stock-pools', 'detail', date, symbol] as const,
+  stockPoolDetail:     (date: string, symbol: string, snapshot: 'current' | 'first' = 'current') => ['stock-pools', 'detail', date, symbol, snapshot] as const,
+  stockPoolEvolution:  (date: string, mode: string, topic: string, window: number) => ['stock-pools', 'evolution', date, mode, topic, window] as const,
+  stockPoolHistory:    (date: string, symbol: string, window: number) => ['stock-pools', 'history', date, symbol, window] as const,
+  stockPoolReview:     (date: string, window: number, horizon: number, costBps: number) => ['stock-pools', 'review', date, window, horizon, costBps] as const,
 
   // Watchlist
   watchlist:            ['watchlist'] as const,

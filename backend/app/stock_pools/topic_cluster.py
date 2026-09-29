@@ -8,9 +8,8 @@ source. The pipeline is:
 2. map terms onto the curated legacy pattern labels when they match, then fold
    the remaining terms into canonical labels by alias equality, containment or
    fuzzy equality (seeded by the highest document frequency terms);
-3. agglomerate canonical labels by stock-set Jaccard (``shared >= 2`` and
-   ``jaccard >= 0.3``); two curated legacy labels are never merged, so the
-   specific/broad distinctions the old table encodes are preserved;
+3. keep distinct canonical labels apart even when their stocks overlap;
+   co-occurrence is not evidence that two directions are synonyms;
 4. keep groups with at least two member stocks and label each group with its
    highest document frequency term.
 
@@ -35,10 +34,9 @@ from typing import Any
 
 from app.stock_pools.topics import SPECIFIC_OVERRIDES, topic_labels
 
-CLUSTER_RULE = "jaccard>=0.3,shared>=2"
-PROMPT_VERSION = "stock-pool-topic-v1"
+CLUSTER_RULE = "alias_equivalence,shared>=2,noise=v3"
+PROMPT_VERSION = "stock-pool-topic-v2"
 MIN_SHARED = 2
-MIN_JACCARD = 0.3
 FUZZY_RATIO = 0.78
 LLM_MAX_TERMS = 5
 LLM_SAMPLE_CHARS = 50
@@ -56,9 +54,10 @@ _NOISE_TEXT = re.compile(
 _NON_THEME = re.compile(
     r"业绩增长|业绩扭亏|业绩预增|业绩预减|业绩预亏|业绩承压|中报增长|年报增长|"
     r"高位回调|此前涨幅|涨幅较大|股价异动|"
-    r"股份回购|回购股份|股份增持|股份减持|股东减持|"
+    r"股份回购|回购股份|股份增持|股份减持|股东减持|大股东增持|"
+    r"主力资金净流出|融资融券|亏损|上市首日大涨|传闻澄清|国家大基金持股|股东拟减持|"
     r"产能扩张|扩产|募投|"
-    r"全国化|乡村振兴|国企改革|国有控股|中国AI 50|"
+    r"全国化|乡村振兴|共同富裕示范区|国企改革|国有控股|中国AI 50|"
     r"转债下修"
 )
 _SPLIT_RE = re.compile(r"[+\uff0b;\uff1b]")
@@ -207,36 +206,11 @@ def _alias_match(term: str, group: _Group) -> bool:
     return False
 
 
-def _agglomerate(groups: dict[str, _Group]) -> list[_Group]:
-    active = [group for group in groups.values() if len(group.symbols) >= MIN_SHARED]
-    while True:
-        best: tuple[float, int, int] | None = None
-        for i in range(len(active)):
-            for j in range(i + 1, len(active)):
-                left, right = active[i], active[j]
-                if left.is_legacy and right.is_legacy:
-                    continue
-                shared = len(left.symbols & right.symbols)
-                if shared < MIN_SHARED:
-                    continue
-                jaccard = shared / len(left.symbols | right.symbols)
-                if jaccard < MIN_JACCARD:
-                    continue
-                if best is None or (jaccard, -i, -j) > best:
-                    best = (jaccard, i, j)
-        if best is None:
-            break
-        _, i, j = best
-        left, right = active[i], active[j]
-        if len(right.symbols) > len(left.symbols) or (
-            len(right.symbols) == len(left.symbols) and right.label < left.label
-        ):
-            left, right = right, left
-        left.symbols |= right.symbols
-        left.terms |= right.terms
-        left.is_legacy = left.is_legacy or right.is_legacy
-        active.remove(right)
-    return sorted(active, key=lambda group: (-len(group.symbols), group.label))
+def _qualified_groups(groups: dict[str, _Group]) -> list[_Group]:
+    return sorted(
+        (group for group in groups.values() if len(group.symbols) >= MIN_SHARED),
+        key=lambda group: (-len(group.symbols), group.label),
+    )
 
 
 def _apply_normalization(
@@ -321,7 +295,7 @@ def _llm_payload(
 
 _LLM_SYSTEM = (
     "你是A股题材聚类归一化助手。输入是当日从涨停梯队、同花顺热点、异动解读、"
-    "热榜概念等来源提取并按共现聚类的题材标签。只做两件事: "
+    "热榜概念等来源提取的题材标签。股票重合不代表标签同义, 保留不同产业链细分。只做两件事: "
     "1) 把表达同一题材的标签合并, 给出别名映射, 目标优先选择输入中更标准常用的标签; "
     "2) 删除不是题材的噪声标签。不得新增输入之外的标签, 不得拆分已有标签。"
     '只输出JSON: {"aliases": {"原标签": "目标标签"}, "drop": ["标签"]}; '
@@ -382,10 +356,10 @@ def build_topic_assignment(
 ) -> TopicAssignment:
     """Build per-symbol topic labels from one day's logic-evidence rows."""
     by_symbol, term_stocks = extract_terms(rows)
-    groups = _agglomerate(_canonicalize(term_stocks))
+    groups = _qualified_groups(_canonicalize(term_stocks))
     mode = "deterministic"
     extra: dict[str, Any] = {}
-    if reuse and reuse.get("mode") == "llm" and reuse.get("prompt_version") == PROMPT_VERSION:
+    if reuse and reuse.get("rule") == CLUSTER_RULE and reuse.get("mode") == "llm" and reuse.get("prompt_version") == PROMPT_VERSION:
         groups, aliases, dropped = _apply_normalization(
             groups, reuse.get("aliases") or {}, reuse.get("dropped") or []
         )

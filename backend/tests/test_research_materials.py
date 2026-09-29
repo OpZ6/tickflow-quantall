@@ -6,6 +6,7 @@ import polars as pl
 
 from app.research_materials import smnc
 from app.research_materials.builder import build_research_material_index, refresh_if_configured
+from app.research_materials.repository import ResearchMaterialRepository, is_direct_research
 
 _LIST_HTML = """
 <html><body>
@@ -93,6 +94,180 @@ def test_research_index_merges_smnc_materials(tmp_path):
     # second build reuses the extraction cache
     cached = build_research_material_index(research, data_root)
     assert cached["material_count"] == 1
+
+
+def test_smnc_topic_title_matches_fine_direction_without_old_concept_tag(tmp_path):
+    from datetime import date
+
+    root = tmp_path / "research_material_index"
+    root.mkdir()
+    (root / "index.json").write_text(json.dumps({"materials": [{
+        "item_id": "smnc_vna", "source": "smnc", "title": "矢量网络分析仪VNA行业变化",
+        "created_at": "2026-09-23T12:49:05+08:00", "concepts": ["PCB／覆铜板"],
+    }]}, ensure_ascii=False), encoding="utf-8")
+    repo = ResearchMaterialRepository(tmp_path)
+    assert [item["item_id"] for item in repo.query_topic("矢量网络分析仪", date(2026, 9, 23))] == ["smnc_vna"]
+    assert [item["item_id"] for item in repo.query_topic("VNA矢量网络分析仪", date(2026, 9, 23))] == ["smnc_vna"]
+    assert repo.query_topic("PCB／覆铜板", date(2026, 9, 23)) == []
+    assert repo.query_topic("PCB／覆铜板", date(2026, 9, 23), aliases=["PCB概念"]) == []
+    assert [item["item_id"] for item in repo.query_topic("电子测量", date(2026, 9, 23), aliases=["VNA"])] == ["smnc_vna"]
+    assert repo.query_topic("矢量网络分析仪", date(2026, 9, 22)) == []
+
+
+def test_smnc_topic_background_ignores_company_name_and_deduplicates_title(tmp_path):
+    from datetime import date
+
+    root = tmp_path / "research_material_index"
+    root.mkdir()
+    (root / "index.json").write_text(json.dumps({"materials": [
+        {"item_id": "company", "source": "smnc", "title": "国邦医药：业务更新",
+         "title_companies": ["国邦医药"], "created_at": "2026-09-23T12:00:00+08:00"},
+        {"item_id": "first", "source": "smnc", "title": "微波光子雷达进展",
+         "created_at": "2026-09-23T13:00:00+08:00"},
+        {"item_id": "repost", "source": "smnc", "title": "微波光子雷达进展",
+         "created_at": "2026-09-23T14:00:00+08:00"},
+    ]}, ensure_ascii=False), encoding="utf-8")
+    repo = ResearchMaterialRepository(tmp_path)
+    assert repo.query_topic("医疗／医药", date(2026, 9, 23)) == []
+    assert [item["item_id"] for item in repo.query_topic("微波光子雷达", date(2026, 9, 23))] == ["repost"]
+
+
+def test_smnc_fine_title_is_indexed_without_known_company_or_concept(tmp_path):
+    from datetime import date
+
+    research = tmp_path / "research"
+    research.mkdir()
+    items = [{
+        "item_id": "smnc_new", "source": "smnc", "title": "微波光子雷达行业进展",
+        "content_text": "微波光子雷达测试取得进展", "created_at": "2026-09-23T12:00:00+08:00",
+        "captured_at": "2026-09-23T05:00:00+00:00",
+        "content_hash": "new-theme-hash", "source_url": "http://smnc.juecan.com/info.asp?id=1",
+    }]
+    (research / "items.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    result = build_research_material_index(research, tmp_path)
+    assert result["material_count"] == 1
+    repo = ResearchMaterialRepository(tmp_path)
+    assert [item["item_id"] for item in repo.query_topic("微波光子雷达", date(2026, 9, 23))] == ["smnc_new"]
+
+
+def test_research_materials_wait_until_locally_available(tmp_path):
+    from datetime import date
+
+    research = tmp_path / "research"
+    research.mkdir()
+    instruments = tmp_path / "instruments"
+    instruments.mkdir()
+    pl.DataFrame({"symbol": ["000001.SZ"], "name": ["甲公司"]}).write_parquet(instruments / "instruments.parquet")
+    items = [
+        {"item_id": "smnc_late", "source": "smnc", "title": "甲公司微波光子雷达进展",
+         "content_text": "甲公司微波光子雷达进展", "created_at": "2026-09-15T14:00:00+08:00",
+         "captured_at": "2026-09-15T17:00:00+00:00", "content_hash": "late-smnc"},
+        {"item_id": "audited_late", "source": "zsxq_mark", "title": "甲公司光互联研究",
+         "created_at": "2026-09-15T14:00:00+08:00"},
+        {"item_id": "smnc_uncaptured", "source": "smnc", "title": "甲公司未经采集时间核对",
+         "content_text": "甲公司", "created_at": "2026-09-15T14:00:00+08:00",
+         "content_hash": "uncaptured-smnc"},
+    ]
+    (research / "items.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    publication = tmp_path / "20260915" / "research"
+    publication.mkdir(parents=True)
+    (publication / "publication_manifest.json").write_text(json.dumps({
+        "schema_version": 5, "status": "complete", "published_at": "2026-09-17T01:00:00+00:00",
+    }), encoding="utf-8")
+    (publication / "research_classification.json").write_text(json.dumps({"items": [{
+        "item_id": "audited_late", "keep": True, "kind": "theme",
+        "companies": [{"name": "甲公司"}], "concepts": [{"name": "光互联"}],
+        "material_role": "primary", "priority_score": 1,
+    }]}, ensure_ascii=False), encoding="utf-8")
+    build_research_material_index(research, tmp_path)
+    repo = ResearchMaterialRepository(tmp_path)
+    assert repo.query_company("甲公司", date(2026, 9, 15)) == []
+    assert repo.query_topic("微波光子雷达", date(2026, 9, 15)) == []
+    assert [item["item_id"] for item in repo.query_company("甲公司", date(2026, 9, 16))] == ["smnc_late"]
+    assert [item["item_id"] for item in repo.query_company("甲公司", date(2026, 9, 17))] == ["audited_late", "smnc_late"]
+    assert [item["item_id"] for item in repo.query_topic("光互联", date(2026, 9, 17))] == ["audited_late"]
+
+
+def test_smnc_company_mentions_do_not_rank_as_focused_material(tmp_path):
+    from datetime import date
+
+    root = tmp_path / "research_material_index"
+    root.mkdir()
+    materials = [
+        {"item_id": "market", "source": "smnc", "title": "上午板块梳理", "created_at": "2026-09-24",
+         "companies": ["甲公司", "乙公司", "丙公司", "丁公司", "戊公司", "己公司"], "takeaway": "甲公司等多只股票上涨", "priority_score": 0},
+        {"item_id": "focused", "source": "smnc", "title": "甲公司业务更新", "created_at": "2026-09-23",
+         "companies": ["甲公司"], "takeaway": "甲公司订单变化", "priority_score": 0},
+        {"item_id": "lead_mention", "source": "smnc", "title": "行业更新", "created_at": "2026-09-23",
+         "companies": ["甲公司", "乙公司"], "takeaway": "甲公司等多家企业受关注", "priority_score": 0},
+        {"item_id": "audited", "source": "zsxq_mark", "basis": "audited_publication", "title": "专题研究",
+         "created_at": "2026-09-22", "companies": ["甲公司"], "material_role": "primary", "priority_score": 1},
+    ]
+    (root / "index.json").write_text(json.dumps({"materials": materials}, ensure_ascii=False), encoding="utf-8")
+    matches = ResearchMaterialRepository(tmp_path).query_company("甲公司", date(2026, 9, 24), limit=4)
+    assert [item["item_id"] for item in matches] == ["audited", "focused", "market", "lead_mention"]
+    assert [item["match_basis"] for item in matches] == ["audited", "focused", "mention", "mention"]
+
+
+def test_smnc_title_separates_single_subject_from_multi_stock_basket(tmp_path):
+    from datetime import date
+
+    research = tmp_path / "research"
+    research.mkdir()
+    instruments = tmp_path / "instruments"
+    instruments.mkdir()
+    pl.DataFrame({"symbol": ["000001.SZ", "000002.SZ", "000003.SZ"],
+                  "name": ["甲公司", "乙公司", "丙公司"]}).write_parquet(instruments / "instruments.parquet")
+    items = [
+        {"item_id": "basket", "source": "smnc", "title": "甲公司、乙公司产业链交流",
+         "content_text": "产能更新", "created_at": "2026-09-24T14:00:00+08:00",
+         "captured_at": "2026-09-24T07:00:00+00:00", "content_hash": "basket-hash"},
+        {"item_id": "focused", "source": "smnc", "title": "丙公司订单更新",
+         "content_text": "订单更新", "created_at": "2026-09-24T14:00:00+08:00",
+         "captured_at": "2026-09-24T07:00:00+00:00", "content_hash": "focused-hash"},
+        {"item_id": "marked", "source": "smnc", "title": "【研究团队】#甲公司：订单更新，对比乙公司",
+         "content_text": "订单更新", "created_at": "2026-09-24T14:00:00+08:00",
+         "captured_at": "2026-09-24T07:00:00+00:00", "content_hash": "marked-hash"},
+    ]
+    (research / "items.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    build_research_material_index(research, tmp_path)
+    repo = ResearchMaterialRepository(tmp_path)
+    assert [(item["item_id"], item["match_basis"]) for item in repo.query_company("甲公司", date(2026, 9, 24))] == [
+        ("marked", "focused"), ("basket", "basket"),
+    ]
+    assert [(item["item_id"], item["match_basis"]) for item in repo.query_company("乙公司", date(2026, 9, 24))] == [
+        ("basket", "basket"), ("marked", "mention"),
+    ]
+    assert repo.query_company("丙公司", date(2026, 9, 24))[0]["match_basis"] == "focused"
+
+
+def test_company_excerpt_and_direct_research_exclude_basket_and_counter(tmp_path):
+    from datetime import date
+
+    research = tmp_path / "research"
+    research.mkdir()
+    instruments = tmp_path / "instruments"
+    instruments.mkdir()
+    pl.DataFrame({"symbol": ["000001.SZ", "000002.SZ"], "name": ["甲公司", "乙公司"]}).write_parquet(
+        instruments / "instruments.parquet"
+    )
+    items = [{
+        "item_id": "smnc_basket", "source": "smnc", "title": "甲公司与乙公司产业链更新",
+        "content_text": "甲公司订单等待验证。乙公司订单已经落地。",
+        "created_at": "2026-09-24T14:00:00+08:00", "captured_at": "2026-09-24T07:00:00+00:00",
+        "content_hash": "basket-excerpt",
+    }]
+    (research / "items.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    build_research_material_index(research, tmp_path)
+    repo = ResearchMaterialRepository(tmp_path)
+    first = repo.query_company("乙公司", date(2026, 9, 24))[0]
+    assert first["match_basis"] == "basket"
+    assert "乙公司订单已经落地" in first["match_excerpt"]
+    assert "company_excerpts" not in first
+    assert not is_direct_research(first)
+    assert not is_direct_research({"match_basis": "audited", "material_role": "counter"})
+    assert is_direct_research({"match_basis": "audited", "material_role": "primary"})
+    assert is_direct_research({"match_basis": "focused"})
 
 
 def test_refresh_keeps_local_items_when_blocked(monkeypatch, tmp_path):

@@ -26,6 +26,19 @@ def _excerpt(audit: dict[str, Any]) -> str:
     return str(evidence[0].get("anchor") or "").strip() if evidence else ""
 
 
+def _latest_available_at(*values: Any) -> str:
+    timestamps = []
+    for value in values:
+        if not value:
+            continue
+        try:
+            timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        timestamps.append(timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=UTC))
+    return max(timestamps).isoformat() if timestamps else ""
+
+
 def _instrument_names(data_root: Path) -> list[str]:
     path = Path(data_root) / "instruments" / "instruments.parquet"
     if not path.is_file():
@@ -38,7 +51,7 @@ def _instrument_names(data_root: Path) -> list[str]:
     return sorted((name for name in names if len(name) >= 3), key=len, reverse=True)
 
 
-def _load_company_cache(path: Path) -> dict[str, dict[str, list[str]]]:
+def _load_company_cache(path: Path) -> dict[str, dict[str, Any]]:
     if not path.is_file():
         return {}
     try:
@@ -48,10 +61,20 @@ def _load_company_cache(path: Path) -> dict[str, dict[str, list[str]]]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _company_excerpts(content: str, companies: list[str]) -> dict[str, str]:
+    text = re.sub(r"\s+", " ", content).strip()
+    excerpts = {}
+    for name in companies:
+        start = text.find(name)
+        if start >= 0:
+            excerpts[name] = text[max(0, start - 50):min(len(text), start + len(name) + 110)].strip()
+    return excerpts
+
+
 def _extract_smnc_facts(
     items: list[dict[str, Any]],
     data_root: Path,
-) -> dict[str, dict[str, list[str]]]:
+) -> dict[str, dict[str, Any]]:
     """Extract company names and topic labels per item, cached by content hash.
 
     The full name scan is only needed once per item; later index rebuilds reuse
@@ -64,12 +87,19 @@ def _extract_smnc_facts(
     changed = False
     for item in items:
         key = str(item.get("content_hash") or item.get("item_id") or "")
-        if not key or key in cache:
+        if not key or (key in cache and "title_companies" in cache[key] and "company_excerpts" in cache[key]):
             continue
+        previous = cache.get(key) or {}
         text = str(item.get("content_text") or "")
-        companies = sorted(set(pattern.findall(text))) if pattern and text else []
-        concepts = topic_labels(text)
-        cache[key] = {"companies": companies, "concepts": concepts}
+        title = str(item.get("title") or "")
+        title_companies = sorted(set(pattern.findall(title))) if pattern and title else []
+        body_companies = previous.get("companies") if previous else (pattern.findall(text) if pattern and text else [])
+        companies = sorted(set(body_companies or []) | set(title_companies))
+        concepts = previous.get("concepts") if previous else topic_labels(text)
+        cache[key] = {
+            "companies": companies, "concepts": concepts, "title_companies": title_companies,
+            "company_excerpts": _company_excerpts(text, companies),
+        }
         changed = True
     if changed:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,25 +107,38 @@ def _extract_smnc_facts(
     return cache
 
 
-def _smnc_materials(items: list[dict[str, Any]], facts: dict[str, dict[str, list[str]]]) -> list[dict[str, Any]]:
+def _primary_title_companies(title: str, companies: list[str]) -> list[str]:
+    marked = [
+        name for name in companies
+        if re.search(rf"(?:#|\uFF03)\s*{re.escape(name)}(?=\W|$)|{re.escape(name)}\s*[:\uFF1A]", title)
+    ]
+    return marked if len(marked) == 1 else []
+
+
+def _smnc_materials(items: list[dict[str, Any]], facts: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     materials: list[dict[str, Any]] = []
     for item in items:
         key = str(item.get("content_hash") or item.get("item_id") or "")
         extracted = facts.get(key) or {}
         companies = [str(value) for value in extracted.get("companies", [])]
         concepts = [str(value) for value in extracted.get("concepts", [])]
-        if not companies and not concepts:
-            continue
         content = str(item.get("content_text") or "")
+        title = str(item.get("title") or "")
+        title_companies = [str(value) for value in extracted.get("title_companies", [])]
         materials.append({
             "item_id": item.get("item_id"),
             "source": "smnc",
-            "title": str(item.get("title") or ""),
+            "title": title,
             "created_at": str(item.get("created_at") or ""),
+            "available_at": str(item.get("captured_at") or ""),
             "source_url": str(item.get("source_url") or ""),
             "report_date": str(item.get("trading_day") or str(item.get("created_at") or "")[:10].replace("-", "")),
             "companies": companies,
+            "title_companies": title_companies,
+            "primary_title_companies": _primary_title_companies(title, title_companies),
+            "company_excerpts": extracted.get("company_excerpts") or {},
             "concepts": concepts,
+            "title_concepts": topic_labels(title),
             "takeaway": content[:200],
             "evidence": [],
             "quality_grade": None,
@@ -139,6 +182,7 @@ def build_research_material_index(source_root: Path, data_root: Path) -> dict[st
             materials[item["item_id"]] = {
                 "item_id": item["item_id"], "source": item.get("source"),
                 "title": item.get("title") or "", "created_at": item.get("created_at") or "",
+                "available_at": _latest_available_at(manifest.get("published_at"), item.get("captured_at")),
                 "source_url": item.get("source_url") or "", "report_date": report_date,
                 "companies": [str(value.get("name") or "") for value in audit.get("companies", []) if value.get("name")],
                 "concepts": [str(value.get("name") or "") for value in audit.get("concepts", []) if value.get("name")],
@@ -155,7 +199,7 @@ def build_research_material_index(source_root: Path, data_root: Path) -> dict[st
     for material in _smnc_materials(smnc_items, facts):
         materials.setdefault(str(material["item_id"]), material)
     payload = {
-        "schema_version": 2, "status": "available" if materials else "unavailable",
+        "schema_version": 4, "status": "available" if materials else "unavailable",
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "latest_publication": max(publications, default=None),
         "material_count": len(materials), "materials": list(materials.values()),
