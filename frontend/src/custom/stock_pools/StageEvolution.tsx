@@ -44,7 +44,6 @@ export function StageEvolution({
 }: Props) {
   const [selectedFlow, setSelectedFlow] = useState<string | null>(null)
   const [selectedKind, setSelectedKind] = useState<string | null>(null)
-  const [showAllMembers, setShowAllMembers] = useState(false)
   const candidateBySymbol = useMemo(() => new Map(candidates.map(row => [row.symbol, row])), [candidates])
   const graphFlows = useMemo(() => {
     if (!data || data.previous_count === null) return []
@@ -120,12 +119,11 @@ export function StageEvolution({
       && (!selectedKind || row.kind === selectedKind)
       && (!selectedStage || (row.exit ? row.previous_stage : row.current_stage) === selectedStage)
       && (!needle || `${row.symbol} ${row.name} ${row.current_stage ?? ''} ${row.previous_stage ?? ''}`.toLowerCase().includes(needle))
-      && (showAllMembers || selectedFlow || row.kind !== 'unchanged')
     ).sort((a, b) =>
       (KIND[a.kind]?.rank ?? 9) - (KIND[b.kind]?.rank ?? 9)
       || Number(b.freshness === '当日事件') - Number(a.freshness === '当日事件')
       || a.symbol.localeCompare(b.symbol))
-  }, [data, selectedFlow, selectedKind, selectedStage, needle, showAllMembers])
+  }, [data, selectedFlow, selectedKind, selectedStage, needle])
   const maxHistory = Math.max(1, ...(data?.history.map(point => point.count ?? 0) ?? []))
   const selectKind = (kind: string) => {
     setSelectedKind(value => value === kind ? null : kind)
@@ -225,11 +223,11 @@ export function StageEvolution({
           <p className="mt-3 border-t border-border pt-2 text-[10px] leading-relaxed text-secondary">盘后先核对新入题材与阶段变化的来源，再检查价格位置和 K 线，标记次日待观察股票。阶段标签本身不构成交易信号。</p>
         </div>
       </div>
-      <div className="mt-3 rounded-lg border border-[#353539] bg-[#111113] p-3">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 className="text-[11px] font-semibold">{selected ? `${KIND[selected.kind]?.label} · ${selected.from_stage} → ${selected.to_stage}` : selectedKind ? KIND[selectedKind]?.label : '逐股变化与次日核对'} <span className="font-normal text-muted">· {movementRows.length}只</span></h4><div className="flex gap-3 text-[10px]">{selectedStage && <span className="text-secondary">当前阶段：{selectedStage}</span>}{selectedKind && <button onClick={() => setSelectedKind(null)} className="cursor-pointer text-accent">清除类别</button>}{!selectedKind && !selectedFlow && <button onClick={() => setShowAllMembers(value => !value)} className="cursor-pointer text-accent">{showAllMembers ? '只看变化' : '含未变化股票'}</button>}</div></div>
+      {(selectedFlow || selectedKind) && <div className="mt-3 rounded-lg border border-[#353539] bg-[#111113] p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 className="text-[11px] font-semibold">{selected ? `${KIND[selected.kind]?.label} · ${selected.from_stage} → ${selected.to_stage}` : KIND[selectedKind ?? '']?.label ?? '迁移逐股明细'} <span className="font-normal text-muted">· {movementRows.length}只</span></h4><div className="flex gap-3 text-[10px]">{selectedKind && <button onClick={() => setSelectedKind(null)} className="cursor-pointer text-accent">清除类别</button>}</div></div>
         {search && <div className="mb-2 text-[9px] text-muted">上方统计为范围全量；搜索只筛下列股票。</div>}
         {movementRows.length ? <div className="max-h-[245px] divide-y divide-[#29292e] overflow-y-auto">
-          {movementRows.slice(0, showAllMembers || selectedFlow || selectedKind ? undefined : 8).map(row => {
+          {movementRows.map(row => {
             const current = candidateBySymbol.get(row.symbol)
             return <div key={row.symbol} className="grid grid-cols-[minmax(115px,1fr)_minmax(145px,1.2fr)_minmax(180px,1.6fr)_115px] items-center gap-2 py-2 text-[10px]">
               {current ? <button onClick={() => onOpen(current)} className="min-w-0 cursor-pointer text-left hover:text-accent"><strong className="block truncate">{row.name}</strong><span className="font-mono text-muted">{row.symbol}</span></button>
@@ -242,8 +240,7 @@ export function StageEvolution({
             </div>
           })}
         </div> : <div className="py-5 text-center text-xs text-muted">当前条件下没有逐股变化；可清除路径或阶段筛选。</div>}
-        {!showAllMembers && !selectedFlow && !selectedKind && movementRows.length > 8 && <button onClick={() => setShowAllMembers(true)} className="mt-2 cursor-pointer text-[10px] text-accent">查看全部 {movementRows.length} 只及未变化股票</button>}
-      </div>
+      </div>}
     </>}
   </section>
 }

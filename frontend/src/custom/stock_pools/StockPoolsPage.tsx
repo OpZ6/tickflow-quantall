@@ -141,6 +141,13 @@ function lowTopicLabels(row: StockPoolCandidate): string[] {
   if (row.topics.length) return row.topics
   return [row.primary_concept || row.memberships?.concept?.[0]].filter((label): label is string => Boolean(label))
 }
+const ROLE_DEFS: [string, string[]][] = [
+  ['启动与加速', ['突破启动', '异动加速']],
+  ['涨停强化', ['涨停强化']],
+  ['分歧与修复', ['高位分歧', '回踩整理', '企稳修复']],
+  ['趋势延续', ['趋势延续']],
+  ['历史与人气观察', ['活跃观察', '人气观察']],
+]
 
 function clusterLow(rows: StockPoolCandidate[]): StockPoolCluster[] {
   const groups = new Map<string, StockPoolCandidate[]>()
@@ -475,14 +482,19 @@ export function StockPoolsPage() {
         {staticRelated.length > 0 && <details className="mt-1.5 rounded-md border border-[#29292e] bg-[#111113] px-2.5 py-2"><summary className="cursor-pointer text-[10px] text-secondary">仅静态关联 {staticRelated.length}只 · 不计入当前题材成员</summary><div className="mt-2 overflow-hidden rounded-md border border-border"><CompactCandidateRows rows={staticRelated} personal={personal} onOpen={setSelected} onPersonal={setPersonalState} /></div></details>}
         </>}
         <div className={topic ? 'mt-3 border-t border-[#29292e] pt-3' : 'mt-2'}>
-        <div className="flex flex-wrap items-baseline justify-between gap-2"><strong className="text-[11px] text-secondary">浏览队列</strong><span className="text-[10px] text-muted">{QUEUE_META[queueMode].label} · 显示 {showAllQueue ? queue.length : Math.min(30, queue.length)} / {queue.length}只</span></div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2"><strong className="text-[11px] text-secondary">浏览队列</strong><span className="text-[10px] text-muted">{QUEUE_META[queueMode].label} · 显示 {showAllQueue || (queueMode === 'members' && topic) ? queue.length : Math.min(30, queue.length)} / {queue.length}只</span></div>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {(Object.entries(QUEUE_META) as [QueueMode, typeof QUEUE_META[QueueMode]][]).map(([mode, meta]) => <button key={mode} title={meta.note} onClick={() => { setQueueMode(mode); setShowAllQueue(false); if (mode === 'low_buy' && perspective !== 'low') { setPerspective('low'); setTopic(''); setStage(''); setSubgroup('') } }} className={`cursor-pointer rounded-md border px-2.5 py-1.5 text-[10px] transition-colors ${queueMode === mode ? 'border-accent/60 bg-accent/10 text-foreground' : 'border-[#29292e] bg-[#111113] text-secondary hover:border-accent/40 hover:text-foreground'}`}>{meta.label} <span className="ml-1 font-mono text-accent">{queueGroups[mode].length}</span></button>)}
+          {(Object.entries(QUEUE_META) as [QueueMode, typeof QUEUE_META[QueueMode]][]).map(([mode, meta]) => <button key={mode} title={meta.note} onClick={() => { setQueueMode(mode); setShowAllQueue(false) }} className={`cursor-pointer rounded-md border px-2.5 py-1.5 text-[10px] transition-colors ${queueMode === mode ? 'border-accent/60 bg-accent/10 text-foreground' : 'border-[#29292e] bg-[#111113] text-secondary hover:border-accent/40 hover:text-foreground'}`}>{meta.label} <span className="ml-1 font-mono text-accent">{queueGroups[mode].length}</span></button>)}
         </div>
         <div className="mt-2 rounded-md border border-accent/25 bg-accent/5 px-3 py-2 text-[10px] leading-relaxed text-secondary">{QUEUE_META[queueMode].copy}</div>
         {queueMode === 'low_buy' && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]"><span className="mr-1 text-muted">线索范围</span>{([['all', '全部'], ['logic', '当日成组题材'], ['smnc', 'SMNC定向'], ['static', '无成组题材']] as const).map(([key, label]) => <button key={key} onClick={() => { setLowEvidence(key); setShowAllQueue(false) }} className={`rounded border px-2 py-1 ${lowEvidence === key ? 'border-accent/60 bg-accent/15 text-foreground' : 'border-border text-secondary hover:border-accent/40'}`}>{label}</button>)}<span className="ml-1 text-muted">只筛浏览线索</span></div>}
-        <div className="mt-2 overflow-hidden rounded-md border border-border bg-base/25"><CompactCandidateRows rows={showAllQueue ? queue : queue.slice(0, 30)} personal={personal} onOpen={setSelected} onPersonal={setPersonalState} numbered lowBuy={queueMode === 'low_buy'} /></div>
-        {queue.length > 30 && <div className="mt-2 text-center"><button onClick={() => setShowAllQueue(value => !value)} className="cursor-pointer rounded-md border border-border bg-base px-4 py-1.5 text-xs text-secondary transition-colors hover:bg-elevated hover:text-foreground">{showAllQueue ? '收起到30只' : `展开全部 ${queue.length}只`}</button></div>}
+        {queueMode === 'members' && topic ? <div data-testid="topic-role-groups" className="mt-2 space-y-2">
+          {ROLE_DEFS.map(([role, stages]) => ({ role, members: queue.filter(row => stages.includes(row.primary_stage)) })).filter(group => group.members.length > 0).map(group => <section key={group.role} className="overflow-hidden rounded-md border border-border bg-base/25">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2 text-[11px]"><strong className="text-foreground">{group.role}</strong><span className="font-mono text-muted">{group.members.length}只</span></div>
+            <CompactCandidateRows rows={group.members} personal={personal} onOpen={setSelected} onPersonal={setPersonalState} numbered />
+          </section>)}
+        </div> : <div className="mt-2 overflow-hidden rounded-md border border-border bg-base/25"><CompactCandidateRows rows={showAllQueue ? queue : queue.slice(0, 30)} personal={personal} onOpen={setSelected} onPersonal={setPersonalState} numbered lowBuy={queueMode === 'low_buy'} /></div>}
+        {queueMode !== 'members' && queue.length > 30 && <div className="mt-2 text-center"><button onClick={() => setShowAllQueue(value => !value)} className="cursor-pointer rounded-md border border-border bg-base px-4 py-1.5 text-xs text-secondary transition-colors hover:bg-elevated hover:text-foreground">{showAllQueue ? '收起到30只' : `展开全部 ${queue.length}只`}</button></div>}
         </div>
       </div>
     </section> : <section className="space-y-4">
