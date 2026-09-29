@@ -16,9 +16,9 @@ const edgeTone = {
   green: 'from-green-500/20', unknown: 'from-slate-500/10',
 }
 
-function Metric({ item }: { item: { label: string; value: string; tone: Tone } }) {
+function Metric({ item }: { item: { label: string; value: string; tone: Tone; judgement: string | null } }) {
   const risk = item.tone === 'red' || item.tone === 'amber' ? item.tone : null
-  return <span className={cn('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-1 py-0.5 text-[11px]', risk && riskSurface[risk])} data-tone={risk || 'normal'}>
+  return <span className={cn('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-1 py-0.5 text-[11px]', risk && riskSurface[risk], item.judgement && 'cursor-help')} data-tone={risk || 'normal'} title={item.judgement || undefined} aria-label={item.judgement || undefined} tabIndex={item.judgement ? 0 : undefined}>
     {risk && <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', riskDot[risk])} aria-label={risk === 'red' ? '显著风险' : '需要关注'} />}
     <span className="text-muted">{item.label}</span>
     <strong className="font-mono font-semibold tabular-nums text-foreground">{item.value}</strong>
@@ -35,8 +35,7 @@ export function RiskRadar({ radar }: { radar: QuantXRiskRadar | null }) {
         <span aria-hidden="true" className={cn('pointer-events-none absolute inset-y-0 left-0 w-40 bg-gradient-to-r to-transparent', edgeTone[overallTone])} />
         <div className="relative col-span-12 min-w-0 lg:col-span-10">
           <h2 className="flex items-center gap-2 text-base font-semibold text-foreground"><ShieldAlert className="h-4 w-4" />风险画像</h2>
-          <p className="mt-2 text-sm font-semibold text-foreground">{radar.headline}</p>
-          <p className="mt-1 max-w-[1080px] text-xs leading-5 text-foreground/85">{radar.summary}</p>
+          <p className="mt-2 text-base font-semibold text-foreground md:text-lg">{radar.headline}</p>
           {radar.counter_evidence && <p className="mt-1.5 text-[11px] leading-5 text-muted">相反证据：{radar.counter_evidence}</p>}
           {radar.missing.length > 0 && <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">{radar.missing.join('、')}数据待同步，当前结论按已具备的证据生成。</p>}
         </div>

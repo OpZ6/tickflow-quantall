@@ -125,7 +125,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         DatasetId.MARKET_BREADTH_DAILY: DatasetSpec(
             dataset_id=DatasetId.MARKET_BREADTH_DAILY,
             description="A-share daily advancing, declining and flat counts",
-            schema_version=2,
+            schema_version=3,
             primary_key=("trade_date", "market"),
             partition_keys=("trade_date",),
             required_columns=(
@@ -138,6 +138,10 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                 "total_count",
                 "up_ratio_pct",
                 "advance_decline",
+                "mean_up_pct",
+                "mean_down_pct",
+                "down_gt7_count",
+                "down_gt7_ratio_pct",
             ),
             storage_schema=_schema(
                 {
@@ -150,9 +154,16 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                     "total_count": pl.Int64,
                     "up_ratio_pct": pl.Float64,
                     "advance_decline": pl.Int64,
+                    "mean_up_pct": pl.Float64,
+                    "mean_down_pct": pl.Float64,
+                    "down_gt7_count": pl.Int64,
+                    "down_gt7_ratio_pct": pl.Float64,
                 }
             ),
-            field_units=MappingProxyType({"up_ratio_pct": "percent"}),
+            field_units=MappingProxyType({
+                "up_ratio_pct": "percent", "mean_up_pct": "percent",
+                "mean_down_pct": "percent", "down_gt7_ratio_pct": "percent",
+            }),
         ),
         DatasetId.MARKET_LIQUIDITY_DAILY: DatasetSpec(
             dataset_id=DatasetId.MARKET_LIQUIDITY_DAILY,

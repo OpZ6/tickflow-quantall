@@ -5,6 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from math import isfinite
 from typing import Any
 
 import polars as pl
@@ -267,13 +268,21 @@ def _build_market_breadth(
         is_fallback = True
     daily = _records(payload, "daily", "stocks", "records")
     summary = payload.get("daily_market") if isinstance(payload.get("daily_market"), dict) else {}
+    mean_up_pct = mean_down_pct = down_gt7_count = down_gt7_ratio_pct = None
     if daily:
         changes = [_number(row.get("pct_chg")) for row in daily]
-        up_count = sum(value is not None and value > 0 for value in changes)
-        down_count = sum(value is not None and value < 0 for value in changes)
-        flat_count = sum(value is not None and value == 0 for value in changes)
-        unknown_count = sum(value is None for value in changes)
+        valid = [value for value in changes if value is not None and isfinite(value)]
+        gains = [value for value in valid if value > 0]
+        losses = [value for value in valid if value < 0]
+        up_count = len(gains)
+        down_count = len(losses)
+        flat_count = len(valid) - up_count - down_count
+        unknown_count = len(daily) - len(valid)
         total_count = len(daily)
+        mean_up_pct = round(sum(gains) / up_count, 2) if up_count else None
+        mean_down_pct = round(sum(losses) / down_count, 2) if down_count else None
+        down_gt7_count = sum(value < -7 for value in losses)
+        down_gt7_ratio_pct = round(down_gt7_count / len(valid) * 100, 2) if valid else None
     elif summary:
         up_count = int(summary.get("up_count") or 0)
         down_count = int(summary.get("down_count") or 0)
@@ -293,6 +302,10 @@ def _build_market_breadth(
         "total_count": total_count,
         "up_ratio_pct": up_ratio_pct,
         "advance_decline": up_count - down_count,
+        "mean_up_pct": mean_up_pct,
+        "mean_down_pct": mean_down_pct,
+        "down_gt7_count": down_gt7_count,
+        "down_gt7_ratio_pct": down_gt7_ratio_pct,
         **_metadata(
             source=source,
             source_record_id=f"{source}:{trade_date}:CN_A",

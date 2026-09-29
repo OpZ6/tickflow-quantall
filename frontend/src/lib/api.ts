@@ -4774,9 +4774,9 @@ export interface QuantXRiskRadar {
     title: string
     tone: 'red' | 'amber' | 'green' | null
     status: string
-    metrics: Array<{ label: string; value: string; tone: 'red' | 'amber' | 'green' | null }>
+    metrics: Array<{ label: string; value: string; tone: 'red' | 'amber' | 'green' | null; judgement: string | null }>
     explanation: string
-    details: Array<{ label: string; value: string; tone: 'red' | 'amber' | 'green' | null }>
+    details: Array<{ label: string; value: string; tone: 'red' | 'amber' | 'green' | null; judgement: string | null }>
     series: Array<{
       kind: 'ordinary' | 'sentiment'
       code: string

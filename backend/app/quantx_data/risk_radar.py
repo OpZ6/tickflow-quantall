@@ -48,8 +48,10 @@ def index_ma10(rows: list[dict[str, Any]], day: date) -> dict[str, float | None]
     }
 
 
-def _metric(label: str, value: str, tone: str | None = None) -> dict[str, str | None]:
-    return {"label": label, "value": value, "tone": tone}
+def _metric(
+    label: str, value: str, tone: str | None = None, judgement: str | None = None,
+) -> dict[str, str | None]:
+    return {"label": label, "value": value, "tone": tone, "judgement": judgement}
 
 
 def _dimension(
@@ -76,28 +78,48 @@ def build_risk_radar(
     dimensions: list[dict[str, Any]] = []
     down_ratio = None
     limit_down = state.get("limit_down_count") if state else None
+    tail_ratio = breadth.get("down_gt7_ratio_pct") if breadth else None
     if breadth and breadth.get("total_count"):
         down_ratio = 100 * breadth["down_count"] / breadth["total_count"]
     if down_ratio is None or limit_down is None:
         dimensions.append(_dimension("breadth", "广度与尾部", None, "数据待同步", [], "", [], "market_breadth_daily · market_state_daily"))
     else:
-        tone = "red" if down_ratio >= 80 or limit_down >= 50 or (down_ratio >= 70 and limit_down >= 30) else "amber" if down_ratio >= 55 or limit_down >= 15 else "green"
+        tone = "red" if down_ratio >= 80 or limit_down >= 50 or (down_ratio >= 70 and limit_down >= 30) or (tail_ratio is not None and tail_ratio >= 5) else "amber" if down_ratio >= 55 or limit_down >= 15 or (tail_ratio is not None and tail_ratio >= 2) else "green"
         dimensions.append(_dimension(
             "breadth", "广度与尾部", tone,
             {"red": "普跌与尾部风险", "amber": "广度需关注", "green": "广度正常"}[tone],
             [
-                _metric("上涨", f"{breadth['up_count']} 家", "green" if breadth["up_count"] > breadth["down_count"] else "red"),
-                _metric("下跌", f"{breadth['down_count']} 家", tone if tone != "green" else None),
-                _metric("下跌占比", f"{down_ratio:.1f}%", tone),
-                _metric("跌停", f"{limit_down} 家", "red" if limit_down >= 50 else "amber" if limit_down >= 15 else None),
-                _metric("平盘", f"{breadth['flat_count']} 家"),
-                _metric("未知", f"{breadth.get('unknown_count') or 0} 家"),
+                _metric("上涨", f"{breadth['up_count']} 家"),
+                _metric("下跌", f"{breadth['down_count']} 家"),
+                _metric(
+                    "下跌占比", f"{down_ratio:.1f}%",
+                    "red" if down_ratio >= 80 else "amber" if down_ratio >= 55 else None,
+                    f"下跌占比 {down_ratio:.1f}% 达到 80%" if down_ratio >= 80 else
+                    f"下跌占比 {down_ratio:.1f}% 达到 55%" if down_ratio >= 55 else None,
+                ),
+                _metric(
+                    "跌停", f"{limit_down} 家",
+                    "red" if limit_down >= 50 else "amber" if limit_down >= 15 else None,
+                    f"跌停 {limit_down} 家达到 50 家" if limit_down >= 50 else
+                    f"跌停 {limit_down} 家达到 15 家" if limit_down >= 15 else None,
+                ),
+                *([_metric("平均涨幅", f"{breadth['mean_up_pct']:+.2f}%")] if breadth.get("mean_up_pct") is not None else []),
+                *([_metric("平均跌幅", f"{breadth['mean_down_pct']:+.2f}%")] if breadth.get("mean_down_pct") is not None else []),
+                *([_metric(
+                    "跌超 7% 占比", f"{tail_ratio:.2f}%",
+                    "red" if tail_ratio >= 5 else "amber" if tail_ratio >= 2 else None,
+                    f"跌幅超过 7% 的个股占 {tail_ratio:.2f}%，达到 5%" if tail_ratio >= 5 else
+                    f"跌幅超过 7% 的个股占 {tail_ratio:.2f}%，达到 2%" if tail_ratio >= 2 else None,
+                )] if tail_ratio is not None else []),
             ],
             f"下跌 {breadth['down_count']} 家、跌停 {limit_down} 家；以已发布广度事实为准。",
             [_metric("样本总数", f"{breadth['total_count']} 家")],
             "market_breadth_daily · market_state_daily",
         ))
 
+    board_counts = {int(row["board_height"]): int(row["count"]) for row in ladder}
+    maximum = max(board_counts) if board_counts else None
+    missing_levels = [level for level in (3, 4) if maximum is not None and maximum >= 4 and board_counts.get(level, 0) == 0]
     premium = state.get("premium_rate_pct") if state else None
     advance = state.get("advance_rate_pct") if state else None
     seal = state.get("seal_rate_pct") if state else None
@@ -107,49 +129,49 @@ def build_risk_radar(
     )[-5:]
     premium_baseline = [row["premium_rate_pct"] for row in previous_state if row.get("premium_rate_pct") is not None]
     advance_baseline = [row["advance_rate_pct"] for row in previous_state if row.get("advance_rate_pct") is not None]
-    if premium is None or advance is None:
+    if premium is None or advance is None or maximum is None:
         dimensions.append(_dimension("relay", "接力与封板", None, "数据待同步", [], "", [], "market_state_daily"))
     else:
-        tone = "red" if premium <= -1 and advance < 20 else "amber" if premium < 0 or advance < 25 or (seal is not None and seal < 75) else "green"
+        tone = "red" if premium <= -1 and advance < 20 else "amber" if premium < 0 or advance < 25 or (seal is not None and seal < 75) or maximum < 4 or missing_levels else "green"
         dimensions.append(_dimension(
             "relay", "接力与封板", tone,
-            {"red": "接力亏损", "amber": "接力需关注", "green": "接力正常"}[tone],
+            {"red": "接力亏损", "amber": "接力或连板需关注", "green": "接力正常"}[tone],
             [
-                _metric("昨涨停溢价", f"{premium:+.2f}%", "red" if premium <= -1 else "amber" if premium < 0 else "green"),
-                _metric("晋级率", f"{advance:.1f}%", "red" if advance < 20 else "amber" if advance < 25 else "green"),
-                *([_metric("封板率", f"{seal:.1f}%", "red" if seal < 65 else "amber" if seal < 75 else "green")] if seal is not None else []),
+                _metric(
+                    "昨涨停溢价", f"{premium:+.2f}%",
+                    "red" if premium <= -1 else "amber" if premium < 0 else "green",
+                    f"昨涨停溢价 {premium:+.2f}% 不高于 -1%" if premium <= -1 else
+                    f"昨涨停溢价 {premium:+.2f}% 为负" if premium < 0 else None,
+                ),
+                _metric(
+                    "晋级率", f"{advance:.1f}%",
+                    "red" if advance < 20 else "amber" if advance < 25 else "green",
+                    f"晋级率 {advance:.1f}% 低于 20%" if advance < 20 else
+                    f"晋级率 {advance:.1f}% 低于 25%" if advance < 25 else None,
+                ),
+                *([_metric(
+                    "封板率", f"{seal:.1f}%",
+                    "red" if seal < 65 else "amber" if seal < 75 else "green",
+                    f"封板率 {seal:.1f}% 低于 65%" if seal < 65 else
+                    f"封板率 {seal:.1f}% 低于 75%" if seal < 75 else None,
+                )] if seal is not None else []),
                 *([_metric("涨停", f"{state['limit_up_count']} 家")] if state.get("limit_up_count") is not None else []),
-                *([_metric("炸板", f"{broken_board_count} 家", "amber" if seal is not None and seal < 75 else None)] if broken_board_count is not None else []),
+                *([_metric("炸板", f"{broken_board_count} 家")] if broken_board_count is not None else []),
+                _metric(
+                    "最高板", f"{maximum} 板", "amber" if maximum < 4 else "green",
+                    f"最高板 {maximum} 板，未达到 4 板" if maximum < 4 else None,
+                ),
+                *[_metric(
+                    f"{level} 板", f"{board_counts.get(level, 0)} 家",
+                    "amber" if level in missing_levels else None,
+                    f"{level} 板缺档" if level in missing_levels else None,
+                ) for level in (3, 4)],
             ],
-            "昨日涨停池的后续收益与晋级结果共同判断接力，封板质量作为辅助证据。",
+            "昨日涨停池收益、晋级、封板，以及最高板是否达到 4 板和 3/4 板是否缺档共同判断。",
             [
                 *([_metric("前 5 日溢价均值", f"{sum(premium_baseline) / 5:+.2f}%")] if len(premium_baseline) == 5 else []),
                 *([_metric("前 5 日晋级率均值", f"{sum(advance_baseline) / 5:.1f}%")] if len(advance_baseline) == 5 else []),
-            ], "market_state_daily · pywencai",
-        ))
-
-    board_counts = {int(row["board_height"]): int(row["count"]) for row in ladder}
-    if not ladder:
-        dimensions.append(_dimension("ladder", "连板结构", None, "数据待同步", [], "", [], "limit_ladder_daily · limit_event_daily"))
-    else:
-        maximum = max(board_counts)
-        first, second = board_counts.get(1, 0), board_counts.get(2, 0)
-        gaps = [level for level in range(2, maximum) if board_counts.get(level, 0) == 0]
-        previous_high = max((row["max_board"] for row in previous_state if row.get("max_board") is not None), default=None)
-        tone = "red" if maximum <= 2 and second <= 1 else "amber" if second < 5 or gaps else "green"
-        dimensions.append(_dimension(
-            "ladder", "连板结构", tone,
-            {"red": "梯队明显收缩", "amber": "梯队有缺口", "green": "梯队正常"}[tone],
-            [
-                _metric("最高板", f"{maximum} 板", "red" if maximum <= 2 else "amber" if maximum <= 3 else None),
-                _metric("首板", f"{first} 家"),
-                _metric("二板", f"{second} 家", "red" if second <= 1 else "amber" if second < 5 else "green"),
-                *[_metric(f"{level} 板", f"{board_counts.get(level, 0)} 家", "amber" if level in gaps else None) for level in range(3, maximum + 1)],
-                *([_metric("近 5 日前高", f"{previous_high} 板")] if previous_high is not None else []),
-            ],
-            f"二板 {second} 家；" + (f"缺少 {', '.join(map(str, gaps))} 板梯队。" if gaps else "二板以上梯队连续。"),
-            [_metric("缺档板高", ", ".join(map(str, gaps)) if gaps else "无", "amber" if gaps else "green")],
-            "limit_ladder_daily · limit_event_daily",
+            ], "market_state_daily · limit_ladder_daily · limit_event_daily · pywencai",
         ))
 
     ordered_liquidity = sorted((row for row in liquidity if row.get("trade_date") and row.get("total_amount_yi") is not None), key=lambda row: row["trade_date"])
@@ -164,13 +186,25 @@ def build_risk_radar(
         tone = "red" if ratio < 70 and down_ratio is not None and down_ratio >= 70 else "amber" if ratio < 90 or ratio > 140 else "green"
         concentration = current.get("top5pct_amount_ratio_pct")
         daily_change = (current["total_amount_yi"] / previous[-1] - 1) * 100 if previous[-1] > 0 else None
+        ratio_tone = "red" if ratio < 80 or ratio > 150 else "amber" if ratio < 90 or ratio > 140 else "green"
         metrics = [
             _metric("当日成交", f"{current['total_amount_yi']:,.0f} 亿"),
-            _metric("相对前 5 日", f"{ratio:.1f}%", "red" if ratio < 80 or ratio > 150 else tone),
+            _metric(
+                "相对前 5 日", f"{ratio:.1f}%", ratio_tone,
+                f"成交额为前 5 日均额的 {ratio:.1f}%，低于 80%" if ratio < 80 else
+                f"成交额为前 5 日均额的 {ratio:.1f}%，高于 150%" if ratio > 150 else
+                f"成交额为前 5 日均额的 {ratio:.1f}%，低于 90%" if ratio < 90 else
+                f"成交额为前 5 日均额的 {ratio:.1f}%，高于 140%" if ratio > 140 else None,
+            ),
             _metric("前 5 日均额", f"{sum(previous) / 5:,.0f} 亿"),
         ]
         if daily_change is not None:
-            metrics.append(_metric("较前日", f"{daily_change:+.1f}%", "red" if abs(daily_change) >= 15 else "amber" if abs(daily_change) >= 10 else "green"))
+            metrics.append(_metric(
+                "较前日", f"{daily_change:+.1f}%",
+                "red" if abs(daily_change) >= 15 else "amber" if abs(daily_change) >= 10 else "green",
+                f"成交额较前日 {daily_change:+.1f}%，波动达到 15%" if abs(daily_change) >= 15 else
+                f"成交额较前日 {daily_change:+.1f}%，波动达到 10%" if abs(daily_change) >= 10 else None,
+            ))
         if concentration is not None:
             metrics.append(_metric("前 5% 成交占比", f"{concentration:.1f}%"))
         if current.get("top20_amount_ratio_pct") is not None:
@@ -210,23 +244,42 @@ def build_risk_radar(
                 "deviation_pct": deviation, "change_pct": row.get("change_pct"),
                 "close": row.get("close"), "ma10": row.get("ma10"),
                 "zone": zone, "tone": "red" if deviation >= high or deviation <= low else "green" if deviation > 0 else "amber",
+                "judgement": f"{name}偏离 MA10 {deviation:+.2f}%，达到高位阈值 {high:+.1f}%" if deviation >= high else
+                f"{name}偏离 MA10 {deviation:+.2f}%，达到低位阈值 {low:.1f}%" if deviation <= low else
+                f"{name}偏离 MA10 {deviation:+.2f}%，仍在均线下方" if deviation <= 0 else None,
             })
     all_a = indices.get(ALL_A_INDEX)
     above = None
+    sentiment_above = sum(row["deviation_pct"] > 0 for row in sentiment)
     if len(ordinary) < 4 or all_a is None:
-        dimensions.append(_dimension("trend", "指数趋势与背离", None, "数据待同步", [], "", [], "kline_index_daily"))
+        dimensions.append(_dimension("trend", "指数与趋势", None, "数据待同步", [], "", [], "kline_index_daily"))
     else:
         above = sum(row["deviation_pct"] > 0 for row in ordinary)
         change = all_a["change_pct"]
-        tone = "red" if above == 0 and len(sentiment) == 4 and all(row["deviation_pct"] <= 0 for row in sentiment) and change is not None and change <= -3 else "amber" if above <= 2 or (len(sentiment) == 4 and sum(row["deviation_pct"] > 0 for row in sentiment) <= 1) else "green"
+        tone = "red" if above == 0 and len(sentiment) == 4 and sentiment_above == 0 and change is not None and change <= -3 else "amber" if above <= 2 or (len(sentiment) == 4 and sentiment_above <= 1) else "green"
         dimensions.append(_dimension(
-            "trend", "指数趋势与背离", tone,
+            "trend", "指数与趋势", tone,
             {"red": "趋势同步走弱", "amber": "趋势尚待修复", "green": "趋势正常"}[tone],
             [
-                _metric("普通指数站上 MA10", f"{above} / {len(ordinary)}", "red" if above == 0 else "amber" if above <= 2 else "green"),
-                *([_metric("四情绪站上 MA10", f"{sum(row['deviation_pct'] > 0 for row in sentiment)} / 4", "red" if all(row["deviation_pct"] <= 0 for row in sentiment) else "amber" if sum(row['deviation_pct'] > 0 for row in sentiment) == 1 else "green")] if len(sentiment) == 4 else []),
-                *([_metric("全 A 当日", f"{change:+.2f}%", "red" if change <= -3 else "amber" if change < 0 else "green")] if change is not None else []),
-                *[_metric(row["name"], f"{row['deviation_pct']:+.2f}%", row["tone"]) for row in sentiment],
+                _metric(
+                    "普通指数站上 MA10", f"{above} / {len(ordinary)}",
+                    "red" if above == 0 else "amber" if above <= 2 else "green",
+                    f"普通指数 {above}/{len(ordinary)} 站上 MA10，全部低于均线" if above == 0 else
+                    f"普通指数仅 {above}/{len(ordinary)} 站上 MA10" if above <= 2 else None,
+                ),
+                *([_metric(
+                    "四情绪站上 MA10", f"{sentiment_above} / 4",
+                    "red" if sentiment_above == 0 else "amber" if sentiment_above == 1 else "green",
+                    f"四情绪 {sentiment_above}/4 站上 MA10，全部低于均线" if sentiment_above == 0 else
+                    "四情绪仅 1/4 站上 MA10" if sentiment_above == 1 else None,
+                )] if len(sentiment) == 4 else []),
+                *([_metric(
+                    "全 A 当日", f"{change:+.2f}%",
+                    "red" if change <= -3 else "amber" if change < 0 else "green",
+                    f"全 A 当日 {change:+.2f}%，跌幅达到 3%" if change <= -3 else
+                    f"全 A 当日 {change:+.2f}%，收跌" if change < 0 else None,
+                )] if change is not None else []),
+                *[_metric(row["name"], f"{row['deviation_pct']:+.2f}%", row["tone"], row["judgement"]) for row in sentiment],
             ],
             "普通指数与通达信四情绪分别观察，不合成一个情绪分。" if len(sentiment) == 4 else "普通指数已计算；通达信四情绪日线尚待同步。",
             [
@@ -236,6 +289,23 @@ def build_risk_radar(
             "kline_index_daily · 通达信四情绪 MA10",
             series=series + sentiment,
         ))
+
+    for row in dimensions:
+        warnings = [item for item in row["metrics"] if item["tone"] in ("amber", "red")]
+        if row["tone"] != "amber" or len(warnings) != 1 or warnings[0]["tone"] != "amber":
+            continue
+        mild = (
+            row["key"] == "breadth" and down_ratio < 70 and limit_down < 20
+            and (tail_ratio is None or tail_ratio < 3)
+        ) or (
+            row["key"] == "relay" and maximum >= 4 and not missing_levels
+            and premium >= -0.5 and advance >= 22 and (seal is None or seal >= 70)
+        ) or (
+            row["key"] == "liquidity" and 85 <= ratio <= 145
+        )
+        if mild:
+            row["tone"] = "green"
+            row["status"] = "基本正常"
 
     by_key = {row["key"]: row for row in dimensions}
     if by_key["breadth"]["tone"] == "red" and by_key["relay"]["tone"] == "red":
@@ -249,25 +319,23 @@ def build_risk_radar(
         headline = "市场出现显著风险信号"
     elif any(row["tone"] == "amber" for row in dimensions):
         headline = "市场局部条件需要关注"
+    elif any(metric["tone"] in ("red", "amber") for row in dimensions for metric in row["metrics"]):
+        headline = "四维整体正常，局部信号需留意"
     else:
-        headline = "五维风险信号正常"
+        headline = "四维风险信号正常"
     missing = [row["title"] for row in dimensions if row["tone"] is None]
-    if len(sentiment) < len(SENTIMENT_INDICES) and "指数趋势与背离" not in missing:
+    if len(sentiment) < len(SENTIMENT_INDICES) and "指数与趋势" not in missing:
         missing.append("通达信四情绪")
     if missing:
         headline = "风险画像数据待同步"
-    lead = []
-    if breadth and down_ratio is not None:
-        lead.append(f"上涨 {breadth['up_count']} 家、下跌 {breadth['down_count']} 家")
-    if premium is not None and advance is not None:
-        lead.append(f"昨涨停股溢价 {premium:+.2f}%、晋级率 {advance:.1f}%")
-    if ratio is not None:
-        lead.append(f"成交额为前 5 日均额的 {ratio:.1f}%")
-    if above is not None:
-        trend_text = f"普通指数 {above}/{len(ordinary)}"
-        if len(sentiment) == 4:
-            trend_text += f"、四情绪 {sum(row['deviation_pct'] > 0 for row in sentiment)}/4"
-        lead.append(trend_text + " 站上 MA10")
+    issue_groups = [
+        f"{row['title']}：" + "、".join(
+            metric["judgement"] for metric in row["metrics"]
+            if metric["tone"] in ("red", "amber") and metric["judgement"]
+        )
+        for row in dimensions
+        if any(metric["tone"] in ("red", "amber") for metric in row["metrics"])
+    ]
     if by_key["breadth"]["tone"] == "red" and by_key["relay"]["tone"] == "red":
         counter_evidence = f"最高连板仍有 {max(board_counts) if board_counts else 0} 板" + (f"、封板率 {seal:.1f}%" if seal is not None else "") + "；局部强势尚未覆盖普跌与接力亏损。"
     elif by_key["breadth"]["tone"] == "green" and by_key["relay"]["tone"] == "green" and any(row["tone"] == "amber" for row in dimensions):
@@ -275,7 +343,7 @@ def build_risk_radar(
         if prior.get("advance_rate_pct") is not None and prior.get("premium_rate_pct") is not None:
             counter_evidence = f"晋级率由前日 {prior['advance_rate_pct']:.1f}% 升至 {advance:.1f}%，溢价由 {prior['premium_rate_pct']:+.2f}% 转为 {premium:+.2f}%；短线改善仍需量能和趋势确认。"
         else:
-            counter_evidence = "广度与接力处于正常区间；成交承接、连板结构与较慢趋势仍需分别核对。"
+            counter_evidence = "广度与接力处于正常区间；量能和指数趋势仍需分别核对。"
     elif any(row["tone"] == "red" for row in dimensions):
         counter_evidence = "其他维度的正常信号说明风险范围仍有差异，需按各维证据判断。"
     elif any(row["tone"] == "amber" for row in dimensions):
@@ -285,10 +353,10 @@ def build_risk_radar(
         counter_evidence = ""
     return {
         "headline": headline,
-        "summary": "；".join(lead) + "。" if lead else "已发布市场事实不足，暂无法生成完整风险总览。",
+        "summary": "风险判断：" + "；".join(issue_groups) + "。" if issue_groups else "四维条件未触发风险阈值。" if not missing else "已发布市场事实不足，暂无法生成完整风险总览。",
         "counter_evidence": counter_evidence,
         "coverage": {"complete": max(0, len(dimensions) - len(missing)), "total": len(dimensions)},
         "dimensions": dimensions,
         "missing": missing,
-        "algorithm_version": "risk-radar-v1",
+        "algorithm_version": "risk-radar-v3",
     }

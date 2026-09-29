@@ -279,7 +279,7 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
     for dataset_id in dataset_ids:
         spec = get_dataset(dataset_id)
         expected_version = {
-            DatasetId.MARKET_BREADTH_DAILY: 2,
+            DatasetId.MARKET_BREADTH_DAILY: 3,
             DatasetId.MARKET_LIQUIDITY_DAILY: 3,
             DatasetId.LIMIT_EVENT_DAILY: 2,
             DatasetId.LIMIT_LADDER_DAILY: 3,
@@ -311,6 +311,21 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
     sector_breadth = get_dataset(sector_breadth_id)
     assert sector_breadth.field_units["above_ma20_pct"] == "percent"
     assert sector_breadth.primary_key == ("trade_date", "dimension", "sector_id")
+
+
+def test_market_breadth_tail_ratio_uses_valid_changes_and_strict_seven_percent() -> None:
+    sources = _sources()
+    sources["tushare"]["daily"] = [
+        {"pct_chg": 2.0}, {"pct_chg": -7.0},
+        {"pct_chg": -8.0}, {"pct_chg": None},
+    ]
+    batches = build_initial_fact_batches("20260825", sources, "run-1", structured_tables=_signal_tables())
+    breadth = next(batch.frame.row(0, named=True) for batch in batches if batch.dataset_id == DatasetId.MARKET_BREADTH_DAILY)
+    assert breadth["mean_up_pct"] == 2.0
+    assert breadth["mean_down_pct"] == -7.5
+    assert breadth["down_gt7_count"] == 1
+    assert breadth["down_gt7_ratio_pct"] == 33.33
+    assert breadth["unknown_count"] == 1
 
 
 def test_fact_builders_normalize_breadth_and_limit_events() -> None:
@@ -356,12 +371,16 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
             "total_count": 3,
             "up_ratio_pct": 33.33,
             "advance_decline": 0,
+            "mean_up_pct": 2.0,
+            "mean_down_pct": -1.0,
+            "down_gt7_count": 0,
+            "down_gt7_ratio_pct": 0.0,
             "source": "tushare",
             "source_record_id": "tushare:20260825:CN_A",
             "observed_at": "2026-08-25T16:01:00+08:00",
             "ingested_at": breadth[0]["ingested_at"],
             "run_id": "run-1",
-            "schema_version": 2,
+            "schema_version": 3,
             "quality_level": "fallback",
             "is_fallback": True,
         }
