@@ -59,6 +59,7 @@ backend/.env
 
 # ===== User-derived prompts =====
 backend/user_prompts/
+prompt/todo.md
 
 # ===== Browser automation =====
 .playwright-mcp/
