@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from collections.abc import Callable
+from datetime import date, datetime
 from pathlib import Path
 
 from apscheduler.triggers.cron import CronTrigger
@@ -52,16 +53,44 @@ def run_scheduled(data_root: Path, *, trade_date: str | None = None) -> dict | N
         return None
 
 
-def register(scheduler, data_root: Path, *, hour: int = 17, minute: int = 30) -> None:
-    """Register the final-cutoff recovery run.
+def register(
+    scheduler, data_root: Path, *, hour: int = 17, minute: int = 30,
+    after_run: Callable[[date], object] | None = None,
+) -> None:
+    """Register recovery runs after the normal pipeline window.
 
     The normal QuantX run is dependency-triggered by TickFlow's successful
-    post-close pipeline.  This later job only recovers cases where that trigger
-    was missed (for example, a process restart between jobs).
+    post-close pipeline. Recovery retries once at 20:30 when another data task
+    occupied the first slot; a complete stock-pool snapshot skips the retry.
     """
+    def recover() -> None:
+        trade_date = _trade_date_today(data_root)
+        if trade_date is None:
+            return
+        day = datetime.strptime(trade_date, "%Y%m%d").date()
+        if after_run:
+            from app.stock_pools.repository import StockPoolRepository
+
+            summary = StockPoolRepository(data_root).get_summary(day)
+            if summary and summary.get("status") == "complete":
+                return
+        from app.services.pipeline_jobs import job_store, release_run_slot, try_acquire_run_slot
+
+        owner = f"quantx-recovery-{trade_date}"
+        if job_store.active_id() or not try_acquire_run_slot(owner):
+            logger.info("QuantX recovery deferred for %s: data task is active", trade_date)
+            return
+        try:
+            result = run_scheduled(data_root, trade_date=trade_date)
+            if result and result.get("status") in {"complete", "degraded"} and after_run:
+                after_run(day)
+        finally:
+            release_run_slot(owner)
+
     scheduler.add_job(
-        lambda: run_scheduled(data_root),
-        trigger=CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone="Asia/Shanghai"),
+        recover,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=f"{hour},20" if hour != 20 else "20",
+                            minute=minute, timezone="Asia/Shanghai"),
         id="quantx_data_deadline_recovery",
         misfire_grace_time=86400,
         replace_existing=True,

@@ -567,7 +567,8 @@ export function QuantXDashboard() {
   if (catalog.isLoading || (!routeDate && !latest)) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
   if (!date || catalog.error) return <div className="py-16 text-center text-sm text-muted">QuantX 日期目录不可用：{String(catalog.error || '暂无已发布日期')}</div>
   if (reviewQuery.isLoading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
-  if (reviewQuery.error || !reviewQuery.data) return <div data-testid="quantx-dashboard-error" className="space-y-3 py-16 text-center"><p className="text-sm text-muted">无 {date} 的单日标准事实</p>{multidayQuery.data && <p className="text-xs text-muted">该日期仅有多日派生数据</p>}</div>
+  if (reviewQuery.error) return <div data-testid="quantx-dashboard-error" className="space-y-3 py-16 text-center"><p className="text-sm text-muted">{date} 单日报告加载失败：{String(reviewQuery.error.message || reviewQuery.error)}</p><button type="button" className="text-sm text-accent underline" onClick={() => void reviewQuery.refetch()}>重试加载</button></div>
+  if (!reviewQuery.data) return <div data-testid="quantx-dashboard-error" className="space-y-3 py-16 text-center"><p className="text-sm text-muted">无 {date} 的单日标准事实</p>{multidayQuery.data && <p className="text-xs text-muted">该日期仅有多日派生数据</p>}</div>
 
   const review = reviewQuery.data
   if (review.data_foundation.canonical_fields.length === 0) {

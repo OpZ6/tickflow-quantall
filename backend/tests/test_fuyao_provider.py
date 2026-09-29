@@ -1464,12 +1464,13 @@ def test_release_of_extracts_from_presigned_url():
 
 
 def test_test_dataset_daily_preview(monkeypatch):
-    bars = {"000001.SZ": [_bar(date(2026, 8, 27), 11.05), _bar(date(2026, 8, 28), 11.65)]}
+    first_day = datetime.now().date() - timedelta(days=2)
+    bars = {"000001.SZ": [_bar(first_day, 11.05), _bar(first_day + timedelta(days=1), 11.65)]}
     provider = _hist_provider(monkeypatch, _FakeHistClient(bars))
     out = provider.test_dataset("daily", ["000001.SZ"])
     assert out["provider"] == "fuyao" and out["dataset"] == "daily"
     assert out["rows"] == 2
-    assert out["preview"][0]["date"] == "2026-08-27"  # date → ISO 字符串
+    assert out["preview"][0]["date"] == first_day.isoformat()  # date → ISO 字符串
 
 
 def test_test_dataset_adj_factor_preview(monkeypatch):

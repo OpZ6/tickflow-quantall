@@ -267,6 +267,20 @@ def test_missing_tail_day_flagged(tmp_path):
     ]
 
 
+def test_exchange_holiday_does_not_block_realtime(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.services import data_integrity
+
+    holiday = date(2026, 9, 25)  # Mid-Autumn closure, despite being a Friday
+    today = date(2026, 9, 28)
+    assert holiday.weekday() == 4
+    _write_daily_partition(tmp_path, "kline_daily", date(2026, 9, 24), None)
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(data_integrity, "_trading_days_for_integrity", lambda _: frozenset({today}))
+
+    assert scan_recent_integrity(tmp_path, today=today) == []
+
+
 def test_snapshot_and_missing_both_reported(tmp_path):
     # 周四盘中快照 + 周五缺失
     _write_daily_partition(tmp_path, "kline_daily", THURSDAY, _ts_ms(THURSDAY, time(13, 30)))

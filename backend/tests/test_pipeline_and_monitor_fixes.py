@@ -30,11 +30,17 @@ def test_manual_pipeline_publishes_dependent_quantx(monkeypatch) -> None:
         "_run_quantx_after_pipeline",
         lambda: calls.append("quantx") or {"trade_date": "20260827", "status": "complete"},
     )
+    monkeypatch.setattr(
+        daily_pipeline,
+        "_run_stock_pools_after_pipeline",
+        lambda: calls.append("stock_pools") or {"status": "complete"},
+    )
 
     result = pipeline_api._run_pipeline_and_quantx(object(), object(), lambda *_args: None)
 
-    assert calls == ["main", "quantx"]
+    assert calls == ["main", "quantx", "stock_pools"]
     assert result["quantx"] == {"trade_date": "20260827", "status": "complete"}
+    assert result["stock_pools"] == {"status": "complete"}
 
 
 def test_dependent_quantx_uses_latest_persisted_session(monkeypatch, tmp_path) -> None:

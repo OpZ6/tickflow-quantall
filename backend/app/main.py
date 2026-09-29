@@ -189,9 +189,11 @@ async def _application_lifespan(app: FastAPI):
         daily_pipeline.set_app_state(app.state)  # 供 depth_finalize job 访问 depth_service
         scheduler = daily_pipeline.start_scheduler(repo, capset)
         from app.quantx_data.scheduler import register as register_quantx_data_scheduler
-        register_quantx_data_scheduler(scheduler, store.data_dir)
-        from app.stock_pools.scheduler import register as register_stock_pool_scheduler
-        register_stock_pool_scheduler(scheduler, repo)
+        from app.stock_pools.scheduler import run_scheduled as run_stock_pool_scheduled
+        register_quantx_data_scheduler(
+            scheduler, store.data_dir,
+            after_run=lambda day: run_stock_pool_scheduled(repo, trade_date=day),
+        )
         app.state.scheduler = scheduler
     except Exception as e:  # noqa: BLE001
         logger.warning("scheduler not started: %s", e)
@@ -531,8 +533,6 @@ app.state.extension_load_errors = extension_load_errors
 # 能力门控异常 → 403(而非默认 500)
 # 业务代码用 capset.require(Cap.X) 断言能力,缺失时抛 CapabilityDenied;
 # 若不注册 handler 会冒泡成 500 Internal Server Error,对前端不友好且语义错误。
-from fastapi import Request
-from fastapi.responses import JSONResponse
 from app.tickflow.capabilities import CapabilityDenied
 
 

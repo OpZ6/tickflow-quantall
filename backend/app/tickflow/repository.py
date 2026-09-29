@@ -12,12 +12,10 @@
 """
 from __future__ import annotations
 
-import json
 import logging
 import sys
 import threading
 import time
-import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -294,7 +292,7 @@ class DataStore:
         for sql in statements:
             try:
                 self.db.execute(sql)
-            except Exception as e:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 # 空数据目录(首次启动)或权限问题时 DuckDB 会抛 IOException;
                 # 跨版本/平台也可能抛 CatalogException 等。空目录缺视图不影响启动
                 # (后续同步写入数据后会重新刷新视图),这里一律降级为 debug 日志。
@@ -2514,12 +2512,25 @@ class KlineRepository:
             c for c in ("name", "total_shares", "float_shares")
             if c in instruments.columns and c not in df.columns
         ]
-        if not metadata_cols:
+        fill_name = "name" in df.columns and "name" in instruments.columns and (
+            df["name"].is_null().any() or (df["name"] == "").any()
+        )
+        if not metadata_cols and not fill_name:
             return df
-        metadata = instruments.select(["symbol", *metadata_cols]).unique(
+        metadata = instruments.select(["symbol", *metadata_cols, *(["name"] if fill_name else [])]).unique(
             subset=["symbol"], keep="last",
         )
-        return df.join(metadata, on="symbol", how="left")
+        if fill_name:
+            metadata = metadata.rename({"name": "_instrument_name"})
+        result = df.join(metadata, on="symbol", how="left")
+        if fill_name:
+            result = result.with_columns(
+                pl.when(pl.col("name").is_null() | (pl.col("name") == ""))
+                .then(pl.col("_instrument_name"))
+                .otherwise(pl.col("name"))
+                .alias("name")
+            ).drop("_instrument_name")
+        return result
 
     def merge_live_enriched_asset(self, asset_type: str, df: pl.DataFrame) -> None:
         """按 symbol 合并当天 enriched 分区和内存缓存。用于少量自选实时。"""

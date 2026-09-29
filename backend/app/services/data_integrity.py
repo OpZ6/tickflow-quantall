@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from functools import lru_cache
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -175,6 +176,21 @@ def _candidate_days(today: date, lookback_days: int) -> list[date]:
     return sorted(days)
 
 
+@lru_cache(maxsize=2)
+def _trading_days_for_integrity(today: date) -> frozenset[date] | None:
+    """Use the configured exchange calendar when available; unknown keeps weekday fallback."""
+    try:
+        from app.data_providers import custom
+
+        if custom.is_custom_provider("fuyao"):
+            days = custom.get_provider("fuyao").trading_days()
+            if days:
+                return frozenset(days)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("integrity trading calendar unavailable: %s", exc)
+    return None
+
+
 def scan_recent_integrity(
     data_dir: Path,
     *,
@@ -191,6 +207,19 @@ def scan_recent_integrity(
     window_start = today - timedelta(days=lookback_days)
     issues: list[IntegrityIssue] = []
 
+    # Local tests/isolated repositories retain the weekday approximation.
+    from app.config import settings
+
+    calendar = (
+        _trading_days_for_integrity(today)
+        if data_dir.resolve() == Path(settings.data_dir).resolve()
+        else None
+    )
+    candidate_days = [
+        day for day in _candidate_days(today, lookback_days)
+        if calendar is None or day in calendar
+    ]
+
     for table in _DAILY_TABLES:
         base = data_dir / table
         existing: set[date] = set()
@@ -205,7 +234,7 @@ def scan_recent_integrity(
         if latest is None or latest < window_start:
             continue
 
-        for day in _candidate_days(today, lookback_days):
+        for day in candidate_days:
             if day not in existing:
                 # 只报"尾部缺口": 晚于本地最新分区的缺失日。
                 # 历史内部空洞是另一类问题(laggards), 已有独立告警, 不在此扩面。

@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -190,20 +191,28 @@ def _run(
     force: bool = False,
     recompute: bool = False,
 ) -> dict:
+    from app.services.pipeline_jobs import job_store, release_run_slot, try_acquire_run_slot
+
+    owner = f"quantx-api-{uuid4().hex}"
+    if job_store.active_id() or not try_acquire_run_slot(owner):
+        raise HTTPException(status_code=409, detail="数据任务正在运行，请稍后再更新 QuantX")
     try:
-        result = run_pipeline(
-            _root(request).parent,
-            trade_date,
-            selected_sources=sources,
-            retry_sources=retry_sources,
-            force=force,
-            recompute=recompute,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if result.get("status") in {"complete", "degraded"}:
-        result["stock_pools"] = _rebuild_stock_pool(request, trade_date)
-    return result
+        try:
+            result = run_pipeline(
+                _root(request).parent,
+                trade_date,
+                selected_sources=sources,
+                retry_sources=retry_sources,
+                force=force,
+                recompute=recompute,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if result.get("status") in {"complete", "degraded"}:
+            result["stock_pools"] = _rebuild_stock_pool(request, trade_date)
+        return result
+    finally:
+        release_run_slot(owner)
 
 
 @router.post("/runs")

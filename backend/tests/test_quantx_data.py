@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import polars as pl
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -220,6 +221,61 @@ def test_scheduled_publication_requires_a_local_market_partition(tmp_path, monke
     )
 
     assert run_scheduled(tmp_path, trade_date="20260904") is None
+
+
+def test_recovery_publishes_stock_pool_after_quantx(tmp_path, monkeypatch):
+    calls = []
+
+    class Scheduler:
+        def add_job(self, fn, **_kwargs):
+            self.fn = fn
+
+    monkeypatch.setattr(quantx_scheduler, "_trade_date_today", lambda _root: "20260928")
+    monkeypatch.setattr(
+        quantx_scheduler, "run_scheduled",
+        lambda _root, *, trade_date: calls.append("quantx") or {"status": "complete"},
+    )
+    scheduler = Scheduler()
+    quantx_scheduler.register(
+        scheduler, tmp_path, after_run=lambda day: calls.append(("stock_pool", day)),
+    )
+
+    scheduler.fn()
+    assert calls == ["quantx", ("stock_pool", date(2026, 9, 28))]
+
+    calls.clear()
+    monkeypatch.setattr(
+        quantx_scheduler, "run_scheduled",
+        lambda _root, *, trade_date: calls.append("quantx_failed") or None,
+    )
+    scheduler.fn()
+    assert calls == ["quantx_failed"]
+
+    calls.clear()
+    monkeypatch.setattr("app.services.pipeline_jobs.try_acquire_run_slot", lambda _owner: False)
+    scheduler.fn()
+    assert calls == []
+
+
+def test_manual_quantx_update_respects_data_run_slot(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    from app.api import quantx_data as quantx_api
+    from app.services.pipeline_jobs import release_run_slot, try_acquire_run_slot
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
+        repo=SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path)),
+    )))
+    monkeypatch.setattr(quantx_api, "run_pipeline", lambda *_args, **_kwargs: {"status": "failed"})
+    assert try_acquire_run_slot("existing-data-run")
+    try:
+        with pytest.raises(HTTPException) as error:
+            quantx_api._run(request, "20260928")
+        assert error.value.status_code == 409
+    finally:
+        release_run_slot("existing-data-run")
+
+    assert quantx_api._run(request, "20260928") == {"status": "failed"}
 
 
 def test_pipeline_is_idempotent_and_catalog_uses_pipeline_status(tmp_path):

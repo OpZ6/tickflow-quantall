@@ -270,7 +270,7 @@ cp .env.example .env       # 按需填 TICKFLOW_API_KEY(留空 = None 模式)
 
 自动检查 / 下载依赖、释放端口、同时起前后端。后端 → <http://localhost:3018> · 前端 → <http://localhost:3011>。
 
-Windows 也可双击根目录 `update-all.cmd`：脚本会启动尚未运行的后端，并从交易日 16:30 起检查当天数据；数据落后时一次执行 A 股/指数/ETF/指标/市场环境和 QuantX 更新。强制重跑使用 `update-all.cmd -Force`；分钟 K 另加 `-EnableMinuteK`。如需工作日 18:30 自动检查并在电脑错过时间后补跑，执行：
+Windows 也可双击根目录 `update-all.cmd`：脚本会启动尚未运行的后端，并执行 A 股/指数/ETF/指标/市场环境和 QuantX 更新；即使各数据集已有当天日期，也会补跑尚未完成的阶段。`update-all.cmd -Force` 保留兼容旧用法；分钟 K 另加 `-EnableMinuteK`。如需工作日 18:30 自动执行并在电脑错过时间后补跑，执行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install_update_task.ps1

@@ -61,6 +61,22 @@ def test_live_enriched_cache_keeps_instrument_metadata_without_persisting_it(tmp
     assert "float_shares" not in persisted.columns
 
 
+def test_live_enriched_fills_missing_quote_names_from_instruments(tmp_path):
+    repo = _repo(tmp_path)
+    rows = pl.concat([
+        _live_row("600000.SH", 10.0).with_columns(pl.lit(None, dtype=pl.Utf8).alias("name")),
+        _live_row("000001.SZ", 12.0).with_columns(pl.lit("现有名称").alias("name")),
+    ])
+
+    repo.flush_live_enriched_asset("stock", rows)
+
+    cached, _ = repo.get_enriched_latest()
+    assert dict(cached.select("symbol", "name").iter_rows()) == {
+        "000001.SZ": "现有名称",
+        "600000.SH": "浦发银行",
+    }
+
+
 def test_live_flush_keeps_historical_range_current(tmp_path):
     repo = _repo(tmp_path)
     today = cn_today()
