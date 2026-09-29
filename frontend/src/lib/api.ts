@@ -2603,13 +2603,13 @@ export const api = {
   marketLabEtfMomentum: (limit = 40) =>
     request<EtfMomentumResponse>(`/api/market-lab/etf-momentum?limit=${limit}`),
   marketLabSectorFlow: (dimension: 'industry' | 'concept' = 'industry') =>
-    request<SectorFlowResponse>(`/api/market-lab/sector-flow?dimension=${dimension}`),
+    request<SectorFlowResponse>(`/api/market-lab/sector-flow?dimension=${dimension}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
   marketLabSectorRadar: (dimension: 'industry' | 'concept' = 'industry', asOf?: string) =>
-    request<SectorRadarResponse>(`/api/market-lab/sector-radar?dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`),
+    request<SectorRadarResponse>(`/api/market-lab/sector-radar?dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
   marketLabSectorMembers: (sector: string, dimension: 'industry' | 'concept' = 'industry', asOf?: string) =>
-    request<SectorMembersResponse>(`/api/market-lab/sector-members?sector=${encodeURIComponent(sector)}&dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`),
+    request<SectorMembersResponse>(`/api/market-lab/sector-members?sector=${encodeURIComponent(sector)}&dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
   marketLabMacroDispersion: () =>
-    request<MacroDispersionResponse>('/api/market-lab/macro-dispersion'),
+    request<MacroDispersionResponse>('/api/market-lab/macro-dispersion', { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
   marketLabPosition: (payload: { balance: number; risk_pct: number; entry: number; stop: number; target?: number; mode: 'brave' | 'sensitive'; trade_type: 'B1' | 'B2' }) =>
     request<PositionResult>('/api/market-lab/position', { method: 'POST', body: JSON.stringify(payload) }),
   marketLabPit: (payload: { top: number; bottom: number; current: number }) =>

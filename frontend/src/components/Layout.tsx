@@ -85,7 +85,6 @@ export const CORE_INDEXES = [
 type CoreIndex = (typeof CORE_INDEXES)[number]
 
 const nav = [
-  { to: '/market-lab', label: '市场实验室', icon: Beaker, badge: 'beta' },
   { to: '/',                label: '看板',     icon: LayoutDashboard },
   { to: '/watchlist',  label: '自选',   icon: Star },
   { to: '/screener',   label: '策略',   icon: ScanSearch },
@@ -102,9 +101,13 @@ const nav = [
   { to: '/lots',       label: '持仓提醒', icon: Layers2 },
   { to: '/signals',    label: '信号库',   icon: Zap },
   { to: '/review',      label: '复盘',   icon: BookOpenCheck },
-  { to: '/quantx',      label: 'QuantX', icon: Zap, badge: 'beta' },
   { to: '/indices', label: '指数', icon: BarChart3 },
   { to: '/data',       label: '数据',   icon: Database },
+] as const
+
+const customNav = [
+  { to: '/market-lab', label: '市场实验室', icon: Beaker, badge: 'beta' },
+  { to: '/quantx', label: 'QuantX', icon: Zap, badge: 'beta' },
 ] as const
 
 /** 亮/暗主题切换 — 状态存 localStorage, 生效见 lib/theme.ts */
@@ -557,7 +560,7 @@ export function Layout() {
     badge: item.badge,
   }))
 
-  const allNav: NavItem[] = [...nav, ...analysisNav, ...extensionNav]
+  const allNav: NavItem[] = [...nav, ...customNav, ...analysisNav, ...extensionNav]
   const savedOrder = prefs?.nav_order ?? []
 
   const navItems = savedOrder.length > 0
@@ -588,7 +591,11 @@ export function Layout() {
     : allNav
 
   const hiddenIds = new Set(prefs?.nav_hidden ?? [])
-  const visibleNavItems = navItems.filter(n => !hiddenIds.has(n.to) && !hiddenIds.has(n.to.replace(/^\/analysis\//, '')))
+  const builtinIds = new Set<string>(nav.map(n => n.to))
+  const visibleNavItems = [
+    ...navItems.filter(n => builtinIds.has(n.to)),
+    ...navItems.filter(n => !builtinIds.has(n.to)),
+  ].filter(n => !hiddenIds.has(n.to) && !hiddenIds.has(n.to.replace(/^\/analysis\//, '')))
 
   const doEnableRealtime = async () => {
     await toggleQuote.mutateAsync(true)

@@ -22,11 +22,12 @@ import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { usePreferences } from '@/lib/useSharedQueries'
+import { getFrontendExtensionNavigation } from '@/extensions/registry'
 
 interface NavEntry {
   id: string
   label: string
-  type: 'builtin' | 'analysis'
+  type: 'builtin' | 'custom' | 'analysis'
   visible: boolean
 }
 
@@ -50,6 +51,16 @@ const BUILTIN_PAGES: NavEntry[] = [
   { id: '/review', label: '复盘', type: 'builtin', visible: true },
   { id: '/indices', label: '指数', type: 'builtin', visible: true },
   { id: '/data', label: '数据', type: 'builtin', visible: true },
+]
+
+const CUSTOM_PAGES: NavEntry[] = [
+  { id: '/market-lab', label: '市场实验室', type: 'custom', visible: true },
+  { id: '/quantx', label: 'QuantX', type: 'custom', visible: true },
+]
+
+const groupEntries = (entries: NavEntry[]) => [
+  ...entries.filter(entry => entry.type === 'builtin'),
+  ...entries.filter(entry => entry.type !== 'builtin'),
 ]
 
 // ── Sortable row ──
@@ -105,7 +116,7 @@ function SortableItem({ entry, hidden, onToggleHidden, badgeEnabled, onToggleBad
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${
           entry.type === 'analysis' ? 'bg-accent/10 text-accent' : 'bg-elevated text-muted'
         }`}>
-          {entry.type === 'builtin' ? '内置' : '扩展'}
+          {entry.type === 'builtin' ? '内置' : entry.type === 'custom' ? '自建' : '扩展'}
         </span>
       </div>
       <div className="flex justify-center">
@@ -122,7 +133,7 @@ function SortableItem({ entry, hidden, onToggleHidden, badgeEnabled, onToggleBad
         </button>
       </div>
       <div className="flex justify-center">
-        {entry.type === 'builtin' ? (
+        {entry.type !== 'analysis' ? (
           <Link
             to={entry.id}
             className="rounded p-1 text-muted hover:text-accent hover:bg-accent/10 transition-colors"
@@ -173,14 +184,20 @@ export function SettingsMenuSettingsPanel() {
     type: 'analysis' as const,
     visible: m.visible,
   }))
+  const extensionEntries: NavEntry[] = getFrontendExtensionNavigation().map(item => ({
+    id: item.route.path,
+    label: item.label,
+    type: 'custom',
+    visible: true,
+  }))
 
   const allEntries = useMemo(() => {
     const saved = prefs?.nav_order ?? []
+    const defaultEntries = [...BUILTIN_PAGES, ...CUSTOM_PAGES, ...analysisEntries, ...extensionEntries]
     const entryMap = new Map<string, NavEntry>()
-    for (const e of BUILTIN_PAGES) entryMap.set(e.id, e)
-    for (const e of analysisEntries) entryMap.set(e.id, e)
+    for (const e of defaultEntries) entryMap.set(e.id, e)
 
-    if (saved.length === 0) return [...BUILTIN_PAGES, ...analysisEntries]
+    if (saved.length === 0) return defaultEntries
 
     const ordered: NavEntry[] = []
     const seen = new Set<string>()
@@ -191,7 +208,7 @@ export function SettingsMenuSettingsPanel() {
         seen.add(id)
       }
     }
-    for (const e of [...BUILTIN_PAGES, ...analysisEntries]) {
+    for (const e of defaultEntries) {
       if (seen.has(e.id)) continue
       // 未保存过排序的新条目: 内置页插回默认位置, 分析菜单追加到末尾
       const defaultIndex = BUILTIN_PAGES.findIndex(p => p.id === e.id)
@@ -205,8 +222,8 @@ export function SettingsMenuSettingsPanel() {
       else if (defaultIndex >= 0) ordered.unshift(e)
       else ordered.push(e)
     }
-    return ordered
-  }, [prefs?.nav_order, analysisEntries])
+    return groupEntries(ordered)
+  }, [prefs?.nav_order, analysisEntries, extensionEntries])
 
   const hiddenSet = useMemo(() => new Set(prefs?.nav_hidden ?? []), [prefs?.nav_hidden])
 
@@ -236,7 +253,7 @@ export function SettingsMenuSettingsPanel() {
       else if (defaultIndex >= 0) result.unshift(e)
       else result.push(e)
     }
-    return result
+    return groupEntries(result)
   }, [localOrder, prefs?.nav_order, allEntries])
 
   const saveNavOrder = useMutation({
@@ -264,6 +281,7 @@ export function SettingsMenuSettingsPanel() {
     const ids = orderedEntries.map(e => e.id)
     const oldIdx = ids.indexOf(active.id as string)
     const newIdx = ids.indexOf(over.id as string)
+    if ((orderedEntries[oldIdx]?.type === 'builtin') !== (orderedEntries[newIdx]?.type === 'builtin')) return
     const reordered = arrayMove(ids, oldIdx, newIdx)
     setLocalOrder(reordered)
     saveNavOrder.mutate(reordered)
@@ -293,7 +311,7 @@ export function SettingsMenuSettingsPanel() {
         <div className="text-[11px] uppercase tracking-[0.2em] text-accent/80">菜单设置</div>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">调整左侧菜单顺序</h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">
-          拖动左侧手柄调整菜单排列顺序，点击眼睛图标控制菜单在侧边栏中的显示或隐藏。
+          内置页面在前，自建与扩展页面在后。拖动左侧手柄调整组内顺序，点击眼睛图标控制显示或隐藏。
         </p>
       </section>
 

@@ -94,18 +94,16 @@ function SectorPanel() {
   const [selectedSector, setSelectedSector] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [memberMetric, setMemberMetric] = useState<'return_pct' | 'main_net_amount' | 'active_buy_net_amount'>('return_pct')
-  const radar = useQuery({ queryKey: QK.marketLabRadar(dimension, asOf), queryFn: () => api.marketLabSectorRadar(dimension, asOf) })
-  const flow = useQuery({ queryKey: QK.marketLabSector(dimension), queryFn: () => api.marketLabSectorFlow(dimension) })
+  const radar = useQuery({ queryKey: QK.marketLabRadar(dimension, asOf), queryFn: () => api.marketLabSectorRadar(dimension, asOf), staleTime: 5 * 60_000 })
+  const flow = useQuery({ queryKey: QK.marketLabSector(dimension), queryFn: () => api.marketLabSectorFlow(dimension), staleTime: 5 * 60_000 })
   const members = useQuery({
     queryKey: QK.marketLabMembers(dimension, selectedSector ?? '', asOf),
     queryFn: () => api.marketLabSectorMembers(selectedSector!, dimension, asOf),
     enabled: Boolean(selectedSector),
+    staleTime: 5 * 60_000,
   })
   const rows = radar.data?.rows ?? []
   const flowRows = flow.data?.rows ?? []
-  useEffect(() => {
-    if (!asOf && radar.data?.as_of) setAsOf(radar.data.as_of)
-  }, [asOf, radar.data?.as_of])
   useEffect(() => {
     if (!rows.length) return
     const radarHasSelection = rows.some(row => row.sector === selectedSector)
@@ -172,7 +170,7 @@ function SectorPanel() {
   </div>
 
   if (radar.isLoading) return <Empty text="正在计算板块资金雷达…" />
-  if (!radar.data?.available) return <Empty text={radar.data?.detail ?? '暂无板块资金数据'} />
+  if (!radar.data?.available) return <Empty text={radar.error?.message ?? radar.data?.detail ?? '暂无板块资金数据'} />
   return <div className="space-y-4">
     <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
       <div><h2 className="text-base font-semibold">板块资金雷达</h2><p className="text-xs text-muted">按资金流入强弱识别进攻与撤退板块；评分和排名沿用 OneChart 口径。</p></div>
@@ -191,14 +189,14 @@ function SectorPanel() {
     </div>
     <div className={`${card} grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]`}>
       <div><h3 className="text-sm font-semibold">板块明细 · {selectedSector ?? '--'}</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[680px] text-right text-xs"><thead className="text-muted"><tr><th className="pb-2 text-left">指标</th><th>数值</th><th>排名</th><th>评分</th><th>1日变化</th><th>3日变化</th><th>5日变化</th></tr></thead><tbody>{rows.filter(row => row.sector === selectedSector).map(row => ([['波段流入率', row.swing_ratio_pct, row.swing_rank, row.swing_score, row.swing_rank_change_1d, row.swing_rank_change_3d, row.swing_rank_change_5d], ['单日流入率', row.flow_ratio_pct, row.ratio_rank, row.ratio_score, row.ratio_rank_change_1d, row.ratio_rank_change_3d, row.ratio_rank_change_5d], ['单日净额(亿)', row.flow_yuan / 1e8, row.amount_rank, row.amount_score, row.amount_rank_change_1d, row.amount_rank_change_3d, row.amount_rank_change_5d]] as const).map(values => <tr key={values[0]} className="border-t border-border/60"><td className="py-2 text-left">{values[0]}</td>{values.slice(1).map((value, index) => <td key={index} className="font-mono">{fmt(value as number)}</td>)}</tr>))}</tbody></table></div></div>
-      <div className="min-w-0 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"><h3 className="text-sm font-semibold">近 3 日资金趋势</h3>{flow.data?.available && selectedFlow ? <div data-testid="sector-flow-trend-chart"><ReactECharts option={trendOption} style={{ height: 220 }} /></div> : <p className="mt-8 text-center text-xs text-muted">暂无逐日资金数据</p>}</div>
+      <div className="min-w-0 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"><h3 className="text-sm font-semibold">近 3 日资金趋势</h3>{flow.data?.available && selectedFlow ? <div data-testid="sector-flow-trend-chart"><ReactECharts option={trendOption} style={{ height: 220 }} /></div> : <p className="mt-8 text-center text-xs text-muted">{flow.error?.message ?? '暂无逐日资金数据'}</p>}</div>
     </div>
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,1.35fr)]">
       <div className={card} data-testid="sector-rank-calendar"><div className="mb-2"><h3 className="text-sm font-semibold">排名日历 · {selectedSector ?? '--'}</h3><p className="text-xs text-muted">纵轴越靠上排名越强；使用当前指标近 {selectedHistory.length} 个交易日。</p></div>{selectedHistory.length ? <ReactECharts option={calendarOption} style={{ height: 280 }} /> : <Empty text="暂无排名历史" />}</div>
       <div className={card} data-testid="sector-member-evidence">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-semibold">成分股强度 · {selectedSector ?? '--'}</h3><p className="text-xs text-muted">{members.data?.member_count ?? 0} 只本地成分 · 资金质量 {members.data?.flow_quality ?? '--'} · 主动买入 {members.data?.active_quality ?? '--'}</p></div><button type="button" className="rounded border border-border px-2.5 py-1.5 text-xs hover:bg-elevated" onClick={exportMembers} disabled={!memberRows}>导出 CSV</button></div>
         <div className="mb-3 flex overflow-hidden rounded border border-border">{([['return_pct', '涨跌幅'], ['main_net_amount', '主力净额'], ['active_buy_net_amount', '主动买入净额']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setMemberMetric(key)} className={`flex-1 px-2 py-1.5 text-xs ${memberMetric === key ? 'bg-accent text-white' : 'hover:bg-elevated'}`}>{label}</button>)}</div>
-        {members.isLoading ? <Empty text="正在加载成分股证据…" /> : !members.data?.available ? <Empty text={members.data?.detail ?? '暂无成分股证据'} /> : memberRows && (memberRows.top.length || memberRows.bottom.length) ? <div className="grid gap-4 md:grid-cols-2">{([['TOP', memberRows.top], ['BOTTOM', memberRows.bottom]] as const).map(([title, evidenceRows]) => <div key={title}><div className="mb-1 text-xs font-semibold text-muted">{title}</div>{evidenceRows.map(row => <div key={`${title}-${row.symbol}`} className="grid grid-cols-[64px_minmax(0,1fr)_86px] gap-2 border-t border-border/60 py-1.5 text-xs"><span className="font-mono text-muted">{row.symbol}</span><span className="truncate" title={row.name}>{row.name}</span><span className={`text-right font-mono ${(row[memberMetric] ?? 0) >= 0 ? 'text-bull' : 'text-bear'}`}>{memberMetric === 'return_pct' ? `${fmt(row[memberMetric])}%` : billion(row[memberMetric] ?? 0)}</span></div>)}</div>)}</div> : <Empty text={memberMetric === 'active_buy_net_amount' ? '当前数据源不提供主动买入净额' : '当前指标暂无可用成分数据'} />}
+        {members.isLoading ? <Empty text="正在加载成分股证据…" /> : !members.data?.available ? <Empty text={members.error?.message ?? members.data?.detail ?? '暂无成分股证据'} /> : memberRows && (memberRows.top.length || memberRows.bottom.length) ? <div className="grid gap-4 md:grid-cols-2">{([['TOP', memberRows.top], ['BOTTOM', memberRows.bottom]] as const).map(([title, evidenceRows]) => <div key={title}><div className="mb-1 text-xs font-semibold text-muted">{title}</div>{evidenceRows.map(row => <div key={`${title}-${row.symbol}`} className="grid grid-cols-[64px_minmax(0,1fr)_86px] gap-2 border-t border-border/60 py-1.5 text-xs"><span className="font-mono text-muted">{row.symbol}</span><span className="truncate" title={row.name}>{row.name}</span><span className={`text-right font-mono ${(row[memberMetric] ?? 0) >= 0 ? 'text-bull' : 'text-bear'}`}>{memberMetric === 'return_pct' ? `${fmt(row[memberMetric])}%` : billion(row[memberMetric] ?? 0)}</span></div>)}</div>)}</div> : <Empty text={memberMetric === 'active_buy_net_amount' ? '当前数据源不提供主动买入净额' : '当前指标暂无可用成分数据'} />}
       </div>
     </div>
   </div>
@@ -209,7 +207,7 @@ type ContributionWindow = '1' | '3' | '5' | '10'
 function MacroPanel() {
   const ct = useChartTheme()
   const [contributionWindow, setContributionWindow] = useState<ContributionWindow>('1')
-  const query = useQuery({ queryKey: QK.marketLabMacro, queryFn: api.marketLabMacroDispersion })
+  const query = useQuery({ queryKey: QK.marketLabMacro, queryFn: api.marketLabMacroDispersion, staleTime: 5 * 60_000 })
   const history = query.data?.history ?? []
   const indices = query.data?.indices ?? []
   const dates = history.map(point => point.date)
@@ -237,7 +235,7 @@ function MacroPanel() {
     }
   }, [ct, dates, history, indices])
   if (query.isLoading) return <Empty text="正在计算宏观离散度…" />
-  if (!query.data?.available) return <Empty text={query.data?.detail ?? '本地行业历史不足，暂不能计算'} />
+  if (!query.data?.available) return <Empty text={query.error?.message ?? query.data?.detail ?? '本地行业历史不足，暂不能计算'} />
   const selectedContribution = query.data.contribution_windows?.[contributionWindow] ?? { high: [], low: [] }
   const zoneTone = query.data.ma3 < 30 ? 'bg-bull/10 text-bull' : query.data.ma3 < 70 ? 'bg-accent/10 text-accent' : query.data.ma3 < 120 ? 'bg-warning/10 text-warning' : 'bg-bear/10 text-bear'
   const contributionColumn = (title: string, rows: MacroContributionRow[], high: boolean) => <div className="min-w-0">
