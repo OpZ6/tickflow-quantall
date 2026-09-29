@@ -52,7 +52,11 @@ def test_five_dimensions_classify_two_contrasting_published_days():
     assert stressed["headline"] == "普跌与接力亏损共振"
     assert [row["tone"] for row in stressed["dimensions"]] == ["red", "red", "amber", "amber", "amber"]
     assert len(stressed["dimensions"]) == 5
-    assert all(len(row["metrics"]) <= 3 for row in stressed["dimensions"])
+    assert stressed["coverage"] == {"complete": 5, "total": 5}
+    assert "上涨 896 家" in stressed["summary"]
+    assert len(stressed["dimensions"][0]["metrics"]) == 6
+    assert all("tone" in metric for row in stressed["dimensions"] for metric in row["metrics"])
+    assert len(stressed["dimensions"][4]["series"]) == 12
 
     recover_day = date(2026, 9, 29)
     recovering = build_risk_radar(
@@ -62,9 +66,11 @@ def test_five_dimensions_classify_two_contrasting_published_days():
         liquidity=_liquidity(recover_day, 14216, 18742),
         ladder=[{"board_height": 1, "count": 47}, {"board_height": 2, "count": 7}, {"board_height": 3, "count": 1}, {"board_height": 4, "count": 1}, {"board_height": 6, "count": 1}],
         indices=_indices(0.36),
+        state_history=[{"trade_date": down_day, "up_ratio_pct": 16.12, "premium_rate_pct": -1.95, "advance_rate_pct": 13.5, "max_board": 5}],
     )
-    assert recovering["headline"] == "广度与接力正常，量能仍需观察"
+    assert recovering["headline"] == "广度与接力修复，量能继续收缩"
     assert [row["tone"] for row in recovering["dimensions"]] == ["green", "green", "amber", "amber", "amber"]
+    assert "前日 13.5%" in recovering["counter_evidence"]
 
 
 def test_missing_input_is_reported_without_a_false_normal_state():

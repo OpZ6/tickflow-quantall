@@ -331,6 +331,12 @@ class QuantXReviewRepository:
             self.facts.get_market_breadth(day), DatasetId.MARKET_BREADTH_DAILY,
         )
         state = self.facts.get_market_state(day)
+        state_history = _preferred_by_day(
+            self.facts.get_range(
+                DatasetId.MARKET_STATE_DAILY, day - timedelta(days=45), day,
+            ),
+            DatasetId.MARKET_STATE_DAILY,
+        )
         liquidity = _preferred_by_day(
             self.facts.get_range(
                 DatasetId.MARKET_LIQUIDITY_DAILY, day - timedelta(days=45), day,
@@ -343,9 +349,10 @@ class QuantXReviewRepository:
         events = _preferred(
             self.facts.get_limit_events(day), DatasetId.LIMIT_EVENT_DAILY,
         )
+        event_rows = events.to_dicts()
         ladder_rows = ladder.to_dicts()
         covered = {row["symbol"] for row in ladder_rows}
-        for row in events.to_dicts():
+        for row in event_rows:
             if (
                 row.get("event_type") == "limit_up"
                 and row.get("symbol") not in covered
@@ -396,6 +403,8 @@ class QuantXReviewRepository:
             breadth=breadth.row(0, named=True) if not breadth.is_empty() else None,
             state=state.row(0, named=True) if not state.is_empty() else None,
             liquidity=liquidity.to_dicts(), ladder=heights, indices=indices,
+            state_history=state_history.to_dicts(),
+            broken_board_count=sum(row.get("event_type") == "broken_board" for row in event_rows) if event_rows else None,
         )
 
     def _apply_market(

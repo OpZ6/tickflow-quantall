@@ -4765,6 +4765,8 @@ export interface QuantXReviewIndexRow {
 export interface QuantXRiskRadar {
   headline: string
   summary: string
+  counter_evidence: string
+  coverage: { complete: number; total: number }
   algorithm_version: string
   missing: string[]
   dimensions: Array<{
@@ -4772,9 +4774,20 @@ export interface QuantXRiskRadar {
     title: string
     tone: 'red' | 'amber' | 'green' | null
     status: string
-    metrics: Array<{ label: string; value: string }>
+    metrics: Array<{ label: string; value: string; tone: 'red' | 'amber' | 'green' | null }>
     explanation: string
-    details: Array<{ label: string; value: string }>
+    details: Array<{ label: string; value: string; tone: 'red' | 'amber' | 'green' | null }>
+    series: Array<{
+      kind: 'ordinary' | 'sentiment'
+      code: string
+      name: string
+      deviation_pct: number
+      change_pct: number | null
+      close: number | null
+      ma10: number | null
+      zone: string
+      tone: 'red' | 'amber' | 'green'
+    }>
     source: string
   }>
 }
