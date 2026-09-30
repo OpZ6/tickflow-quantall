@@ -28,6 +28,7 @@ def _stats(rows: list[dict]) -> dict[str, Any]:
     priced = [row["return_pct"] for row in mature if row["return_pct"] is not None]
     open_priced = [row["open_proxy_pct"] for row in mature if row["open_proxy_pct"] is not None]
     net_priced = [row["open_proxy_net_pct"] for row in mature if row["open_proxy_net_pct"] is not None]
+    adverse = [row["max_adverse_pct"] for row in mature if row.get("max_adverse_pct") is not None]
     stages = Counter(row["target_stage"] or "未入池" for row in mature)
     return {
         "sample_count": len(rows), "matured_count": len(mature),
@@ -42,6 +43,10 @@ def _stats(rows: list[dict]) -> dict[str, Any]:
         "unavailable_count": sum(row["outcome_status"] == "unavailable" for row in rows),
         "retained_count": sum(row["target_stage"] is not None for row in mature),
         "up_count": sum(value > 0 for value in priced),
+        "up_rate_pct": round(sum(value > 0 for value in priced) / len(priced) * 100, 2) if priced else None,
+        "priced_dates": len({row["date"] for row in mature if row["return_pct"] is not None}),
+        "mean_adverse_pct": round(sum(adverse) / len(adverse), 2) if adverse else None,
+        "adverse_count": len(adverse),
         "mean_return_pct": round(sum(priced) / len(priced), 2) if priced else None,
         "median_return_pct": round(median(priced), 2) if priced else None,
         "open_proxy_count": len(open_priced),
@@ -279,6 +284,12 @@ def build_review(repo: StockPoolRepository, kline_repo: Any, trade_date: date, w
         source_id: {"label": meta[0], **with_comparison([row for row in observations if source_id in row["added_source_ids"]])}
         for source_id, meta in SOURCE_META.items()
     }
+    combinations = sorted({tuple(row["source_ids"]) for row in observations if len(row["source_ids"]) >= 2})
+    combination_stats = {
+        "+".join(sources): {"label": "+".join(SOURCE_META[source][0] for source in sources),
+                            **with_comparison([row for row in observations if tuple(row["source_ids"]) == sources])}
+        for sources in combinations
+    }
     transitions = sorted({f'{row["previous_stage"] or "未入池"} → {row["stage"]}' for row in observations})
     transition_stats = {
         transition: with_comparison([row for row in observations if f'{row["previous_stage"] or "未入池"} → {row["stage"]}' == transition])
@@ -308,6 +319,6 @@ def build_review(repo: StockPoolRepository, kline_repo: Any, trade_date: date, w
         "skipped_dates": skipped,
         "groups": groups,
         "attribution": {"sources": source_stats, "added_sources": added_source_stats,
-                        "transitions": transition_stats, "research": research_stats},
+                        "transitions": transition_stats, "research": research_stats, "combinations": combination_stats},
         "rows": sorted(observations, key=lambda row: (row["date"], row["symbol"]), reverse=True),
     }

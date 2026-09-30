@@ -7,6 +7,8 @@ import { api, type MacroContributionRow, type SectorRadarRow } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { useChartTheme } from '@/lib/theme'
 import { SectorActivityPanel } from '@/components/SectorActivityPanel'
+import { EtfMomentumPanel } from '@/components/EtfMomentumPanel'
+import { ConceptOverlapPanel, SectorResearchPanel } from '@/components/SectorResearchPanel'
 
 type Tab = 'etf' | 'sector' | 'macro' | 'risk'
 
@@ -38,38 +40,6 @@ function Empty({ text }: { text: string }) {
   return <div className="grid min-h-64 place-items-center rounded-lg border border-dashed border-border text-sm text-muted">{text}</div>
 }
 
-function EtfPanel() {
-  const query = useQuery({ queryKey: QK.marketLabEtf, queryFn: () => api.marketLabEtfMomentum(60) })
-  const rows = query.data?.rows ?? []
-  const option = useMemo(() => ({
-    tooltip: { trigger: 'axis' }, grid: { left: 110, right: 30, top: 20, bottom: 35 },
-    xAxis: { type: 'value', name: '%' },
-    yAxis: { type: 'category', data: rows.slice(0, 15).map(row => row.name).reverse(), axisLabel: { width: 90, overflow: 'truncate' } },
-    series: [{ type: 'bar', data: rows.slice(0, 15).map(row => row.weighted_momentum_pct).reverse(), itemStyle: { color: '#8b5cf6' } }],
-  }), [rows])
-  if (query.isLoading) return <Empty text="正在计算 ETF 动量…" />
-  if (!query.data?.available) return <Empty text={query.data?.detail ?? '暂无 ETF 数据'} />
-  return <div className="space-y-4">
-    <div className={card}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div><h2 className="text-base font-semibold">主流 ETF 动量排名</h2><p className="text-xs text-muted">{query.data.formula}；斜率动量为 20 日对数回归年化收益 × R²</p></div>
-        <span className="rounded bg-accent/10 px-2 py-1 text-xs text-accent">截至 {rows[0]?.as_of}</span>
-      </div>
-      <ReactECharts option={option} style={{ height: 360 }} />
-    </div>
-    <div className={`${card} overflow-x-auto`}>
-      <table className="w-full min-w-[980px] text-right text-xs">
-        <thead className="text-muted"><tr><th className="py-2 text-left">排名 / 标的</th><th>1日</th><th>5日</th><th>20日</th><th>50日</th><th>加权动量</th><th>斜率动量</th><th>量比5/20</th><th>较前日</th></tr></thead>
-        <tbody>{rows.map(row => <tr key={row.symbol} className="border-t border-border/60">
-          <td className="py-2 text-left"><b className="mr-2 text-accent">{row.rank}</b>{row.name}<span className="ml-2 text-muted">{row.symbol}</span></td>
-          {[row.return_1d_pct, row.return_5d_pct, row.return_20d_pct, row.return_50d_pct, row.weighted_momentum_pct, row.slope_momentum_pct].map((v, i) => <td key={i} className={(v ?? 0) >= 0 ? 'text-bull' : 'text-bear'}>{fmt(v)}%</td>)}
-          <td>{fmt(row.volume_ratio_5_20)}</td><td>{row.rank_change == null ? '--' : `${row.rank_change > 0 ? '↑' : row.rank_change < 0 ? '↓' : '→'} ${Math.abs(row.rank_change)}`}</td>
-        </tr>)}</tbody>
-      </table>
-    </div>
-  </div>
-}
-
 type RadarMetric = 'swing' | 'ratio' | 'amount' | 'change'
 type RankWindow = 1 | 3 | 5
 
@@ -87,11 +57,11 @@ const radarDays = (row: SectorRadarRow, metric: RadarMetric, high: boolean) => {
 }
 
 function SectorPanel() {
-  const [view, setView] = useState<'funds' | 'activity' | 'external'>('activity')
+  const [view, setView] = useState<'funds' | 'activity' | 'external' | 'phase' | 'overlap' | 'outcomes'>('activity')
   return <div className="space-y-4">
-    <div className="flex gap-2">{([['activity', '表现与活跃'], ['funds', 'THS板块压力'], ['external', '外部资金观察']] as const).map(([key, label]) =>
+    <div className="flex flex-wrap gap-2">{([['activity', '表现与活跃'], ['phase', '资金与宽度'], ['overlap', '成员重叠'], ['outcomes', '后续收益'], ['funds', 'THS板块压力'], ['external', '外部资金观察']] as const).map(([key, label]) =>
       <button key={key} aria-pressed={view === key} onClick={() => setView(key)} className={`rounded border px-3 py-2 text-xs ${view === key ? 'border-accent bg-accent/10 text-accent' : 'border-border text-secondary hover:bg-elevated'}`}>{label}</button>)}</div>
-    {view === 'activity' ? <SectorActivityPanel /> : <SectorFundsPanel key={view} external={view === 'external'} />}
+    {view === 'activity' ? <SectorActivityPanel /> : view === 'phase' || view === 'outcomes' ? <SectorResearchPanel view={view} /> : view === 'overlap' ? <ConceptOverlapPanel /> : <SectorFundsPanel key={view} external={view === 'external'} />}
   </div>
 }
 
@@ -370,6 +340,6 @@ export function MarketLab() {
   return <div className="space-y-5 p-4 md:p-6" data-testid="market-lab">
     <div><h1 className="text-xl font-semibold">市场实验室</h1><p className="mt-1 text-sm text-muted">复现 ETF 动量、板块资金趋势、宏观离散度、仓位与交易模拟，并沿用 TickFlow 本地数据底座。</p></div>
     <div className="flex flex-wrap gap-2">{tabs.map(item => <button key={item.key} onClick={() => setTab(item.key)} className={`inline-flex items-center gap-2 rounded-btn border px-3 py-2 text-sm ${tab === item.key ? 'border-accent bg-accent/10 text-accent' : 'border-border text-secondary hover:bg-elevated'}`}><item.icon className="h-4 w-4" />{item.label}</button>)}</div>
-    {tab === 'etf' && <EtfPanel />}{tab === 'sector' && <SectorPanel />}{tab === 'macro' && <MacroPanel />}{tab === 'risk' && <RiskPanel />}
+    {tab === 'etf' && <EtfMomentumPanel />}{tab === 'sector' && <SectorPanel />}{tab === 'macro' && <MacroPanel />}{tab === 'risk' && <RiskPanel />}
   </div>
 }

@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.services.market_lab import (
@@ -18,6 +18,7 @@ from app.services.market_lab import (
     sector_members_from_repo,
     sector_radar_from_repo,
 )
+from app.services.sector_research import concept_overlap_from_repo, sector_research
 
 router = APIRouter(prefix="/api/market-lab", tags=["market-lab"])
 
@@ -61,8 +62,10 @@ class SimulationIn(BaseModel):
 
 
 @router.get("/etf-momentum")
-def etf_momentum(request: Request, limit: int = Query(40, ge=1, le=200)) -> dict:
-    return etf_momentum_from_repo(request.app.state.repo, limit=limit)
+def etf_momentum(request: Request, limit: int = Query(40, ge=1, le=200),
+                 symbols: str | None = Query(None, max_length=1999, pattern=r"^\d{6}\.(SH|SZ|BJ)(,\d{6}\.(SH|SZ|BJ))*$")) -> dict:
+    return etf_momentum_from_repo(request.app.state.repo, limit=limit,
+                                 symbols=symbols.split(",") if symbols else None)
 
 
 @router.get("/sector-flow")
@@ -73,6 +76,23 @@ def sector_flow(request: Request, dimension: str = Query("industry", pattern="^(
         fact_repo=getattr(request.app.state, "market_facts", None),
         ths_only=taxonomy == "ths",
     )
+
+
+@router.get("/sector-research")
+def research(request: Request, dimension: Literal["industry_level1", "industry_level2"] = "industry_level1",
+             as_of: date | None = None, horizon: int = Query(5, ge=1, le=10)) -> dict:
+    if horizon not in (1, 3, 5, 10):
+        raise HTTPException(422, "horizon must be 1, 3, 5 or 10")
+    try:
+        return sector_research(request.app.state.repo, dimension, as_of, horizon)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/concept-overlap")
+def overlap(request: Request, sector: str = Query("", max_length=120),
+            limit: int = Query(10, ge=1, le=30)) -> dict:
+    return concept_overlap_from_repo(request.app.state.repo, sector, limit)
 
 
 @router.get("/sector-radar")

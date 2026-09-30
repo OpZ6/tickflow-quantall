@@ -54,7 +54,7 @@ export function StockPoolHistoryReview({ date, onOpen }: { date: string; onOpen:
   const [costBps, setCostBps] = useState(20)
   const [group, setGroup] = useState<string>('all')
   const [topic, setTopic] = useState('')
-  const [attributionMode, setAttributionMode] = useState<'sources' | 'added_sources' | 'transitions' | 'research'>('sources')
+  const [attributionMode, setAttributionMode] = useState<'sources' | 'added_sources' | 'transitions' | 'research' | 'combinations'>('sources')
   const [flowMode, setFlowMode] = useState<FlowMode>('outcome')
   const [showAllFlows, setShowAllFlows] = useState(false)
   const [transition, setTransition] = useState('')
@@ -179,7 +179,6 @@ export function StockPoolHistoryReview({ date, onOpen }: { date: string; onOpen:
   const attributionRows = Object.entries(data?.attribution[attributionMode] ?? {})
     .filter(([, item]) => item.matured_count > 0)
     .sort((a, b) => b[1].matured_count - a[1].matured_count)
-    .slice(0, attributionMode === 'transitions' ? 12 : 9)
   const coverageDays = [...new Set([...(data?.anchor_dates ?? []), ...(data?.skipped_dates.map(item => item.date) ?? [])])].sort()
 
   return <section className="space-y-3">
@@ -265,10 +264,10 @@ export function StockPoolHistoryReview({ date, onOpen }: { date: string; onOpen:
       </div>
 
       {!topic && <div className="rounded-[9px] border border-[#353539] bg-[#151517] p-3.5">
-        <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-xs font-semibold">全局来源与迁移拆分</h3><p className="mt-0.5 text-[10px] text-muted">各类可能重叠；对照差按观察日等权，结果包含历史回放。</p></div><div className="flex rounded border border-border bg-base p-0.5 text-[10px]">{([['sources', '九路来源'], ['added_sources', '新增来源'], ['transitions', '具体迁移'], ['research', '研究材料']] as const).map(([mode, label]) => <button key={mode} onClick={() => setAttributionMode(mode)} className={`rounded px-2 py-1 ${attributionMode === mode ? 'bg-accent/20 text-accent' : 'text-muted hover:text-foreground'}`}>{label}</button>)}</div></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-xs font-semibold">入池理由与后续表现</h3><p className="mt-0.5 text-[10px] text-muted">全局候选样本；九路来源可重叠，完整来源组合互斥。周期跟随上方1/3/5日；结果包含历史回放，描述性比较不代表因果贡献。</p></div><div className="flex flex-wrap rounded border border-border bg-base p-0.5 text-[10px]">{([['sources', '九路来源'], ['combinations', '来源组合'], ['added_sources', '新增来源'], ['transitions', '具体迁移'], ['research', '研究材料']] as const).map(([mode, label]) => <button key={mode} onClick={() => setAttributionMode(mode)} className={`rounded px-2 py-1 ${attributionMode === mode ? 'bg-accent/20 text-accent' : 'text-muted hover:text-foreground'}`}>{label}</button>)}</div></div>
         {attributionMode === 'research' && <p className="mt-2 text-[10px] text-muted">SMNC 标题单股细分在 {data.research_breakdown_observations} / {data.groups.all.matured_count} 次到期观察中有记录；旧快照未记录不视为零。</p>}
         {(attributionMode === 'added_sources' || attributionMode === 'transitions') && <p className="mt-2 text-[10px] text-muted">变化归因需观察日与前一日均有按时首次版；下列“实盘可核验”只计算满足该条件的到期观察。</p>}
-        <div className="mt-2 grid gap-1.5 md:grid-cols-2 xl:grid-cols-3">{attributionRows.map(([key, item]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded border border-[#29292e] bg-[#111113] px-2.5 py-2 text-[10px]"><span className="truncate text-secondary" title={item.label || key}>{item.label || key}</span><b className="font-mono text-foreground">{item.matured_count}次</b><span className="mt-0.5 text-muted">开盘代理中位 {signed(item.median_open_proxy_pct)}</span><span className="mt-0.5 font-mono text-muted">{attributionMode === 'added_sources' || attributionMode === 'transitions' ? `实盘可核验变化 ${item.recorded_transition_count ?? 0}次` : `同日差 ${signed(item.peer_open_diff_pct)}`}</span></div>)}{!attributionRows.length && <div className="py-3 text-[10px] text-muted">暂无到期观察</div>}</div>
+        <div className="mt-3 max-h-[450px] overflow-auto" data-testid="pool-rule-outcomes"><table className="w-full min-w-[1050px] text-right text-[10px]"><thead className="sticky top-0 bg-[#111113] text-muted"><tr>{['入池理由', '到期／有行情', '行情日期／不同股票', '收盘上涨比例', '收盘均值／中位', '开盘代理中位', '同日池内差', '期间最低变化均值', '可核验／其余'].map(label => <th key={label} className="px-2 py-2 first:text-left">{label}</th>)}</tr></thead><tbody>{attributionRows.map(([key, item]) => <tr key={key} className="border-t border-border text-secondary"><td className="px-2 py-2.5 text-left">{item.label || key}</td><td>{item.matured_count}／{item.priced_count}</td><td>{item.priced_dates}／{item.unique_symbols}</td><td>{percent(item.up_count, item.priced_count)}</td><td>{signed(item.mean_return_pct)}／{signed(item.median_return_pct)}</td><td>{signed(item.median_open_proxy_pct)}</td><td>{signed(item.peer_open_diff_pct)} <span className="text-muted">{item.peer_open_days}日</span></td><td title="次日开盘至目标日期的最低价相对次日开盘变化；不是峰谷最大回撤">{signed(item.mean_adverse_pct)} <span className="text-muted">{item.adverse_count}次</span></td><td>{attributionMode === 'added_sources' || attributionMode === 'transitions' ? item.recorded_transition_count ?? 0 : item.recorded_count}／{item.matured_count - (attributionMode === 'added_sources' || attributionMode === 'transitions' ? item.recorded_transition_count ?? 0 : item.recorded_count)}</td></tr>)}</tbody></table>{!attributionRows.length && <p className="py-5 text-xs text-muted">暂无到期观察</p>}</div>
       </div>}
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(310px,1fr)]">

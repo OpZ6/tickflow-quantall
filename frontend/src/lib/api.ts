@@ -2339,6 +2339,7 @@ export interface EtfMomentumRow {
   slope_momentum_pct: number | null
   volume_ratio_5_20: number | null
   momentum_change_pct: number | null
+  previous_metrics: Record<string, number | null>
 }
 
 export interface EtfMomentumResponse {
@@ -2347,6 +2348,27 @@ export interface EtfMomentumResponse {
   unit: 'percent'
   formula?: string
   rows: EtfMomentumRow[]
+  requested_count?: number
+  excluded_count?: number
+}
+
+export interface SectorResearchStat {
+  sample_count: number; date_count: number; mean_excess_pct: number | null
+  median_return_pct: number | null; outperform_pct: number | null
+}
+export interface SectorResearchResponse {
+  available: boolean; detail: string; trade_date?: string; dimension?: string; horizon?: number
+  phase: Array<{ sector: string; x: number | null; y: number | null; previous_x: number | null; previous_y: number | null
+    breadth_pct: number | null; amount_yi: number; member_count: number; breadth_members: number; pressure_members: number }>
+  outcomes: null | { cells: Array<SectorResearchStat & { band: number; expanding: boolean }>
+    sectors: Array<SectorResearchStat & { sector: string; breadth_pct: number | null; breadth_change_5d_pp: number | null }>
+    pending_count: number; missing_count: number; matured_count: number; first_date: string | null; last_date: string | null }
+}
+export interface ConceptOverlapResponse {
+  available: boolean; detail: string; concepts: string[]; sector: string; member_count: number; related_count: number
+  rows: Array<{ sector: string; member_count: number; common_count: number; jaccard_pct: number
+    coverage_pct: number; other_coverage_pct: number; common_codes: string[]; common_members: Array<{ code: string; name: string }> }>
+  edges: Array<{ source: string; target: string; common_count: number; jaccard_pct: number }>
 }
 
 export interface SectorFlowResponse {
@@ -2611,8 +2633,12 @@ export const api = {
       `/api/chanlun/official?symbol=${encodeURIComponent(symbol)}&level=${level}&limit=${limit}`,
       { quiet: true },
     ),
-  marketLabEtfMomentum: (limit = 40) =>
-    request<EtfMomentumResponse>(`/api/market-lab/etf-momentum?limit=${limit}`),
+  marketLabEtfMomentum: (limit = 40, symbols?: string) =>
+    request<EtfMomentumResponse>(`/api/market-lab/etf-momentum?${new URLSearchParams({ limit: String(limit), ...(symbols ? { symbols } : {}) })}`),
+  marketLabSectorResearch: (dimension: string, horizon: number, asOf?: string) =>
+    request<SectorResearchResponse>(`/api/market-lab/sector-research?${new URLSearchParams({ dimension, horizon: String(horizon), ...(asOf ? { as_of: asOf } : {}) })}`),
+  marketLabConceptOverlap: (sector?: string) =>
+    request<ConceptOverlapResponse>(`/api/market-lab/concept-overlap?${new URLSearchParams(sector ? { sector } : {})}`),
   marketLabSectorFlow: (dimension: 'industry' | 'concept' = 'industry', taxonomy: 'ths' | 'source' = 'ths') =>
     request<SectorFlowResponse>(`/api/market-lab/sector-flow?dimension=${dimension}&taxonomy=${taxonomy}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
   marketLabSectorRadar: (dimension: 'industry' | 'concept' = 'industry', asOf?: string, taxonomy: 'ths' | 'source' = 'ths') =>
@@ -5407,6 +5433,7 @@ export interface StockPoolReviewRow {
 export interface StockPoolReviewStats {
   sample_count: number; matured_count: number; matured_dates: number; priced_count: number; unique_symbols: number; retained_count: number; recorded_count: number; recorded_transition_count?: number
   pending_count: number; unavailable_count: number; up_count: number
+  up_rate_pct: number | null; priced_dates: number; mean_adverse_pct: number | null; adverse_count: number
   mean_return_pct: number | null; median_return_pct: number | null; peer_diff_pct: number | null; peer_days: number
   open_proxy_count: number; mean_open_proxy_pct: number | null; median_open_proxy_pct: number | null
   mean_open_proxy_net_pct: number | null; median_open_proxy_net_pct: number | null
@@ -5428,7 +5455,7 @@ export interface StockPoolReview {
   anchor_dates: string[]
   skipped_dates: Array<{ date: string; reason: string }>
   groups: Record<string, StockPoolReviewStats>
-  attribution: Record<'sources' | 'added_sources' | 'transitions' | 'research', Record<string, StockPoolReviewStats & { label?: string }>>
+  attribution: Record<'sources' | 'added_sources' | 'transitions' | 'research' | 'combinations', Record<string, StockPoolReviewStats & { label?: string }>>
   rows: StockPoolReviewRow[]
 }
 

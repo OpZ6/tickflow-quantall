@@ -19,7 +19,7 @@ def _pct(now: float, before: float) -> float:
 def _period_return(closes: list[float], period: int, offset: int = 0) -> float | None:
     end = len(closes) - 1 - offset
     start = end - period
-    if start < 0 or end < 0:
+    if start < 0 or end < 0 or any(not math.isfinite(v) or v <= 0 for v in (closes[end], closes[start])):
         return None
     return _pct(closes[end], closes[start])
 
@@ -27,7 +27,7 @@ def _period_return(closes: list[float], period: int, offset: int = 0) -> float |
 def _slope_momentum(closes: list[float], window: int = 20, offset: int = 0) -> float | None:
     end = len(closes) - offset
     values = closes[max(0, end - window):end]
-    if len(values) < window or any(v <= 0 for v in values):
+    if len(values) < window or any(not math.isfinite(v) or v <= 0 for v in values):
         return None
     ys = [math.log(v) for v in values]
     xs = list(range(len(ys)))
@@ -45,7 +45,7 @@ def _momentum_row(symbol: str, frame: pl.DataFrame, name: str, offset: int = 0) 
     if frame.is_empty() or "close" not in frame.columns:
         return None
     frame = frame.sort("date")
-    closes = [float(v) for v in frame["close"].to_list() if v is not None]
+    closes = [float(v) if v is not None else float("nan") for v in frame["close"].to_list()]
     volumes = [float(v or 0) for v in frame.get_column("volume").to_list()] if "volume" in frame.columns else []
     required = {p: _period_return(closes, p, offset) for p in (1, 5, 20, 50)}
     if any(v is None for v in required.values()):
@@ -97,6 +97,10 @@ def build_etf_momentum(
         row["momentum_change_pct"] = (
             row["weighted_momentum_pct"] - old["weighted_momentum_pct"] if old else None
         )
+        row["previous_metrics"] = {key: old.get(key) if old else None for key in (
+            "return_1d_pct", "return_5d_pct", "return_20d_pct", "return_50d_pct",
+            "weighted_momentum_pct", "slope_momentum_pct", "volume_ratio_5_20",
+        )}
     return current
 
 
@@ -450,14 +454,16 @@ def monte_carlo(
     }
 
 
-def etf_momentum_from_repo(repo, limit: int = 40) -> dict[str, Any]:
+def etf_momentum_from_repo(repo, limit: int = 40, symbols: list[str] | None = None) -> dict[str, Any]:
     instruments = repo.get_etf_instruments()
     if instruments.is_empty() or "symbol" not in instruments.columns:
         return {"available": False, "detail": "本地暂无 ETF 标的或日线数据", "unit": "percent", "rows": []}
-    symbols: list[str] = []
+    requested = list(dict.fromkeys(symbols or []))
+    symbols = requested.copy()
+    latest_date = None
     if hasattr(repo, "get_enriched_latest_asset"):
-        latest, _ = repo.get_enriched_latest_asset("etf")
-        if not latest.is_empty() and {"symbol", "amount"}.issubset(latest.columns):
+        latest, latest_date = repo.get_enriched_latest_asset("etf")
+        if not requested and not latest.is_empty() and {"symbol", "amount"}.issubset(latest.columns):
             symbols = (
                 latest.sort("amount", descending=True)["symbol"]
                 .cast(pl.Utf8).unique(maintain_order=True).head(limit).to_list()
@@ -467,16 +473,20 @@ def etf_momentum_from_repo(repo, limit: int = 40) -> dict[str, Any]:
     names = {}
     if "name" in instruments.columns:
         names = dict(zip(instruments["symbol"].cast(pl.Utf8), instruments["name"].cast(pl.Utf8), strict=False))
-    end = date.today()
+    end = latest_date or date.today()
     start = end - timedelta(days=140)
-    frames = {symbol: repo.get_etf_daily(symbol, start, end) for symbol in symbols}
+    frames = {symbol: repo.get_etf_daily(symbol, start, end) for symbol in symbols if symbol in names}
+    if latest_date:
+        frames = {symbol: frame for symbol, frame in frames.items()
+                  if not frame.is_empty() and frame["date"].max() == latest_date}
     rows = build_etf_momentum(frames, names)
     return {
         "available": bool(rows),
         "detail": None if rows else "ETF 历史不足 51 个交易日",
         "unit": "percent",
         "formula": "1d x 0.4 + 5d x 0.3 + 20d x 0.2 + 50d x 0.1",
-        "universe": "latest turnover top" if hasattr(repo, "get_enriched_latest_asset") else "instrument order",
+        "universe": "custom" if requested else "latest turnover top" if hasattr(repo, "get_enriched_latest_asset") else "instrument order",
+        "requested_count": len(symbols), "excluded_count": len(symbols) - len(rows),
         "rows": rows,
     }
 
