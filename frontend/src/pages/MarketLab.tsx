@@ -89,7 +89,6 @@ const radarDays = (row: SectorRadarRow, metric: RadarMetric, high: boolean) => {
 function SectorPanel() {
   const [view, setView] = useState<'funds' | 'activity' | 'external'>('activity')
   return <div className="space-y-4">
-    <p className="text-xs text-muted">THS完整板块 · 表现与排名 · 与股票池共用概念及成分</p>
     <div className="flex gap-2">{([['activity', '表现与活跃'], ['funds', 'THS板块压力'], ['external', '外部资金观察']] as const).map(([key, label]) =>
       <button key={key} aria-pressed={view === key} onClick={() => setView(key)} className={`rounded border px-3 py-2 text-xs ${view === key ? 'border-accent bg-accent/10 text-accent' : 'border-border text-secondary hover:bg-elevated'}`}>{label}</button>)}</div>
     {view === 'activity' ? <SectorActivityPanel /> : <SectorFundsPanel key={view} external={view === 'external'} />}
