@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repair 2016+ daily bars written with the legacy volume/amount units.
+"""Repair 2015+ daily bars written with the legacy volume/amount units.
 
 The evidenced legacy interval ends on 2025-08-22.  In that interval the local
 parquet files store volume in shares and amount in thousand yuan.  The current
@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
@@ -22,6 +23,7 @@ import polars as pl
 ROOT = Path(__file__).resolve().parents[1]
 DATASETS = ("kline_daily", "kline_daily_enriched")
 DEFAULT_START = date(2016, 1, 1)
+EARLIEST_START = date(2015, 1, 1)
 DEFAULT_END = date(2025, 8, 22)
 
 
@@ -63,11 +65,12 @@ def _targets(data_root: Path, start: date, end: date) -> dict[str, list[Path]]:
 
 
 def _positive_ratio(frame: pl.DataFrame) -> pl.Series:
+    price = "raw_close" if "raw_close" in frame.columns else "close"
     return (
         frame.filter(
-            (pl.col("volume") > 0) & (pl.col("amount") > 0) & (pl.col("close") > 0)
+            (pl.col("volume") > 0) & (pl.col("amount") > 0) & (pl.col(price) > 0)
         )
-        .select((pl.col("amount") / (pl.col("volume") * pl.col("close"))).alias("ratio"))
+        .select((pl.col("amount") / (pl.col("volume") * pl.col(price))).alias("ratio"))
         .get_column("ratio")
     )
 
@@ -91,10 +94,25 @@ def _transform_partition(frame: pl.DataFrame, expected_date: date) -> pl.DataFra
     )
     post = _positive_ratio(transformed)
     if post.min() < 0.1 or post.max() >= 10_000.0:
-        raise RuntimeError(
-            f"{expected_date} post-repair ratio outside evidenced bounds: "
-            f"min={post.min()}, max={post.max()}"
+        # A 0.01-yuan close can coexist with intraday trades above 10 yuan in
+        # old negotiated NEEQ bars. Check the actual price range in those cases.
+        price = "raw_close" if "raw_close" in frame.columns else "close"
+        low = "raw_low" if "raw_low" in frame.columns else "low"
+        high = "raw_high" if "raw_high" in frame.columns else "high"
+        ratio = pl.col("amount") / (pl.col("volume") * pl.col(price))
+        exceptional = transformed.filter(
+            (pl.col("volume") > 0) & (pl.col("amount") > 0) & (pl.col(price) > 0)
+            & ((ratio < 0.1) | (ratio >= 10_000.0))
         )
+        average_price = pl.col("amount") / (pl.col("volume") * 100.0)
+        if {low, high} - set(transformed.columns) or exceptional.filter(
+            ~average_price.is_between(pl.col(low) * 0.99, pl.col(high) * 1.01)
+            .fill_null(False)
+        ).height:
+            raise RuntimeError(
+                f"{expected_date} post-repair ratio outside evidenced bounds: "
+                f"min={post.min()}, max={post.max()}"
+            )
     return transformed
 
 
@@ -142,9 +160,9 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     data_root = args.data_root.resolve()
-    if args.start < DEFAULT_START or args.end > DEFAULT_END or args.start > args.end:
+    if args.start < EARLIEST_START or args.end > DEFAULT_END or args.start > args.end:
         parser.error(
-            f"repair range must stay within {DEFAULT_START}..{DEFAULT_END}"
+            f"repair range must stay within {EARLIEST_START}..{DEFAULT_END}"
         )
 
     plan, targets = _preflight(data_root, args.start, args.end)
@@ -158,6 +176,12 @@ def main() -> int:
     backup_root.mkdir(parents=True)
     backups: dict[Path, Path] = {}
     artifacts: list[dict] = []
+    sys.path.insert(0, str(ROOT / "backend"))
+    from app.enriched_generation import EnrichedPublication
+
+    publication = EnrichedPublication(data_root, "stock")
+    publication.begin()
+    changed = False
     try:
         for dataset in DATASETS:
             for target in targets[dataset]:
@@ -170,6 +194,8 @@ def main() -> int:
                 )
                 temporary = target.with_name(f".part.{run_id}.tmp")
                 replacement.write_parquet(temporary)
+                publication.mark_changed()
+                changed = True
                 os.replace(temporary, target)
                 artifacts.append({
                     "path": target.relative_to(data_root).as_posix(),
@@ -177,12 +203,17 @@ def main() -> int:
                     "backup_sha256": _sha256(backup),
                     "published_sha256": _sha256(target),
                 })
+        generation = publication.commit()
     except BaseException as exc:
         for target, backup in backups.items():
             shutil.copy2(backup, target)
         for paths in targets.values():
             for target in paths:
                 target.with_name(f".part.{run_id}.tmp").unlink(missing_ok=True)
+        if changed:
+            publication.commit()
+        else:
+            publication.abandon()
         (backup_root / "manifest.json").write_text(
             json.dumps({**plan, "status": "failed_rolled_back", "error": repr(exc)}, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -193,6 +224,7 @@ def main() -> int:
         "dry_run": False,
         "status": "complete",
         "run_id": run_id,
+        "enriched_generation": generation,
         "backup": backup_root.relative_to(data_root).as_posix(),
         "artifacts": artifacts,
     })

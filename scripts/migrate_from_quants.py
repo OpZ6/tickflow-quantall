@@ -119,6 +119,20 @@ def _table_exists(con, table: str) -> bool:
         return False
 
 
+def _normalize_daily_units(df: pd.DataFrame) -> pd.DataFrame:
+    """The verified Quants warehouse stores shares and thousand yuan."""
+    supported = {"quanti.stock_daily_raw", "tushare.pro.daily"}
+    if "source_daily_raw" not in df.columns:
+        raise ValueError("daily source is required to identify units")
+    invalid = ~df["source_daily_raw"].isin(supported)
+    if invalid.any():
+        raise ValueError("unverified daily source units; refusing migration")
+    result = df.drop(columns=["source_daily_raw"]).copy()
+    result["volume"] = result["volume"] / 100.0
+    result["amount"] = result["amount"] * 1000.0
+    return result
+
+
 def export_daily(
     con,
     tickflow_data: Path,
@@ -133,14 +147,14 @@ def export_daily(
     date_sql, date_values = _date_where(start_date, end_date)
     df = con.execute(
         "SELECT ts_code, trade_date, open_raw, high_raw, low_raw, close_raw, "
-        "volume_raw, amount_raw FROM dwd_daily_bar WHERE open_raw IS NOT NULL"
+        "volume_raw, amount_raw, source_daily_raw FROM dwd_daily_bar WHERE open_raw IS NOT NULL"
         + date_sql,
         date_values,
     ).fetchdf()
     if df is None or df.empty:
         logger.warning("dwd_daily_bar 无数据")
         return 0
-    df = df.rename(columns=_DAILY_RENAME)
+    df = _normalize_daily_units(df.rename(columns=_DAILY_RENAME))
     df["date"] = df["date"].apply(_parse_yyyymmdd)
     df = df.dropna(subset=["date", "symbol"])
     # 停牌过滤(open=0 且 high=0),对齐 TickFlow filter_halt_days
@@ -165,7 +179,7 @@ def export_enriched(
     df = con.execute(
         "SELECT b.ts_code AS symbol, b.trade_date AS date, "
         "b.open_adj AS open, b.high_adj AS high, b.low_adj AS low, b.close_adj AS close, "
-        "b.volume_raw AS volume, b.amount_raw AS amount, "
+        "b.volume_raw AS volume, b.amount_raw AS amount, b.source_daily_raw, "
         "b.close_raw AS raw_close, b.high_raw AS raw_high, b.low_raw AS raw_low, "
         "d.turnover_rate, 0::UINTEGER AS consecutive_limit_ups, "
         "0::UINTEGER AS consecutive_limit_downs "
@@ -178,6 +192,7 @@ def export_enriched(
     if df is None or df.empty:
         logger.warning("dwd_daily_bar has no enriched rows to export")
         return 0
+    df = _normalize_daily_units(df)
     df["date"] = df["date"].apply(_parse_yyyymmdd)
     df = df.dropna(subset=["date", "symbol"])
     df = df[~((df["open"] == 0) & (df["high"] == 0))]

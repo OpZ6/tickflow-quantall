@@ -21,8 +21,8 @@ def _legacy_frame(day: date, turnover_rate: float = 250.0) -> pl.DataFrame:
     })
 
 
-def test_transform_partition_repairs_legacy_turnover() -> None:
-    day = date(2024, 1, 2)
+@pytest.mark.parametrize("day", [date(2015, 1, 5), date(2024, 1, 2)])
+def test_transform_partition_repairs_legacy_turnover(day: date) -> None:
     result = MODULE._transform_partition(_legacy_frame(day), day)
 
     assert result["turnover_rate"].item() == pytest.approx(2.5)
@@ -43,3 +43,9 @@ def test_targets_stay_inside_enriched_dataset(tmp_path: Path) -> None:
     _legacy_frame(day).write_parquet(target)
 
     assert MODULE._targets(tmp_path, day, day) == [target.resolve()]
+
+
+def test_cli_accepts_explicit_2015_repair(monkeypatch) -> None:
+    monkeypatch.setattr("sys.argv", ["repair", "--start", "2015-01-01", "--end", "2015-12-31"])
+    monkeypatch.setattr(MODULE, "_preflight", lambda *args: ({}, []))
+    assert MODULE.main() == 0

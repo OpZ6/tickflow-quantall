@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
@@ -23,6 +24,7 @@ import polars as pl
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_START = date(2016, 1, 1)
+EARLIEST_START = date(2015, 1, 1)
 DEFAULT_END = date(2025, 8, 22)
 
 
@@ -134,8 +136,8 @@ def main() -> int:
     parser.add_argument("--end", type=date.fromisoformat, default=DEFAULT_END)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
-    if args.start < DEFAULT_START or args.end > DEFAULT_END or args.start > args.end:
-        parser.error(f"repair range must stay within {DEFAULT_START}..{DEFAULT_END}")
+    if args.start < EARLIEST_START or args.end > DEFAULT_END or args.start > args.end:
+        parser.error(f"repair range must stay within {EARLIEST_START}..{DEFAULT_END}")
 
     data_root = args.data_root.resolve()
     plan, targets = _preflight(data_root, args.start, args.end)
@@ -149,6 +151,12 @@ def main() -> int:
     backup_root.mkdir(parents=True)
     backups: dict[Path, Path] = {}
     artifacts: list[dict] = []
+    sys.path.insert(0, str(ROOT / "backend"))
+    from app.enriched_generation import EnrichedPublication
+
+    publication = EnrichedPublication(data_root, "stock")
+    publication.begin()
+    changed = False
     try:
         for target in targets:
             backup = backup_root / target.relative_to(data_root)
@@ -160,6 +168,8 @@ def main() -> int:
             )
             temporary = target.with_name(f".part.{run_id}.tmp")
             replacement.write_parquet(temporary)
+            publication.mark_changed()
+            changed = True
             os.replace(temporary, target)
             artifacts.append({
                 "path": target.relative_to(data_root).as_posix(),
@@ -167,11 +177,16 @@ def main() -> int:
                 "backup_sha256": _sha256(backup),
                 "published_sha256": _sha256(target),
             })
+        generation = publication.commit()
     except BaseException as exc:
         for target, backup in backups.items():
             shutil.copy2(backup, target)
         for target in targets:
             target.with_name(f".part.{run_id}.tmp").unlink(missing_ok=True)
+        if changed:
+            publication.commit()
+        else:
+            publication.abandon()
         (backup_root / "manifest.json").write_text(
             json.dumps(
                 {**plan, "status": "failed_rolled_back", "error": repr(exc)},
@@ -186,6 +201,7 @@ def main() -> int:
         "dry_run": False,
         "status": "complete",
         "run_id": run_id,
+        "enriched_generation": generation,
         "backup": backup_root.relative_to(data_root).as_posix(),
         "artifacts": artifacts,
     })

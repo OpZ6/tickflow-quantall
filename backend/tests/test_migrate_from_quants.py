@@ -9,16 +9,80 @@ from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 # 脚本在 prototypes/tickflow/scripts/,不在 backend 包内;用 sys.path 加载
 _scripts = Path(__file__).resolve().parents[1].parent / "scripts"
 sys.path.insert(0, str(_scripts))
 
 from migrate_from_quants import (  # noqa: E402
+    _normalize_daily_units,
     _parse_yyyymmdd,
     _write_date_partitions,
     _write_symbol_partitions,
+    export_daily,
+    export_enriched,
 )
+
+
+def test_normalize_daily_units_matches_2015_source_and_preserves_turnover():
+    frame = pd.DataFrame({
+        "source_daily_raw": ["quanti.stock_daily_raw", "tushare.pro.daily"],
+        "volume": [286_043_643.0, 1000.0],
+        "amount": [4_565_387.8464, 10.0],
+        "turnover_rate": [2.9079, 0.1],
+    })
+    result = _normalize_daily_units(frame)
+    assert result["volume"].tolist() == [2_860_436.43, 10.0]
+    assert result["amount"].tolist() == pytest.approx([4_565_387_846.4, 10_000.0])
+    assert result["turnover_rate"].tolist() == [2.9079, 0.1]
+    assert "source_daily_raw" not in result.columns
+    assert frame["volume"].iloc[0] == 286_043_643.0
+
+
+@pytest.mark.parametrize("source", [None, "unknown", ""])
+def test_normalize_daily_units_rejects_unverified_sources(source):
+    with pytest.raises(ValueError, match="unverified daily source"):
+        _normalize_daily_units(pd.DataFrame({"source_daily_raw": [source]}))
+
+
+def test_normalize_daily_units_rejects_missing_source():
+    with pytest.raises(ValueError, match="source is required"):
+        _normalize_daily_units(pd.DataFrame({"amount": [1.0], "volume": [1.0]}))
+
+
+@pytest.mark.parametrize("exporter,dataset", [
+    (export_daily, "kline_daily"), (export_enriched, "kline_daily_enriched"),
+])
+def test_export_standard_units_across_old_year_boundary(tmp_path, exporter, dataset):
+    import duckdb
+
+    # In-memory source only; never connect to the production warehouse.
+    bars = pd.DataFrame({
+        "ts_code": ["600000.SH"] * 3,
+        "trade_date": [date(2015, 1, 5), date(2016, 12, 30), date(2017, 1, 3)],
+        **{f"{field}_raw": [10.0] * 3 for field in ("open", "high", "low", "close")},
+        **{f"{field}_adj": [5.0] * 3 for field in ("open", "high", "low", "close")},
+        "volume_raw": [1_000_000.0] * 3,
+        "amount_raw": [10_000.0] * 3,
+        "source_daily_raw": ["quanti.stock_daily_raw", "tushare.pro.daily", "tushare.pro.daily"],
+    })
+    basic = bars[["ts_code", "trade_date"]].assign(turnover_rate=2.5)
+    with duckdb.connect(":memory:") as con:
+        con.register("bars", bars)
+        con.register("basic", basic)
+        con.execute("CREATE TABLE dwd_daily_bar AS SELECT * FROM bars")
+        con.execute("CREATE TABLE dwd_daily_basic AS SELECT * FROM basic")
+        assert exporter(con, tmp_path, date(2015, 1, 1), date(2016, 12, 31)) == 2
+    for day in ("2015-01-05", "2016-12-30"):
+        row = pd.read_parquet(tmp_path / dataset / f"date={day}" / "part.parquet").iloc[0]
+        assert row["volume"] == 10_000.0  # lots
+        assert row["amount"] == 10_000_000.0  # yuan
+        price = row["raw_close"] if dataset.endswith("enriched") else row["close"]
+        assert row["amount"] / (row["volume"] * 100) == price
+        if dataset.endswith("enriched"):
+            assert row["turnover_rate"] == 2.5  # percentage points, no extra scaling
+    assert not (tmp_path / dataset / "date=2017-01-03").exists()
 
 # ---- _parse_yyyymmdd ----
 

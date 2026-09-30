@@ -80,6 +80,12 @@
 
 禁止用数值大小猜单位，例如“值小于 1 就乘 100”。转换必须由来源契约显式决定。
 
+股票日 K 的 `amount` 单位为元、`volume` 单位为手（100 股），enriched 的 `turnover_rate` 为百分数值。Quants `dwd_daily_bar` 的已核实来源 `quanti.stock_daily_raw` 与 `tushare.pro.daily` 在仓库中使用股／千元；`scripts/migrate_from_quants.py` 在 raw 和 enriched 两条导出入口统一除以 100／乘以 1,000，未知来源拒绝导出。`dwd_daily_basic.turnover_rate` 已为百分数，导出时保持原值。
+
+旧库存的 2016—2025 年单位迁移曾遗漏 2015 年；2026-09-30 对 2015 年 244 个交易日、535,663 行按原库逐日逐股核实后补齐。`repair_historical_daily_units.py` 和 `repair_historical_turnover_rate.py` 支持显式 `--start 2015-01-01 --end 2015-12-31`，默认范围仍从 2016 年开始；默认预检，`--apply` 才备份并原子替换。已修复数据再次执行会被预检拒绝，避免重复缩放。两个脚本通过 `EnrichedPublication` 标记发布与更新 generation，历史内存缓存和矩阵不能继续命中旧版本。成交额／成交量核验使用不复权价格；旧新三板极端收盘价造成均价／收盘价比例越界时，须验证均价仍处于原始日内高低价范围，不直接扩大倍率。
+
+历史断点标注：旧版本 enriched 曾在 2016-12-30 附近出现已修复与未修复区间交界，这不是来源按 2017 年切换单位的契约。当前已修复库存从 2015-01-05 起使用统一单位；1AMV、换手率、流通市值等逐股计算无需统一截断到 2017-01-01，但仍须满足各自预热与股本可得性要求。流水线明确标注标准单位，不根据日期重复缩放。未修复的旧库存应先按备份清单和修复脚本预检处理。2026-09-30 全日期复核 raw/enriched 各 2,855 个分区：每日 `amount / (volume * raw_close)` 中位数为 93.19—107.14（raw 使用 `close`），enriched 换手率日中位数为 0.52%—6.97%，未发现整日单位断点。
+
 ## 5. Source Manager
 
 QuantX 专项来源在 `collectors.py` 声明 `SourceSpec`，由 `SourceManager` 注册。SourceSpec 至少包含：

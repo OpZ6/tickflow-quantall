@@ -25,8 +25,8 @@ def _legacy_frame(day: date) -> pl.DataFrame:
     })
 
 
-def test_transform_partition_maps_legacy_units() -> None:
-    day = date(2024, 1, 2)
+@pytest.mark.parametrize("day", [date(2015, 1, 5), date(2024, 1, 2)])
+def test_transform_partition_maps_legacy_units(day: date) -> None:
     result = MODULE._transform_partition(_legacy_frame(day), day)
 
     assert result["volume"].item() == 32_156.44
@@ -44,6 +44,20 @@ def test_transform_partition_rejects_current_units() -> None:
         MODULE._transform_partition(current, day)
 
 
+def test_2015_negotiated_bar_uses_raw_price_range_for_unit_check() -> None:
+    day = date(2015, 3, 19)
+    frame = pl.DataFrame({
+        "symbol": ["430139.BJ"], "date": [day],
+        "open": [15.38], "high": [15.38], "low": [0.01], "close": [0.01],
+        "volume": [28000.0], "amount": [113.58],
+    })
+    result = MODULE._transform_partition(frame, day)
+    assert result["amount"].item() == 113580.0
+    assert result["volume"].item() == 280.0
+    with pytest.raises(RuntimeError, match="outside evidenced bounds"):
+        MODULE._transform_partition(frame.with_columns(pl.lit(3.0).alias("high")), day)
+
+
 def test_preflight_requires_matching_raw_and_enriched_dates(tmp_path: Path) -> None:
     day = date(2024, 1, 2)
     raw = tmp_path / "kline_daily" / f"date={day}"
@@ -53,3 +67,9 @@ def test_preflight_requires_matching_raw_and_enriched_dates(tmp_path: Path) -> N
 
     with pytest.raises(RuntimeError, match="no kline_daily_enriched partitions"):
         MODULE._preflight(tmp_path, day, day)
+
+
+def test_cli_accepts_explicit_2015_repair(monkeypatch) -> None:
+    monkeypatch.setattr("sys.argv", ["repair", "--start", "2015-01-01", "--end", "2015-12-31"])
+    monkeypatch.setattr(MODULE, "_preflight", lambda *args: ({}, {}))
+    assert MODULE.main() == 0
