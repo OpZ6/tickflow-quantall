@@ -1848,6 +1848,16 @@ export type ChartAdjustment = 'none' | 'qfq' | 'hfq'
 export type ChartRangeName = '1m' | '3m' | '6m' | '1y' | '3y' | '5y' | 'all' | 'custom'
 
 export interface ChartDataMeta {
+  indicator_metadata?: Record<string, {
+    algorithm_version: string
+    parameters: { h: number; gamma: number; kf: number; n: number }
+    capital_basis: 'ordinary_float'
+    price_basis: 'unadjusted'
+    bar_basis: 'observed_stock_daily_bars'
+    latest_share_basis: string
+    warmup_bars: number
+    available: boolean
+  }>
   requested_interval: ChartInterval
   effective_interval: ChartInterval
   requested_adjustment: ChartAdjustment
@@ -1985,6 +1995,7 @@ export interface ChartDataQuery {
   paramsFingerprint?: string
   warmupBars?: number
   indicatorWarmups?: Record<string, number>
+  indicatorParams?: Record<string, Record<string, unknown>>
 }
 
 export interface StrategyPreviewRequest {
@@ -3881,6 +3892,7 @@ export const api = {
     if (query.indicatorWarmups && Object.keys(query.indicatorWarmups).length) {
       params.set('indicator_warmups', Object.entries(query.indicatorWarmups).sort(([left], [right]) => left.localeCompare(right)).map(([id, bars]) => `${id}:${bars}`).join(','))
     }
+    if (query.indicatorParams && Object.keys(query.indicatorParams).length) params.set('indicator_params', JSON.stringify(query.indicatorParams))
     return request<ChartDataResponse>(`/api/kline/chart?${params.toString()}`)
   },
 
@@ -5434,4 +5446,69 @@ export const stockPoolApi = {
   rebuild: (tradeDate?: string) => request<Record<string, unknown>>('/api/stock-pools/runs', {
     method: 'POST', body: JSON.stringify({ trade_date: tradeDate ?? null }),
   }),
+}
+
+export interface AmvPoint {
+  date: string
+  amv_yi: number
+  float_mv_yi: number
+  active_share_pct: number
+  amount_proxy_yi: number
+  price_index: number | null
+}
+
+export interface AmvMember {
+  symbol: string
+  name: string
+  amv_yi: number
+  float_mv_yi: number
+  active_share_pct: number
+  amount_proxy_yi: number
+  share_basis: string
+  amv_change_pct: number | null
+  amv_change_5d_pct: number | null
+  active_share_change_5d_pp: number
+  price_change_5d_pct: number | null
+  percentile_250: number | null
+}
+
+export interface AmvAnalysis {
+  trade_date: string
+  algorithm_version: string
+  official_0amv_verified: false
+  capital_basis: 'ordinary_float'
+  status: 'complete' | 'partial' | 'unavailable'
+  scope: 'selected_members' | 'sector_latest_mapping'
+  sector: string | null
+  dimension: string | null
+  membership_basis: string
+  calendar_basis: string
+  requested_members: number
+  covered_members: number
+  unmapped_members: number
+  diagnosis: string
+  notes: string[]
+  parameters: { half_life_sessions: number; exponent: number; turnover_factor: number; warmup_sessions: number }
+  series: AmvPoint[]
+  members: AmvMember[]
+  excluded: Array<{ symbol: string; reason: string }>
+  latest: (AmvPoint & {
+    amv_change_pct: number | null
+    amv_change_5d_pct: number | null
+    active_share_change_5d_pp: number
+    price_change_5d_pct: number | null
+    expanding_members_5d: number
+    expanding_members_5d_pct: number
+    top3_amv_share_pct: number | null
+    latest_float_proxy_members: number
+    percentile_250: number | null
+  }) | null
+}
+
+export const amvApi = {
+  analyze: (date: string, symbols: string[], sector = '', dimension: 'concept' | 'industry_level1' | 'industry_level2' = 'concept') =>
+    request<AmvAnalysis>('/api/amv/analyze', {
+      method: 'POST', body: JSON.stringify({ trade_date: date, symbols, sector, dimension }),
+      timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
+    }),
 }

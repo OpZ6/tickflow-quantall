@@ -16,6 +16,7 @@ const GROUPS: Record<string, string> = {
   chop: '波动', ao: '动量', aroon: '趋势', pvt: '成交量', dpo: '动量', forceindex: '成交量',
   emv: '成交量', adl: '成交量', chaikinosc: '成交量', elderray: '趋势', ttmsqueeze: '波动',
   stc: '动量', cr: '情绪', brar: '情绪',
+  amv: '活跃筹码', amvchg: '活跃筹码', amvpct: '活跃筹码',
 }
 
 const LABELS: Record<string, string> = {
@@ -25,6 +26,12 @@ const LABELS: Record<string, string> = {
 }
 
 function paramsFor(key: string): ParamDefinition[] {
+  if (key.startsWith('amv')) return [
+    { key: 'h', label: '零换手半衰期 H', min: 1, max: 30, step: 1, defaultValue: 8 },
+    { key: 'gamma', label: '活跃比例幂次 γ', min: .5, max: 2, step: .05, defaultValue: 1 },
+    { key: 'kf', label: '换手强度 KF', min: .5, max: 2, step: .05, defaultValue: 1.15 },
+    ...(key === 'amvpct' ? [{ key: 'n', label: '历史分位窗口 N', min: 20, max: 250, step: 1, defaultValue: 250 }] : []),
+  ]
   return Object.entries(PARAM_DEFS[key] ?? {}).map(([name, value]) => {
     const decimal = !Number.isInteger(value)
     return {
@@ -39,6 +46,7 @@ function paramsFor(key: string): ParamDefinition[] {
 }
 
 function warmupFor(key: string): number {
+  if (key.startsWith('amv')) return key === 'amvpct' ? 369 : key === 'amv' ? 131 : 121
   const params = Object.values(PARAM_DEFS[key] ?? {})
   return Math.max(2, ...params.filter(Number.isFinite).map(value => Math.ceil(value))) * 3
 }
@@ -68,15 +76,22 @@ export const PANE_REGISTRY: ChartIndicatorDefinition[] = SUB_CHARTS.map(item => 
   category: 'pane',
   kind: 'technical',
   placement: 'sub',
-  calculation: 'client',
+  calculation: item.key.startsWith('amv') ? 'server' : 'client',
   group: GROUPS[item.key] ?? '其他',
-  requiredFields: ['open', 'high', 'low', 'close', ...(GROUPS[item.key] === '成交量' ? ['volume'] : [])],
+  requiredFields: item.key.startsWith('amv') ? ['raw_close', 'amount', 'float_shares'] : ['open', 'high', 'low', 'close', ...(GROUPS[item.key] === '成交量' ? ['volume'] : [])],
   warmupBars: warmupFor(item.key),
-  supportedIntervals: [...ALL_INTERVALS],
+  supportedIntervals: item.key.startsWith('amv') ? ['1d'] : [...ALL_INTERVALS],
   defaultParams: { ...(PARAM_DEFS[item.key] ?? {}) },
   paramSchema: paramsFor(item.key),
   styleSchema: [],
   defaultHeight: item.height,
+  help: item.key.startsWith('amv') ? (
+    '普通流通股本研究估计；固定使用不复权价格，仅支持个股日线。默认 H=8、γ=1、KF=1.15。' +
+    (item.key === 'amv' ? '紫线为活跃市值（亿），黄线MA10，蓝线BBI（3/6/9/12日均值）。观察持续扩张、均线方向及与股价是否同步；上涨中的回落不等同卖出。' :
+      item.key === 'amvchg' ? '柱线为活跃市值日变化百分比，红增绿减。连续增强比单日尖峰更有参考价值；下跌伴随活跃增加可能是抛压与分歧换手，不代表资金净流入。' :
+      '分位比较活跃占比与自身最近N根有效日K。80表示相对自身较活跃，20表示较冷清，均为观察刻度。高分位不等于便宜或应该买，需结合方向与价格位置。') +
+    'KF乘在换手强度上，改变递推速度；不是输出金额乘数。参数按钮同步已添加的1AMV副图。'
+  ) : undefined,
 }))
 
 export const STRUCTURE_REGISTRY: ChartIndicatorDefinition[] = [
@@ -100,6 +115,6 @@ export const INDICATOR_COUNTS = {
   volume: PANE_REGISTRY.some(item => item.key === 'vol') ? 1 : 0,
 }
 
-if (INDICATOR_COUNTS.overlays !== 20 || INDICATOR_COUNTS.panes !== 38 || INDICATOR_COUNTS.volume !== 1) {
+if (INDICATOR_COUNTS.overlays !== 20 || INDICATOR_COUNTS.panes !== 41 || INDICATOR_COUNTS.volume !== 1) {
   throw new Error(`指标注册表不完整: ${JSON.stringify(INDICATOR_COUNTS)}`)
 }

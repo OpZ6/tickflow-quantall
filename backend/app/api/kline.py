@@ -58,6 +58,7 @@ def get_chart_data(
     params_fingerprint: Annotated[str | None, Query(max_length=160)] = None,
     warmup_bars: Annotated[int, Query(ge=0, le=2000)] = 160,
     indicator_warmups: Annotated[str | None, Query(max_length=2000)] = None,
+    indicator_params: Annotated[str | None, Query(max_length=4096)] = None,
 ):
     """统一图表行情: 显式周期、复权、范围以及真实覆盖元数据。"""
     from app.services.chart_data import ChartQuery, build_chart_response
@@ -68,6 +69,7 @@ def get_chart_data(
     if asset_type is not None and asset_type != repo.resolve_asset_type(symbol):
         raise HTTPException(status_code=422, detail="asset_type 与本地标的类型不一致")
     try:
+        parsed_indicator_params = json.loads(indicator_params) if indicator_params else {}
         layer_categories = {item.strip() for item in (layers or "").split(",") if item.strip()}
         unknown_layers = layer_categories - {"pattern", "strategy", "event", "plan"}
         if unknown_layers:
@@ -103,6 +105,7 @@ def get_chart_data(
                 end_date=end_date or cn_today(),
                 required_warmup_bars=warmup_bars,
                 indicator_warmups=tuple(dict(parsed_indicator_warmups).items()),
+                indicator_params=parsed_indicator_params,
             ),
             data_dir=repo.store.data_dir,
             layer_categories=layer_categories,

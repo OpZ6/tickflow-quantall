@@ -37,6 +37,7 @@ export const QK = {
   quantxTables:     (date: string) => ['quantx-tables', date] as const,
   quantxObservability: (date: string) => ['quantx-observability', date] as const,
   stockPoolCatalog:    ['stock-pools', 'catalog'] as const,
+  amv: (date: string, symbols: string, sector = '') => ['amv', 'float-state-v2', date, symbols, sector] as const,
   stockPoolSummary:    (date: string) => ['stock-pools', 'summary', date] as const,
   stockPoolCandidates: (date: string) => ['stock-pools', 'candidates', date] as const,
   stockPoolDetail:     (date: string, symbol: string, snapshot: 'current' | 'first' = 'current') => ['stock-pools', 'detail', date, symbol, snapshot] as const,
@@ -105,8 +106,8 @@ export const QK = {
   // Kline
   kline:                (symbol: string, start: string, end: string, extColumns?: string) =>
                            ['kline', symbol, start, end, extColumns ?? ''] as const,
-  klineChart:           (symbol: string, assetType: string, interval: string, adjustment: string, range: string, start: string, end: string, layers = '', strategies = '', sourceRunId = '', paramsFingerprint = '', warmupBars = 160, indicatorWarmups = '') =>
-                           ['kline-chart', symbol, assetType, interval, adjustment, range, start, end, layers, strategies, sourceRunId, paramsFingerprint, warmupBars, indicatorWarmups] as const,
+  klineChart:           (symbol: string, assetType: string, interval: string, adjustment: string, range: string, start: string, end: string, layers = '', strategies = '', sourceRunId = '', paramsFingerprint = '', warmupBars = 160, indicatorWarmups = '', indicatorParams = '') =>
+                           ['kline-chart', symbol, assetType, interval, adjustment, range, start, end, layers, strategies, sourceRunId, paramsFingerprint, warmupBars, indicatorWarmups, indicatorParams] as const,
   strategyChartPreview: (symbol: string, assetType: string, timeframe: string, start: string, end: string, strategyIds: string, inputFingerprint: string) =>
                            ['strategy-chart-preview', symbol, assetType, timeframe, start, end, strategyIds, inputFingerprint] as const,
   klineLatest:          (symbol: string) => ['kline-latest', symbol] as const,

@@ -384,6 +384,10 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   const exactParamsFingerprint = strategyScope === 'source' ? strategyContext?.paramsFingerprint : undefined
   const indicatorWarmups = Object.fromEntries(layout.indicators.filter(item => item.enabled).map(instance => {
     const definition = INDICATOR_REGISTRY.find(item => item.key === instance.indicatorId)
+    if (instance.indicatorId.startsWith('amv')) {
+      const warmup = Math.max(120, Number(instance.params.h ?? 8) * 12)
+      return [instance.indicatorId, warmup + (instance.indicatorId === 'amvpct' ? Number(instance.params.n ?? 250) - 1 : instance.indicatorId === 'amv' ? 11 : 1)]
+    }
     const parameterWarmup = instance.kind === 'technical'
       ? Math.max(0, ...Object.values(instance.params).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)).map(value => Math.ceil(value) * 3))
       : 0
@@ -391,8 +395,10 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
   }))
   const indicatorWarmupSignature = Object.entries(indicatorWarmups).sort(([left], [right]) => left.localeCompare(right)).map(([id, bars]) => `${id}:${bars}`).join(',')
   const requiredWarmupBars = Math.max(160, ...Object.values(indicatorWarmups))
+  const indicatorParams = Object.fromEntries(technicalIndicators.filter(item => item.indicatorId.startsWith('amv')).map(item => [item.indicatorId, item.params]))
+  const indicatorParamsSignature = JSON.stringify(indicatorParams)
   const chartQuery = useQuery({
-    queryKey: QK.klineChart(symbol, '', layout.interval, layout.adjustment, layout.range, requestedStart, requestEnd, layerKey, strategyKey, exactSourceRunId ?? '', exactParamsFingerprint ?? '', requiredWarmupBars, indicatorWarmupSignature),
+    queryKey: QK.klineChart(symbol, '', layout.interval, layout.adjustment, layout.range, requestedStart, requestEnd, layerKey, strategyKey, exactSourceRunId ?? '', exactParamsFingerprint ?? '', requiredWarmupBars, indicatorWarmupSignature, indicatorParamsSignature),
     queryFn: () => api.klineChart({
       symbol, interval: layout.interval, adjustment: layout.adjustment, range: layout.range,
       ...(requestedStart ? { startDate: requestedStart } : {}),
@@ -403,6 +409,7 @@ export function UnifiedStockChart({ symbol, height = 680, strategyContext }: Pro
       paramsFingerprint: exactParamsFingerprint,
       warmupBars: requiredWarmupBars,
       indicatorWarmups,
+      indicatorParams,
     }),
     enabled: !!symbol && (layout.range !== 'custom' || !!customStart),
     placeholderData: previous => previous,

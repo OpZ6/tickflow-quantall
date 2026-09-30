@@ -28,6 +28,7 @@ export interface ChartIndicatorDefinition {
   paramSchema: ParamDefinition[]
   styleSchema: ParamDefinition[]
   defaultHeight?: number
+  help?: string
 }
 
 export type ChartIndicatorKind = 'technical' | 'structure' | 'pattern' | 'strategy' | 'event'

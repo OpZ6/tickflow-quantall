@@ -38,6 +38,15 @@ export interface OHLC {
   kdj_j?: number | null
   boll_upper?: number | null
   boll_lower?: number | null
+  amv_yi?: number | null
+  amv_ma10?: number | null
+  amv_bbi?: number | null
+  amv_active_pct?: number | null
+  amvchg_pct?: number | null
+  amvchg_yi?: number | null
+  amvchg_active_pct?: number | null
+  amvpct_value?: number | null
+  amvpct_active_pct?: number | null
 }
 
 export interface ChartMarker {
@@ -468,6 +477,7 @@ function makeLinesSub(
     refLines?: number[]
     zeroLine?: boolean
     barLine?: (lines: LineDef[], data: OHLC[]) => any[] | null
+    extraInfo?: (row: OHLC) => { label: string; color: string; value: string }[]
   },
 ): SubChartDef {
   const refLines = [...(opts?.refLines ?? []), ...(opts?.zeroLine ? [0] : [])]
@@ -506,12 +516,31 @@ function makeLinesSub(
       if (!d || !data || idx == null || idx < 0 || idx >= data.length) return []
       const lines = cachedLines(data, key, getParams(key), compute)
       const fmt = (v: number | null) => v == null ? '—' : Math.abs(v) >= 1e5 ? (v / 1e4).toFixed(0) + '万' : v.toFixed(2)
-      return lines.map(l => ({ label: l.name, color: l.color, value: fmt(l.values[idx]) }))
+      return [...lines.map(l => ({ label: l.name, color: l.color, value: fmt(l.values[idx]) })), ...(opts?.extraInfo?.(d) ?? [])]
     },
   }
 }
 
 const EXTENDED_SUB_CHARTS: SubChartDef[] = [
+  makeLinesSub('amv', '1AMV 活跃市值 / 亿', d => [
+    { name: '活跃市值/亿', color: '#c084fc', values: d.map(x => x.amv_yi ?? null) },
+    { name: 'MA10/亿', color: '#fbbf24', values: d.map(x => x.amv_ma10 ?? null) },
+    { name: 'BBI/亿', color: '#38bdf8', values: d.map(x => x.amv_bbi ?? null) },
+  ], { height: 96, extraInfo: d => [{ label: '占比%', color: '#94a3b8', value: d.amv_active_pct == null ? '—' : d.amv_active_pct.toFixed(2) }] }),
+  makeLinesSub('amvchg', '1AMV 活跃变化 / %', d => [
+    { name: '活跃变化%', color: '#c084fc', values: d.map(x => x.amvchg_pct ?? null) },
+  ], { height: 80, zeroLine: true, extraInfo: d => [
+    { label: '增减/亿', color: (d.amvchg_yi ?? 0) >= 0 ? THEME.bull : THEME.bear, value: d.amvchg_yi == null ? '—' : d.amvchg_yi.toFixed(2) },
+    { label: '占比%', color: '#94a3b8', value: d.amvchg_active_pct == null ? '—' : d.amvchg_active_pct.toFixed(2) },
+  ], barLine: (_lines, data) => [{
+    name: '活跃变化柱%', type: 'bar', animation: false,
+    data: data.map(x => ({ value: x.amvchg_pct ?? '-', itemStyle: { color: (x.amvchg_pct ?? 0) >= 0 ? THEME.bull : THEME.bear } })),
+  }] }),
+  makeLinesSub('amvpct', '1AMV 历史分位 / %', d => [
+    { name: '占比分位%', color: '#c084fc', values: d.map(x => x.amvpct_value ?? null) },
+  ], { height: 80, yAxisConfig: { min: 0, max: 100 }, refLines: [20, 50, 80], extraInfo: d => [
+    { label: '占比%', color: '#94a3b8', value: d.amvpct_active_pct == null ? '—' : d.amvpct_active_pct.toFixed(2) },
+  ] }),
   makeLinesSub('wr', 'WR', (d, p) => [{ name: 'WR', color: '#3B82F6', values: calcWR(d, p.p) }], { yAxisConfig: { min: 0, max: 100 }, refLines: [20, 80] }),
   makeLinesSub('cci', 'CCI', (d, p) => [{ name: 'CCI', color: '#ff9800', values: calcCCI(d, p.p) }], { refLines: [-100, 100] }),
   makeLinesSub('bias', 'BIAS', d => [

@@ -26,6 +26,9 @@ export const PARAM_DEFS: Record<string, Record<string, number>> = {
   kdjch: { n: 9, m1: 3, m2: 3 },
   wrch: { p: 14 },
   // 副图
+  amv: { h: 8, gamma: 1, kf: 1.15 },
+  amvchg: { h: 8, gamma: 1, kf: 1.15 },
+  amvpct: { h: 8, gamma: 1, kf: 1.15, n: 250 },
   kdj: { n: 9, m1: 3, m2: 3 },
   wr: { p: 14 },
   cci: { p: 14 },

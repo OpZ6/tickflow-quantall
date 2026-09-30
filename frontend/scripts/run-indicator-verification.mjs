@@ -15,7 +15,7 @@ try {
   if (!coreKeys.every(key => source.includes(`key: '${key}'`))) throw new Error('核心副图清单不完整')
   const extended = source.match(/makeLinesSub\('/g)?.length ?? 0
   const panes = coreKeys.length - 1 + extended
-  if (overlays !== 20 || panes !== 38) throw new Error(`指标注册清单错误: overlay=${overlays}, pane=${panes}`)
+  if (overlays !== 20 || panes !== 41) throw new Error(`指标注册清单错误: overlay=${overlays}, pane=${panes}`)
   console.log(`INDICATOR_REGISTRY_OK=${overlays}+${panes}`)
 } finally {
   await rm(output, { force: true })

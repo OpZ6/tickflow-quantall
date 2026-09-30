@@ -13,6 +13,7 @@
 - `layers=pattern,strategy,event,plan`；不传时保持旧响应兼容，传入后返回 `annotation_layers`。
 - `strategy_ids`、`source_run_id`、`params_fingerprint` 用于恢复策略页来源及精确运行批次。
 - `warmup_bars` 是本次查询的最大预热需求；`indicator_warmups=id:bars,...` 携带逐指标需求并进入查询键。
+- `indicator_params` 为 JSON 对象，仅支持 `amv/amvchg/amvpct` 的 `h/gamma/kf/n`，未知键、非有限值、越界与非整数周期返回 422。配置进入查询键；服务端按真实参数补足预热。
 
 `POST /api/strategies/preview` 是独立的只读单股策略接口：请求包含 `symbol`、`asset_type`、`timeframe`、`start_date`、`end_date`、至多三个正式 `strategy_ids` 和可选参数覆盖；响应返回临时策略 `annotation_layers`、策略版本和输入指纹。当前首批只开放声明日线 `chart_preview` 的四个价格结构策略，计算口径固定为前复权 enriched 日线；切换图表复权只改变 K 线显示，不重新定义策略的正式信号日期。
 
@@ -24,7 +25,11 @@
 
 ## 指标与结构层
 
-- `frontend/src/features/stock-chart/indicatorRegistry.ts` 是 20 个主图、38 个副图、成交量、缠论、关键价位、形态、正式策略和事件的统一类型化目录。定义包含稳定 ID、版本、语义类型、主副图位置、计算位置、字段、周期、参数 schema、样式 schema 和预热长度。
+- `frontend/src/features/stock-chart/indicatorRegistry.ts` 是 20 个主图、41 个副图、成交量、缠论、关键价位、形态、正式策略和事件的统一类型化目录。定义包含稳定 ID、版本、语义类型、主副图位置、计算位置、字段、周期、参数 schema、样式 schema 和预热长度。
+- 1AMV 增加 `amv` 活跃市值（MA10与3/6/9/12日BBI）、`amvchg` 活跃日变化%、`amvpct` 活跃占比历史分位三个服务端副图，共用现有时间轴、缩放与回放。仅个股日线，计算始终使用不复权价格；普通流通股本与原TXT的自由流通股本有区别。默认研究参数 H=8、γ=1、KF=1.15；保留原公式10/1.15/1与全样本候选8/1/1.3按钮，不声明复刻指南针原参数或交易收益。
+- 共享递推为 `u=1-exp(-KF*amount/(raw_close*float_shares)); A=u+2^(-1/H)*(1-u)*A_prev; V=M*A^gamma`。有效输入不足时返回空值；基础预热为 `max(120,12*H)` 根，分位还需要随后 N 根成熟值。股票副图按实际个股日K根数，不合成停牌K；固定成员板块分析按统一市场日期轴，缺成员数据时重置状态并剔除无法覆盖最近30日的成员。
+- `meta.indicator_metadata` 披露算法版本、参数、普通流通股本、原始价格、日K根口径与最新股本来源。参数切换重算并刷新查询；三图共用配置按钮，个别手动编辑允许单独对照。完整说明在 `/amv-guide.html`。
+- 单股与成分批量查询只复用已就绪的全市场最新缓存；冷缓存从已发布日线读取并计算单股所需指标，禁止同步触发全市场预热，以避免图表30秒超时。
 - `frontend/src/lib/indicator-formulas.ts` 保存纯公式；参数通过集中存储管理。公式异常会在工作台显示并写入控制台，不得静默消失。
 - 缠论默认调用本地 `POST /api/chanlun/analyze`，显示算法版本、数据指纹和末笔确认状态。包含处理、分型、笔、段、中枢和买卖点均为同一 ECharts 的可选图层。
 - ZenChart 仅是可选对照。任何官方端点无法映射到本地 candles 时整层拒绝叠加，不替换本地 K 线。

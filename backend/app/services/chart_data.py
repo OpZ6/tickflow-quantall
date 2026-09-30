@@ -3,15 +3,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Literal
 
 import polars as pl
 
+from app.indicators.active_market_value import WARMUP, normalize_amv_params
 from app.indicators.levels import compute_levels
 from app.indicators.pipeline import _apply_adj_factor, compute_indicators
+from app.services.active_market_value import AMV_CHART_IDS, append_chart_amv
 
 ChartInterval = Literal["1m", "5m", "15m", "30m", "60m", "1d", "1w", "1mo"]
 ChartAdjustment = Literal["none", "qfq", "hfq"]
@@ -50,6 +52,7 @@ class ChartQuery:
     end_date: date
     required_warmup_bars: int = _MIN_WARMUP_BARS
     indicator_warmups: tuple[tuple[str, int], ...] = ()
+    indicator_params: dict = field(default_factory=dict)
 
 
 def _warmup_calendar_days(interval: ChartInterval, required_bars: int) -> int:
@@ -286,6 +289,14 @@ def build_chart_response(
         indicator_id: max(0, min(int(bars), 2_000))
         for indicator_id, bars in query.indicator_warmups
     }
+    if not isinstance(query.indicator_params, dict) or set(query.indicator_params) - AMV_CHART_IDS:
+        raise ValueError("indicator_params仅支持1AMV副图")
+    normalized_params = {key: normalize_amv_params(params) for key, params in query.indicator_params.items()}
+    amv_configurations = {key: normalized_params.get(key) or normalize_amv_params()
+                          for key in requested_indicator_warmups if key in AMV_CHART_IDS}
+    for key, params in amv_configurations.items():
+        requested_indicator_warmups[key] = max(WARMUP, int(params["h"] * 12)) + (
+            int(params["n"]) - 1 if key == "amvpct" else 11 if key == "amv" else 1)
     required_warmup_bars = max(
         [max(0, min(int(query.required_warmup_bars), 2_000)), *requested_indicator_warmups.values()]
     )
@@ -298,6 +309,9 @@ def build_chart_response(
     effective_adjustment: ChartAdjustment = query.adjustment
     warmup_bars = 0
     analysis_rows = pl.DataFrame()
+    indicator_metadata = {}
+    if amv_configurations and (query.interval != "1d" or query.asset_type != "stock"):
+        warnings.append("1AMV仅适用于个股日线, 当前周期或资产类型不计算。")
     if query.asset_type == "index" and query.adjustment != "none":
         effective_adjustment = "none"
         warnings.append("指数不适用复权, 已使用不复权价格")
@@ -328,6 +342,9 @@ def build_chart_response(
                 warnings.append("原始日线缺失, 当前只能使用已有前复权历史")
                 effective_adjustment = "qfq"
         else:
+            # Preserve the economic price basis before main-candle adjustment.
+            if amv_configurations:
+                rows = rows.with_columns(pl.col("close").alias("raw_close"))
             rows = apply_adjustment(rows, factors, effective_adjustment)
             source = "local_daily"
             # 涨停/炸板是日期事件, 从既有 enriched 事实附加到同一组最终 candles;
@@ -347,6 +364,8 @@ def build_chart_response(
         rows = aggregate_daily(rows, query.interval)
         if not rows.is_empty():
             rows = compute_indicators(rows)
+            if amv_configurations and query.interval == "1d" and query.asset_type == "stock":
+                rows, indicator_metadata = append_chart_amv(repo, rows, amv_configurations)
             warmup_bars = rows.filter(pl.col("date") < start).height
             analysis_rows = rows
             rows = rows.filter(pl.col("date").is_between(start, end))
@@ -464,11 +483,14 @@ def build_chart_response(
             "required_warmup_bars": required_warmup_bars,
             "actual_warmup_bars": warmup_bars,
             "warmup_complete": warmup_complete,
+            "indicator_metadata": indicator_metadata,
             "indicator_readiness": {
                 indicator_id: {
                     "required_warmup_bars": bars,
                     "actual_warmup_bars": warmup_bars,
-                    "status": "ready" if query.range_name == "all" or warmup_bars >= bars else "partial",
+                    "status": ("ready" if indicator_metadata.get(indicator_id, {}).get("available") and warmup_bars >= bars else "partial")
+                              if indicator_id in AMV_CHART_IDS else
+                              ("ready" if query.range_name == "all" or warmup_bars >= bars else "partial"),
                 }
                 for indicator_id, bars in requested_indicator_warmups.items()
             },
