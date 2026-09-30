@@ -107,3 +107,44 @@ if (JSON.stringify(actual) !== JSON.stringify(golden)) {
   throw new Error('指标固定样本与黄金值不一致')
 }
 console.log(`INDICATOR_FORMULAS_OK=${Object.keys(actual).length}`)
+
+function closeTo(actual: number | null, expected: number, label: string) {
+  if (actual == null || Math.abs(actual - expected) > 1e-9) throw new Error(`${label}: ${actual} != ${expected}`)
+}
+
+// 手算递推样本：SMA(13,8) 不能替换成普通移动均值。
+const recursive = F.tdxSmaArr([10, 20, 30], 13, 8)
+closeTo(recursive[1], 210 / 13, 'SMA first update')
+closeTo(recursive[2], 4170 / 169, 'SMA second update')
+if (JSON.stringify(F.tdxSmaArr([10, null, 20], 3)) !== '[10,null,20]') throw new Error('Invalid SMA input was filled')
+
+const sample = [10, 11, 9, 8].map(low => ({ low, high: low + 1, open: low + 0.5, close: low + 0.5 }))
+const oversold = F.calcOversoldTurning(sample)
+closeTo(oversold.pressure[1], 0, 'No new low gate')
+closeTo(oversold.pressure[2], 1125 / 618, 'First new low pressure')
+closeTo(oversold.pressure[3], 2156.25 / 618, 'Pressure EMA recurrence')
+closeTo(oversold.trend[0], 50, 'RSV initial seed')
+closeTo(oversold.trend[1], 335 / 6, 'Trend EMA after rising')
+closeTo(oversold.trend[2], 3506 / 72, 'Trend EMA after falling')
+
+const flat = F.calcOversoldTurning(Array.from({ length: 100 }, () => ({ low: 10, high: 10, open: 10, close: 10 })))
+if ([...flat.pressure, ...flat.trend].some(v => v !== null)) throw new Error('Flat zero denominator must be unavailable')
+const falling = F.calcOversoldTurning(Array.from({ length: 100 }, (_, i) => ({ low: 200 - i, high: 201 - i, open: 200.5 - i, close: 200.5 - i })))
+if (falling.pressure.some(v => v !== null)) throw new Error('A zero positive-low denominator must not create pressure')
+
+const full = F.calcOversoldTurning(candles)
+for (const end of [1, 38, 55, 90, 130]) {
+  const prefix = F.calcOversoldTurning(candles.slice(0, end))
+  if (JSON.stringify(prefix) !== JSON.stringify({ pressure: full.pressure.slice(0, end), trend: full.trend.slice(0, end) })) {
+    throw new Error(`Oversold formula reads future candles at ${end}`)
+  }
+}
+const scaled = F.calcOversoldTurning(candles.map(c => ({ ...c, open: c.open * 10, high: c.high * 10, low: c.low * 10, close: c.close * 10, volume: 0 })))
+for (const key of ['pressure', 'trend'] as const) {
+  for (let i = 0; i < full[key].length; i++) {
+    if (full[key][i] == null) {
+      if (scaled[key][i] !== null) throw new Error('Price scaling changes availability')
+    } else closeTo(scaled[key][i], full[key][i]!, 'Scale and volume independence')
+  }
+}
+console.log('OVERSOLD_FORMULA_OK: numeric recurrence, zero division, causality, scale and volume independence')

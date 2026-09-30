@@ -17,6 +17,7 @@ const GROUPS: Record<string, string> = {
   emv: '成交量', adl: '成交量', chaikinosc: '成交量', elderray: '趋势', ttmsqueeze: '波动',
   stc: '动量', cr: '情绪', brar: '情绪',
   amv: '活跃筹码', amvchg: '活跃筹码', amvpct: '活跃筹码',
+  oversold: '动量',
 }
 
 const LABELS: Record<string, string> = {
@@ -46,6 +47,7 @@ function paramsFor(key: string): ParamDefinition[] {
 }
 
 function warmupFor(key: string): number {
+  if (key === 'oversold') return 200
   if (key.startsWith('amv')) return key === 'amvpct' ? 369 : key === 'amv' ? 131 : 121
   const params = Object.values(PARAM_DEFS[key] ?? {})
   return Math.max(2, ...params.filter(Number.isFinite).map(value => Math.ceil(value))) * 3
@@ -91,6 +93,13 @@ export const PANE_REGISTRY: ChartIndicatorDefinition[] = SUB_CHARTS.map(item => 
       item.key === 'amvchg' ? '柱线为活跃市值日变化百分比，红增绿减。连续增强比单日尖峰更有参考价值；下跌伴随活跃增加可能是抛压与分歧换手，不代表资金净流入。' :
       '分位比较活跃占比与自身最近N根有效日K。80表示相对自身较活跃，20表示较冷清，均为观察刻度。高分位不等于便宜或应该买，需结合方向与价格位置。') +
     'KF乘在换手强度上，改变递推速度；不是输出金额乘数。参数按钮同步已添加的1AMV副图。'
+  ) : item.key === 'oversold' ? (
+    '两套吸筹公式的合并观察版，按主图复权价格计算，建议先看日线；窗口单位为K线根数。' +
+    '粉红柱使用第一套VAR7（左轴原值），体现38根新低附近的价格压力；柱高不代表主力买入或资金净流入。' +
+    '紫线使用第二套55根趋势公式（右轴）；11以下偏低、89以上偏高、50为中间参考，允许超出0～100。' +
+    '红点表示上穿11，绿点表示下穿89；仅记录阈值变化。可观察低位压力后趋势是否回升，再对照主图止跌、关键价位与量能。' +
+    '省略重复的21/27根位置线、第一套拉升线及第二套DYNAINFO当前行情过滤和多档买卖标记。' +
+    'SMA按通达信递推；除零留空，首个有效值初始化并预热200根。未收盘K线数值仍会变化。'
   ) : undefined,
 }))
 
@@ -115,6 +124,6 @@ export const INDICATOR_COUNTS = {
   volume: PANE_REGISTRY.some(item => item.key === 'vol') ? 1 : 0,
 }
 
-if (INDICATOR_COUNTS.overlays !== 20 || INDICATOR_COUNTS.panes !== 41 || INDICATOR_COUNTS.volume !== 1) {
+if (INDICATOR_COUNTS.overlays !== 20 || INDICATOR_COUNTS.panes !== 42 || INDICATOR_COUNTS.volume !== 1) {
   throw new Error(`指标注册表不完整: ${JSON.stringify(INDICATOR_COUNTS)}`)
 }

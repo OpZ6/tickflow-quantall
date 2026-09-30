@@ -14,6 +14,51 @@ export interface Candle {
 
 type Arr = (number | null)[]
 
+/** 通达信 SMA(X,N,M)：首个有效值作种子；无效输入留空并重置递推。 */
+export function tdxSmaArr(values: Arr, n: number, m = 1): Arr {
+  let previous: number | null = null
+  return values.map(value => {
+    if (value == null || !Number.isFinite(value)) { previous = null; return null }
+    previous = previous == null ? value : (value * m + previous * (n - m)) / n
+    return previous
+  })
+}
+
+/** 两套用户公式的合并观察版：第一套 VAR7 + 第二套 55 根趋势线。
+ * 只消费价格，不表示资金流；不引入 DYNAINFO 的当前行情快照。
+ */
+export function calcOversoldTurning(C: Candle[]): { pressure: Arr; trend: Arr } {
+  const changes: Arr = C.map((c, i) => i === 0 ? null : c.low - C[i - 1].low)
+  const absolute = tdxSmaArr(changes.map(v => v == null ? null : Math.abs(v)), 3)
+  const positive = tdxSmaArr(changes.map(v => v == null ? null : Math.max(v, 0)), 3)
+  // 正常正价格下 IF(CLOSE*1.2,...) 恒取第一分支。
+  const var3 = tdxSmaArr(absolute.map((v, i) => {
+    const denominator = positive[i]
+    return v == null || denominator == null || denominator <= 0 ? null : v / denominator * 1000
+  }), 4, 2) // EMA(X,3) = SMA(X,4,2)
+  const gated = var3.map((value, i) => {
+    if (value == null) return null
+    if (C[i].low > llv(C, 38, i)) return 0
+    const window = var3.slice(Math.max(0, i - 37), i + 1)
+    // 初始 REF 无值不参与极值；内部除零缺口不伪造为有效数据。
+    const firstValid = window.findIndex(v => v != null)
+    if (firstValid < 0 || window.slice(firstValid).some(v => v == null)) return null
+    const highest = Math.max(...window.filter((v): v is number => v != null))
+    return (value + highest * 2) / 2
+  })
+  const pressure = tdxSmaArr(gated, 4, 2).map((value, i) =>
+    value == null ? null : value / 618 * (llv(C, 90, i) !== 0 ? 1 : 0))
+  const rsv = C.map((c, i) => {
+    const low = llv(C, 55, i)
+    const range = hhv(C, 55, i) - low
+    return range > 0 ? (c.close - low) / range * 100 : null
+  })
+  const k = tdxSmaArr(rsv, 5)
+  const d = tdxSmaArr(k, 3)
+  const trend = tdxSmaArr(k.map((v, i) => v == null || d[i] == null ? null : 3 * v - 2 * d[i]!), 4, 2)
+  return { pressure, trend }
+}
+
 // ===== 基础辅助 =====
 
 export function hhv(C: Candle[], n: number, i: number): number {

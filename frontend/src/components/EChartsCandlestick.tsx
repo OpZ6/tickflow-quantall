@@ -13,7 +13,7 @@ import {
   calcVR, calcVortex, calcWR, calcBOLL, calcBBI, calcZigZag, calcSAR, calcTEMA, calcDEMA,
   calcHMA, calcWMA, calcVWMA, calcVWAP, calcSupertrend, calcDonchian, calcKeltner,
   calcIchimoku, calcAlligator, calcLinRegChannel, calcEMA, calcSMA, calcChop, calcPVT,
-  calcKDJChannel, calcWRChannel,
+  calcKDJChannel, calcWRChannel, calcOversoldTurning,
 } from '@/lib/indicator-formulas'
 
 export interface OHLC {
@@ -213,6 +213,7 @@ export interface SubChartDef {
   buildInfo: (d: OHLC | null, data?: OHLC[], idx?: number) => { label: string; color: string; value: string }[]
   /** Y 轴特殊配置 */
   yAxisConfig?: Record<string, any>
+  secondaryYAxisConfig?: Record<string, any>
   /** 水平参考线 (如 RSI 的 30/70) */
   refLines?: number[]
 }
@@ -445,7 +446,7 @@ const CORE_SUB_CHARTS: SubChartDef[] = [
 
 // ===== 扩展副图指标 (前端计算, 公式移植自 openclarr-chanlun) =====
 
-type LineDef = { name: string; color: string; values: (number | null)[] }
+type LineDef = { name: string; color: string; values: (number | null)[]; type?: 'line' | 'bar'; yAxisIndex?: number; width?: number; smooth?: boolean }
 
 /** 按 data 引用 + 参数签名缓存计算结果，避免鼠标移动时重复计算 */
 const subComputeCache = new WeakMap<OHLC[], Map<string, LineDef[]>>()
@@ -474,6 +475,7 @@ function makeLinesSub(
   opts?: {
     height?: number
     yAxisConfig?: Record<string, any>
+    secondaryYAxisConfig?: Record<string, any>
     refLines?: number[]
     zeroLine?: boolean
     barLine?: (lines: LineDef[], data: OHLC[]) => any[] | null
@@ -486,14 +488,16 @@ function makeLinesSub(
     label,
     height: opts?.height ?? 72,
     ...(opts?.yAxisConfig ? { yAxisConfig: opts.yAxisConfig } : {}),
+    ...(opts?.secondaryYAxisConfig ? { secondaryYAxisConfig: opts.secondaryYAxisConfig } : {}),
     ...(refLines.length > 0 ? { refLines } : {}),
     buildSeries: (data, _context) => {
       const lines = cachedLines(data, key, getParams(key), compute)
       const series: any[] = lines.map(l => ({
-        name: l.name, type: 'line',
+        name: l.name, type: l.type ?? 'line', yAxisIndex: l.yAxisIndex ?? 0,
         data: l.values.map(v => v != null ? Number(v) : '-'),
-        smooth: true, symbol: 'none', animation: false,
-        lineStyle: { width: 1, color: l.color }, itemStyle: { color: l.color },
+        smooth: l.smooth ?? true, symbol: 'none', animation: false,
+        z: l.type === 'bar' ? 1 : 3,
+        lineStyle: { width: l.width ?? 1, color: l.color }, itemStyle: { color: l.color, opacity: l.type === 'bar' ? 0.55 : 1 },
       }))
       if (opts?.barLine) {
         const extra = opts.barLine(lines, data)
@@ -522,6 +526,29 @@ function makeLinesSub(
 }
 
 const EXTENDED_SUB_CHARTS: SubChartDef[] = [
+  makeLinesSub('oversold', '超跌与拐点', data => {
+    const values = calcOversoldTurning(data)
+    return [
+      { name: '趋势', color: '#e879f9', values: values.trend, width: 2, smooth: false },
+      { name: '低点压力', color: '#fb7185', values: values.pressure, type: 'bar', yAxisIndex: 1 },
+    ]
+  }, {
+    height: 120,
+    yAxisConfig: { position: 'right', min: (value: { min: number }) => Math.min(0, value.min), max: (value: { max: number }) => Math.max(100, value.max) },
+    secondaryYAxisConfig: { position: 'left', min: 0, axisLabel: { color: '#fb7185', fontSize: 9 }, splitLine: { show: false } },
+    refLines: [11, 50, 89],
+    barLine: lines => {
+      const trend = lines[0].values
+      return [{ name: '阈值穿越', type: 'scatter', symbolSize: 7, z: 5, animation: false,
+        data: trend.map((value, i) => {
+          const previous = trend[i - 1]
+          const rising = value != null && previous != null && previous <= 11 && value > 11
+          const falling = value != null && previous != null && previous >= 89 && value < 89
+          return { value: rising || falling ? value : '-', itemStyle: { color: rising ? THEME.bull : THEME.bear } }
+        }),
+      }]
+    },
+  }),
   makeLinesSub('amv', '1AMV 活跃市值 / 亿', d => [
     { name: '活跃市值/亿', color: '#c084fc', values: d.map(x => x.amv_yi ?? null) },
     { name: 'MA10/亿', color: '#fbbf24', values: d.map(x => x.amv_ma10 ?? null) },
@@ -1439,7 +1466,7 @@ function buildOption(
   activeSubDefs.forEach((def, i) => {
     const gridIdx = i + 1
     const xAxisIdx = i + 1
-    const yAxisIdx = i + 1
+    const yAxisIdx = yAxes.length
 
     const chartTop = curTop + INFO_BAR_H
     grids.push({
@@ -1474,6 +1501,14 @@ function buildOption(
 
     xAxisIndices.push(xAxisIdx)
 
+    if (def.secondaryYAxisConfig) {
+      yAxes.push({
+        gridIndex: gridIdx, scale: true, splitNumber: 2,
+        axisLine: { show: false }, axisTick: { show: false },
+        ...def.secondaryYAxisConfig,
+      })
+    }
+
     let subSeries: any[] = []
     try {
       subSeries = def.buildSeries(calculationData, { compact, volumeCompare, params: {} }).map(trimSeries).map(item => styleSeries(def.key, item))
@@ -1481,7 +1516,7 @@ function buildOption(
       reportIndicatorError(def.key, error)
     }
     subSeries.forEach((s: any) => {
-      series.push({ ...s, xAxisIndex: xAxisIdx, yAxisIndex: yAxisIdx })
+      series.push({ ...s, xAxisIndex: xAxisIdx, yAxisIndex: yAxisIdx + (def.secondaryYAxisConfig && s.yAxisIndex === 1 ? 1 : 0) })
     })
 
     curTop += INFO_BAR_H + def.height + SUB_GAP_PX
