@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from app.market_facts.registry import DatasetId
 from app.market_facts.repository import MarketFactRepository
-from app.quantx_data.new_high_clusters import load_security_memberships
+from app.quantx_data.new_high_clusters import load_ths_memberships as load_security_memberships
 from app.research_materials.repository import ResearchMaterialRepository, is_direct_research
 from app.services.screener import ScreenerService
 from app.stock_pools import topic_cluster

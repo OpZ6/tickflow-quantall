@@ -14,21 +14,22 @@ function direction(value: number | null | undefined) {
   return value == null || value === 0 ? 'text-foreground' : value > 0 ? 'text-red-400' : 'text-emerald-400'
 }
 
-export function AmvPanel({ date, symbols, topic = '', compact = false, dimension = 'concept' }: {
-  date: string; symbols: string[]; topic?: string; compact?: boolean; dimension?: AmvDimension
+export function AmvPanel({ date, symbols = [], topic = '', compact = false, dimension = 'concept', selectableSector = false }: {
+  date: string; symbols?: string[]; topic?: string; compact?: boolean; dimension?: AmvDimension; selectableSector?: boolean
 }) {
-  const [fullSector, setFullSector] = useState(Boolean(topic))
+  const fullSector = Boolean(topic)
   const [anchor, setAnchor] = useState(topic)
+  const [referenceDimension, setReferenceDimension] = useState(dimension)
   const [showMembers, setShowMembers] = useState(false)
   const symbolKey = [...new Set(symbols)].sort().join(',')
-  const mapping = useQuery({ queryKey: QK.amvSectors(dimension, date),
-    queryFn: () => amvApi.sectors(dimension, date), enabled: Boolean(topic && symbols.length && fullSector),
+  const mapping = useQuery({ queryKey: QK.amvSectors(referenceDimension, date),
+    queryFn: () => amvApi.sectors(referenceDimension, date), enabled: Boolean(date && fullSector && selectableSector),
     staleTime: 5 * 60_000, retry: false })
-  const hasMapping = symbols.length === 0 || Boolean(mapping.data?.rows.some(row => row.sector === anchor))
+  const hasMapping = !selectableSector || Boolean(mapping.data?.rows.some(row => row.sector === anchor))
   const enabled = Boolean(date && (fullSector ? anchor && hasMapping : symbolKey))
   const query = useQuery({
-    queryKey: QK.amv(date, symbolKey, fullSector ? anchor : '', dimension),
-    queryFn: () => amvApi.analyze(date, fullSector ? [] : symbolKey.split(',').filter(Boolean), fullSector ? anchor : '', dimension),
+    queryKey: QK.amv(date, symbolKey, fullSector ? anchor : '', referenceDimension),
+    queryFn: () => amvApi.analyze(date, fullSector ? [] : symbolKey.split(',').filter(Boolean), fullSector ? anchor : '', referenceDimension),
     enabled, staleTime: 5 * 60_000, retry: false,
   })
   const data = query.data
@@ -59,19 +60,20 @@ export function AmvPanel({ date, symbols, topic = '', compact = false, dimension
   return <section data-testid="amv-panel" className="mt-3 rounded-lg border border-violet-400/20 bg-[#111113] p-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap items-baseline gap-2"><strong className="text-xs text-foreground">{fullSector ? `${anchor} · 板块活跃参考` : '1AMV · 筹码活跃参考'}</strong><span className="text-[10px] text-muted">研究估计 · 普通流通股本</span></div>
-      {topic && symbols.length > 0 && <div className="flex gap-1 text-[10px]">{([true, false] as const).map(full => <button key={String(full)} aria-pressed={fullSector === full} onClick={() => setFullSector(full)}
-        className={`rounded border px-2 py-1 ${fullSector === full ? 'border-violet-400/50 bg-violet-400/10 text-foreground' : 'border-border text-muted hover:text-foreground'}`}>{full ? '完整板块成分' : '题材入池成员'}</button>)}</div>}
     </div>
-    {topic && symbols.length > 0 && fullSector && <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted"><span>题材 {topic} · 参考板块</span>
+    {fullSector && selectableSector && <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted"><span>动态题材 {topic} · THS完整板块参考</span>
+      <select aria-label="题材参考分类" className="rounded border border-border bg-base px-2 py-1 text-foreground" value={referenceDimension} onChange={event => { setReferenceDimension(event.target.value as AmvDimension); setAnchor('') }}>
+        <option value="concept">THS概念</option><option value="industry_level1">THS一级行业</option><option value="industry_level2">THS二级行业</option>
+      </select>
       <select aria-label="题材参考板块" className="max-w-full rounded border border-border bg-base px-2 py-1 text-foreground" value={hasMapping ? anchor : ''} onChange={event => setAnchor(event.target.value)}>
         <option value="" disabled>选择完整参考板块</option>{mapping.data?.rows.map(row => <option key={row.sector} value={row.sector ?? ''}>{row.sector}</option>)}
       </select>
-      {mapping.isPending ? <span>正在读取成分映射…</span> : mapping.isError ? <span>{mapping.error.message}<button className="ml-2 text-accent" onClick={() => void mapping.refetch()}>重试</button></span> : !hasMapping && <span>该逻辑题材没有同名完整映射，请选择参考板块，或切回入池成员。</span>}
+      {mapping.isPending ? <span>正在读取成分映射…</span> : mapping.isError ? <span>{mapping.error.message}<button className="ml-2 text-accent" onClick={() => void mapping.refetch()}>重试</button></span> : !hasMapping && <span>动态题材没有同名板块，请选择研究参考；参考选择不会改变题材归类。</span>}
     </div>}
     {query.isPending && enabled && <p className="mt-3 text-xs text-muted">正在读取行情与历史股本…</p>}
     {query.isError && <div className="mt-3 text-xs text-secondary">{query.error.message}<button onClick={() => void query.refetch()} className="ml-3 text-accent hover:underline">重试</button></div>}
     {data && <>
-      <div className="mt-2 text-[10px] text-muted">{data.trade_date} · {fullSector ? '最新板块成分固定回看' : symbols.length === 1 ? '当前个股' : '当前题材入池成员固定回看'} · 可比 {data.covered_members}/{data.requested_members}只
+      <div className="mt-2 text-[10px] text-muted">{data.trade_date} · {fullSector ? '完整板块成分快照回看' : symbols.length === 1 ? '当前个股' : '指定成员固定回看'} · 可比 {data.covered_members}/{data.requested_members}只
         {data.market_cap_coverage_pct != null ? ` · 市值覆盖 ${number(data.market_cap_coverage_pct, '%', 1)}` : ` · ${data.unknown_capital_members}只成分缺少当日市值，市值覆盖不可计算`}
         {data.unmapped_members > 0 ? ` · ${data.unmapped_members}只成分缺少证券映射` : ''}
         {data.latest?.latest_float_proxy_members ? ` · ${data.latest.latest_float_proxy_members}只当前使用最新股本代理` : ''}

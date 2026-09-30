@@ -66,11 +66,12 @@ def etf_momentum(request: Request, limit: int = Query(40, ge=1, le=200)) -> dict
 
 
 @router.get("/sector-flow")
-def sector_flow(request: Request, dimension: str = Query("industry", pattern="^(industry|concept)$")) -> dict:
+def sector_flow(request: Request, dimension: str = Query("industry", pattern="^(industry|concept)$"), taxonomy: Literal["ths", "source"] = "ths") -> dict:
     return sector_flow_from_repo(
         request.app.state.repo,
         dimension=dimension,
         fact_repo=getattr(request.app.state, "market_facts", None),
+        ths_only=taxonomy == "ths",
     )
 
 
@@ -79,12 +80,14 @@ def sector_radar(
     request: Request,
     dimension: str = Query("industry", pattern="^(industry|concept)$"),
     as_of: date | None = None,
+    taxonomy: Literal["ths", "source"] = "ths",
 ) -> dict:
     return sector_radar_from_repo(
         request.app.state.repo,
         dimension=dimension,
         as_of=as_of,
         fact_repo=getattr(request.app.state, "market_facts", None),
+        ths_only=taxonomy == "ths",
     )
 
 
@@ -98,13 +101,13 @@ def sector_members(
 ) -> dict:
     return sector_members_from_repo(
         request.app.state.repo, dimension=dimension, sector=sector,
-        as_of=as_of, limit=limit,
+        as_of=as_of, limit=limit, ths_only=True,
     )
 
 
 @router.get("/macro-dispersion")
 def macro_dispersion(request: Request) -> dict:
-    return macro_dispersion_from_repo(request.app.state.repo)
+    return macro_dispersion_from_repo(request.app.state.repo, ths_only=True)
 
 
 @router.post("/position")

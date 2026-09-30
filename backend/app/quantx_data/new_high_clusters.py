@@ -53,17 +53,19 @@ def _concept_dimension(value: str) -> str:
     return "attribute" if _CONCEPT_ATTRIBUTE.search(value) else "concept"
 
 
-def load_security_memberships(data_dir) -> dict[str, dict[str, set[str]]]:
+def load_security_memberships(data_dir, *, ths_only: bool = False) -> dict[str, dict[str, set[str]]]:
     memberships: dict[str, dict[str, set[str]]] = {
         dimension: defaultdict(set) for dimension in DIMENSIONS
     }
     for config in ExtConfigStore(data_dir).load_all():
+        if ths_only and config.id not in {"ext_gn_ths", "ext_hy_ths"}:
+            continue
         concept_field = _dimension_field(config, "concept")
         if concept_field:
             for row in _read_ext_rows(data_dir, config, concept_field):
                 concepts = {
                     value
-                    for value in _dimension_values(row.get(concept_field))
+                    for value in (_ths_values(row.get(concept_field)) if ths_only else _dimension_values(row.get(concept_field)))
                     if _is_investable_concept(value)
                 }
                 for key in _symbol_keys(row, config):
@@ -74,7 +76,7 @@ def load_security_memberships(data_dir) -> dict[str, dict[str, set[str]]]:
         industry_field = _dimension_field(config, "industry")
         if industry_field:
             for row in _read_ext_rows(data_dir, config, industry_field):
-                paths = _dimension_values(row.get(industry_field))
+                paths = _ths_values(row.get(industry_field)) if ths_only else _dimension_values(row.get(industry_field))
                 levels: dict[str, set[str]] = {
                     "industry_level1": set(),
                     "industry_level2": set(),
@@ -90,6 +92,17 @@ def load_security_memberships(data_dir) -> dict[str, dict[str, set[str]]]:
                     for dimension, values in levels.items():
                         memberships[dimension][normalized].update(values)
     return memberships
+
+
+def _ths_values(value: Any) -> list[str]:
+    # Spaces and slashes are part of names (AI PC, WiFi 6, DRG/DIP).
+    values = value if isinstance(value, (list, tuple)) else re.split(r"[;\uff1b,\uff0c\u3001|\n]+", str(value or ""))
+    return sorted({str(item).strip() for item in values if str(item).strip().lower() not in {"", "nan", "none", "null"}})
+
+
+def load_ths_memberships(data_dir) -> dict[str, dict[str, set[str]]]:
+    """Full THS snapshots for Market Lab and stock pools; QuantX keeps its route."""
+    return load_security_memberships(data_dir, ths_only=True)
 
 
 def _new_high_rows(facts: MarketFactRepository, trade_date: date) -> dict[str, dict[str, Any]]:

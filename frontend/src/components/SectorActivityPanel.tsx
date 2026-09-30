@@ -4,7 +4,7 @@ import { amvApi, type AmvDimension } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { AmvPanel } from './AmvPanel'
 
-type Metric = 'active_share_change_5d_pp' | 'active_share_pct' | 'expanding_members_5d_pct'
+type Metric = 'active_share_change_5d_pp' | 'active_share_pct' | 'expanding_members_5d_pct' | 'price_change_5d_pct'
 const fmt = (value: number | null | undefined, suffix = '', signed = false) => value == null
   ? '—' : `${signed && value > 0 ? '+' : ''}${value.toFixed(2)}${suffix}`
 const color = (value: number | null | undefined) => value == null || value === 0
@@ -37,10 +37,10 @@ export function SectorActivityPanel() {
 
   return <div className="space-y-4" data-testid="sector-activity">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><h2 className="text-base font-semibold text-foreground">板块活跃参与</h2><p className="mt-1 text-xs text-muted">观察参与扩张、收缩与集中程度；活跃占比上升需结合价格方向判断。</p></div>
+      <div><h2 className="text-base font-semibold text-foreground">THS完整板块 · 表现与活跃</h2><p className="mt-1 text-xs text-muted">完整成分计算价格表现、参与扩张与扩散；与股票池使用同一套板块参考。</p></div>
       <div className="flex flex-wrap items-center gap-2">
         <select aria-label="活跃板块分类" className={control} value={dimension} onChange={event => { setDimension(event.target.value as AmvDimension); setSelection(null) }}>
-          <option value="concept">概念题材</option><option value="industry_level1">一级行业</option><option value="industry_level2">二级行业</option>
+          <option value="concept">THS概念题材</option><option value="industry_level1">THS一级行业</option><option value="industry_level2">THS二级行业</option>
         </select>
         <input aria-label="活跃参与日期" className={control} type="date" value={date ?? data?.trade_date ?? ''} onChange={event => { setDate(event.target.value || undefined); setSelection(null) }} />
         <button className={control} onClick={() => { if (date) setDate(undefined); else void query.refetch() }}>最新</button>
@@ -52,7 +52,7 @@ export function SectorActivityPanel() {
         <div className="flex flex-wrap gap-2">
           <input aria-label="搜索活跃板块" className={control} placeholder="搜索板块" value={search} onChange={event => setSearch(event.target.value)} />
           <select aria-label="活跃变化范围" className={control} value={filter} onChange={event => setFilter(event.target.value as typeof filter)}><option value="all">全部</option><option value="expanding">占比扩张</option><option value="contracting">占比收缩</option></select>
-          <select aria-label="活跃排序指标" className={control} value={metric} onChange={event => setMetric(event.target.value as Metric)}><option value="active_share_change_5d_pp">5日占比变化</option><option value="active_share_pct">活跃占比</option><option value="expanding_members_5d_pct">活跃扩散率</option></select>
+          <select aria-label="活跃排序指标" className={control} value={metric} onChange={event => setMetric(event.target.value as Metric)}><option value="active_share_change_5d_pp">5日占比变化</option><option value="active_share_pct">活跃占比</option><option value="expanding_members_5d_pct">活跃扩散率</option><option value="price_change_5d_pct">5日价格表现</option></select>
           <button className={control} onClick={() => setDescending(value => !value)}>{descending ? '↓ 降序' : '↑ 升序'}</button>
         </div>
       </div>
@@ -83,8 +83,8 @@ export function SectorActivityPanel() {
       <div className="mt-3 space-y-2 leading-relaxed text-secondary">
         <p>先按5日占比变化找扩张板块，再看扩散率：多只成员同步增强，比只由少数大市值成员推动更广泛。前三活跃集中度用于辨认龙头集中。</p>
         <p>价格上涨且占比扩张，可作为参与增强的研究线索；价格下跌且占比扩张，可能是分歧换手和抛压；价格上涨而占比收缩，需关注参与衰减。</p>
-        <p>结合资金页签时先确认日期、分类与成分一致。行业资金为来源净额，概念资金为OHLCV压力代理；活跃市值不代表净买入，不能仅凭同名板块合并口径。</p>
-        <p>股票池题材详情默认显示这里的完整板块参考，也可切换入池成员对比。用于复盘与跟踪；当前不参与入池过滤或评分。</p>
+        <p>THS板块压力与这里共用完整成分；OHLCV压力代理和活跃市值均不代表净买入。外部资金观察保留来源自带分类，不与THS板块合并。</p>
+        <p>股票池题材详情固定显示这里的完整概念板块参考，计算范围独立于入池名单。合并逻辑题材可选择对应概念板块。用于复盘与跟踪；当前不参与入池过滤或评分。</p>
       </div>
     </details>
   </div>

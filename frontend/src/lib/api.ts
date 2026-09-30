@@ -2613,10 +2613,10 @@ export const api = {
     ),
   marketLabEtfMomentum: (limit = 40) =>
     request<EtfMomentumResponse>(`/api/market-lab/etf-momentum?limit=${limit}`),
-  marketLabSectorFlow: (dimension: 'industry' | 'concept' = 'industry') =>
-    request<SectorFlowResponse>(`/api/market-lab/sector-flow?dimension=${dimension}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
-  marketLabSectorRadar: (dimension: 'industry' | 'concept' = 'industry', asOf?: string) =>
-    request<SectorRadarResponse>(`/api/market-lab/sector-radar?dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
+  marketLabSectorFlow: (dimension: 'industry' | 'concept' = 'industry', taxonomy: 'ths' | 'source' = 'ths') =>
+    request<SectorFlowResponse>(`/api/market-lab/sector-flow?dimension=${dimension}&taxonomy=${taxonomy}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
+  marketLabSectorRadar: (dimension: 'industry' | 'concept' = 'industry', asOf?: string, taxonomy: 'ths' | 'source' = 'ths') =>
+    request<SectorRadarResponse>(`/api/market-lab/sector-radar?dimension=${dimension}&taxonomy=${taxonomy}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
   marketLabSectorMembers: (sector: string, dimension: 'industry' | 'concept' = 'industry', asOf?: string) =>
     request<SectorMembersResponse>(`/api/market-lab/sector-members?sector=${encodeURIComponent(sector)}&dimension=${dimension}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
   marketLabMacroDispersion: () =>

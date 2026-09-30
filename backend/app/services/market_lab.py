@@ -481,8 +481,21 @@ def etf_momentum_from_repo(repo, limit: int = 40) -> dict[str, Any]:
     }
 
 
-def _attach_dimension(repo, history: pl.DataFrame, dimension: str) -> pl.DataFrame:
-    if dimension in history.columns or history.is_empty() or "symbol" not in history.columns:
+def _attach_dimension(repo, history: pl.DataFrame, dimension: str, *, ths_only: bool = False) -> pl.DataFrame:
+    if history.is_empty() or "symbol" not in history.columns:
+        return history
+    if ths_only:
+        from app.quantx_data.new_high_clusters import load_ths_memberships
+
+        memberships = load_ths_memberships(repo.store.data_dir)
+        key = "industry_level2" if dimension == "industry" else "concept"
+        pairs = [(code, label) for code, labels in memberships[key].items() for label in sorted(labels)]
+        mapping = pl.DataFrame(pairs, schema={"_code": pl.String, dimension: pl.String}, orient="row")
+        # Replace any inherited vendor classification with the shared THS map.
+        return (history.drop(dimension, strict=False)
+                .with_columns(pl.col("symbol").str.split(".").list.first().alias("_code"))
+                .join(mapping, on="_code", how="inner").drop("_code"))
+    if dimension in history.columns:
         return history
     from app.services.rps_rotation import _load_concept_map_df
 
@@ -571,18 +584,19 @@ def _sector_flow_from_facts(fact_repo, dimension: str) -> dict[str, Any] | None:
     }
 
 
-def sector_flow_from_repo(repo, dimension: str = "industry", fact_repo=None) -> dict[str, Any]:
-    if fact_repo is not None:
+def sector_flow_from_repo(repo, dimension: str = "industry", fact_repo=None, *, ths_only: bool = False) -> dict[str, Any]:
+    if fact_repo is not None and not ths_only:
         canonical = _sector_flow_from_facts(fact_repo, dimension)
         if canonical is not None:
             return canonical
+        return {"available": False, "quality": "unavailable", "detail": "来源未提供该分类的板块资金事实", "rows": []}
     latest, latest_date = repo.get_enriched_latest()
     if latest_date is None or latest.is_empty():
         return {"available": False, "quality": "unavailable", "detail": "本地暂无股票日线", "rows": []}
     history = repo.get_enriched_range(latest_date - timedelta(days=10), latest_date)
     if history is None or history.is_empty():
         return {"available": False, "quality": "unavailable", "detail": "本地历史日线不足", "rows": []}
-    history = _attach_dimension(repo, history, dimension)
+    history = _attach_dimension(repo, history, dimension, ths_only=ths_only)
     if dimension not in history.columns:
         return {"available": False, "quality": "unavailable", "detail": f"缺少 {dimension} 维度历史", "rows": []}
     flow_columns = [c for c in ("main_net_inflow", "main_net", "net_inflow") if c in history.columns]
@@ -629,8 +643,8 @@ def _longest_enriched_history(repo, end_date: date, windows: tuple[int, ...]) ->
 
 
 def _aggregate_sector_returns(data: pl.DataFrame, dimension: str) -> pl.DataFrame:
-    data = data.sort(["symbol", "date"]).with_columns(
-        ((pl.col("close") / pl.col("close").shift(1).over("symbol") - 1) * 100)
+    data = data.sort(["symbol", dimension, "date"]).with_columns(
+        ((pl.col("close") / pl.col("close").shift(1).over(["symbol", dimension]) - 1) * 100)
         .alias("daily_return_pct")
     ).filter(pl.col("daily_return_pct").is_not_null())
     weight_column = next(
@@ -803,13 +817,14 @@ def _sector_radar_from_facts(fact_repo, dimension: str, as_of: date | None) -> d
 
 
 def sector_radar_from_repo(
-    repo, dimension: str = "industry", as_of: date | None = None, fact_repo=None
+    repo, dimension: str = "industry", as_of: date | None = None, fact_repo=None, *, ths_only: bool = False
 ) -> dict[str, Any]:
     """Build OneChart-compatible money-flow radar ranks for every local sector."""
-    if fact_repo is not None:
+    if fact_repo is not None and not ths_only:
         canonical = _sector_radar_from_facts(fact_repo, dimension, as_of)
         if canonical is not None:
             return canonical
+        return {"available": False, "quality": "unavailable", "detail": "来源未提供该分类的板块资金事实", "rows": []}
     latest, latest_date = repo.get_enriched_latest()
     if latest_date is None or latest.is_empty():
         return {"available": False, "quality": "unavailable", "detail": "本地暂无股票日线", "rows": []}
@@ -817,7 +832,7 @@ def sector_radar_from_repo(
     history = _longest_enriched_history(repo, target_date, (140, 100, 75, 55, 35, 14))
     if history is None:
         return {"available": False, "quality": "unavailable", "detail": "本地历史日线不足", "rows": []}
-    history = _attach_dimension(repo, history, dimension)
+    history = _attach_dimension(repo, history, dimension, ths_only=ths_only)
     required = {dimension, "symbol", "date", "close", "amount"}
     if not required.issubset(history.columns):
         return {"available": False, "quality": "unavailable", "detail": f"缺少 {dimension} 或行情历史", "rows": []}
@@ -879,7 +894,7 @@ def sector_radar_from_repo(
 
 
 def sector_members_from_repo(
-    repo, *, dimension: str, sector: str, as_of: date | None = None, limit: int = 10
+    repo, *, dimension: str, sector: str, as_of: date | None = None, limit: int = 10, ths_only: bool = False
 ) -> dict[str, Any]:
     """Return stock-level evidence for one radar sector from the local repository."""
     latest, latest_date = repo.get_enriched_latest()
@@ -889,13 +904,13 @@ def sector_members_from_repo(
     history = repo.get_enriched_range(target_date - timedelta(days=12), target_date)
     if history is None or history.is_empty():
         return {"available": False, "detail": "个股历史不足", "metrics": {}}
-    history = _attach_dimension(repo, history, dimension)
+    history = _attach_dimension(repo, history, dimension, ths_only=ths_only)
     required = {"symbol", "date", "close", dimension}
     if not required.issubset(history.columns):
         return {"available": False, "detail": "缺少板块成分映射或收盘价", "metrics": {}}
     dimension_text = pl.col(dimension).cast(pl.Utf8)
     member_filter = dimension_text == sector
-    if dimension == "industry":
+    if dimension == "industry" and not ths_only:
         # 统一事实中的行业名可能是一级/二级简称, 而 ext_hy_ths 保存的是
         # “一级-二级-三级”全路径。点击雷达行时两种口径都应能下钻到成分股。
         member_filter = member_filter | dimension_text.str.split("-").list.contains(sector)
@@ -1003,7 +1018,7 @@ def _contribution_windows(
     return windows
 
 
-def macro_dispersion_from_repo(repo) -> dict[str, Any]:
+def macro_dispersion_from_repo(repo, *, ths_only: bool = False) -> dict[str, Any]:
     """Compute OneChart dispersion from local daily industry return cross-sections."""
     latest, latest_date = repo.get_enriched_latest()
     if latest_date is None or latest.is_empty():
@@ -1011,7 +1026,7 @@ def macro_dispersion_from_repo(repo) -> dict[str, Any]:
     history = _longest_enriched_history(repo, latest_date, (420, 300, 220, 160, 100, 60, 30))
     if history is None:
         return {"available": False, "detail": "本地行业历史不足", "history": [], "indices": []}
-    history = _attach_dimension(repo, history, "industry")
+    history = _attach_dimension(repo, history, "industry", ths_only=ths_only)
     required = {"industry", "symbol", "date", "close"}
     if not required.issubset(history.columns):
         return {"available": False, "detail": "缺少本地行业映射或收盘价历史", "history": [], "indices": []}

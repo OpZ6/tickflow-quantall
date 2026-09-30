@@ -23,7 +23,7 @@ from app.indicators.active_market_value import (
     resolve_float_shares,
 )
 from app.market_facts.repository import MarketFactRepository
-from app.quantx_data.new_high_clusters import load_security_memberships
+from app.quantx_data.new_high_clusters import load_ths_memberships as load_security_memberships
 
 AMV_DIMENSIONS = ("concept", "industry_level1", "industry_level2")
 _sector_cache = OrderedDict()
@@ -140,7 +140,7 @@ def list_sector_activity(repo, trade_date=None, *, dimension="concept"):
     return {"available": any(x["latest"] for x in rows), "trade_date": trade_date.isoformat(), "dimension": dimension,
             "algorithm_version": ALGORITHM_VERSION, "rows": rows,
             "available_dates": [d.isoformat() for d in batch["days"][-30:]],
-            "detail": "最新概念/行业成分固定回看，普通流通股本估计；与资金雷达的板块分类独立。"}
+            "detail": "最新概念/行业成分固定回看，普通流通股本估计；与股票池和THS板块压力排名共用完整成分。"}
 
 
 def analyze_active_market_value(repo, trade_date: date, symbols: list[str], *, sector: str = "", dimension: str = "concept") -> dict:
@@ -149,7 +149,7 @@ def analyze_active_market_value(repo, trade_date: date, symbols: list[str], *, s
             raise ValueError("无效板块分类")
         batch = _sector_batch(repo, trade_date)
         if sector not in batch["groups"][dimension]:
-            raise ValueError("找不到同名完整成分映射，可切回题材入池成员观察。")
+            raise ValueError("找不到该板块的完整成分映射，请重新选择对应概念板块。")
         return _sector_result(batch, trade_date, dimension, sector)
     instruments = repo.get_instruments()
     names = dict(instruments.select("symbol", "name").iter_rows()) if {"symbol", "name"} <= set(instruments.columns) else {}

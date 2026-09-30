@@ -275,7 +275,7 @@ def test_dynamic_topic_cluster_exposes_subgroups_for_merged_labels():
     ]
 
 
-def test_dynamic_topic_cluster_applies_and_reuses_llm_normalization():
+def test_dynamic_topic_cluster_rejects_and_reuses_unverified_llm_normalization():
     rows = [
         {"symbol": "000001", "evidence_source": "ths_hot_concepts", "match_text": "风电;海工装备", "text": "海上风电"},
         {"symbol": "000002", "evidence_source": "ths_hot_concepts", "match_text": "风电", "text": ""},
@@ -289,16 +289,16 @@ def test_dynamic_topic_cluster_applies_and_reuses_llm_normalization():
 
     assignment = build_topic_assignment(rows, normalizer=fake)
     assert assignment.meta["mode"] == "llm"
-    assert assignment.meta["aliases"] == {"海工装备": "风电"}
-    assert assignment.topics["000001"] == ["风电"]
+    assert assignment.meta["aliases"] == {}
+    assert set(assignment.topics["000001"]) == {"海工装备", "风电"}
     assert assignment.topics["000002"] == ["风电"]
-    assert assignment.topics["000003"] == ["风电"]
+    assert assignment.topics["000003"] == ["海工装备"]
     assert len(calls) == 1
 
     reused = build_topic_assignment(rows, normalizer=fake, reuse=assignment.meta)
     assert len(calls) == 1
     assert reused.meta["mode"] == "llm"
-    assert reused.topics["000003"] == ["风电"]
+    assert reused.topics["000003"] == ["海工装备"]
     build_topic_assignment(rows, normalizer=fake, reuse={**assignment.meta, "rule": "older"})
     assert len(calls) == 2
 

@@ -8,11 +8,11 @@ from __future__ import annotations
 import re
 
 TOPIC_PATTERNS: tuple[tuple[str, str], ...] = (
-    ("PCB／覆铜板", r"PCB|HDI|覆铜板|CCL|电子布|铜箔"),
+    ("PCB／覆铜板", r"(?<![a-z])PCB(?![a-z])|(?<![a-z])HDI(?![a-z])|覆铜板|(?<![a-z])CCL(?![a-z])|电子布|铜箔"),
     ("液冷", r"液冷"),
-    ("MLCC／被动元件", r"MLCC|被动元件"),
+    ("MLCC／被动元件", r"(?<![a-z])MLCC(?![a-z])|被动元件"),
     ("网络／AI安全", r"网络安全|AI安全|数据安全|网络可视化"),
-    ("光互联", r"光通信|光模块|CPO|光互联|光纤"),
+    ("光互联", r"光通信|光模块|(?<![a-z])CPO(?![a-z])|光互联|光纤"),
     ("金刚石散热", r"金刚石散热"),
     ("培育钻石", r"培育钻石"),
     ("人形机器人", r"人形机器人"),
@@ -26,7 +26,7 @@ TOPIC_PATTERNS: tuple[tuple[str, str], ...] = (
     ("电力", r"热电联产|电力"),
     ("AI应用", r"AI应用|智能体|AI大模型"),
     ("算力／数据中心", r"AI算力|云计算数据中心|数据中心|服务器"),
-    ("创新药／CRO", r"创新药|CRO|mRNA"),
+    ("创新药／CRO", r"创新药|(?<![a-z])CRO(?![a-z])|(?<![a-z])mRNA(?![a-z])"),
     ("医疗／医药", r"医药|医疗"),
     ("零售", r"连锁零售|零售"),
     ("旅游", r"旅游|酒店|人工景点"),
@@ -62,7 +62,7 @@ BACKGROUND_EXACT = {
     "长安汽车概念", "英伟达概念", "PC", "50",
 }
 INDUSTRY_DISPLAY_THEMES = {
-    "元件": {"PCB概念", "MLCC概念"},
+    "元件": {"PCB", "MLCC", "PCB概念", "MLCC概念"},
     "半导体": {"存储芯片", "先进封装", "汽车芯片", "MCU芯片", "第三代半导体", "光刻胶", "光刻机"},
     "通信设备": {"共封装光学(CPO)", "光纤概念", "铜缆高速连接", "5G", "6G概念"},
     "电池": {"固态电池", "锂电池概念", "钠离子电池", "动力电池回收"},
@@ -72,11 +72,15 @@ INDUSTRY_DISPLAY_THEMES = {
 THEME_LEVEL_ORDER = {"theme": 0, "industry": 1, "background": 2}
 
 
-def topic_labels(text: str) -> list[str]:
+def topic_labels(text: str, *, whole_term: bool = False) -> list[str]:
     """Return explicit topic labels mentioned by the text, preserving rule order."""
     if not text:
         return []
-    matched = [name for name, pattern in TOPIC_PATTERNS if re.search(pattern, text, re.I)]
+    # Dynamic clustering handles complete source tags, not free-form mentions.
+    # A compound like 电力人工智能 keeps its own name instead of becoming 电力.
+    target = re.sub(r"(概念|板块)$", "", text.strip()) if whole_term else text
+    match = re.fullmatch if whole_term else re.search
+    matched = [name for name, pattern in TOPIC_PATTERNS if match(pattern, target, re.I)]
     return [name for name in matched if SPECIFIC_OVERRIDES.get(name) not in matched]
 
 

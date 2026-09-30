@@ -87,15 +87,16 @@ const radarDays = (row: SectorRadarRow, metric: RadarMetric, high: boolean) => {
 }
 
 function SectorPanel() {
-  const [view, setView] = useState<'funds' | 'activity'>('funds')
+  const [view, setView] = useState<'funds' | 'activity' | 'external'>('activity')
   return <div className="space-y-4">
-    <div className="flex gap-2">{([['funds', '资金强弱'], ['activity', '活跃参与']] as const).map(([key, label]) =>
+    <p className="text-xs text-muted">THS完整板块 · 表现与排名 · 与股票池共用概念及成分</p>
+    <div className="flex gap-2">{([['activity', '表现与活跃'], ['funds', 'THS板块压力'], ['external', '外部资金观察']] as const).map(([key, label]) =>
       <button key={key} aria-pressed={view === key} onClick={() => setView(key)} className={`rounded border px-3 py-2 text-xs ${view === key ? 'border-accent bg-accent/10 text-accent' : 'border-border text-secondary hover:bg-elevated'}`}>{label}</button>)}</div>
-    {view === 'funds' ? <SectorFundsPanel /> : <SectorActivityPanel />}
+    {view === 'activity' ? <SectorActivityPanel /> : <SectorFundsPanel key={view} external={view === 'external'} />}
   </div>
 }
 
-function SectorFundsPanel() {
+function SectorFundsPanel({ external = false }: { external?: boolean }) {
   const ct = useChartTheme()
   const [dimension, setDimension] = useState<'industry' | 'concept'>('industry')
   const [metric, setMetric] = useState<RadarMetric>('swing')
@@ -104,12 +105,13 @@ function SectorFundsPanel() {
   const [selectedSector, setSelectedSector] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [memberMetric, setMemberMetric] = useState<'return_pct' | 'main_net_amount' | 'active_buy_net_amount'>('return_pct')
-  const radar = useQuery({ queryKey: QK.marketLabRadar(dimension, asOf), queryFn: () => api.marketLabSectorRadar(dimension, asOf), staleTime: 5 * 60_000 })
-  const flow = useQuery({ queryKey: QK.marketLabSector(dimension), queryFn: () => api.marketLabSectorFlow(dimension), staleTime: 5 * 60_000 })
+  const taxonomy = external ? 'source' : 'ths'
+  const radar = useQuery({ queryKey: QK.marketLabRadar(dimension, asOf, taxonomy), queryFn: () => api.marketLabSectorRadar(dimension, asOf, taxonomy), staleTime: 5 * 60_000 })
+  const flow = useQuery({ queryKey: QK.marketLabSector(dimension, taxonomy), queryFn: () => api.marketLabSectorFlow(dimension, taxonomy), staleTime: 5 * 60_000 })
   const members = useQuery({
     queryKey: QK.marketLabMembers(dimension, selectedSector ?? '', asOf),
     queryFn: () => api.marketLabSectorMembers(selectedSector!, dimension, asOf),
-    enabled: Boolean(selectedSector),
+    enabled: Boolean(selectedSector) && !external,
     staleTime: 5 * 60_000,
   })
   const rows = radar.data?.rows ?? []
@@ -130,7 +132,8 @@ function SectorFundsPanel() {
   const retreaters = metric === 'change' ? ordered.slice(-rankChangeCount).reverse() : ordered.filter(row => radarRankPct(row, metric) <= 10).reverse()
   const maxAbs = Math.max(1e-9, ...attackers.concat(retreaters).map(row => Math.abs(radarValue(row, metric, rankWindow))))
   const selectedFlow = flowRows.find(row => row.sector === selectedSector)
-  const metricLabel = metric === 'swing' ? '波段流入率' : metric === 'ratio' ? '单日流入率' : metric === 'amount' ? '单日净额' : `${rankWindow}日排名变化`
+  const proxy = radar.data?.quality === 'proxy'
+  const metricLabel = metric === 'swing' ? (proxy ? '波段压力率' : '波段流入率') : metric === 'ratio' ? (proxy ? '单日压力率' : '单日流入率') : metric === 'amount' ? (proxy ? '单日压力额' : '单日净额') : `${rankWindow}日排名变化`
   const metricText = (row: SectorRadarRow) => metric === 'amount'
     ? billion(row.flow_yuan)
     : metric === 'change'
@@ -169,7 +172,7 @@ function SectorFundsPanel() {
     URL.revokeObjectURL(link.href)
   }
   const renderSide = (sideRows: SectorRadarRow[], high: boolean) => <div className="min-w-0">
-    <div className={`mb-2 flex items-center justify-between text-xs font-semibold ${high ? 'text-bull' : 'text-bear'}`}><span>{high ? '进攻方 · 流入' : '流出 · 撤退方'}</span><span className="text-muted">{high ? 'TOP 10%' : 'BOTTOM 10%'}</span></div>
+    <div className={`mb-2 flex items-center justify-between text-xs font-semibold ${high ? 'text-bull' : 'text-bear'}`}><span>{high ? '相对强势' : '相对弱势'}</span><span className="text-muted">{high ? 'TOP 10%' : 'BOTTOM 10%'}</span></div>
     <div className="space-y-1.5">{sideRows.map(row => {
       const value = radarValue(row, metric, rankWindow)
       return <button key={row.sector} type="button" onClick={() => setSelectedSector(row.sector)} className={`w-full rounded border px-2.5 py-2 text-left transition-colors ${selectedSector === row.sector ? 'border-accent bg-accent/5' : 'border-border/70 hover:bg-elevated'}`}>
@@ -183,31 +186,31 @@ function SectorFundsPanel() {
   if (!radar.data?.available) return <Empty text={radar.error?.message ?? radar.data?.detail ?? '暂无板块资金数据'} />
   return <div className="space-y-4">
     <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-      <div><h2 className="text-base font-semibold">板块资金雷达</h2><p className="text-xs text-muted">按资金流入强弱识别进攻与撤退板块；评分和排名沿用 OneChart 口径。</p></div>
+      <div><h2 className="text-base font-semibold">{external ? '外部资金观察' : 'THS完整板块压力排名'}</h2><p className="text-xs text-muted">{external ? '来源自带分类独立展示，不映射为THS成分；用于补充观察。' : '与活跃参考共用THS完整成分；压力为收盘位置×成交额，结合价格方向观察。'}</p></div>
       <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
         <input aria-label="搜索板块" className={input} style={{ width: 170 }} placeholder="搜索板块" value={search} onChange={event => setSearch(event.target.value)} />
-        <div className="flex overflow-hidden rounded border border-border">{([['swing', '波段流入率'], ['ratio', '单日流入率'], ['amount', '单日净额'], ['change', '排名变化']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setMetric(key)} className={`px-3 py-2 text-xs ${metric === key ? 'bg-accent text-white' : 'bg-surface text-secondary hover:bg-elevated'}`}>{label}</button>)}</div>
+        <div className="flex overflow-hidden rounded border border-border">{([['swing', proxy ? '波段压力率' : '波段流入率'], ['ratio', proxy ? '单日压力率' : '单日流入率'], ['amount', proxy ? '单日压力额' : '单日净额'], ['change', '排名变化']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setMetric(key)} className={`px-3 py-2 text-xs ${metric === key ? 'bg-accent text-white' : 'bg-surface text-secondary hover:bg-elevated'}`}>{label}</button>)}</div>
         {metric === 'change' && <select aria-label="排名变化窗口" className={input} style={{ width: 88 }} value={rankWindow} onChange={event => setRankWindow(Number(event.target.value) as RankWindow)}><option value={1}>1 日</option><option value={3}>3 日</option><option value={5}>5 日</option></select>}
         <select aria-label="板块维度" className={input} style={{ width: 116 }} value={dimension} onChange={event => { setDimension(event.target.value as typeof dimension); setAsOf(undefined) }}><option value="industry">行业板块</option><option value="concept">概念板块</option></select>
         <select aria-label="雷达日期" className={input} style={{ width: 142 }} value={asOf ?? radar.data.as_of} onChange={event => setAsOf(event.target.value)}>{radar.data.available_dates?.slice().reverse().map(value => <option key={value} value={value}>{value}</option>)}</select>
       </div>
     </div>
     <div className={card} data-testid="sector-radar-mirror">
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border pb-3 text-xs"><span className={`rounded px-2 py-1 ${radar.data.quality === 'observed' ? 'bg-bull/10 text-bull' : 'bg-warning/10 text-warning'}`}>{radar.data.quality === 'observed' ? '真实资金流' : 'OHLCV 资金压力代理'}</span><span className="text-muted">{metricLabel} · {radar.data.universe_size} 个板块 · 截至 {radar.data.as_of}</span><span className="ml-auto text-muted">排名分位评分：波段 9.16×RankPct+61.53</span></div>
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border pb-3 text-xs"><span className={`rounded px-2 py-1 ${radar.data.quality === 'observed' ? 'bg-bull/10 text-bull' : 'bg-warning/10 text-warning'}`}>{radar.data.quality === 'proxy' ? 'OHLCV 资金压力代理' : '来源资金流'}</span><span className="text-muted">{metricLabel} · {radar.data.universe_size} 个板块 · 截至 {radar.data.as_of}</span><span className="ml-auto text-muted">排名分位评分：波段 9.16×RankPct+61.53</span></div>
       {radar.data.detail && <p className="mb-3 text-xs text-warning">{radar.data.detail}</p>}
       <div className="grid gap-5 md:grid-cols-2">{renderSide(attackers, true)}{renderSide(retreaters, false)}</div>
     </div>
     <div className={`${card} grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]`}>
-      <div><h3 className="text-sm font-semibold">板块明细 · {selectedSector ?? '--'}</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[680px] text-right text-xs"><thead className="text-muted"><tr><th className="pb-2 text-left">指标</th><th>数值</th><th>排名</th><th>评分</th><th>1日变化</th><th>3日变化</th><th>5日变化</th></tr></thead><tbody>{rows.filter(row => row.sector === selectedSector).map(row => ([['波段流入率', row.swing_ratio_pct, row.swing_rank, row.swing_score, row.swing_rank_change_1d, row.swing_rank_change_3d, row.swing_rank_change_5d], ['单日流入率', row.flow_ratio_pct, row.ratio_rank, row.ratio_score, row.ratio_rank_change_1d, row.ratio_rank_change_3d, row.ratio_rank_change_5d], ['单日净额(亿)', row.flow_yuan / 1e8, row.amount_rank, row.amount_score, row.amount_rank_change_1d, row.amount_rank_change_3d, row.amount_rank_change_5d]] as const).map(values => <tr key={values[0]} className="border-t border-border/60"><td className="py-2 text-left">{values[0]}</td>{values.slice(1).map((value, index) => <td key={index} className="font-mono">{fmt(value as number)}</td>)}</tr>))}</tbody></table></div></div>
+      <div><h3 className="text-sm font-semibold">板块明细 · {selectedSector ?? '--'}</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[680px] text-right text-xs"><thead className="text-muted"><tr><th className="pb-2 text-left">指标</th><th>数值</th><th>排名</th><th>评分</th><th>1日变化</th><th>3日变化</th><th>5日变化</th></tr></thead><tbody>{rows.filter(row => row.sector === selectedSector).map(row => ([[proxy ? '波段压力率' : '波段流入率', row.swing_ratio_pct, row.swing_rank, row.swing_score, row.swing_rank_change_1d, row.swing_rank_change_3d, row.swing_rank_change_5d], [proxy ? '单日压力率' : '单日流入率', row.flow_ratio_pct, row.ratio_rank, row.ratio_score, row.ratio_rank_change_1d, row.ratio_rank_change_3d, row.ratio_rank_change_5d], [proxy ? '单日压力额(亿)' : '单日净额(亿)', row.flow_yuan / 1e8, row.amount_rank, row.amount_score, row.amount_rank_change_1d, row.amount_rank_change_3d, row.amount_rank_change_5d]] as const).map(values => <tr key={values[0]} className="border-t border-border/60"><td className="py-2 text-left">{values[0]}</td>{values.slice(1).map((value, index) => <td key={index} className="font-mono">{fmt(value as number)}</td>)}</tr>))}</tbody></table></div></div>
       <div className="min-w-0 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"><h3 className="text-sm font-semibold">近 3 日资金趋势</h3>{flow.data?.available && selectedFlow ? <div data-testid="sector-flow-trend-chart"><ReactECharts option={trendOption} style={{ height: 220 }} /></div> : <p className="mt-8 text-center text-xs text-muted">{flow.error?.message ?? '暂无逐日资金数据'}</p>}</div>
     </div>
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,1.35fr)]">
       <div className={card} data-testid="sector-rank-calendar"><div className="mb-2"><h3 className="text-sm font-semibold">排名日历 · {selectedSector ?? '--'}</h3><p className="text-xs text-muted">纵轴越靠上排名越强；使用当前指标近 {selectedHistory.length} 个交易日。</p></div>{selectedHistory.length ? <ReactECharts option={calendarOption} style={{ height: 280 }} /> : <Empty text="暂无排名历史" />}</div>
-      <div className={card} data-testid="sector-member-evidence">
+      {!external && <div className={card} data-testid="sector-member-evidence">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-semibold">成分股强度 · {selectedSector ?? '--'}</h3><p className="text-xs text-muted">{members.data?.member_count ?? 0} 只本地成分 · 资金质量 {members.data?.flow_quality ?? '--'} · 主动买入 {members.data?.active_quality ?? '--'}</p></div><button type="button" className="rounded border border-border px-2.5 py-1.5 text-xs hover:bg-elevated" onClick={exportMembers} disabled={!memberRows}>导出 CSV</button></div>
-        <div className="mb-3 flex overflow-hidden rounded border border-border">{([['return_pct', '涨跌幅'], ['main_net_amount', '主力净额'], ['active_buy_net_amount', '主动买入净额']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setMemberMetric(key)} className={`flex-1 px-2 py-1.5 text-xs ${memberMetric === key ? 'bg-accent text-white' : 'hover:bg-elevated'}`}>{label}</button>)}</div>
+        <div className="mb-3 flex overflow-hidden rounded border border-border">{([['return_pct', '涨跌幅'], ['main_net_amount', members.data?.flow_quality === 'proxy' ? '收盘压力额' : '主力净额'], ['active_buy_net_amount', '主动买入净额']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setMemberMetric(key)} className={`flex-1 px-2 py-1.5 text-xs ${memberMetric === key ? 'bg-accent text-white' : 'hover:bg-elevated'}`}>{label}</button>)}</div>
         {members.isLoading ? <Empty text="正在加载成分股证据…" /> : !members.data?.available ? <Empty text={members.error?.message ?? members.data?.detail ?? '暂无成分股证据'} /> : memberRows && (memberRows.top.length || memberRows.bottom.length) ? <div className="grid gap-4 md:grid-cols-2">{([['TOP', memberRows.top], ['BOTTOM', memberRows.bottom]] as const).map(([title, evidenceRows]) => <div key={title}><div className="mb-1 text-xs font-semibold text-muted">{title}</div>{evidenceRows.map(row => <div key={`${title}-${row.symbol}`} className="grid grid-cols-[64px_minmax(0,1fr)_86px] gap-2 border-t border-border/60 py-1.5 text-xs"><span className="font-mono text-muted">{row.symbol}</span><span className="truncate" title={row.name}>{row.name}</span><span className={`text-right font-mono ${(row[memberMetric] ?? 0) >= 0 ? 'text-bull' : 'text-bear'}`}>{memberMetric === 'return_pct' ? `${fmt(row[memberMetric])}%` : billion(row[memberMetric] ?? 0)}</span></div>)}</div>)}</div> : <Empty text={memberMetric === 'active_buy_net_amount' ? '当前数据源不提供主动买入净额' : '当前指标暂无可用成分数据'} />}
-      </div>
+      </div>}
     </div>
   </div>
 }

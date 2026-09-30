@@ -6,8 +6,7 @@ source. The pipeline is:
 1. extract source-specific terms from ``match_text`` (hot-list concept tags,
    anomaly keyword lists, ladder theme names, hot-list reasons);
 2. map terms onto the curated legacy pattern labels when they match, then fold
-   the remaining terms into canonical labels by alias equality, containment or
-   fuzzy equality (seeded by the highest document frequency terms);
+   the remaining terms into canonical labels by verified alias equality;
 3. keep distinct canonical labels apart even when their stocks overlap;
    co-occurrence is not evidence that two directions are synonyms;
 4. keep groups with at least two member stocks and label each group with its
@@ -23,7 +22,6 @@ failure falls back to the deterministic labels and records ``llm-fallback``.
 from __future__ import annotations
 
 import asyncio
-import difflib
 import json
 import re
 from collections import defaultdict
@@ -34,10 +32,9 @@ from typing import Any
 
 from app.stock_pools.topics import SPECIFIC_OVERRIDES, topic_labels
 
-CLUSTER_RULE = "alias_equivalence,shared>=2,noise=v3"
-PROMPT_VERSION = "stock-pool-topic-v2"
+CLUSTER_RULE = "exact_term,explicit_alias,shared>=2,noise=v4"
+PROMPT_VERSION = "stock-pool-topic-v3"
 MIN_SHARED = 2
-FUZZY_RATIO = 0.78
 LLM_MAX_TERMS = 5
 LLM_SAMPLE_CHARS = 50
 MAX_SUBGROUPS = 10
@@ -61,7 +58,6 @@ _NON_THEME = re.compile(
     r"转债下修"
 )
 _SPLIT_RE = re.compile(r"[+\uff0b;\uff1b]")
-_PAREN_RE = re.compile(r"[\uff08(](.*?)[)\uff09]")
 _SUFFIX_RE = re.compile(r"(概念|板块)$")
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.S)
 
@@ -76,14 +72,19 @@ def _norm(term: str) -> str:
 
 
 _ALIAS_CACHE: dict[str, frozenset[str]] = {}
+_VERIFIED_ALIASES = {
+    "vna": "vna矢量网络分析仪",
+    "矢量网络分析仪": "vna矢量网络分析仪",
+    "网络分析仪": "vna矢量网络分析仪",
+}
 
 
 def _aliases(term: str) -> frozenset[str]:
     cached = _ALIAS_CACHE.get(term)
     if cached is not None:
         return cached
-    forms = {_norm(term)}
-    forms.update(_norm(inner) for inner in _PAREN_RE.findall(term))
+    name = _norm(term)
+    forms = {_VERIFIED_ALIASES.get(name, name)}
     result = frozenset(form for form in forms if len(form) >= 2)
     _ALIAS_CACHE[term] = result
     return result
@@ -161,10 +162,11 @@ def _canonicalize(term_stocks: dict[str, set[str]]) -> dict[str, _Group]:
         group.symbols |= term_stocks[term]
 
     ordered = sorted(term_stocks, key=lambda term: (-len(term_stocks[term]), term))
-    legacy_terms = [term for term in ordered if topic_labels(term)]
-    dynamic_terms = [term for term in ordered if not topic_labels(term)]
+    # A composite direction must not collapse into the first matched family.
+    legacy_terms = [term for term in ordered if len(topic_labels(term, whole_term=True)) == 1]
+    dynamic_terms = [term for term in ordered if len(topic_labels(term, whole_term=True)) != 1]
     for term in legacy_terms:
-        add(topic_labels(term)[0], topic_labels(term)[0], True, term)
+        add(topic_labels(term, whole_term=True)[0], topic_labels(term, whole_term=True)[0], True, term)
 
     for term in dynamic_terms:
         best: _Group | None = None
@@ -189,19 +191,13 @@ def _alias_match(term: str, group: _Group) -> bool:
     term_forms = _aliases(term)
     if not term_forms:
         return False
-    for candidate in (group.label, *group.terms):
+    # Match the canonical name only: a compound child term cannot become a
+    # bridge that absorbs its broad parent or another industry.
+    for candidate in (group.label,):
         candidate_forms = _aliases(candidate)
         if not candidate_forms:
             continue
         if term_forms & candidate_forms:
-            return True
-        if any(a in b or b in a for a in term_forms for b in candidate_forms):
-            return True
-        if any(
-            abs(len(a) - len(b)) <= 2 and difflib.SequenceMatcher(None, a, b).ratio() >= FUZZY_RATIO
-            for a in term_forms
-            for b in candidate_forms
-        ):
             return True
     return False
 
@@ -221,8 +217,9 @@ def _apply_normalization(
         str(key): str(value).strip()
         for key, value in aliases.items()
         if key in valid and isinstance(value, str) and value.strip() and value.strip() != key
+        and bool(_aliases(str(key)) & _aliases(value.strip()))
     }
-    applied_dropped = sorted({str(value) for value in dropped if str(value) in valid})
+    applied_dropped = sorted({str(value) for value in dropped if str(value) in valid and not keep_term(str(value))})
 
     def resolve(label: str) -> str:
         seen: set[str] = set()
