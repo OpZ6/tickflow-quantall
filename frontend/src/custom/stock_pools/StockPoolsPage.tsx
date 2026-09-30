@@ -6,7 +6,7 @@ import { QK } from '@/lib/queryKeys'
 import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
 import { StockPoolHistoryReview } from './StockPoolHistoryReview'
 import { StockPoolMiniKline } from './StockPoolMiniKline'
-import { AmvPanel } from './AmvPanel'
+import { AmvPanel } from '@/components/AmvPanel'
 
 type PersonalState = 'unseen' | 'priority' | 'pending' | 'seen' | 'ignored'
 type View = 'workbench' | 'all' | 'review'

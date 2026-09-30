@@ -4,7 +4,7 @@
 :root{color-scheme:dark;--bg:#101113;--panel:#181a20;--fg:#e5e7eb;--muted:#9ca3af;--border:#30333d;--accent:#c084fc}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.85 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1120px;margin:auto;padding:48px 28px 80px}h1{font-size:32px;line-height:1.3;margin:12px 0}h2{font-size:23px;margin:42px 0 16px}h3{font-size:17px;margin:0 0 10px}p{margin:10px 0}.muted,small{color:var(--muted)}a{color:#7dd3fc}.badge{display:inline-block;border:1px solid #c084fc55;border-radius:20px;padding:3px 12px;color:var(--accent);font-size:12px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card,.note{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px}.note{border-left:3px solid var(--accent);margin:18px 0}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;border-bottom:1px solid var(--border);padding:12px;vertical-align:top}th{color:#c4b5fd;background:#1c1925}pre{overflow:auto;padding:20px;background:#0c0d10;border:1px solid var(--border);border-radius:10px;font:14px/1.9 Consolas,monospace}.red{color:#f87171}.green{color:#34d399}.purple{color:#c084fc}.yellow{color:#fbbf24}.blue{color:#38bdf8}li{margin:7px 0}.steps{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.steps span{padding:8px 15px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}@media(max-width:750px){main{padding:28px 18px}.cards{grid-template-columns:1fr}h1{font-size:26px}td,th{min-width:110px}}
 </style></head><body><main>
 <span class="badge">TickFlow · 1AMV 研究指标 · 2026-09-30</span><h1>观察参与度的方向、速度与历史位置</h1>
-<p class="muted">适用入口：个股分析 → 指标中心 → 搜索 1AMV。默认优选 H=8、γ=1、KF=1.15。全程由脚本计算。</p>
+<p class="muted">适用入口：个股分析 → 指标中心 → 搜索 1AMV；市场实验室 → 板块资金 → 活跃参与；股票池 → 题材详情。默认优选 H=8、γ=1、KF=1.15。全程由脚本计算。</p>
 <nav><a href="#panes">三图怎么看</a> · <a href="#together">怎么配合</a> · <a href="#pools">复盘与股票池</a> · <a href="#math">计算与参数</a></nav>
 <div class="note"><b>它衡量什么？</b>用近期成交换手与逐日衰减，估计仍处于活跃状态的流通筹码比例，再乘市值。每笔成交都同时有买卖双方，因此活跃增加可以伴随上涨，也可以伴随下跌；它没有识别“主力身份”或资金净流向的能力。</div>
 <h2>1 · 原始套件与项目的对应关系</h2>
@@ -12,7 +12,7 @@
 <tr><td>01 AMVSTK</td><td>个股活跃市值、MA10、BBI及隐藏的占比、市值、增减额</td><td>1AMV 活跃市值副图</td></tr>
 <tr><td>02 AMVCHG</td><td>日变化百分比柱，隐藏增减金额与占比</td><td>1AMV 活跃变化副图</td></tr>
 <tr><td>03 AMVPCT</td><td>活跃占比在自身最近N根中的分位</td><td>1AMV 历史分位副图</td></tr>
-<tr><td>04 AMVBK</td><td>板块指数列表排序，累加成分的活跃市值与增减额</td><td>股票池的题材／成员活跃观察；不是第四个个股副图</td></tr>
+<tr><td>04 AMVBK</td><td>板块指数列表排序，累加成分的活跃市值与增减额</td><td>市场实验室的活跃参与排序、股票池的完整板块参考；不是第四个个股副图</td></tr>
 </tbody></table></div><p>所以原套件有四个功能公式，其中三个用于个股副图，一个用于板块排序。原文件把 AMVBK 标成“副图公式类型”，但说明明确要求不要把它加载成板块走势图副图。</p>
 <h2 id="panes">2 · 三个副图分别怎么看</h2>
 <div class="cards"><section class="card"><h3>方向 · 活跃市值</h3><p><span class="purple">紫线 V</span>：活跃市值估计，单位亿元。<span class="yellow">黄线 MA10</span>：近10根均值。<span class="blue">蓝线 BBI</span>：3、6、9、12根均值的平均。</p><p>先看线是否持续上行，再看是否站在走强的 MA10／BBI 上方。穿越只能说明近期活跃市值超过均值，需观察能否延续。</p><p>右上“占比”是 V/M，比绝对金额更适合跨不同市值股票比较。</p></section>
@@ -32,7 +32,10 @@
 <p><b>具体例子：</b>V从100亿增到110亿，而流通市值也从1000亿增到1100亿，活跃占比仍为10%。这时活跃市值的+10%包含价格推动，并不能说活跃筹码比例增加了10%。又如分位由15升至40，表示它相对自身正在变热；不会自动说明它比另一只分位90的股票更强或更值得参与。</p>
 <h2 id="pools">4 · 对复盘、选股池和板块研究的价值</h2>
 <div class="cards"><section class="card"><h3>复盘：记录参与的变化</h3><p>给已关注股票增加“价格／活跃占比同步或背离”“升温／冷却”“自身分位位置”三个描述。用于解释突破、回踩或事件日为何不同，尤其注意价格上涨是否只有市值推动。</p></section><section class="card"><h3>股票池：辅助排序与核对</h3><p>同一候选池先按既有价格结构筛选，再比较占比5日变化、分位变化与价格表现。V绝对额偏向大市值，不能直接作为个股强弱排名。低分位回升与高分位延续是不同研究问题。</p></section><section class="card"><h3>板块：建立参与锚点</h3><p>把固定成员的V相加，除以相同成员M得到加权活跃占比；同时看参与扩张成员比例与前三集中度，区分单个龙头推动和题材共同升温。</p></section></div>
-<p>项目已经展示题材／成员的活跃估计、占比、近5日变化、分位、扩张广度和集中度。完整板块映射与入池成员集合可以切换；观察时要核对覆盖成员数，少量入池成员不能代表完整板块。概念成分互有重叠，不能把各题材V再累加成全市场。</p>
+<p>市场实验室的活跃参与支持概念、一级行业、二级行业，默认按5日占比变化排序，也可按占比或扩散率排序。股票池题材详情默认显示同一完整板块，可以切回入池成员对比。两处共享算法、参数和板块成分；观察时核对日期、成员覆盖与市值覆盖，少量入池成员不能代表完整板块。概念成分互有重叠，不能把各题材V再累加成全市场。</p>
+<p>合并的逻辑题材可能没有同名完整板块，例如“PCB／覆铜板”。这时手动选择PCB等参考板块，页面分别标明题材和参照；不会把两个名称自动视为相同成分。也可以切回入池成员，观察当前候选集合。</p>
+<p>曲线左轴的活跃市值与等权价格以显示首日为100，右轴显示实际活跃占比；5日占比变化的pp表示百分点。扩散率是可比成员中占比近5日上升的比例，前三集中度是前三只成员的活跃市值占板块总值比例。250日分位只有成熟样本足够时才显示。</p>
+<p><b>与板块资金配合：</b>先核对日期、分类和成分一致。资金增强、占比扩张且扩散广泛，可作为参与增强的研究线索；价格下跌而活跃扩张，也可能反映分歧和抛压。行业资金与概念压力代理口径不同，不能只因板块同名就合并为一个分数。当前不修改股票池过滤和评分。</p>
 <p><b>可研究的选股方向：</b>“整理后活跃恢复”“价格突破且参与共同扩张”“上涨中活跃背离”“高位活跃异常放大”。这些是待检验的条件组合，当前只增加分析维度。参数验证比较的是第三方曲线形状，未检验这些选股组合的收益、回撤与交易成本。</p>
 <h2 id="math">5 · 算法与默认参数为什么这样选</h2>
 <pre>Mₜ = 不复权收盘价 × 流通股本

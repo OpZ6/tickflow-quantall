@@ -6,6 +6,7 @@ import { Activity, Calculator, FlaskConical, Gauge, Layers3 } from 'lucide-react
 import { api, type MacroContributionRow, type SectorRadarRow } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { useChartTheme } from '@/lib/theme'
+import { SectorActivityPanel } from '@/components/SectorActivityPanel'
 
 type Tab = 'etf' | 'sector' | 'macro' | 'risk'
 
@@ -86,6 +87,15 @@ const radarDays = (row: SectorRadarRow, metric: RadarMetric, high: boolean) => {
 }
 
 function SectorPanel() {
+  const [view, setView] = useState<'funds' | 'activity'>('funds')
+  return <div className="space-y-4">
+    <div className="flex gap-2">{([['funds', '资金强弱'], ['activity', '活跃参与']] as const).map(([key, label]) =>
+      <button key={key} aria-pressed={view === key} onClick={() => setView(key)} className={`rounded border px-3 py-2 text-xs ${view === key ? 'border-accent bg-accent/10 text-accent' : 'border-border text-secondary hover:bg-elevated'}`}>{label}</button>)}</div>
+    {view === 'funds' ? <SectorFundsPanel /> : <SectorActivityPanel />}
+  </div>
+}
+
+function SectorFundsPanel() {
   const ct = useChartTheme()
   const [dimension, setDimension] = useState<'industry' | 'concept'>('industry')
   const [metric, setMetric] = useState<RadarMetric>('swing')

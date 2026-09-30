@@ -7,6 +7,7 @@ from __future__ import annotations
 
 # ruff: noqa: RUF001 -- Chinese user-facing labels intentionally use native punctuation.
 import math
+from array import array
 from datetime import date
 
 import polars as pl
@@ -116,61 +117,87 @@ def compute_stock_amv(observations, *, params=None):
     return history
 
 
-def compute_active_market_value(rows: pl.DataFrame, trading_days: list[date], symbols: list[str], names: dict[str, str]) -> dict:
-    """Shared stock/sector/market kernel. V_sector=sum(V_i), a_sector=sum(V_i)/sum(M_i).
+def prepare_active_market_value(rows: pl.DataFrame, trading_days: list[date], symbols: list[str], names: dict[str, str]) -> dict:
+    """Calculate each stock once; retain compact columns for board aggregation.
 
-Unknown observations reset the recursive state. Actual zero amount decays it.
-The last 30 sessions use the same mature cohort, so missing members cannot
-produce artificial changes. Recursive state requires a temporal loop; joins and
-selection use Polars. Parameters are research assumptions, not reverse engineered.
+    Only the last 250 mature observations are needed for the percentile and
+    30-session chart. The recursive kernel still consumes the entire warmup.
     """
     days, wanted = sorted(set(trading_days)), sorted(set(symbols))
+    prepared = {"days": days[-250:], "histories": {}, "members": {}, "capital": {}}
+    if not days or not {"symbol", "date", "raw_close", "amount", "float_shares"} <= set(rows.columns):
+        return prepared
+    rows = rows.filter(pl.col("symbol").is_in(wanted) & pl.col("date").is_in(days)).sort(["symbol", "date"])
+    if rows.select("symbol", "date").is_duplicated().any():
+        raise ValueError("AMV输入存在重复证券交易日")
+    first = max(0, len(days) - DISPLAY_BARS)
+    for key, frame in rows.partition_by("symbol", as_dict=True).items():
+        symbol = key[0]
+        by_date = {row["date"]: row for row in frame.iter_rows(named=True)}
+        last = by_date.get(days[-1], {})
+        if _valid(last.get("raw_close"), positive=True) and _valid(last.get("float_shares"), positive=True):
+            mv = last["raw_close"] * last["float_shares"] / 1e8
+            if math.isfinite(mv):
+                prepared["capital"][symbol] = mv
+        history = compute_stock_amv([by_date.get(day) for day in days])
+        if len(days) < 6 or any(x is None for x in history[first:]):
+            continue
+        current, prev, past5 = history[-1], history[-2], history[-6]
+        prepared["members"][symbol] = {"symbol": symbol, "name": names.get(symbol, symbol),
+            **{k: v for k, v in current.items() if k != "close"},
+            "amv_change_yi": current["amv_yi"] - prev["amv_yi"],
+            "amv_change_pct": _change(current["amv_yi"], prev["amv_yi"]),
+            "amv_change_5d_pct": _change(current["amv_yi"], past5["amv_yi"]),
+            "active_share_change_5d_pp": current["active_share_pct"] - past5["active_share_pct"],
+            "percentile_250": _percentile([x["active_share_pct"] if x else None for x in history]),
+            "price_change_5d_pct": _change(current["close"], past5["close"]) if _valid(current["close"], positive=True) else None}
+        columns = {field: array("d", (x[field] if x else math.nan for x in history[-250:]))
+                   for field in ("amv_yi", "float_mv_yi", "amount_proxy_yi")}
+        base_close = history[first]["close"]
+        columns["price_index"] = array("d", (x["close"] / base_close * 100
+            if x and _valid(x["close"], positive=True) and _valid(base_close, positive=True) else math.nan
+            for x in history[-250:]))
+        prepared["histories"][symbol] = columns
+    return prepared
+
+
+def aggregate_active_market_value(prepared: dict, symbols: list[str]) -> dict:
+    """V_board=sum(V_i), a_board=sum(V_i)/sum(M_i), using one fixed cohort."""
+    days, wanted = prepared["days"], sorted(set(symbols))
     result = {"algorithm_version": ALGORITHM_VERSION, "official_0amv_verified": False,
         "capital_basis": "ordinary_float", "status": "unavailable",
         "parameters": {"half_life_sessions": HALF_LIFE, "exponent": EXPONENT,
                        "turnover_factor": TURNOVER_FACTOR, "warmup_sessions": WARMUP},
         "requested_members": len(wanted), "covered_members": 0, "series": [], "members": [], "excluded": [],
         "latest": None, "diagnosis": "缺少连续预热行情或目标日日线，暂不能计算。"}
-    if not days or not {"symbol", "date", "raw_close", "amount", "float_shares"} <= set(rows.columns):
-        return result
-    rows = rows.filter(pl.col("symbol").is_in(wanted) & pl.col("date").is_in(days)).sort(["symbol", "date"])
-    if rows.select("symbol", "date").is_duplicated().any():
-        raise ValueError("AMV输入存在重复证券交易日")
-    groups = {key[0]: frame.to_dicts() for key, frame in rows.partition_by("symbol", as_dict=True).items()}
-    histories = {}
-    first = max(0, len(days) - DISPLAY_BARS)
-    for symbol in wanted:
-        by_date = {row["date"]: row for row in groups.get(symbol, [])}
-        history = compute_stock_amv([by_date.get(day) for day in days])
-        if any(x is None for x in history[first:]):
-            result["excluded"].append({"symbol": symbol, "reason": f"近30交易日缺日、无效输入或不足{WARMUP}日连续预热"})
-            continue
-        histories[symbol] = history
-        current, prev, past5 = history[-1], history[-2], history[-6]
-        result["members"].append({"symbol": symbol, "name": names.get(symbol, symbol),
-            **{k: v for k, v in current.items() if k != "close"},
-            "amv_change_pct": _change(current["amv_yi"], prev["amv_yi"]),
-            "amv_change_5d_pct": _change(current["amv_yi"], past5["amv_yi"]),
-            "active_share_change_5d_pp": current["active_share_pct"] - past5["active_share_pct"],
-            "percentile_250": _percentile([x["active_share_pct"] if x else None for x in history]),
-            "price_change_5d_pct": _change(current["close"], past5["close"]) if _valid(current["close"], positive=True) else None})
+    result["market_cap_coverage_pct"] = None
+    result["unknown_capital_members"] = sum(s not in prepared["capital"] for s in wanted)
+    histories = {s: prepared["histories"][s] for s in wanted if s in prepared["histories"]}
+    result["members"] = [dict(prepared["members"][s]) for s in histories]
+    result["excluded"] = [{"symbol": s, "reason": f"近30交易日缺日、无效输入或不足{WARMUP}日连续预热"}
+                          for s in wanted if s not in histories]
     if not histories:
         return result
+    first = max(0, len(days) - DISPLAY_BARS)
     result["covered_members"] = len(histories)
     result["status"] = "complete" if len(histories) == len(wanted) else "partial"
     members, aggregate = result["members"], []
+    totals = {field: [sum(values) for values in zip(*(h[field] for h in histories.values()), strict=True)]
+              for field in ("amv_yi", "float_mv_yi", "amount_proxy_yi", "price_index")}
     for i, day in enumerate(days):
-        values = [history[i] for history in histories.values()]
-        if any(x is None for x in values):
+        amv, mv = totals["amv_yi"][i], totals["float_mv_yi"][i]
+        if not math.isfinite(amv) or not math.isfinite(mv):
             aggregate.append(None)
             continue
-        amv, mv = sum(x["amv_yi"] for x in values), sum(x["float_mv_yi"] for x in values)
-        ratios = [history[i]["close"] / history[first]["close"] for history in histories.values()
-            if _valid(history[i]["close"], positive=True) and _valid(history[first]["close"], positive=True)]
+        price = totals["price_index"][i] / len(histories)
         aggregate.append({"date": day.isoformat(), "amv_yi": amv, "float_mv_yi": mv,
-            "active_share_pct": amv / mv * 100, "amount_proxy_yi": sum(x["amount_proxy_yi"] for x in values),
-            "price_index": sum(ratios) / len(values) * 100 if len(ratios) == len(values) else None})
+            "active_share_pct": amv / mv * 100, "amount_proxy_yi": totals["amount_proxy_yi"][i],
+            "price_index": price if math.isfinite(price) else None})
     current, prev, past5 = aggregate[-1], aggregate[-2], aggregate[-6]
+    for member in members:
+        member["amv_share_pct"] = member["amv_yi"] / current["amv_yi"] * 100 if current["amv_yi"] > 0 else None
+    if not result["unknown_capital_members"]:
+        result["market_cap_coverage_pct"] = current["float_mv_yi"] / sum(prepared["capital"][s] for s in wanted) * 100
     result["latest"] = {**current, "amv_change_pct": _change(current["amv_yi"], prev["amv_yi"]),
         "amv_change_5d_pct": _change(current["amv_yi"], past5["amv_yi"]),
         "active_share_change_5d_pp": current["active_share_pct"] - past5["active_share_pct"],
@@ -196,3 +223,7 @@ selection use Polars. Parameters are research assumptions, not reverse engineere
     else:
         result["diagnosis"] = "近5日价格或活跃占比持平。"
     return result
+
+
+def compute_active_market_value(rows: pl.DataFrame, trading_days: list[date], symbols: list[str], names: dict[str, str]) -> dict:
+    return aggregate_active_market_value(prepare_active_market_value(rows, trading_days, symbols, names), symbols)

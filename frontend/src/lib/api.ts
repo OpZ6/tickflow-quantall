@@ -5448,6 +5448,8 @@ export const stockPoolApi = {
   }),
 }
 
+export type AmvDimension = 'concept' | 'industry_level1' | 'industry_level2'
+
 export interface AmvPoint {
   date: string
   amv_yi: number
@@ -5461,6 +5463,8 @@ export interface AmvMember {
   symbol: string
   name: string
   amv_yi: number
+  amv_share_pct: number | null
+  amv_change_yi: number
   float_mv_yi: number
   active_share_pct: number
   amount_proxy_yi: number
@@ -5486,6 +5490,8 @@ export interface AmvAnalysis {
   requested_members: number
   covered_members: number
   unmapped_members: number
+  market_cap_coverage_pct: number | null
+  unknown_capital_members: number
   diagnosis: string
   notes: string[]
   parameters: { half_life_sessions: number; exponent: number; turnover_factor: number; warmup_sessions: number }
@@ -5505,8 +5511,21 @@ export interface AmvAnalysis {
   }) | null
 }
 
+export type AmvSectorRow = Pick<AmvAnalysis, 'sector' | 'status' | 'requested_members' | 'covered_members' | 'unmapped_members' | 'market_cap_coverage_pct' | 'unknown_capital_members' | 'latest' | 'diagnosis'>
+export interface AmvSectorResponse {
+  available: boolean
+  trade_date: string | null
+  dimension: AmvDimension
+  algorithm_version?: string
+  rows: AmvSectorRow[]
+  available_dates: string[]
+  detail: string
+}
+
 export const amvApi = {
-  analyze: (date: string, symbols: string[], sector = '', dimension: 'concept' | 'industry_level1' | 'industry_level2' = 'concept') =>
+  sectors: (dimension: AmvDimension = 'concept', date?: string) =>
+    request<AmvSectorResponse>(`/api/amv/sectors?dimension=${dimension}${date ? `&trade_date=${encodeURIComponent(date)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
+  analyze: (date: string, symbols: string[], sector = '', dimension: AmvDimension = 'concept') =>
     request<AmvAnalysis>('/api/amv/analyze', {
       method: 'POST', body: JSON.stringify({ trade_date: date, symbols, sector, dimension }),
       timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
