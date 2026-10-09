@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
-import { amvApi, type AmvDimension } from '@/lib/api'
+import { amvApi, type AmvDimension, type AmvProfile } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 
 function number(value: number | null | undefined, suffix = '', digits = 2) {
@@ -14,12 +14,14 @@ function direction(value: number | null | undefined) {
   return value == null || value === 0 ? 'text-foreground' : value > 0 ? 'text-red-400' : 'text-emerald-400'
 }
 
-export function AmvPanel({ date, symbols = [], topic = '', compact = false, dimension = 'concept', selectableSector = false }: {
-  date: string; symbols?: string[]; topic?: string; compact?: boolean; dimension?: AmvDimension; selectableSector?: boolean
+export function AmvPanel({ date, symbols = [], topic = '', compact = false, dimension = 'concept', selectableSector = false, profile: requestedProfile }: {
+  date: string; symbols?: string[]; topic?: string; compact?: boolean; dimension?: AmvDimension; selectableSector?: boolean; profile?: AmvProfile
 }) {
   const fullSector = Boolean(topic)
   const [anchor, setAnchor] = useState(topic)
   const [referenceDimension, setReferenceDimension] = useState(dimension)
+  const [localProfile, setLocalProfile] = useState<AmvProfile>('research')
+  const profile = requestedProfile ?? localProfile
   const [showMembers, setShowMembers] = useState(false)
   const symbolKey = [...new Set(symbols)].sort().join(',')
   const mapping = useQuery({ queryKey: QK.amvSectors(referenceDimension, date),
@@ -28,8 +30,8 @@ export function AmvPanel({ date, symbols = [], topic = '', compact = false, dime
   const hasMapping = !selectableSector || Boolean(mapping.data?.rows.some(row => row.sector === anchor))
   const enabled = Boolean(date && (fullSector ? anchor && hasMapping : symbolKey))
   const query = useQuery({
-    queryKey: QK.amv(date, symbolKey, fullSector ? anchor : '', referenceDimension),
-    queryFn: () => amvApi.analyze(date, fullSector ? [] : symbolKey.split(',').filter(Boolean), fullSector ? anchor : '', referenceDimension),
+    queryKey: QK.amv(date, symbolKey, fullSector ? anchor : '', referenceDimension, profile),
+    queryFn: () => amvApi.analyze(date, fullSector ? [] : symbolKey.split(',').filter(Boolean), fullSector ? anchor : '', referenceDimension, profile),
     enabled, staleTime: 5 * 60_000, retry: false,
   })
   const data = query.data
@@ -59,7 +61,7 @@ export function AmvPanel({ date, symbols = [], topic = '', compact = false, dime
   }, [data])
   return <section data-testid="amv-panel" className="mt-3 rounded-lg border border-violet-400/20 bg-[#111113] p-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex flex-wrap items-baseline gap-2"><strong className="text-xs text-foreground">{fullSector ? `${anchor} · 板块活跃参考` : '1AMV · 筹码活跃参考'}</strong><span className="text-[10px] text-muted">研究估计 · 普通流通股本</span></div>
+      <div className="flex flex-wrap items-baseline gap-2"><strong className="text-xs text-foreground">{fullSector ? `${anchor} · 板块活跃参考` : '1AMV · 筹码活跃参考'}</strong><span className="text-[10px] text-muted">{profile === 'reconstructed' ? '逆向参数参考' : '项目研究参数'} · 普通流通股本</span>{requestedProfile == null && <select aria-label="1AMV参数口径" className="rounded border border-border bg-base px-2 py-1 text-[10px] text-secondary" value={profile} onChange={event => setLocalProfile(event.target.value as AmvProfile)}><option value="research">研究优选 H8 / γ1 / KF1.15</option><option value="reconstructed">逆向参数 H10 / γ1.15 / KF1</option></select>}</div>
     </div>
     {fullSector && selectableSector && <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted"><span>动态题材 {topic} · THS完整板块参考</span>
       <select aria-label="题材参考分类" className="rounded border border-border bg-base px-2 py-1 text-foreground" value={referenceDimension} onChange={event => { setReferenceDimension(event.target.value as AmvDimension); setAnchor('') }}>
@@ -104,7 +106,7 @@ export function AmvPanel({ date, symbols = [], topic = '', compact = false, dime
         </>}
       </>}
       {data.excluded.length > 0 && <div className="mt-2 text-[9px] text-muted" title={data.excluded.map(row => `${row.symbol}：${row.reason}`).join('\n')}>未计入 {data.excluded.length}只：缺日、无效输入或连续预热不足；曲线全程保持同一可比集合。</div>}
-      <div className="mt-2 border-t border-border pt-2 text-[9px] text-muted">研究优选 H=8、γ=1、KF=1.15；普通流通股本估计，尚未以指南针原件校准。活跃增强需结合价格方向与参与广度。</div>
+      <div className="mt-2 border-t border-border pt-2 text-[9px] text-muted">{profile === 'reconstructed' ? '逆向参数 H=10、γ=1.15、KF=1；' : '研究优选 H=8、γ=1、KF=1.15；'}本项目仍使用普通流通股本、严格预热和固定可比成员口径，参数一致不代表完整官方复刻。活跃增强需结合价格方向与参与广度。</div>
     </>}
   </section>
 }

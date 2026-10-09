@@ -19,6 +19,7 @@ from app.indicators.active_market_value import (
     compute_active_market_value,
     compute_stock_amv,
     normalize_amv_params,
+    normalize_amv_profile,
     prepare_active_market_value,
     resolve_float_shares,
 )
@@ -51,7 +52,8 @@ def _load_observations(repo, trade_date, selected, instruments, shares):
     return rows, days, calendar_basis
 
 
-def _describe(result, trade_date, calendar_basis, *, sector="", dimension="concept", unmapped=0):
+def _describe(result, trade_date, calendar_basis, *, sector="", dimension="concept", unmapped=0, profile="research"):
+    profile, params = normalize_amv_profile(profile)
     result = dict(result)
     if unmapped:
         result["requested_members"] += unmapped
@@ -59,28 +61,29 @@ def _describe(result, trade_date, calendar_basis, *, sector="", dimension="conce
         result["market_cap_coverage_pct"] = None
         if result["status"] == "complete":
             result["status"] = "partial"
-    return {**result, "trade_date": trade_date.isoformat(),
+    return {**result, "trade_date": trade_date.isoformat(), "parameter_profile": profile,
         "scope": "sector_latest_mapping" if sector else "selected_members", "unmapped_members": unmapped,
         "sector": sector or None, "dimension": dimension if sector else None, "calendar_basis": calendar_basis,
         "membership_basis": "latest_ext_snapshot_proxy" if sector else "caller_fixed_members",
         "share_history_basis": "effective_or_announcement_date_reconstructed",
-        "notes": ["1AMV研究估计，普通流通股本口径；不是已还原的指南针0AMV。",
-                  "研究优选H=8、γ=1.00、KF=1.15；KF作用于换手率，尚未用指南针原件校准。",
+        "notes": ["1AMV研究估计，普通流通股本口径；参数复算不代表完整官方复刻。",
+                  f"{'项目研究优选' if profile == 'research' else '外部逆向报告参数'} H={params['h']}、γ={params['gamma']:.2f}、KF={params['kf']:.2f}；KF作用于换手率。",
                   "固定成员回看；活跃增加不代表净流入。最新股本代理与成分缺失均单独披露。"]}
 
 
-def _sector_batch(repo, trade_date):
+def _sector_batch(repo, trade_date, profile="research"):
     """One repository batch and one recursion per stock, shared by both pages.
 
     Bounded process cache, 5-minute TTL, keyed by published daily generation,
     constituent contents and capital inputs. The lock coalesces cold requests.
     """
+    profile, params = normalize_amv_profile(profile)
     instruments, shares = repo.get_instruments(), repo.get_historical_shares()
     mapping = load_security_memberships(repo.store.data_dir)
     generation = repo.get_matrix_data_generation("stock")
     membership_key = tuple((dim, tuple((code, tuple(sorted(labels))) for code, labels in sorted(mapping.get(dim, {}).items())))
                            for dim in AMV_DIMENSIONS)
-    key = (repo, trade_date, generation, hash(membership_key),
+    key = (repo, trade_date, profile, generation, hash(membership_key),
            instruments.hash_rows().sum() if instruments.height else 0, shares.hash_rows().sum() if shares.height else 0)
     with _sector_lock:
         cached = _sector_cache.get(key)
@@ -102,8 +105,9 @@ def _sector_batch(repo, trade_date):
                 groups[dim][label] = (symbols, len(codes) - len(symbols))
                 selected.update(symbols)
         rows, days, calendar_basis = _load_observations(repo, trade_date, sorted(selected), instruments, shares)
-        batch = {"prepared": prepare_active_market_value(rows, days, sorted(selected), names),
-                 "groups": groups, "results": {}, "days": days, "calendar_basis": calendar_basis}
+        batch = {"prepared": prepare_active_market_value(rows, days, sorted(selected), names, params=params),
+                 "groups": groups, "results": {}, "days": days, "calendar_basis": calendar_basis,
+                 "profile": profile}
         if repo.get_matrix_data_generation("stock") != generation:
             raise ValueError("日线数据正在更新，请稍后重试。")
         _sector_cache[key] = (monotonic(), batch)
@@ -119,35 +123,39 @@ def _sector_result(batch, trade_date, dimension, sector):
             symbols, unmapped = batch["groups"][dimension][sector]
             result = aggregate_active_market_value(batch["prepared"], symbols)
             batch["results"][key] = _describe(result, trade_date, batch["calendar_basis"],
-                                            sector=sector, dimension=dimension, unmapped=unmapped)
+                                            sector=sector, dimension=dimension, unmapped=unmapped,
+                                            profile=batch["profile"])
         return batch["results"][key]
 
 
-def list_sector_activity(repo, trade_date=None, *, dimension="concept"):
+def list_sector_activity(repo, trade_date=None, *, dimension="concept", profile="research"):
     if dimension not in AMV_DIMENSIONS:
         raise ValueError("无效板块分类")
+    profile, params = normalize_amv_profile(profile)
     trade_date = trade_date or repo.latest_enriched_date("stock") or repo.latest_daily_date()
     if trade_date is None:
         return {"available": False, "trade_date": None, "dimension": dimension, "rows": [], "available_dates": [],
                 "detail": "暂无本地日线，无法计算板块活跃参与。"}
-    batch = _sector_batch(repo, trade_date)
+    batch = _sector_batch(repo, trade_date, profile)
     rows = []
     for sector in batch["groups"][dimension]:
         result = _sector_result(batch, trade_date, dimension, sector)
         rows.append({k: result[k] for k in ("sector", "status", "requested_members", "covered_members", "unmapped_members",
-                                           "market_cap_coverage_pct", "unknown_capital_members", "latest", "diagnosis")})
+                                           "market_cap_coverage_pct", "unknown_capital_members", "latest", "diagnosis", "parameter_profile")})
     rows.sort(key=lambda x: (-(x["latest"]["active_share_change_5d_pp"] if x["latest"] else -float("inf")), x["sector"]))
     return {"available": any(x["latest"] for x in rows), "trade_date": trade_date.isoformat(), "dimension": dimension,
-            "algorithm_version": ALGORITHM_VERSION, "rows": rows,
+            "algorithm_version": ALGORITHM_VERSION, "parameter_profile": profile,
+            "parameters": {"half_life_sessions": params["h"], "exponent": params["gamma"], "turnover_factor": params["kf"]}, "rows": rows,
             "available_dates": [d.isoformat() for d in batch["days"][-30:]],
             "detail": "最新概念/行业成分固定回看，普通流通股本估计；与股票池和THS板块压力排名共用完整成分。"}
 
 
-def analyze_active_market_value(repo, trade_date: date, symbols: list[str], *, sector: str = "", dimension: str = "concept") -> dict:
+def analyze_active_market_value(repo, trade_date: date, symbols: list[str], *, sector: str = "", dimension: str = "concept", profile="research") -> dict:
+    profile, params = normalize_amv_profile(profile)
     if sector:
         if dimension not in AMV_DIMENSIONS:
             raise ValueError("无效板块分类")
-        batch = _sector_batch(repo, trade_date)
+        batch = _sector_batch(repo, trade_date, profile)
         if sector not in batch["groups"][dimension]:
             raise ValueError("找不到该板块的完整成分映射，请重新选择对应概念板块。")
         return _sector_result(batch, trade_date, dimension, sector)
@@ -160,8 +168,8 @@ def analyze_active_market_value(repo, trade_date: date, symbols: list[str], *, s
         raise ValueError("成分超过1500只，请选择更具体的板块")
     shares = repo.get_historical_shares()
     rows, days, calendar_basis = _load_observations(repo, trade_date, selected, instruments, shares)
-    result = compute_active_market_value(rows, days, selected, names)
-    return _describe(result, trade_date, calendar_basis)
+    result = compute_active_market_value(rows, days, selected, names, params=params)
+    return _describe(result, trade_date, calendar_basis, profile=profile)
 
 
 AMV_CHART_IDS = {"amv", "amvchg", "amvpct"}

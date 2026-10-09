@@ -13,6 +13,7 @@ EXTENSION_API_VERSION = BACKEND_EXTENSION_API_VERSION
 router = APIRouter(prefix="/api/amv", tags=["amv"])
 Symbol = Annotated[str, Field(pattern=r"^\d{6}\.(SH|SZ|BJ)$")]
 Dimension = Literal["concept", "industry_level1", "industry_level2"]
+Profile = Literal["research", "reconstructed"]
 
 
 class AmvRequest(BaseModel):
@@ -20,6 +21,7 @@ class AmvRequest(BaseModel):
     symbols: list[Symbol] = Field(default_factory=list, max_length=1500)
     sector: str = Field(default="", max_length=80)
     dimension: Dimension = "concept"
+    profile: Profile = "research"
 
     @model_validator(mode="after")
     def has_scope(self):
@@ -33,15 +35,17 @@ class AmvRequest(BaseModel):
 def analyze(payload: AmvRequest, request: Request) -> dict:
     try:
         return analyze_active_market_value(request.app.state.repo, payload.trade_date,
-                                           payload.symbols, sector=payload.sector, dimension=payload.dimension)
+                                           payload.symbols, sector=payload.sector, dimension=payload.dimension,
+                                           profile=payload.profile)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/sectors")
-def sectors(request: Request, trade_date: date | None = None, dimension: Dimension = "concept") -> dict:
+def sectors(request: Request, trade_date: date | None = None, dimension: Dimension = "concept",
+            profile: Profile = "research") -> dict:
     try:
-        return list_sector_activity(request.app.state.repo, trade_date, dimension=dimension)
+        return list_sector_activity(request.app.state.repo, trade_date, dimension=dimension, profile=profile)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -199,6 +199,19 @@ def test_sector_api_default_date_and_classification(monkeypatch, tmp_path):
         assert out.json()["rows"][0]["sector"] == "PCB"
         out = client.get("/api/amv/sectors", params={"dimension": "industry_level2"})
         assert out.json()["rows"][0]["sector"] == "元件"
+        reconstructed = client.get("/api/amv/sectors", params={"profile": "reconstructed"})
+        assert reconstructed.status_code == 200
+        assert reconstructed.json()["parameter_profile"] == "reconstructed"
+        assert reconstructed.json()["parameters"] == {
+            "half_life_sessions": 10, "exponent": 1.15, "turnover_factor": 1.0}
+        row = reconstructed.json()["rows"][0]
+        assert row["parameter_profile"] == "reconstructed"
+        assert row["latest"]["relative_ma10_pct"] is not None
+        detail = client.post("/api/amv/analyze", json={"trade_date": app.state.repo.days[-1].isoformat(),
+            "symbols": ["000001.SZ"], "profile": "reconstructed"})
+        assert detail.status_code == 200
+        assert detail.json()["parameters"]["half_life_sessions"] == 10
+        assert client.get("/api/amv/sectors?profile=unknown").status_code == 422
         assert client.get("/api/amv/sectors?dimension=industry").status_code == 422
         assert client.get("/api/amv/sectors?trade_date=bad").status_code == 422
 

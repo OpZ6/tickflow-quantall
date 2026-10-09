@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { amvApi, type AmvDimension, type AmvSectorRow } from '@/lib/api'
+import { amvApi, type AmvDimension, type AmvProfile, type AmvSectorRow } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { AmvPanel } from './AmvPanel'
 
-type Metric = 'active_share_change_5d_pp' | 'active_share_pct' | 'expanding_members_5d_pct' | 'price_change_5d_pct'
+type Metric = 'active_share_change_5d_pp' | 'active_share_pct' | 'expanding_members_5d_pct' | 'price_change_5d_pct' | 'relative_ma10_pct'
 type SortKey = Metric | 'sector' | 'covered_members' | 'market_cap_coverage_pct'
 const columns: { key: SortKey; label: string; description?: string }[] = [
   { key: 'sector', label: '板块' },
   { key: 'active_share_pct', label: '活跃占比' },
+  { key: 'relative_ma10_pct', label: 'AMV/MA10', description: '板块活跃总值相对近10日均值的偏离' },
   { key: 'active_share_change_5d_pp', label: '5日占比变化/pp' },
   { key: 'expanding_members_5d_pct', label: '活跃扩散率', description: '近5日活跃占比上升的可比成员比例' },
   { key: 'price_change_5d_pct', label: '5日价格' },
@@ -25,13 +26,14 @@ const control = 'rounded border border-border bg-base px-2.5 py-2 text-xs text-f
 
 export function SectorActivityPanel() {
   const [dimension, setDimension] = useState<AmvDimension>('concept')
+  const [profile, setProfile] = useState<AmvProfile>('research')
   const [date, setDate] = useState<string>()
   const [sort, setSort] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>(null)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'expanding' | 'contracting'>('all')
   const [selection, setSelection] = useState<string | null>(null)
-  const query = useQuery({ queryKey: QK.amvSectors(dimension, date),
-    queryFn: () => amvApi.sectors(dimension, date), staleTime: 5 * 60_000, retry: false })
+  const query = useQuery({ queryKey: QK.amvSectors(dimension, date, profile),
+    queryFn: () => amvApi.sectors(dimension, date, profile), staleTime: 5 * 60_000, retry: false })
   const data = query.data
   const ordered = useMemo(() => (data?.rows ?? []).filter(row => {
     if (!row.sector?.toLowerCase().includes(search.trim().toLowerCase())) return false
@@ -58,6 +60,9 @@ export function SectorActivityPanel() {
           <select aria-label="活跃板块分类" className={control} value={dimension} onChange={event => { setDimension(event.target.value as AmvDimension); setSelection(null) }}>
             <option value="concept">THS概念题材</option><option value="industry_level1">THS一级行业</option><option value="industry_level2">THS二级行业</option>
           </select>
+          <select aria-label="活跃参数口径" className={control} value={profile} onChange={event => { setProfile(event.target.value as AmvProfile); setSelection(null) }}>
+            <option value="research">项目研究参数</option><option value="reconstructed">1AMV逆向参数</option>
+          </select>
           <input aria-label="活跃参与日期" className={control} type="date" value={date ?? data?.trade_date ?? ''} onChange={event => { setDate(event.target.value || undefined); setSelection(null) }} />
           <button className={control} onClick={() => { if (date) setDate(undefined); else void query.refetch() }}>最新</button>
           <input aria-label="搜索活跃板块" className={control} placeholder="搜索板块" value={search} onChange={event => setSearch(event.target.value)} />
@@ -68,7 +73,7 @@ export function SectorActivityPanel() {
       {query.isError && <div className="py-6 text-xs text-secondary">{query.error.message}<button className="ml-3 text-accent" onClick={() => void query.refetch()}>重试</button></div>}
       {data && <>
         <div className="mt-3 max-h-[420px] overflow-auto" data-testid="sector-activity-table">
-          <table className="w-full min-w-[740px] text-right text-xs">
+          <table className="w-full min-w-[840px] text-right text-xs">
             <thead className="sticky top-0 z-10 bg-surface text-muted"><tr>{columns.map(({ key, label, description }, i) => <th className={`whitespace-nowrap px-3 py-2 font-normal ${i === 0 ? 'text-left' : ''}`} key={key}
               aria-sort={(sort?.key ?? 'active_share_change_5d_pp') === key ? (sort?.direction ?? 'descending') : 'none'}>
               <button type="button" className={`inline-flex items-center gap-1 hover:text-foreground ${sort?.key === key ? 'text-foreground' : ''}`} onClick={() => toggleSort(key)}
@@ -79,6 +84,7 @@ export function SectorActivityPanel() {
             <tbody>{ordered.map(row => <tr key={row.sector} className={`border-t border-border/60 ${row.sector === selected?.sector ? 'bg-violet-400/10' : 'hover:bg-elevated'}`}>
               <td className="whitespace-nowrap px-3 py-2 text-left"><button className="text-left hover:text-accent" aria-pressed={row.sector === selected?.sector} onClick={() => setSelection(row.sector)}>{row.sector}</button></td>
               <td className="px-3 font-mono">{fmt(row.latest?.active_share_pct, '%')}</td>
+              <td className={`px-3 font-mono ${color(row.latest?.relative_ma10_pct)}`}>{fmt(row.latest?.relative_ma10_pct, '%', true)}</td>
               <td className={`px-3 font-mono ${color(row.latest?.active_share_change_5d_pp)}`}>{fmt(row.latest?.active_share_change_5d_pp, '', true)}</td>
               <td className="px-3 font-mono">{fmt(row.latest?.expanding_members_5d_pct, '%')}</td>
               <td className={`px-3 font-mono ${color(row.latest?.price_change_5d_pct)}`}>{fmt(row.latest?.price_change_5d_pct, '%', true)}</td>
@@ -91,7 +97,7 @@ export function SectorActivityPanel() {
         {dimension === 'concept' && <p className="mt-3 text-[10px] text-muted">概念成分可重叠，不可累加为全市场值。</p>}
       </>}
     </div>
-    {selected?.sector && data?.trade_date && <AmvPanel key={`${dimension}:${data.trade_date}:${selected.sector}`} date={data.trade_date} symbols={[]} topic={selected.sector} dimension={dimension} />}
+    {selected?.sector && data?.trade_date && <AmvPanel key={`${dimension}:${data.trade_date}:${selected.sector}:${profile}`} date={data.trade_date} symbols={[]} topic={selected.sector} dimension={dimension} profile={profile} />}
     <details className="rounded-lg border border-border bg-surface p-4 text-xs">
       <summary className="cursor-pointer font-medium">如何结合资金与选股池使用</summary>
       <div className="mt-3 space-y-2 leading-relaxed text-secondary">

@@ -5476,6 +5476,7 @@ export const stockPoolApi = {
 }
 
 export type AmvDimension = 'concept' | 'industry_level1' | 'industry_level2'
+export type AmvProfile = 'research' | 'reconstructed'
 
 export interface AmvPoint {
   date: string
@@ -5484,6 +5485,7 @@ export interface AmvPoint {
   active_share_pct: number
   amount_proxy_yi: number
   price_index: number | null
+  relative_ma10_pct?: number | null
 }
 
 export interface AmvMember {
@@ -5506,6 +5508,7 @@ export interface AmvMember {
 export interface AmvAnalysis {
   trade_date: string
   algorithm_version: string
+  parameter_profile: AmvProfile
   official_0amv_verified: false
   capital_basis: 'ordinary_float'
   status: 'complete' | 'partial' | 'unavailable'
@@ -5544,17 +5547,19 @@ export interface AmvSectorResponse {
   trade_date: string | null
   dimension: AmvDimension
   algorithm_version?: string
+  parameter_profile?: AmvProfile
+  parameters?: { half_life_sessions: number; exponent: number; turnover_factor: number }
   rows: AmvSectorRow[]
   available_dates: string[]
   detail: string
 }
 
 export const amvApi = {
-  sectors: (dimension: AmvDimension = 'concept', date?: string) =>
-    request<AmvSectorResponse>(`/api/amv/sectors?dimension=${dimension}${date ? `&trade_date=${encodeURIComponent(date)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
-  analyze: (date: string, symbols: string[], sector = '', dimension: AmvDimension = 'concept') =>
+  sectors: (dimension: AmvDimension = 'concept', date?: string, profile: AmvProfile = 'research') =>
+    request<AmvSectorResponse>(`/api/amv/sectors?dimension=${dimension}&profile=${profile}${date ? `&trade_date=${encodeURIComponent(date)}` : ''}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
+  analyze: (date: string, symbols: string[], sector = '', dimension: AmvDimension = 'concept', profile: AmvProfile = 'research') =>
     request<AmvAnalysis>('/api/amv/analyze', {
-      method: 'POST', body: JSON.stringify({ trade_date: date, symbols, sector, dimension }),
+      method: 'POST', body: JSON.stringify({ trade_date: date, symbols, sector, dimension, profile }),
       timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
     }),
 }

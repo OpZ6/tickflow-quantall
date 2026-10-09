@@ -18,6 +18,16 @@ EXPONENT = 1.0
 TURNOVER_FACTOR = 1.15
 WARMUP = 120
 DISPLAY_BARS = 30
+AMV_PROFILES = {
+    "research": {"h": 8, "gamma": 1.0, "kf": 1.15, "n": 250},
+    "reconstructed": {"h": 10, "gamma": 1.15, "kf": 1.0, "n": 250},
+}
+
+
+def normalize_amv_profile(profile="research"):
+    if profile not in AMV_PROFILES:
+        raise ValueError("无效的 1AMV 参数口径")
+    return profile, dict(AMV_PROFILES[profile])
 
 
 def resolve_float_shares(rows: pl.DataFrame, instruments: pl.DataFrame, shares: pl.DataFrame) -> pl.DataFrame:
@@ -117,14 +127,15 @@ def compute_stock_amv(observations, *, params=None):
     return history
 
 
-def prepare_active_market_value(rows: pl.DataFrame, trading_days: list[date], symbols: list[str], names: dict[str, str]) -> dict:
+def prepare_active_market_value(rows: pl.DataFrame, trading_days: list[date], symbols: list[str], names: dict[str, str], *, params=None) -> dict:
     """Calculate each stock once; retain compact columns for board aggregation.
 
     Only the last 250 mature observations are needed for the percentile and
     30-session chart. The recursive kernel still consumes the entire warmup.
     """
     days, wanted = sorted(set(trading_days)), sorted(set(symbols))
-    prepared = {"days": days[-250:], "histories": {}, "members": {}, "capital": {}}
+    p = normalize_amv_params(params)
+    prepared = {"days": days[-p["n"]:], "histories": {}, "members": {}, "capital": {}, "parameters": p}
     if not days or not {"symbol", "date", "raw_close", "amount", "float_shares"} <= set(rows.columns):
         return prepared
     rows = rows.filter(pl.col("symbol").is_in(wanted) & pl.col("date").is_in(days)).sort(["symbol", "date"])
@@ -139,7 +150,7 @@ def prepare_active_market_value(rows: pl.DataFrame, trading_days: list[date], sy
             mv = last["raw_close"] * last["float_shares"] / 1e8
             if math.isfinite(mv):
                 prepared["capital"][symbol] = mv
-        history = compute_stock_amv([by_date.get(day) for day in days])
+        history = compute_stock_amv([by_date.get(day) for day in days], params=p)
         if len(days) < 6 or any(x is None for x in history[first:]):
             continue
         current, prev, past5 = history[-1], history[-2], history[-6]
@@ -149,7 +160,7 @@ def prepare_active_market_value(rows: pl.DataFrame, trading_days: list[date], sy
             "amv_change_pct": _change(current["amv_yi"], prev["amv_yi"]),
             "amv_change_5d_pct": _change(current["amv_yi"], past5["amv_yi"]),
             "active_share_change_5d_pp": current["active_share_pct"] - past5["active_share_pct"],
-            "percentile_250": _percentile([x["active_share_pct"] if x else None for x in history]),
+            "percentile_250": _percentile([x["active_share_pct"] if x else None for x in history], p["n"]),
             "price_change_5d_pct": _change(current["close"], past5["close"]) if _valid(current["close"], positive=True) else None}
         columns = {field: array("d", (x[field] if x else math.nan for x in history[-250:]))
                    for field in ("amv_yi", "float_mv_yi", "amount_proxy_yi")}
@@ -164,10 +175,12 @@ def prepare_active_market_value(rows: pl.DataFrame, trading_days: list[date], sy
 def aggregate_active_market_value(prepared: dict, symbols: list[str]) -> dict:
     """V_board=sum(V_i), a_board=sum(V_i)/sum(M_i), using one fixed cohort."""
     days, wanted = prepared["days"], sorted(set(symbols))
+    params = prepared.get("parameters", normalize_amv_params())
     result = {"algorithm_version": ALGORITHM_VERSION, "official_0amv_verified": False,
         "capital_basis": "ordinary_float", "status": "unavailable",
-        "parameters": {"half_life_sessions": HALF_LIFE, "exponent": EXPONENT,
-                       "turnover_factor": TURNOVER_FACTOR, "warmup_sessions": WARMUP},
+        "parameters": {"half_life_sessions": params["h"], "exponent": params["gamma"],
+                       "turnover_factor": params["kf"], "percentile_sessions": params["n"],
+                       "warmup_sessions": max(WARMUP, int(params["h"] * 12))},
         "requested_members": len(wanted), "covered_members": 0, "series": [], "members": [], "excluded": [],
         "latest": None, "diagnosis": "缺少连续预热行情或目标日日线，暂不能计算。"}
     result["market_cap_coverage_pct"] = None
@@ -194,6 +207,9 @@ def aggregate_active_market_value(prepared: dict, symbols: list[str]) -> dict:
             "active_share_pct": amv / mv * 100, "amount_proxy_yi": totals["amount_proxy_yi"][i],
             "price_index": price if math.isfinite(price) else None})
     current, prev, past5 = aggregate[-1], aggregate[-2], aggregate[-6]
+    moving = [x["amv_yi"] for x in aggregate[-10:] if x is not None]
+    moving_average = sum(moving) / len(moving) if len(moving) == 10 else None
+    current["relative_ma10_pct"] = (current["amv_yi"] / moving_average - 1) * 100 if moving_average else None
     for member in members:
         member["amv_share_pct"] = member["amv_yi"] / current["amv_yi"] * 100 if current["amv_yi"] > 0 else None
     if not result["unknown_capital_members"]:
@@ -206,7 +222,7 @@ def aggregate_active_market_value(prepared: dict, symbols: list[str]) -> dict:
         "expanding_members_5d_pct": sum(x["active_share_change_5d_pp"] > 0 for x in members) / len(members) * 100,
         "top3_amv_share_pct": sum(sorted((x["amv_yi"] for x in members), reverse=True)[:3]) / current["amv_yi"] * 100 if current["amv_yi"] > 0 else None,
         "latest_float_proxy_members": sum(x["share_basis"] == "latest_float_proxy" for x in members),
-        "percentile_250": _percentile([x["active_share_pct"] if x else None for x in aggregate])}
+        "percentile_250": _percentile([x["active_share_pct"] if x else None for x in aggregate], params["n"])}
     result["series"] = aggregate[first:]
     result["members"].sort(key=lambda x: (-x["amv_yi"], x["symbol"]))
     delta, price = result["latest"]["active_share_change_5d_pp"], result["latest"]["price_change_5d_pct"]
@@ -225,5 +241,5 @@ def aggregate_active_market_value(prepared: dict, symbols: list[str]) -> dict:
     return result
 
 
-def compute_active_market_value(rows: pl.DataFrame, trading_days: list[date], symbols: list[str], names: dict[str, str]) -> dict:
-    return aggregate_active_market_value(prepare_active_market_value(rows, trading_days, symbols, names), symbols)
+def compute_active_market_value(rows: pl.DataFrame, trading_days: list[date], symbols: list[str], names: dict[str, str], *, params=None) -> dict:
+    return aggregate_active_market_value(prepare_active_market_value(rows, trading_days, symbols, names, params=params), symbols)
