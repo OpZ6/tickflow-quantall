@@ -13,6 +13,7 @@ type View = 'workbench' | 'all' | 'review'
 type ChangeView = 'complete' | 'today'
 type QueueMode = 'members' | 'topic_event' | 'signal' | 'low_buy' | 'research' | 'priority' | 'pending'
 type LowEvidence = 'all' | 'logic' | 'smnc' | 'static'
+type TopicSort = 'count' | 'mean_pct' | 'up_count' | 'down_count' | 'startup' | 'pullback'
 
 const PERSONAL_LABELS: Record<PersonalState, string> = {
   unseen: '未处理', priority: '重点跟踪', pending: '待确认', seen: '已看', ignored: '暂不关注',
@@ -175,7 +176,7 @@ function clusterLow(rows: StockPoolCandidate[]): StockPoolCluster[] {
     || b.count - a.count || b.event_count - a.event_count || a.name.localeCompare(b.name))
 }
 
-type TopicCluster = StockPoolCluster & { startupCount: number; pullbackCount: number }
+type TopicCluster = StockPoolCluster & { startupCount: number; pullbackCount: number; down_count: number; flat_count: number }
 
 function mergeTopicClusters(hot: StockPoolCluster[], low: StockPoolCluster[], rows: StockPoolCandidate[]): TopicCluster[] {
   const bySymbol = new Map(rows.map(row => [row.symbol, row]))
@@ -201,6 +202,8 @@ function mergeTopicClusters(hot: StockPoolCluster[], low: StockPoolCluster[], ro
       count: members.length,
       event_count: members.filter(row => row.source_ids.some(source => EVENT_SOURCES.has(source))).length,
       up_count: members.filter(row => row.pct_chg > 0).length,
+      down_count: members.filter(row => row.pct_chg < 0).length,
+      flat_count: members.filter(row => row.pct_chg === 0).length,
       mean_pct_chg: members.length ? members.reduce((sum, row) => sum + row.pct_chg, 0) / members.length : 0,
       stage_counts: Object.fromEntries([...new Set(members.map(row => row.primary_stage))].map(stage => [stage, members.filter(row => row.primary_stage === stage).length])),
       symbols: members.map(row => row.symbol), subgroups,
@@ -233,6 +236,7 @@ export function StockPoolsPage() {
   const [sources, setSources] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [showAllTopics, setShowAllTopics] = useState(false)
+  const [topicSort, setTopicSort] = useState<TopicSort>('count')
   const [showAllQueue, setShowAllQueue] = useState(false)
   const [queueMode, setQueueMode] = useState<QueueMode>('topic_event')
   const [lowEvidence, setLowEvidence] = useState<LowEvidence>('all')
@@ -276,6 +280,18 @@ export function StockPoolsPage() {
   const rows = candidates.data?.rows ?? []
   const lowClusters = useMemo(() => clusterLow(rows), [rows])
   const clusters = useMemo(() => mergeTopicClusters(summary.data?.clusters ?? [], lowClusters, rows), [summary.data?.clusters, lowClusters, rows])
+  const sortedTopicClusters = useMemo(() => {
+    const result = [...clusters]
+    const metric = (cluster: TopicCluster) => {
+      if (topicSort === 'mean_pct') return cluster.mean_pct_chg
+      if (topicSort === 'up_count') return cluster.up_count
+      if (topicSort === 'down_count') return cluster.down_count
+      if (topicSort === 'startup') return cluster.startupCount
+      if (topicSort === 'pullback') return cluster.pullbackCount
+      return cluster.count
+    }
+    return result.sort((a, b) => metric(b) - metric(a) || b.count - a.count || a.name.localeCompare(b.name))
+  }, [clusters, topicSort])
 
   useEffect(() => {
     if (view === 'workbench' && topic && !clusters.some(item => item.name === topic)) { setTopic(''); setSubgroup('') }
@@ -472,19 +488,26 @@ export function StockPoolsPage() {
       {summary.data && <div className="border-b border-[#29292e] px-[11px] py-1.5 text-[10px] text-muted">当前快照发布于 {summary.data.published_at ? new Date(summary.data.published_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '时间未记录'} · {summary.data.first_published_available ? '首次版已留存' : '该日期没有首次版留存'}</div>}
 
       <div className="border-b border-[#29292e] p-[13px]">
-        <WorkbenchHeader index="01" title="今日题材分类池" actions={<><span className="text-[10px] text-muted">{clusters.length}组</span>{topic && <button onClick={() => { setTopic(''); setStage(''); setSubgroup(''); setQueueMode('topic_event') }} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">清除题材筛选</button>}{clusters.length > TOPIC_PREVIEW_LIMIT && <button onClick={() => setShowAllTopics(value => !value)} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">{showAllTopics ? `收起到${TOPIC_PREVIEW_LIMIT}组` : '展开全部'}</button>}</>} />
+        <WorkbenchHeader index="01" title="今日题材分类池" actions={<><label className="flex items-center gap-1.5 text-[10px] text-muted">排序<select aria-label="题材排序" value={topicSort} onChange={event => setTopicSort(event.target.value as TopicSort)} className="rounded border border-border bg-base px-2 py-1 text-[10px] text-secondary"><option value="count">候选数量 ↓</option><option value="mean_pct">平均涨跌幅 ↓</option><option value="up_count">上涨家数 ↓</option><option value="down_count">下跌家数 ↓</option><option value="startup">启动阶段数 ↓</option><option value="pullback">回调阶段数 ↓</option></select></label><span className="text-[10px] text-muted">{clusters.length}组</span>{topic && <button onClick={() => { setTopic(''); setStage(''); setSubgroup(''); setQueueMode('topic_event') }} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">清除题材筛选</button>}{clusters.length > TOPIC_PREVIEW_LIMIT && <button onClick={() => setShowAllTopics(value => !value)} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">{showAllTopics ? `收起到${TOPIC_PREVIEW_LIMIT}组` : '展开全部'}</button>}</>} />
         <p className="mt-2 text-[10px] text-muted">合并当日逻辑题材与至少3只候选共有的回调题材；静态关联只作今日成员线索。</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {(showAllTopics ? clusters : clusters.slice(0, TOPIC_PREVIEW_LIMIT)).map(cluster => {
+          {(showAllTopics ? sortedTopicClusters : sortedTopicClusters.slice(0, TOPIC_PREVIEW_LIMIT)).map(cluster => {
             const leading = Object.entries(cluster.stage_counts || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name]) => name).join('／')
             const subgroupHint = (cluster.subgroups ?? []).slice(0, 2).map(item => `${item.name} ${item.count}`).join(' · ')
             const basis = cluster.dimension === 'logic' ? '当日逻辑' : cluster.dimension === 'mixed' ? '逻辑／静态' : '静态关联'
             const direction = cluster.startupCount > cluster.pullbackCount ? '偏启动' : cluster.pullbackCount > cluster.startupCount ? '偏回调' : cluster.startupCount ? '启动／回调并存' : '观察中'
+            const breadth = cluster.up_count > cluster.down_count ? '上涨占优' : cluster.down_count > cluster.up_count ? '下跌占优' : '涨跌分化'
+            const breadthTone = cluster.up_count > cluster.down_count ? 'text-bull' : cluster.down_count > cluster.up_count ? 'text-bear' : 'text-secondary'
             const observation = themeContextShort(summary.data?.theme_contexts?.[cluster.name])
-            return <button key={cluster.name} onClick={() => chooseTopic(cluster.name)} className={`grid min-h-[66px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded-[7px] border bg-[#111113] p-2.5 text-left transition-colors ${topic === cluster.name ? 'border-accent/70 bg-accent/10' : 'border-[#29292e] hover:border-accent/45 hover:bg-elevated/60'}`}>
+            return <button key={cluster.name} onClick={() => chooseTopic(cluster.name)} className={`grid min-h-[82px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded-[7px] border bg-[#111113] p-2.5 text-left transition-colors ${topic === cluster.name ? 'border-accent/70 bg-accent/10' : 'border-[#29292e] hover:border-accent/45 hover:bg-elevated/60'}`}>
               <strong className="truncate text-[11px] text-foreground">{cluster.name}</strong><b className="font-mono text-[13px] text-[#aeb8ff]">{cluster.count}只</b>
-              <div className="col-span-2 mt-0.5 truncate text-[9px] text-muted">{direction} · 启动 {cluster.startupCount} · 回调 {cluster.pullbackCount} · {basis}</div>
-              <div className="col-span-2 truncate text-[9px] text-muted">候选事件 {cluster.event_count} · {subgroupHint || leading || '阶段待确认'}</div>
+              <div className="col-span-2 mt-0.5 truncate text-[9px] text-muted">阶段{direction} · 启动 {cluster.startupCount} · 回调 {cluster.pullbackCount} · {basis}</div>
+              <div className="col-span-2 mt-0.5 flex flex-wrap items-center gap-x-2 text-[9px]">
+                <span className={`font-medium ${breadthTone}`}>{breadth}</span>
+                <span className="font-mono">均值 <b className={cluster.mean_pct_chg > 0 ? 'text-bull' : cluster.mean_pct_chg < 0 ? 'text-bear' : 'text-secondary'}>{signedPct(cluster.mean_pct_chg)}</b></span>
+                <span className="font-mono"><b className="text-bull">涨 {cluster.up_count}</b> / <b className="text-bear">跌 {cluster.down_count}</b> / 平 {cluster.flat_count}</span>
+              </div>
+              <div className="col-span-2 truncate text-[9px] text-muted">池内候选 · 事件 {cluster.event_count} · {subgroupHint || leading || '阶段待确认'}</div>
               {observation && <div className="col-span-2 mt-0.5 truncate text-[9px] text-[#9ca9c6]">{observation}</div>}
             </button>
           })}
@@ -495,8 +518,8 @@ export function StockPoolsPage() {
         <WorkbenchHeader index="02" title={topic ? `${topic} · 成员与处理` : '候选处理'} note={topic ? `题材成员 ${activeCluster?.count ?? memberRows.length}只 · 当前范围 ${queueGroups.members.length}只` : `当前范围 ${queueGroups.members.length}只`} />
         {topic && <>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-secondary">
-          <span>候选上涨 {activeCluster ? Math.round(activeCluster.up_count / Math.max(1, activeCluster.count) * 100) : Math.round(memberRows.filter(row => row.pct_chg > 0).length / Math.max(1, memberRows.length) * 100)}%</span>
-          <span>等权涨幅 {activeCluster?.mean_pct_chg.toFixed(2) ?? '0.00'}%</span>
+          <span>候选涨跌 <b className="text-bull">涨 {activeCluster?.up_count ?? memberRows.filter(row => row.pct_chg > 0).length}</b> / <b className="text-bear">跌 {activeCluster?.down_count ?? memberRows.filter(row => row.pct_chg < 0).length}</b> / 平 {activeCluster?.flat_count ?? memberRows.filter(row => row.pct_chg === 0).length}</span>
+          <span>等权涨幅 <b className={activeCluster && activeCluster.mean_pct_chg < 0 ? 'text-bear' : 'text-bull'}>{signedPct(activeCluster?.mean_pct_chg ?? null)}</b></span>
           <span>当日事件 {activeCluster?.event_count ?? memberRows.filter(row => row.source_ids.some(sourceId => EVENT_SOURCES.has(sourceId))).length}</span>
           {topicSourceCounts.slice(0, 6).map(([label, count]) => <Tag key={label}>{label} {count}</Tag>)}
         </div>
