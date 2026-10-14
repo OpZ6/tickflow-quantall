@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 
 import numpy as np
 import polars as pl
+import pytest
 
 from app.backtest.engine import BacktestEngine, MatcherConfig
 from app.backtest.matrix import build_market_matrix
