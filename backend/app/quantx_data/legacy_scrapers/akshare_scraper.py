@@ -1,6 +1,7 @@
 """Akshare scraper: futures, sector fund flow, industry rankings."""
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import akshare as ak
@@ -173,6 +174,69 @@ def fetch_industry_boards() -> dict:
         return {"top": [], "bottom": []}
 
 
+def fetch_margin_history(trade_date: str, days: int = 30) -> dict:
+    """Combine exchange-reported financing balances into a recent daily series."""
+    from datetime import timedelta
+
+    end = datetime.strptime(trade_date, "%Y%m%d")
+    start = (end - timedelta(days=100)).strftime("%Y%m%d")
+    try:
+        shanghai = ak.stock_margin_sse(start_date=start, end_date=trade_date)
+    except Exception as exc:
+        print(f"  [akshare] Shanghai margin history unavailable: {type(exc).__name__}")
+        return {}
+    if shanghai is None or shanghai.empty:
+        return {}
+
+    required = {"信用交易日期", "融资余额"}
+    if not required.issubset(shanghai.columns):
+        print("  [akshare] Shanghai margin response missing required columns")
+        return {}
+    shanghai = shanghai.copy()
+    shanghai["信用交易日期"] = shanghai["信用交易日期"].astype(str)
+    shanghai["融资余额"] = pd.to_numeric(shanghai["融资余额"], errors="coerce")
+    dates = shanghai.loc[
+        (shanghai["信用交易日期"] <= trade_date) & shanghai["融资余额"].notna(),
+        ["信用交易日期", "融资余额"],
+    ].sort_values("信用交易日期").tail(days + 1)
+
+    def shenzhen_balance(date: str) -> tuple[str, float | None]:
+        try:
+            frame = ak.stock_margin_szse(date=date)
+            if frame is None or frame.empty or "融资余额" not in frame.columns:
+                return date, None
+            value = pd.to_numeric(frame["融资余额"], errors="coerce").iloc[0]
+            return date, float(value) if pd.notna(value) else None
+        except Exception as exc:
+            print(f"  [akshare] Shenzhen margin {date} unavailable: {type(exc).__name__}")
+            return date, None
+
+    date_list = dates["信用交易日期"].tolist()
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        shenzhen = dict(pool.map(shenzhen_balance, date_list))
+
+    records = []
+    for row in dates.to_dict(orient="records"):
+        date = row["信用交易日期"]
+        sz_balance_yi = shenzhen.get(date)
+        sh_balance_yi = float(row["融资余额"]) / 1e8
+        if sz_balance_yi is None:
+            continue
+        records.append({
+            "date": date,
+            "financing_balance_yi": round(sh_balance_yi + sz_balance_yi, 2),
+        })
+
+    records.sort(key=lambda item: item["date"])
+    for index, row in enumerate(records):
+        previous = records[index - 1]["financing_balance_yi"] if index else None
+        row["financing_net_buy_yi"] = round(
+            row["financing_balance_yi"] - previous, 2
+        ) if previous is not None else 0.0
+    records = records[-days:]
+    return {"history": records, "latest": records[-1] if records else {}}
+
+
 def run(trade_date: str = TRADE_DATE, output_dir: str = OUTPUT_DIR) -> str:
     os.makedirs(output_dir, exist_ok=True)
     print(f"\n{'='*50}\n[akshare] Scraping {trade_date}...")
@@ -181,6 +245,7 @@ def run(trade_date: str = TRADE_DATE, output_dir: str = OUTPUT_DIR) -> str:
         "futures": fetch_futures(),
         "sector_fund_flow": fetch_sector_fund_flow(),
         "industry_boards": fetch_industry_boards(),
+        "margin": fetch_margin_history(trade_date),
     }
     path = os.path.join(output_dir, "akshare.json")
     with open(path, "w", encoding="utf-8") as f:

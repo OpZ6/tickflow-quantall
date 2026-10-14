@@ -67,8 +67,19 @@ def _decode_jwt_meta(token: str | None) -> dict[str, Any]:
         return {"has_token": True, "decode_error": f"{type(exc).__name__}: {exc}"}
 
 
+def _local_storage(state: dict[str, Any]) -> dict[str, str]:
+    values = state.get("localStorage")
+    if isinstance(values, dict):
+        return values
+    origin = next(
+        (item for item in state.get("origins", []) if item.get("origin") == BASE_URL),
+        None,
+    )
+    return {item["name"]: item["value"] for item in (origin or {}).get("localStorage", [])}
+
+
 def _state_meta(state: dict[str, Any]) -> dict[str, Any]:
-    local_storage = state.get("localStorage", {})
+    local_storage = _local_storage(state)
     token = local_storage.get("token")
     if not token:
         for cookie in state.get("cookies", []):
@@ -176,12 +187,13 @@ def scrape() -> dict:
         result["error"] = f"{type(exc).__name__}: {exc}"
         return result
 
+    local_storage = _local_storage(state)
     meta = _state_meta(state)
     result["state_path"] = str(state_path.relative_to(ROOT)) if state_path.is_relative_to(ROOT) else str(state_path)
     result["login_state"] = {
         "state_found": True,
         "token_meta": meta,
-        "local_storage_keys": sorted(state.get("localStorage", {}).keys()),
+        "local_storage_keys": sorted(local_storage.keys()),
         "cookie_names": [c.get("name") for c in state.get("cookies", [])],
     }
     if meta.get("expired"):
@@ -222,14 +234,14 @@ def scrape() -> dict:
         page.on("response", on_response)
         try:
             page.goto(BASE_URL, wait_until="domcontentloaded", timeout=40000)
-            if state.get("localStorage"):
+            if local_storage:
                 page.evaluate(
                     """items => {
                         for (const [key, value] of Object.entries(items)) {
                             localStorage.setItem(key, value);
                         }
                     }""",
-                    state["localStorage"],
+                    local_storage,
                 )
 
             result["pages"]["stock_ladder"] = _probe_page(page, f"{BASE_URL}/stock-ladder")

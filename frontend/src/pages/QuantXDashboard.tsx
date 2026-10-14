@@ -49,6 +49,7 @@ import {
   SectorFlowChart,
   SectorScatterChart,
   SectorTreemapChart,
+  SealQualityPanel,
   UpCountChart,
 } from './QuantXReview'
 
@@ -498,7 +499,7 @@ function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthL
   const { s1, s2, s3, s4, s5 } = review.sections
   if (tab === 'market') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="主要指数" className="xl:col-span-2"><IndexChart indexes={s1.indexes} /></Panel><Panel title="涨跌家数 + 成交额"><UpCountChart history={s1.up_count_history} /></Panel><Panel title="融资余额 + 净买入"><MarginChart history={s1.margin_history} /></Panel></div>
   if (tab === 'themes') return <div className="grid gap-3 xl:grid-cols-2">{multiday && <><div className="xl:col-span-2"><ThemeLifecyclePanel data={multiday} /></div><FactorAttribution rows={multiday.factor_attribution} /></>}<Panel title="多源题材"><GenericRows rows={[...s2.themes_pywencai.map(row => ({ source: 'pywencai', ...row })), ...s2.themes_ths.map(row => ({ source: 'ths', name: row.tag, count: row.count, rank: row.rank }))]} columns={['source', 'name', 'count', 'rank']} /></Panel><Panel title="百日新高扩散聚类" hint="看哪些板块正批量创出阶段新高" className="xl:col-span-2"><NewHighPanel date={review.trade_date} data={s2.new_high} /></Panel></div>
-  if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel></div>
+  if (tab === 'emotion') return <div className="grid gap-3 xl:grid-cols-2"><Panel title="连板高度历史"><HeightChart history={s3.height_history} /></Panel><Panel title="晋级率 / 溢价率 / 涨停数"><AdvanceRateChart history={s3.advance_history} /></Panel><div className="xl:col-span-2"><SealQualityPanel summary={s3.seal_quality} rows={s3.ladder_detail} /></div></div>
   if (tab === 'flow') return <div data-testid="quantx-capital-workspace" className="grid gap-3">
     <div data-testid="quantx-capital-breadth-row" className="grid gap-3 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
       <Panel testId="quantx-capital-ecosystem" title="行业资金分布" hint="全行业流入/流出使用同一面积尺度，其他行业合并但总额不丢失" icon={<Sparkles className="h-3.5 w-3.5" />} className="xl:[grid-column:span_9/span_9]"><SectorTreemapChart data={s4.sector_treemap} summary={s4.sector_flow} height={750} /></Panel>

@@ -34,6 +34,7 @@ QuantX 专项网页来源属于“市场事实来源”，统一通过 `app.quan
 
 ## 支持文档
 
+- [量化研究与回测实战入门](../prompt/quant-backtest-primer.md)：面向交易新人的量化概念、A 股回测口径、因子检验、防过拟合和实盘执行速览；另有 [可视化 HTML 报告](../prompt/quant-backtest-primer.html)。
 - [量化策略研发通用规范](research/strategy-development-methodology.md)：所有选股与交易策略共用的研究顺序、时间隔离、Alpha 评价、适用期验证、反过拟合和证据要求。
 - [右侧中短线波段方向合同](research/right-side-swing-operating-system-20260910.md)：身份与停止边界。迭代用法见[策略迭代助手](research/strategy-iteration-assistant.md)。
 - [量化选股策略迭代主计划](research/quant-development-plan.md)：当前策略队列、数据状态与阶段计划；具体正在执行的任务见根目录 `goal.md`。

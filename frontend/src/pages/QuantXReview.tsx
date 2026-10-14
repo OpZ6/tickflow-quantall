@@ -12,7 +12,7 @@ import {
   Activity, Flame, AlertTriangle, CheckCircle2, XCircle,
   Zap, Gauge, FileText, Layers3, TrendingUp, BookOpenCheck, LayoutGrid,
 } from 'lucide-react'
-import { quantxApi } from '@/lib/api'
+import { quantxApi, type QuantXReviewData } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { useChartTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
@@ -459,6 +459,60 @@ export function SectorScatterChart({ data, height = 480 }: { data: any[]; height
   return <div ref={ref} className="w-full" style={{ height }} />
 }
 
+export function SealQualityPanel({ summary, rows }: {
+  summary: QuantXReviewData['sections']['s3']['seal_quality']
+  rows: QuantXReviewData['sections']['s3']['ladder_detail']
+}) {
+  const coveredRows = rows.filter(row =>
+    row.first_seal_time != null || row.last_seal_time != null ||
+    row.broken_count != null || row.seal_amount_yi != null,
+  )
+  if (summary.total_limit_up_count <= 0) return null
+
+  return (
+    <div className="rounded-lg border border-border bg-elevated/30 p-3">
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <h4 className="text-xs font-semibold">涨停封板质量</h4>
+        <span className="text-[10px] text-muted">过程字段覆盖 {summary.process_coverage_count}/{summary.total_limit_up_count} ({summary.process_coverage_pct == null ? '--' : `${summary.process_coverage_pct.toFixed(1)}%`})</span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 mb-3">
+        {[
+          { label: '无炸板', value: summary.no_break_ratio_pct, count: summary.broken_count_coverage_count, suffix: '%' },
+          { label: '多次炸板', value: summary.repeat_break_ratio_pct, count: summary.broken_count_coverage_count, suffix: '%' },
+          { label: '09:35前封板', value: summary.early_seal_ratio_pct, count: summary.first_seal_coverage_count, suffix: '%' },
+          { label: '14:30后最终封板', value: summary.late_final_seal_ratio_pct, count: summary.last_seal_coverage_count, suffix: '%' },
+          { label: '封板资金中位数', value: summary.median_seal_amount_yi, count: summary.seal_amount_coverage_count, suffix: '亿' },
+        ].map(item => (
+          <div key={item.label} className="rounded border border-border bg-elevated/30 p-2 text-center">
+            <div className="text-[10px] text-muted">{item.label}</div>
+            <div className="font-semibold">{item.value == null ? '--' : `${item.value.toFixed(1)}${item.suffix}`}</div>
+            <div className="text-[9px] text-muted">有效样本 {item.count}</div>
+          </div>
+        ))}
+      </div>
+      {coveredRows.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[620px] text-[11px]">
+            <thead><tr className="text-muted"><th className="text-left py-1">股票</th><th className="text-right">板位</th><th className="text-right">首次封板</th><th className="text-right">最后封板</th><th className="text-right">炸板次数</th><th className="text-right">封板资金</th></tr></thead>
+            <tbody>{coveredRows.slice(0, 12).map(row => (
+              <tr key={row.code} className="border-t border-border/50">
+                <td className="py-1"><span className="font-medium">{row.name}</span><span className="ml-1 text-muted">{row.code}</span></td>
+                <td className="text-right">{row.limit_times}板</td>
+                <td className="text-right font-mono">{row.first_seal_time || '--'}</td>
+                <td className="text-right font-mono">{row.last_seal_time || '--'}</td>
+                <td className="text-right">{row.broken_count ?? '--'}</td>
+                <td className="text-right">{row.seal_amount_yi == null ? '--' : `${row.seal_amount_yi.toFixed(2)}亿`}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+          {coveredRows.length > 12 && <div className="pt-1 text-right text-[10px] text-muted">展示前12只，共 {coveredRows.length} 只有封板过程数据</div>}
+        </div>
+      ) : <div className="text-[11px] text-muted">当前涨停梯队暂无封板过程字段</div>}
+      <div className="mt-2 text-[10px] text-muted">时间为北京时间；“封板资金”为来源字段口径，不代表净流入。各比例按对应字段的有效样本计算。</div>
+    </div>
+  )
+}
+
 // ═══ 主页面 ═══
 
 export function QuantXReview() {
@@ -586,6 +640,7 @@ export function QuantXReview() {
       {emotionTrendData.dates.length > 1 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">情绪趋势 (近{emotionTrendData.dates.length}日)</h4><EmotionTrendChart dates={emotionTrendData.dates} scores={emotionTrendData.scores} /></div>)}
       {s3.height_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">连板高度历史 (markLine: 3板/5板)</h4><HeightChart history={s3.height_history} /></div>)}
       {s3.advance_history?.length > 0 && (<div className="rounded-lg border border-border bg-elevated/30 p-3 mb-4"><h4 className="text-xs font-semibold text-muted mb-1">晋级率/溢价率/涨停数 (近{s3.advance_history.length}日, 3轴)</h4><AdvanceRateChart history={s3.advance_history} /></div>)}
+      <SealQualityPanel summary={s3.seal_quality} rows={s3.ladder_detail} />
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className={cn('rounded-lg border p-3', (s3.ebb_signals || []).some((e: any) => e.triggered) ? 'border-orange-500/40 bg-orange-500/5' : 'border-border bg-elevated/50')}><h4 className="text-xs font-semibold mb-2">退潮信号</h4>{(s3.ebb_signals || []).map((e: any, i: number) => (<div key={i} className="flex items-center gap-2 text-xs">{e.triggered ? <AlertTriangle className="h-3 w-3 text-orange-400" /> : <CheckCircle2 className="h-3 w-3 text-green-400" />}<span>{e.name}</span><span className="ml-auto text-muted">{e.triggered ? '触发' : '未触发'}</span></div>))}</div>
         <div className={cn('rounded-lg border p-3', s3.crash_signals?.some((c: any) => c.triggered) ? 'border-red-500/40 bg-red-500/5' : 'border-border bg-elevated/50')}><h4 className="text-xs font-semibold mb-2">崩塌信号</h4>{(s3.crash_signals || []).map((c: any, i: number) => (<div key={i} className="flex items-center gap-2 text-xs">{c.triggered ? <XCircle className="h-3 w-3 text-red-400" /> : <CheckCircle2 className="h-3 w-3 text-green-400" />}<span>{c.name}</span><span className="ml-auto text-muted">{c.status}</span></div>))}</div>

@@ -24,7 +24,7 @@ def _indices(day_change: float) -> dict:
 def _liquidity(day: date, today: float, baseline: float) -> list[dict]:
     return [
         {"trade_date": day - timedelta(days=offset), "total_amount_yi": baseline}
-        for offset in range(5, 0, -1)
+        for offset in range(20, 0, -1)
     ] + [{"trade_date": day, "total_amount_yi": today, "top5pct_amount_ratio_pct": 43.0}]
 
 
@@ -84,13 +84,43 @@ def test_four_dimensions_classify_two_contrasting_published_days():
     assert [row["tone"] for row in recovering["dimensions"]] == ["green", "green", "amber", "amber"]
     assert "前日 13.5%" in recovering["counter_evidence"]
     recovering_liquidity = {item["label"]: item["tone"] for item in recovering["dimensions"][2]["metrics"]}
-    assert recovering_liquidity["相对前 5 日"] == recovering_liquidity["较前日"] == "red"
+    assert recovering_liquidity["相对前 20 日"] == recovering_liquidity["较前日"] == "red"
     assert any(item["label"] == "平均跌幅" and item["value"] == "-1.36%" for item in recovering["dimensions"][0]["metrics"])
     assert all(
         metric["judgement"] and metric["judgement"] in recovering["summary"]
         for row in recovering["dimensions"] for metric in row["metrics"]
         if metric["tone"] in ("red", "amber")
     )
+
+
+def test_liquidity_radar_uses_twenty_day_baseline_for_status_and_color():
+    day = date(2026, 9, 29)
+    liquidity = [
+        {"trade_date": day - timedelta(days=offset), "total_amount_yi": 20000.0}
+        for offset in range(20, 5, -1)
+    ] + [
+        {"trade_date": day - timedelta(days=offset), "total_amount_yi": 16397.0}
+        for offset in range(5, 0, -1)
+    ] + [{"trade_date": day, "total_amount_yi": 15500.0}]
+    result = build_risk_radar(
+        day,
+        breadth={"up_count": 3000, "down_count": 2000, "flat_count": 100, "total_count": 5100},
+        state={"limit_down_count": 8, "premium_rate_pct": 1.0, "advance_rate_pct": 30.0, "seal_rate_pct": 85.0},
+        liquidity=liquidity,
+        ladder=[
+            {"board_height": 1, "count": 30},
+            {"board_height": 3, "count": 2},
+            {"board_height": 4, "count": 1},
+        ],
+        indices=_indices(1.0),
+    )
+    dimension = result["dimensions"][2]
+    metrics = {item["label"]: item for item in dimension["metrics"]}
+    assert metrics["相对前 20 日"]["value"] == "81.2%"
+    assert metrics["相对前 20 日"]["tone"] == "amber"
+    assert metrics["前 20 日均额"]["value"] == "19,099 亿"
+    assert dimension["tone"] == "amber"
+    assert dimension["status"] == "量能波动需关注"
 
 
 def test_relay_flags_height_below_four_without_a_separate_ladder_dimension():
@@ -130,8 +160,8 @@ def test_single_mild_warning_keeps_dimension_green_and_judgement_visible():
     indices = _indices(1.0)
     for row in indices.values():
         row["deviation_pct"] = 1.0
-    liquidity = _liquidity(day, 8700, 10325)
-    liquidity[-2]["total_amount_yi"] = 8700
+    liquidity = _liquidity(day, 9000, 9000)
+    liquidity[-2]["total_amount_yi"] = 8100
     result = build_risk_radar(
         day,
         breadth={"up_count": 3000, "down_count": 2000, "total_count": 5100, "down_gt7_ratio_pct": 2.1},
@@ -141,7 +171,7 @@ def test_single_mild_warning_keeps_dimension_green_and_judgement_visible():
         indices=indices,
     )
     assert [row["tone"] for row in result["dimensions"]] == ["green"] * 4
-    assert [row["status"] for row in result["dimensions"][:3]] == ["基本正常"] * 3
+    assert [row["status"] for row in result["dimensions"][:3]] == ["基本正常", "基本正常", "量能正常"]
     assert result["headline"] == "四维整体正常，局部信号需留意"
     assert all(
         any(metric["tone"] == "amber" and metric["judgement"] in result["summary"] for metric in row["metrics"])

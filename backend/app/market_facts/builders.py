@@ -425,12 +425,24 @@ def _build_margin_history(
     ingested_at: str,
 ) -> FactBatch:
     as_of_date = _trade_date(trade_date)
-    payload = sources.get("tushare") or {}
+    source = "tushare"
+    payload = sources.get(source) or {}
     margin = payload.get("margin") if isinstance(payload.get("margin"), dict) else {}
+    if not _records(margin, "history", "records", "rows"):
+        fallback = sources.get("akshare") or {}
+        fallback_margin = fallback.get("margin")
+        if isinstance(fallback_margin, dict) and _records(
+            fallback_margin, "history", "records", "rows"
+        ):
+            source, payload, margin = "akshare", fallback, fallback_margin
     rows = []
     for item in _records(margin, "history", "records", "rows"):
         margin_date = _calendar_date(item.get("date") or item.get("trade_date"))
-        balance = _number(item.get("rzye_yi") or item.get("financing_balance_yi"))
+        balance = _number(
+            item.get("rzye_yi")
+            if item.get("rzye_yi") is not None
+            else item.get("financing_balance_yi")
+        )
         if margin_date is None or balance is None or margin_date > as_of_date:
             continue
         rows.append(
@@ -445,11 +457,12 @@ def _build_margin_history(
                     else item.get("financing_net_buy_yi")
                 ),
                 **_metadata(
-                    source="tushare",
-                    source_record_id=f"tushare:margin:CN_A:{margin_date.isoformat()}",
+                    source=source,
+                    source_record_id=f"{source}:margin:CN_A:{margin_date.isoformat()}",
                     observed_at=_observed_at(payload),
                     ingested_at=ingested_at,
                     run_id=run_id,
+                    is_fallback=source != "tushare",
                 ),
             }
         )
@@ -483,6 +496,12 @@ def _event_rows(
         )
         if event_type == "limit_up" and board_height is None:
             board_height = 1
+        first_seal_time = str(row.get("first_time") or "").strip()
+        last_seal_time = str(row.get("last_time") or "").strip()
+        if first_seal_time.lower() in {"", "nan", "none"}:
+            first_seal_time = None
+        if last_seal_time.lower() in {"", "nan", "none"}:
+            last_seal_time = None
         normalized.append(
             {
                 "trade_date": _trade_date(trade_date),
@@ -494,6 +513,10 @@ def _event_rows(
                 "event_type": event_type,
                 "board_height": board_height,
                 "limit_reason": str(row.get("reason") or "").strip(),
+                "first_seal_time": first_seal_time,
+                "last_seal_time": last_seal_time,
+                "broken_count": _integer(row.get("open_times")),
+                "seal_amount_yi": _number(row.get("seal_amount_yi")),
                 **_metadata(
                     source=source,
                     source_record_id=f"{source}:{trade_date}:{event_type}:{symbol}",

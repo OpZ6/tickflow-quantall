@@ -7,6 +7,12 @@
           raw_close, raw_high, raw_low, turnover_rate,
           consecutive_limit_ups, consecutive_limit_downs
 
+单位契约: volume 为手(100股), amount 为元, turnover_rate 为百分数值。
+历史单位断点: 旧 Quants 导入的股/千元及其派生的 100 倍换手率已由
+repair_historical_daily_units.py / repair_historical_turnover_rate.py 修复。
+2015 年遗漏区间也已补齐; 2016-12-30 不是当前数据的有效性边界。
+流水线只接收标准单位, 不按日期或数值大小再次缩放; 未修复库存须先迁移。
+
 设计:
   - 100% Polars 表达式(SQL 窗口无法表达递归 EMA)
   - 每只标的独立计算(`.over("symbol")`)
@@ -94,9 +100,9 @@ def invalidate_custom_signals() -> None:
 ENRICHED_STORAGE_COLS = [
     "symbol", "date",
     "open", "high", "low", "close",          # 前复权
-    "volume", "amount",
+    "volume", "amount",                     # 手(100股) / 元; 入库前统一单位
     "raw_close", "raw_high", "raw_low",       # 不复权原始价
-    "turnover_rate",                           # 依赖当时的 float_shares, 不可回推
+    "turnover_rate",                           # 百分数值; 依赖当时的 float_shares, 不可回推
     "consecutive_limit_ups",                   # 递推状态, 需从历史 cum_sum
     "consecutive_limit_downs",
     "quote_ts",                                # 行情时间戳(ms): 盘后校验/量比折算/跨天完整性

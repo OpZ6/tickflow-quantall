@@ -49,7 +49,7 @@ def _daily_frame(trade_date: str) -> pd.DataFrame:
 
 def _classify_board(code: str) -> str:
     code = str(code).split(".", 1)[0].zfill(6)
-    if code.startswith("688"):
+    if code.startswith(("688", "689")):
         return "科创板"
     if code.startswith("30"):
         return "创业板"

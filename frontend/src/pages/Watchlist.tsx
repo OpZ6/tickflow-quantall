@@ -7,6 +7,7 @@ import { Trash2, RefreshCw, Star, X, Search, LayoutGrid, List, Rows3, BarChart3,
 import { api, type KlineRow, type MinuteKlineRow, type WatchlistGroup, type WatchlistGroupColor } from '@/lib/api'
 import { fetchMinuteBatchIncremental } from '@/lib/minuteBatchIncremental'
 import { QK } from '@/lib/queryKeys'
+import { BOARDS, getBoardType } from '@/lib/board'
 import { storage } from '@/lib/storage'
 import { fmtPrice, fmtPct, fmtBigNum, priceColorClass, formatExtNumber } from '@/lib/format'
 import { cn } from '@/lib/cn'
@@ -55,21 +56,9 @@ import {
 // ===== 板块标识（筛选/卡片用） =====
 // 注: boardTag（创/科/北 标签）已移至共享 @/components/stock-table/primitives
 
-const BOARDS = ['沪主板', '深主板', '创业板', '科创板', '北交所'] as const
-type BoardType = typeof BOARDS[number]
-
 // 板块筛选选项 = 股票板块 + ETF（ETF 无 symbol 板块语义，按 asset_type 匹配）
 const ETF_BOARD = 'ETF'
 const BOARD_OPTIONS = [...BOARDS, ETF_BOARD]
-
-function getBoardType(symbol: string): BoardType | null {
-  if (/^(300|301)/.test(symbol)) return '创业板'
-  if (/^688/.test(symbol))       return '科创板'
-  if (/\.BJ$/.test(symbol))      return '北交所'
-  if (/^60[0135]/.test(symbol))  return '沪主板'
-  if (/^00[012]/.test(symbol))   return '深主板'
-  return null
-}
 
 // ===== 换手率分档色（卡片/表格用） =====
 

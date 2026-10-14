@@ -176,9 +176,16 @@ def build_risk_radar(
 
     ordered_liquidity = sorted((row for row in liquidity if row.get("trade_date") and row.get("total_amount_yi") is not None), key=lambda row: row["trade_date"])
     current = next((row for row in ordered_liquidity if row["trade_date"] == day), None)
-    previous = [row["total_amount_yi"] for row in ordered_liquidity if row["trade_date"] < day][-5:]
+    previous = [
+        row["total_amount_yi"] for row in ordered_liquidity
+        if row["trade_date"] < day
+    ]
     previous20 = [row["total_amount_yi"] for row in ordered_liquidity if row["trade_date"] < day][-20:]
-    ratio = 100 * current["total_amount_yi"] / (sum(previous) / len(previous)) if current and len(previous) == 5 and sum(previous) > 0 else None
+    ratio = (
+        100 * current["total_amount_yi"] / (sum(previous20) / 20)
+        if current and len(previous20) == 20 and sum(previous20) > 0
+        else None
+    )
     daily_change = None
     if ratio is None:
         dimensions.append(_dimension("liquidity", "量能与承接", None, "数据待同步", [], "", [], "market_liquidity_daily"))
@@ -190,13 +197,13 @@ def build_risk_radar(
         metrics = [
             _metric("当日成交", f"{current['total_amount_yi']:,.0f} 亿"),
             _metric(
-                "相对前 5 日", f"{ratio:.1f}%", ratio_tone,
-                f"成交额为前 5 日均额的 {ratio:.1f}%，低于 80%" if ratio < 80 else
-                f"成交额为前 5 日均额的 {ratio:.1f}%，高于 150%" if ratio > 150 else
-                f"成交额为前 5 日均额的 {ratio:.1f}%，低于 90%" if ratio < 90 else
-                f"成交额为前 5 日均额的 {ratio:.1f}%，高于 140%" if ratio > 140 else None,
+                "相对前 20 日", f"{ratio:.1f}%", ratio_tone,
+                f"成交额为前 20 日均额的 {ratio:.1f}%，低于 80%" if ratio < 80 else
+                f"成交额为前 20 日均额的 {ratio:.1f}%，高于 150%" if ratio > 150 else
+                f"成交额为前 20 日均额的 {ratio:.1f}%，低于 90%" if ratio < 90 else
+                f"成交额为前 20 日均额的 {ratio:.1f}%，高于 140%" if ratio > 140 else None,
             ),
-            _metric("前 5 日均额", f"{sum(previous) / 5:,.0f} 亿"),
+            _metric("前 20 日均额", f"{sum(previous20) / 20:,.0f} 亿"),
         ]
         if daily_change is not None:
             metrics.append(_metric(
@@ -209,13 +216,11 @@ def build_risk_radar(
             metrics.append(_metric("前 5% 成交占比", f"{concentration:.1f}%"))
         if current.get("top20_amount_ratio_pct") is not None:
             metrics.append(_metric("前 20 名成交占比", f"{current['top20_amount_ratio_pct']:.1f}%"))
-        if len(previous20) == 20 and sum(previous20) > 0:
-            metrics.append(_metric("相对前 20 日", f"{100 * current['total_amount_yi'] / (sum(previous20) / 20):.1f}%"))
         dimensions.append(_dimension(
             "liquidity", "量能与承接", tone,
             {"red": "缩量与普跌共振", "amber": "量能波动需关注", "green": "量能正常"}[tone],
             metrics,
-            "成交额与此前五个已发布交易日的均额比较；成交集中度用于观察承接范围。",
+            "成交额与此前二十个已发布交易日的均额比较；成交集中度用于观察承接范围。",
             [*([_metric("前 20 日均额", f"{sum(previous20) / 20:,.0f} 亿")] if len(previous20) == 20 else [])],
             "market_liquidity_daily",
         ))
@@ -301,7 +306,7 @@ def build_risk_radar(
             row["key"] == "relay" and maximum >= 4 and not missing_levels
             and premium >= -0.5 and advance >= 22 and (seal is None or seal >= 70)
         ) or (
-            row["key"] == "liquidity" and 85 <= ratio <= 145
+            row["key"] == "liquidity" and 90 <= ratio <= 140
         )
         if mild:
             row["tone"] = "green"

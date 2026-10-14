@@ -796,7 +796,7 @@ def _ladder_category(theme: str) -> str:
 def _board_kind(symbol: str, exchange: str) -> str:
     if exchange == "BSE" or symbol.startswith(("4", "8", "9")):
         return "30cm"
-    if symbol.startswith(("300", "301", "688", "689")):
+    if symbol.startswith(("300", "301", "302", "688", "689")):
         return "20cm"
     return "10cm"
 

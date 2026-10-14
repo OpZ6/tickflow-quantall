@@ -4909,7 +4909,34 @@ export interface QuantXReviewDataV2 {
       ebb_signals: Array<{ name: string; triggered: boolean | null; available: boolean | null; value?: unknown; baseline?: unknown }>
       crash_signals: Array<{ name: string; triggered: boolean | null; status: string; evidence: string }>
       ladder_grid: Array<{ level: string; count: number; names: string[] }>
-      ladder_detail: Array<Record<string, unknown>>
+      ladder_detail: Array<{
+        code: string
+        name: string
+        limit_times: number
+        theme_name: string
+        turnover_pct: number | null
+        amount_yi: number | null
+        first_seal_time: string | null
+        last_seal_time: string | null
+        broken_count: number | null
+        seal_amount_yi: number | null
+      }>
+      seal_quality: {
+        total_limit_up_count: number
+        process_coverage_count: number
+        process_coverage_pct: number | null
+        broken_count_coverage_count: number
+        no_break_count: number
+        no_break_ratio_pct: number | null
+        repeat_break_count: number
+        repeat_break_ratio_pct: number | null
+        first_seal_coverage_count: number
+        early_seal_ratio_pct: number | null
+        last_seal_coverage_count: number
+        late_final_seal_ratio_pct: number | null
+        seal_amount_coverage_count: number
+        median_seal_amount_yi: number | null
+      }
       height_history: Array<{ date: string; height: number; name: string; names: string[]; second_height: number; second_names: string[]; turnover_pct: number | null; amount_yi: number | null }>
     }
     s4: {

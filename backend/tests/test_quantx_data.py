@@ -80,7 +80,7 @@ def _fixture(root: Path, trade_date: str = "20260825") -> Path:
         "ths_hot": {"trade_date": trade_date, "status": "ok", "reason_tags": [{"tag": "人工智能", "count": 2}], "stocks": [{"code": "000001", "name": "甲", "reason": "人工智能"}]},
         "zhangtingke": {"trade_date": trade_date, "status": "ok", "ladder_by_height": {"2": [{"code": "000001", "name": "甲", "limit_times": 2, "theme_name": "人工智能", "turnover_pct": 12.34, "amount_yi": 8.76}]}, "ladder_stocks": [{"code": "000001", "name": "甲", "limit_times": 2, "theme_name": "人工智能", "turnover_pct": 12.34, "amount_yi": 8.76}]},
         "zhangtingjun": {"trade_date": trade_date, "status": "ok"},
-        "pywencai": {"trade_date": trade_date, "status": "ok", "limit_up": {"count": 1, "stocks": [{"code": "000001", "name": "甲", "limit_times": 2, "concepts": ["人工智能"]}], "ladder": {"2": ["甲"]}, "themes": [{"name": "人工智能", "count": 1}]}, "broken_board": {"count": 0, "stocks": []}, "limit_down": {"count": 0, "stocks": []}, "seal_rate": 100, "broken_rate": 0},
+        "pywencai": {"trade_date": trade_date, "status": "ok", "limit_up": {"count": 1, "stocks": [{"code": "000001", "name": "甲", "limit_times": 2, "concepts": ["人工智能"], "first_time": "09:30:00", "last_time": "09:30:00", "open_times": 0, "seal_amount_yi": 12.5}], "ladder": {"2": ["甲"]}, "themes": [{"name": "人工智能", "count": 1}]}, "broken_board": {"count": 0, "stocks": []}, "limit_down": {"count": 0, "stocks": []}, "seal_rate": 100, "broken_rate": 0},
         "duanxianxia": {"trade_date": trade_date, "status": "ok"},
         "deepq": {"trade_date": trade_date, "status": "ok"},
         "security_popularity": {"trade_date": trade_date, "status": "ok", "records": []},
@@ -756,6 +756,17 @@ def test_review_api_reads_published_snapshot_after_sources_are_removed(tmp_path)
     assert response.json()["sections"]["s3"]["ladder_grid"]
     assert response.json()["sections"]["s3"]["ladder_detail"][0]["turnover_pct"] == 12.34
     assert response.json()["sections"]["s3"]["ladder_detail"][0]["amount_yi"] == 8.76
+    ladder_detail = response.json()["sections"]["s3"]["ladder_detail"][0]
+    assert ladder_detail["first_seal_time"] == "09:30:00"
+    assert ladder_detail["last_seal_time"] == "09:30:00"
+    assert ladder_detail["broken_count"] == 0
+    assert ladder_detail["seal_amount_yi"] == 12.5
+    seal_quality = response.json()["sections"]["s3"]["seal_quality"]
+    assert seal_quality["total_limit_up_count"] == 1
+    assert seal_quality["process_coverage_count"] == 1
+    assert seal_quality["no_break_ratio_pct"] == 100.0
+    assert seal_quality["early_seal_ratio_pct"] == 100.0
+    assert seal_quality["median_seal_amount_yi"] == 12.5
     height_history = response.json()["sections"]["s3"]["height_history"]
     assert height_history[-1]["date"] == "20260825"
     assert height_history[-1]["height"] == 2

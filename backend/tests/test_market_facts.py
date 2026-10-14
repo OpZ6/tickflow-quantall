@@ -74,6 +74,10 @@ def _sources(trade_date: str = "20260825") -> dict[str, dict]:
                         "name": "甲",
                         "limit_times": 2,
                         "reason": "人工智能",
+                        "first_time": "09:31:00",
+                        "last_time": "09:42:00",
+                        "open_times": 2,
+                        "seal_amount_yi": 3.21,
                     }
                 ],
                 "themes": [{"name": "人工智能", "count": 1}],
@@ -281,7 +285,7 @@ def test_initial_dataset_registry_declares_contracts_and_routes() -> None:
         expected_version = {
             DatasetId.MARKET_BREADTH_DAILY: 3,
             DatasetId.MARKET_LIQUIDITY_DAILY: 3,
-            DatasetId.LIMIT_EVENT_DAILY: 2,
+            DatasetId.LIMIT_EVENT_DAILY: 3,
             DatasetId.LIMIT_LADDER_DAILY: 3,
         }.get(dataset_id, 1)
         assert spec.schema_version == expected_version
@@ -412,6 +416,12 @@ def test_fact_builders_normalize_breadth_and_limit_events() -> None:
     assert events["source"].unique().to_list() == ["pywencai"]
     assert events["is_fallback"].to_list() == [False, False, False]
     assert events.filter(pl.col("event_type") == "limit_up")["limit_reason"].item() == "人工智能"
+    limit_up = events.filter(pl.col("event_type") == "limit_up").row(0, named=True)
+    assert limit_up["first_seal_time"] == "09:31:00"
+    assert limit_up["last_seal_time"] == "09:42:00"
+    assert limit_up["broken_count"] == 2
+    assert limit_up["seal_amount_yi"] == 3.21
+    assert events.filter(pl.col("event_type") == "broken_board")["broken_count"].item() is None
     ladder = by_id[DatasetId.LIMIT_LADDER_DAILY].frame.row(0, named=True)
     assert ladder["turnover_pct"] == 12.34
     assert ladder["amount_yi"] == 8.76

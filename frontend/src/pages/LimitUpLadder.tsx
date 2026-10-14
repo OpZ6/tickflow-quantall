@@ -17,6 +17,7 @@ import { SealedBadge } from '@/components/SealedBadge'
 import { useDialogBackdrop } from '@/lib/useDialogBackdrop'
 import type { ExtColumnDisplayConfig } from '@/lib/watchlist-columns'
 import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
+import { getBoardType } from '@/lib/board'
 
 // ===== Ext 字段配置 =====
 
@@ -158,9 +159,10 @@ function fmtSealAmount(v: number): string {
 // ===== 板块标识 =====
 
 function boardTag(symbol: string): { label: string; cls: string } | null {
-  if (/^(300|301)/.test(symbol)) return { label: '创', cls: 'text-[#f97316] bg-[#f97316]/12 border-[#f97316]/25' }
-  if (/^688/.test(symbol))       return { label: '科', cls: 'text-cyan-400 bg-cyan-400/12 border-cyan-400/25' }
-  if (/\.BJ$/.test(symbol))      return { label: '北', cls: 'text-purple-400 bg-purple-400/12 border-purple-400/25' }
+  const board = getBoardType(symbol)
+  if (board === '创业板') return { label: '创', cls: 'text-[#f97316] bg-[#f97316]/12 border-[#f97316]/25' }
+  if (board === '科创板') return { label: '科', cls: 'text-cyan-400 bg-cyan-400/12 border-cyan-400/25' }
+  if (board === '北交所') return { label: '北', cls: 'text-purple-400 bg-purple-400/12 border-purple-400/25' }
   return null
 }
 
@@ -699,13 +701,13 @@ function matchFilter(stock: LimitLadderStock, key: FilterKey): boolean {
     case 'failed':
       return stock.status === 'failed'
     case 'main':
-      return !/^(300|301|688)/.test(s) && !/\.BJ$/.test(s) && !n.includes('ST')
+      return (getBoardType(s) === '沪主板' || getBoardType(s) === '深主板') && !n.includes('ST')
     case 'chinext':
-      return /^(300|301)/.test(s)
+      return getBoardType(s) === '创业板'
     case 'star':
-      return /^688/.test(s)
+      return getBoardType(s) === '科创板'
     case 'bj':
-      return /\.BJ$/.test(s)
+      return getBoardType(s) === '北交所'
     case 'st':
       return n.includes('ST')
   }

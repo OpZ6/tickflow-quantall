@@ -5,6 +5,7 @@ import json
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from statistics import median
 from typing import Any, Protocol
 
 import polars as pl
@@ -25,14 +26,17 @@ from .review_contract import (
     audit_review_fields,
 )
 from .review_schema import REVIEW_V2_SCHEMA_VERSION, QuantXReviewResponseV2
-from .risk_radar import (
-    ALL_A_INDEX, MARKET_INDICES, SENTIMENT_INDICES,
-    build_risk_radar, index_ma10,
-)
 from .review_view import (
     VIEW_ALGORITHM_VERSION,
     apply_deterministic_review_view,
     review_view_derivation_status,
+)
+from .risk_radar import (
+    ALL_A_INDEX,
+    MARKET_INDICES,
+    SENTIMENT_INDICES,
+    build_risk_radar,
+    index_ma10,
 )
 
 INDEX_DISPLAY_NAMES = {
@@ -69,6 +73,67 @@ class IndexRepository(Protocol):
 
 def _day(value: str) -> date:
     return datetime.strptime(value, "%Y%m%d").date()
+
+
+def _seal_clock_minutes(value: Any) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    digits = "".join(character for character in text if character.isdigit())
+    if len(digits) == 5:
+        digits = f"0{digits}"
+    if len(digits) < 4:
+        return None
+    hour, minute = int(digits[:2]), int(digits[2:4])
+    if hour > 23 or minute > 59:
+        return None
+    return hour * 60 + minute
+
+
+def _seal_quality_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(rows)
+    broken_known = [row["broken_count"] for row in rows if row.get("broken_count") is not None]
+    first_known = [
+        _seal_clock_minutes(row.get("first_seal_time"))
+        for row in rows
+        if _seal_clock_minutes(row.get("first_seal_time")) is not None
+    ]
+    last_known = [
+        _seal_clock_minutes(row.get("last_seal_time"))
+        for row in rows
+        if _seal_clock_minutes(row.get("last_seal_time")) is not None
+    ]
+    amounts = [
+        float(row["seal_amount_yi"])
+        for row in rows
+        if row.get("seal_amount_yi") is not None
+    ]
+    process_covered = sum(
+        any(row.get(field) is not None for field in (
+            "first_seal_time", "last_seal_time", "broken_count", "seal_amount_yi",
+        ))
+        for row in rows
+    )
+
+    def pct(count: int, denominator: int) -> float | None:
+        return round(count / denominator * 100, 1) if denominator else None
+
+    return {
+        "total_limit_up_count": total,
+        "process_coverage_count": process_covered,
+        "process_coverage_pct": pct(process_covered, total),
+        "broken_count_coverage_count": len(broken_known),
+        "no_break_count": sum(value == 0 for value in broken_known),
+        "no_break_ratio_pct": pct(sum(value == 0 for value in broken_known), len(broken_known)),
+        "repeat_break_count": sum(value >= 2 for value in broken_known),
+        "repeat_break_ratio_pct": pct(sum(value >= 2 for value in broken_known), len(broken_known)),
+        "first_seal_coverage_count": len(first_known),
+        "early_seal_ratio_pct": pct(sum(value < 9 * 60 + 35 for value in first_known), len(first_known)),
+        "last_seal_coverage_count": len(last_known),
+        "late_final_seal_ratio_pct": pct(sum(value >= 14 * 60 + 30 for value in last_known), len(last_known)),
+        "seal_amount_coverage_count": len(amounts),
+        "median_seal_amount_yi": round(median(amounts), 2) if amounts else None,
+    }
 
 
 def _preferred(frame: pl.DataFrame, dataset_id: DatasetId) -> pl.DataFrame:
@@ -178,6 +243,7 @@ def _clear_canonical_cache_fields(snapshot: dict[str, Any]) -> None:
             "crash_signals",
             "ladder_grid",
             "ladder_detail",
+            "seal_quality",
             "height_history",
         ),
         "s4": ("sector_flow", "sector_treemap"),
@@ -825,10 +891,18 @@ class QuantXReviewRepository:
         ladder = _preferred(
             self.facts.get_limit_ladder(day), DatasetId.LIMIT_LADDER_DAILY
         )
+        events = _preferred(
+            self.facts.get_limit_events(day), DatasetId.LIMIT_EVENT_DAILY
+        )
+        limit_up_events = {
+            row["symbol"]: row
+            for row in events.filter(pl.col("event_type") == "limit_up").to_dicts()
+        } if not events.is_empty() else {}
         if ladder.is_empty():
             return
+        ladder_rows = ladder.to_dicts()
         grouped: dict[int, list[dict[str, Any]]] = {}
-        for row in ladder.to_dicts():
+        for row in ladder_rows:
             grouped.setdefault(int(row["board_height"]), []).append(row)
         section = _section(snapshot, "s3")
         section["ladder_grid"] = [
@@ -839,17 +913,23 @@ class QuantXReviewRepository:
             }
             for level, rows in sorted(grouped.items(), reverse=True)
         ]
-        section["ladder_detail"] = [
-            {
+        details = []
+        for row in ladder_rows:
+            event = limit_up_events.get(row["symbol"], {})
+            details.append({
                 "code": row["symbol"],
                 "name": row.get("name") or "",
                 "limit_times": row["board_height"],
                 "theme_name": row.get("theme_name") or "",
                 "turnover_pct": row.get("turnover_pct"),
                 "amount_yi": row.get("amount_yi"),
-            }
-            for row in ladder.to_dicts()
-        ]
+                "first_seal_time": event.get("first_seal_time"),
+                "last_seal_time": event.get("last_seal_time"),
+                "broken_count": event.get("broken_count"),
+                "seal_amount_yi": event.get("seal_amount_yi"),
+            })
+        section["ladder_detail"] = details
+        section["seal_quality"] = _seal_quality_summary(details)
         history = _preferred_rows_by_day(
             self.facts.get_range(
                 DatasetId.LIMIT_LADDER_DAILY,
@@ -898,6 +978,7 @@ class QuantXReviewRepository:
             [
                 "sections.s3.ladder_grid",
                 "sections.s3.ladder_detail",
+                "sections.s3.seal_quality",
                 "sections.s3.height_history",
             ]
         )

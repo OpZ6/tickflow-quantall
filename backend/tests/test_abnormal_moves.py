@@ -240,8 +240,11 @@ def test_attach_deviation_columns_no_bench_close_leak(tmp_path) -> None:
 def test_board_and_st_rules() -> None:
     assert board_of("600000.SH") == "主板"
     assert board_of("000001.SZ") == "主板"
+    assert board_of("003001.SZ") == "主板"
     assert board_of("301123.SZ") == "创业板"
+    assert board_of("302132.SZ") == "创业板"
     assert board_of("688123.SH") == "科创板"
+    assert board_of("689009.SH") == "科创板"
     assert board_of("920001.BJ") == "北交所"
     assert is_st_name("*ST 某某") is True
     assert is_st_name("正常股") is False

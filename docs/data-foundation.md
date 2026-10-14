@@ -41,9 +41,11 @@
 
 `sector_breadth_daily` 同时保存 `sw_level1` 与 `sw_level2`。乐咕乐股宽度响应包含滚动历史时，日流水线必须将最近 30 个交易日展开为独立事实分区，而不是只落目标日；每个分区仍按 `(trade_date, dimension, sector_id)` 唯一。历史修复使用 `scripts/backfill_sector_breadth_history.py`：默认仅预检，`--apply` 前备份被替换分区到 `data/.fact_backups/`，再通过 `FactPublication` 原子发布。
 
-`limit_event_daily.limit_reason` 保存事件来源给出的短理由；`limit_ladder_daily.theme_reason` 保存题材级催化，`interpretation` 保存个股级涨停解读。三者缺失时保持空字符串，不得由展示层补写推测性理由。历史低版本分区通过 union-by-name 兼容读取，新采集分区分别使用事件 schema v2 与梯队 schema v3。
+`limit_event_daily.limit_reason` 保存事件来源给出的短理由；`limit_ladder_daily.theme_reason` 保存题材级催化，`interpretation` 保存个股级涨停解读。三者缺失时保持空字符串，不得由展示层补写推测性理由。`limit_event_daily` schema v3 还保存来源可提供的 `first_seal_time`、`last_seal_time`（北京时间墙钟字符串）、`broken_count`（炸板次数）和 `seal_amount_yi`（封板资金，亿元）；只有来源覆盖的涨停事件有值，其他事件或来源缺字段时为 null。历史低版本分区通过 union-by-name 兼容读取，新采集分区分别使用事件 schema v3 与梯队 schema v3。
 
 `security_popularity_daily`按`(trade_date, symbol, source_name, list_type)`保存各来源的独立名次，不合并重排。网页实时接口只能采集上海时区当天；历史日期必须由`scripts/import_security_popularity_snapshot.py`显式导入当时已冻结的快照，禁止用当前榜单冒充历史观察。该事实设置`degrades_when_missing=false`，缺失时依赖它的页面能力显示`unavailable`，不阻断其余市场事实和股票池发布。
+
+`margin_daily`优先使用 Tushare `margin` 的沪深交易所融资余额汇总；该接口不可用或无记录时，回退到 AKShare 的上交所区间数据与深交所逐日数据，按交易日合计两市融资余额。`financing_balance_yi` 的单位为亿元；`financing_net_buy_yi` 是相邻已采集交易日融资余额之差（亿元），首条记录为 0。回退行标记 `source=akshare`、`quality_level=fallback` 和 `is_fallback=true`。任一交易所当日数据缺失时不生成该日合计。
 
 `stock_logic_evidence_daily`按`(trade_date, evidence_source, symbol, evidence_kind)`合并逐股逻辑原文，`evidence_source`为`limit_ladder`（涨停梯队解读）、`ths_hot`（同花顺热点理由）、`fuyao_anomaly`（同花顺个股异动解读）或`ths_hot_list`（同花顺热榜解读，降级）。`match_text`是允许确定性题材关键词规则匹配的来源专属文本：梯队用`theme_name`、热点用`reason`、异动用`keyword_list`拼接、热榜降级用整段理由。`text`保存展示原文，异动的长篇业务解读不参与匹配以免过度归类。`catalyst`保存梯队题材催化，`tag`保存异动标签。同花顺异动接口只返回当日快照，历史日期必须由`scripts/import_fuyao_anomaly_snapshot.py`导入冻结响应；两个导入脚本都会把来源快照写回`quantx/<date>/normalized/`，使后续`--recompute`复用而不是发布空分区。热榜解读与异动解读是同一上游分析：同股同文时只保留异动行；仅在异动来源缺失或未覆盖该股时保留热榜行，并标记`is_fallback=true`、`quality_level=fallback`。该事实设置`degrades_when_missing=false`，缺失时股票池只保留可用来源并标记降级。
 

@@ -228,7 +228,7 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
         DatasetId.LIMIT_EVENT_DAILY: DatasetSpec(
             dataset_id=DatasetId.LIMIT_EVENT_DAILY,
             description="Daily stock limit-up, limit-down and broken-board events",
-            schema_version=2,
+            schema_version=3,
             primary_key=("trade_date", "symbol", "event_type"),
             partition_keys=("trade_date",),
             required_columns=(
@@ -249,9 +249,13 @@ DATASETS: Mapping[DatasetId, DatasetSpec] = MappingProxyType(
                     "event_type": pl.String,
                     "board_height": pl.UInt32,
                     "limit_reason": pl.String,
+                    "first_seal_time": pl.String,
+                    "last_seal_time": pl.String,
+                    "broken_count": pl.UInt32,
+                    "seal_amount_yi": pl.Float64,
                 }
             ),
-            field_units=MappingProxyType({}),
+            field_units=MappingProxyType({"seal_amount_yi": "CNY_100M"}),
         ),
         DatasetId.LIMIT_LADDER_DAILY: DatasetSpec(
             dataset_id=DatasetId.LIMIT_LADDER_DAILY,
@@ -598,7 +602,7 @@ ROUTES: Mapping[DatasetId, SourceRoute] = MappingProxyType(
         ),
         DatasetId.MARGIN_DAILY: SourceRoute(
             DatasetId.MARGIN_DAILY,
-            ("tushare",),
+            ("tushare", "akshare"),
         ),
         DatasetId.LIMIT_EVENT_DAILY: SourceRoute(
             DatasetId.LIMIT_EVENT_DAILY,

@@ -83,6 +83,7 @@ class Section3(_StrictModel):
     crash_signals: list[dict[str, Any]] = Field(default_factory=list)
     ladder_grid: list[dict[str, Any]] = Field(default_factory=list)
     ladder_detail: list[dict[str, Any]] = Field(default_factory=list)
+    seal_quality: dict[str, Any] = Field(default_factory=dict)
     height_history: list[dict[str, Any]] = Field(default_factory=list)
 
 
