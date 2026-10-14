@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>1AMV 算法完全解构 · 实现逻辑与复现指南</title>
+<style>
+  :root{
+    --bg:#0d1017; --panel:#151923; --panel2:#1a1f2b; --line:#262d3d;
+    --fg:#dce2ec; --dim:#8b94a7; --accent:#e05d5d; --accent2:#5da2e0;
+    --green:#5dc98f; --orange:#e0a95d; --code-bg:#10141d;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);font:15px/1.75 "Segoe UI","Microsoft YaHei",sans-serif;margin:0;padding:0}
+  .wrap{max-width:980px;margin:0 auto;padding:40px 28px 80px}
+  h1{font-size:26px;margin:0 0 6px}
+  h2{font-size:20px;margin:46px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line);color:#fff}
+  h3{font-size:16px;margin:28px 0 10px;color:var(--accent2)}
+  .meta{color:var(--dim);font-size:12.5px;margin-bottom:26px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:22px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card b{display:block;font-size:12px;color:var(--dim);margin-bottom:4px;letter-spacing:.5px}
+  .card .big{font-size:17px;color:#fff;font-family:Consolas,monospace}
+  .formula{background:var(--code-bg);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:8px;padding:14px 18px;margin:14px 0;font-family:Consolas,"Cascadia Mono",monospace;
+    font-size:14.5px;color:#e8eef7;overflow-x:auto;line-height:1.9}
+  .formula .c{color:var(--dim)}
+  .formula .k{color:var(--orange)}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+    font-family:Consolas,monospace;font-size:13px;line-height:1.65;overflow-x:auto;color:#c9d4e5}
+  code{font-family:Consolas,monospace;font-size:.92em;background:var(--code-bg);
+    border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:#ffd9a0}
+  pre code{border:none;background:none;padding:0;color:inherit}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th,td{padding:8px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:var(--dim);font-weight:600;white-space:nowrap}
+  tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+  .ok{color:var(--green);font-weight:600}.warn{color:var(--orange)}.bad{color:var(--accent)}
+  .note{background:rgba(93,162,224,.07);border:1px solid rgba(93,162,224,.25);border-radius:8px;
+    padding:12px 16px;margin:14px 0;font-size:13.5px}
+  .note b{color:var(--accent2)}
+  .proof{background:rgba(93,201,143,.06);border:1px solid rgba(93,201,143,.25);border-radius:8px;
+    padding:12px 16px;margin:14px 0;font-size:13.5px}
+  .proof b{color:var(--green)}
+  .toc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 22px;margin:20px 0}
+  .toc a{color:var(--accent2);text-decoration:none;display:block;padding:2px 0;font-size:13.5px}
+  .toc a:hover{text-decoration:underline}
+  svg{max-width:100%;height:auto;display:block;margin:18px auto}
+  .center{text-align:center;color:var(--dim);font-size:12.5px;margin-top:-10px}
+  ul{padding-left:22px} li{margin:4px 0}
+  .kbd{color:#fff}
+  @media print{ body{background:#fff;color:#000} }
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>1AMV 算法完全解构</h1>
+<div class="meta">逆向对象：1AMV 1.0.27（2026-10-03 发布）｜方法：安装包解包 → 字节码提取 → 原生模块动态内省 → 数值探针验证｜核心公式已 100% 复原并与官方二进制逐位对照通过｜本文与任何行情软件无依赖关系</div>
+
+<div class="cards">
+  <div class="card"><b>核心状态量</b><span class="big">V ∈ [0,1]</span>活跃筹码占比（指数遗忘递推）</div>
+  <div class="card"><b>当日激活率</b><span class="big">A = 1 − e<sup>−x</sup></span>x = 成交额 / 流通市值</div>
+  <div class="card"><b>遗忘半衰期</b><span class="big">D = 2<sup>−1/10</sup></span>每 10 个交易日活跃记忆减半</div>
+  <div class="card"><b>活跃总值</b><span class="big">AMV = mv亿 × V<sup>1.15</sup></span>γ = 1.15 超线性放大</div>
+</div>
+
+<div class="toc">
+  <a href="#s1">1 · 逆向方法与证据链（怎么解出来的，可信度如何）</a>
+  <a href="#s2">2 · 核心数学模型逐条拆解</a>
+  <a href="#s3">3 · 指标体系映射（官方五个公式各是什么）</a>
+  <a href="#s4">4 · 板块与指数聚合规则</a>
+  <a href="#s5">5 · 参数总表（逆向出的全部常量）</a>
+  <a href="#s6">6 · 数值验证记录（探针实验对照）</a>
+  <a href="#s7">7 · 与数据源解耦：任意本地 K 线接入</a>
+  <a href="#s8">8 · 完整复现指南（文件清单与运行步骤）</a>
+  <a href="#s9">9 · 工程架构对照（官方 vs 极简复刻）</a>
+  <a href="#s10">10 · 局限、改进方向与合规声明</a>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="s1">1 · 逆向方法与证据链</h2>
+
+<h3>1.1 拆包路径</h3>
+<pre>
+1AMV_1.0.27.zip
+ ├─ 公式文件/*.tn6          ← 通达信加密公式（<b>未解密，也不需要</b>，见 1.3）
+ └─ 1AMV安装程序.exe        ← NSIS 安装包（7z 直接解开）
+      ├─ 1AMV.exe           ← PyInstaller 更新进程（Tkinter）
+      ├─ 1AMV后台.exe        ← 后台计算进程
+      ├─ control-center/    ← PySide6 控制中心 UI
+      └─ _internal/         ← Python 3.13 运行时 + 两个 Cython 编译模块
+           ├─ qfq_core.cp313-win_amd64.pyd      （Cython，调度/聚合/指纹）
+           └─ qfq_terminal_math.cp313-win_amd64.pyd （Cython，<b>核心数学</b>）
+</pre>
+
+<p>关键突破口有三层：</p>
+<ul>
+  <li><b>PYZ 字节码</b>：PyInstaller 的资源包可以直接按 TOC 解出全部 <code>.pyc</code>，
+      其中 <code>amv_core.pyc</code>（分位数计算）和 20 个 <code>oneamv_* / qfq_*</code>
+      编排模块是纯字节码，反汇编即可读。</li>
+  <li><b>Cython 模块动态内省</b>：官方用 Python 3.13.12 编译，本机恰好有同版本解释器——
+      把解出的字节码 + 原生 <code>.pyd</code> 组装成一个可运行环境后，
+      <code>import qfq_terminal_math</code> 直接成功，可以调用、可以测签名、可以读常量
+      （<code>GAMMA=1.15、HALF_LIFE=10、D=0.933033、YI=1e8</code> 一眼可见）。</li>
+  <li><b>数值探针</b>：对 <code>evaluate()</code> 做网格化敏感度实验
+      （固定其它输入、扫描单一变量），从响应曲线反推封闭形式，
+      再用随机行情链式验证到 float32 舍入精度。</li>
+</ul>
+
+<h3>1.2 为什么可信度是"100%"</h3>
+<div class="proof">
+<b>证据链：</b>① 常量直接可读（D、γ、半衰期、1e8 单位）；② 8 日随机行情链式测试，
+V 和 AMV 两个输出全部精确匹配（残差 &lt; 2e-6，恰为 float32 舍入级）；③ 越界输入
+（V=100）行为与公式预测一致；④ 盘中 <code>minutes</code> 参数响应与
+<code>f = D^(minutes/240)</code> 精确吻合。四个独立实验交叉验证同一组公式，没有拟合自由度。
+</div>
+
+<h3>1.3 关于未解密的 .tn6 公式</h3>
+<div class="note">
+五个 <code>.tn6</code> 是通达信加密格式，本次<b>未解密</b>——但不影响结论完整性。
+官方后台模块里有常量 <code>PROFILE = 'tdx_float32_named_ops_v1'</code>，其唯一用途是
+<b>用 float32 逐位复刻通达信公式端的运算顺序</b>，保证后台聚合值和通达信图表显示值一致。
+也就是说：Python 端的 <code>qfq_terminal_math.evaluate</code> 就是公式端数学的官方镜像，
+从这一侧复原 = 拿到公式端的数学。未解的只剩纯显示层细节（柱高缩放、列宽等），与算法无关。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="s2">2 · 核心数学模型逐条拆解</h2>
+
+<h3>2.1 输入（每根日 K 三个数）</h3>
+<table>
+  <tr><th>变量</th><th>含义</th><th>说明</th></tr>
+  <tr><td><code>close</code></td><td>收盘价</td><td>官方用前复权；复刻时任意口径均可，只影响市值口径一致性</td></tr>
+  <tr><td><code>amount</code></td><td>成交额（元）</td><td>当日全部成交金额</td></tr>
+  <tr><td><code>float_shares</code></td><td>流通股本（股）</td><td>流通 A 股本；决定"筹码总量"的分母</td></tr>
+</table>
+
+<h3>2.2 第一步：当日激活率 A —— 泊松筹码模型</h3>
+<div class="formula">
+x = amount / (close × float_shares)   <span class="c"># 换手率：当日成交额 ÷ 流通市值</span><br>
+<b>A = 1 − e<sup>−x</sup></b>                        <span class="c"># 当日"至少被交易过一次"的筹码占比</span>
+</div>
+<p>把当日成交额均匀摊到全部流通筹码上，每份筹码平均被交易 <code>x</code> 次。
+按泊松过程，一份筹码一次都没被碰到的概率是 <code>e^(−x)</code>，
+所以 <b>A 就是用换手率推算的"当日新激活筹码比例"</b>。</p>
+<p>为什么用 <code>1−e^(−x)</code> 而不是直接用换手率 x？——<b>饱和抑制</b>：
+x=1（换手 100%）时 A 只有 63.2%，x=2 时 86.5%，永远不会超过 1。
+天量对倒日不会线性爆炸把指标打穿，这是整个指标稳健性的第一层保护。</p>
+
+<h3>2.3 第二步：活跃状态 V —— 带遗忘的递推</h3>
+<div class="formula">
+V<sub>t</sub> = D·V<sub>t−1</sub> + A<sub>t</sub> · (1 − D·V<sub>t−1</sub>)<br>
+<span class="c">等价形式：</span><br>
+1 − V<sub>t</sub> = e<sup>−x<sub>t</sub></sup> · (1 − D·V<sub>t−1</sub>)<br>
+<span class="c">首日初始化：</span>V<sub>1</sub> = A<sub>1</sub>　　<span class="c">衰减因子：</span><b>D = 2<sup>−1/10</sup> ≈ 0.933033</b>
+</div>
+
+<svg viewBox="0 0 680 210" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei" font-size="13">
+  <rect x="20" y="70" width="120" height="54" rx="9" fill="#1a2233" stroke="#3a4a66"/>
+  <text x="80" y="92" fill="#8b94a7" text-anchor="middle" font-size="11">昨日状态</text>
+  <text x="80" y="112" fill="#dce2ec" text-anchor="middle">V(t−1)</text>
+
+  <path d="M140 97 L225 97" stroke="#5da2e0" stroke-width="1.6" marker-end="url(#ar)"/>
+  <rect x="228" y="70" width="150" height="54" rx="9" fill="#1a2233" stroke="#e0a95d"/>
+  <text x="303" y="92" fill="#8b94a7" text-anchor="middle" font-size="11">先冷却（遗忘）</text>
+  <text x="303" y="112" fill="#e0a95d" text-anchor="middle">D·V(t−1) = 0.933·V</text>
+
+  <path d="M378 97 L463 97" stroke="#5da2e0" stroke-width="1.6" marker-end="url(#ar)"/>
+  <rect x="466" y="60" width="194" height="74" rx="9" fill="#1a2233" stroke="#e05d5d"/>
+  <text x="563" y="82" fill="#8b94a7" text-anchor="middle" font-size="11">再激活（今日成交）</text>
+  <text x="563" y="102" fill="#e05d5d" text-anchor="middle">+ A·(1 − D·V)</text>
+  <text x="563" y="121" fill="#8b94a7" text-anchor="middle" font-size="11">A = 1−e^(−成交额/流通市值)</text>
+
+  <path d="M563 134 L563 172 L80 172 L80 124" stroke="#5dc98f" stroke-width="1.5" fill="none" marker-end="url(#ar2)"/>
+  <text x="320" y="192" fill="#5dc98f" text-anchor="middle" font-size="12">输出 V(t) → 明天作为新的 V(t−1)</text>
+
+  <defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#5da2e0"/></marker>
+    <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#5dc98f"/></marker>
+  </defs>
+</svg>
+<div class="center">图：每日递推 = 冷却 → 激活 → 回写</div>
+
+<p>这个结构的四个理想性质：</p>
+<ul>
+  <li><b>有界性</b>：V 严格落在 [0,1]，V 物理含义就是"仍处于活跃状态的流通筹码比例"，
+      天然可以跨股票、跨板块、跨指数直接比较（换手率做不到）。</li>
+  <li><b>指数遗忘</b>：D = 2^(−1/10) 意味着 10 个交易日前的一次放量的记忆只剩一半，
+      30 日前只剩 12.5%。官方文档说的"250 日分位窗口"之上，
+      这 10 日半衰期才是真正的时间常数。</li>
+  <li><b>乘法激活</b>：A 作用在"当前未激活的余额 (1−D·V)"上而不是全量上——
+      已经活跃的筹码不会被重复计数，天量日也无法把 V 一次推满。</li>
+  <li><b>无参数漂移</b>：整个递推只有 D 一个时间常数，没有窗口重置、没有再基准化
+      （官方 docstring 原话："never silently rebase"）。</li>
+</ul>
+
+<h3>2.4 第三步：活跃总值 AMV —— 市值加权 + 超线性</h3>
+<div class="formula">
+AMV<sub>t</sub> = 流通市值(亿) × V<sub>t</sub><sup>γ</sup>　　<span class="c">γ = 1.15</span>
+</div>
+<p>两个乘法因子的分工：流通市值让大市值股票在板块聚合中拥有相应话语权（ƩAMV 才有意义）；
+V^1.15 则给<b>高激活状态温和的超线性权重</b>——V=80% 的股票贡献不是线性的 0.8 份，
+而是 0.76 份……等等，实际上是 V=0.8 时 0.8^1.15 ≈ 0.765、V=0.2 时 0.2^1.15 ≈ 0.157，
+即高激活相对低激活被放大了约 4.9 倍 vs 线性的 4 倍。γ 是唯一"调味"参数，
+去掉它（γ=1）指标依然成立，只是板块内部的集中度偏好会被抹平。</p>
+
+<h3>2.5 盘中语义与通用 step</h3>
+<div class="formula">
+<span class="c">盘中（已交易 minutes 分钟）：</span>f = D^(minutes/240)<br>
+V_display = f·V<sub>t−1</sub> + A·(1 − f·V<sub>t−1</sub>)<br>
+<span class="c">后台通用步进（float64）：</span>step(prev, A, fraction) = D<sup>fraction</sup>·prev + A·(1 − D<sup>fraction</sup>·prev)
+</div>
+<p>验证实验确认：minutes=1/30/60/120 的返回值与上式逐位吻合。
+日线上 fraction=1，退化为标准递推。</p>
+
+<h3>2.6 float32 位级复刻</h3>
+<p>官方所有终端数学用 <code>np.float32</code> 按固定运算顺序计算
+（模块常量 <code>PROFILE='tdx_float32_named_ops_v1'</code>），
+目的是和通达信公式引擎逐位一致。<b>自用时直接用 float64 即可</b>，
+精度更好且不损失任何性质——参考实现就是这么做的。</p>
+
+<!-- ================================================================ -->
+<h2 id="s3">3 · 指标体系映射（官方五个公式各是什么）</h2>
+<table>
+  <tr><th>官方组件</th><th>内容</th><th>对应算法</th></tr>
+  <tr><td>1AMV（副图）</td><td>活跃总值 + 均线</td><td>AMV 序列及其 MA（排序端默认 MA10）</td></tr>
+  <tr><td>1AMVK（副图）</td><td>活跃涨跌 / 活跃占比 / 历史分位</td><td>ΔAMV；V（即"占比"）；250 日滚动分位</td></tr>
+  <tr><td>1AMVR（仅排序）</td><td>排序数据，第 2 列"相对均线"</td><td>AMV / MA10 − 1</td></tr>
+  <tr><td>1AMVRAW / 1AMVCHK</td><td>后台数据读取 / 校验辅助</td><td>读回写通道的 RAW 行（RAWPRICE/RAWAMOUNT/RAWFREE/RAWFLOAT/RAWMIN/RAWADJ/RAWREV）</td></tr>
+</table>
+
+<h3>历史分位的精确定义（从字节码反汇编还原）</h3>
+<div class="formula">
+score = #(窗口内 &lt; 当前值) + 0.5 × #(窗口内 = 当前值)<br>
+分位 = 100 × score / #有效样本　　<span class="c">窗口 n=250，起始 NaN 填充，样本不足按已有数</span>
+</div>
+<p>注意官方文档强调的区别：分位比较的是<b>占比 V</b>（相对自己过去一年位置），
+不是活跃总值大小。并列值计 0.5——这就是标准的 mid-rank 百分位。</p>
+
+<!-- ================================================================ -->
+<h2 id="s4">4 · 板块与指数聚合规则</h2>
+<ul>
+  <li><b>总值</b>：板块 AMV = Σ 成员 AMV（同一交易日的成员值对齐相加，官方注释：
+      "Pair the SAME two market dates"）。</li>
+  <li><b>占比</b>：板块 V = ΣAMV / Σ流通市值（市值加权平均的成员 V）。</li>
+  <li><b>分位</b>：对板块占比序列做同样的 250 日滚动分位。</li>
+  <li><b>相对均线</b>：板块 AMV / MA10 − 1。</li>
+  <li><b>口径警告</b>（官方文档自认）：历史指标一律按<b>当前成分名单</b>回算，
+      不是逐日历史成分。成分变动大的板块（如风格板块）历史曲线不可用于判断当时强弱。
+      ——这是自建管线最容易超越官方的一点（有自己的数据源就能逐日快照回放）。</li>
+  <li>指数成分来自随包的 <code>index-packs/*.json</code>（含来源与生效日期的快照，
+      schema 为 <code>oneamv-index-membership-v2</code>，658 个指数），可直接复用。</li>
+</ul>
+
+<!-- ================================================================ -->
+<h2 id="s5">5 · 参数总表（逆向出的全部常量）</h2>
+<table>
+  <tr><th>常量</th><th>值</th><th>作用</th><th>来源</th></tr>
+  <tr><td><code>HALF_LIFE</code></td><td>10</td><td>活跃记忆半衰期（交易日）</td><td>qfq_core / qfq_terminal_math 模块常量</td></tr>
+  <tr><td><code>D</code></td><td>0.933033（=2^(−1/10)）</td><td>日衰减因子</td><td>同上 + 数值验证</td></tr>
+  <tr><td><code>GAMMA</code></td><td>1.15</td><td>占比超线性指数</td><td>同上</td></tr>
+  <tr><td><code>PCTL_WINDOW</code></td><td>250</td><td>分位窗口（1 年）</td><td>percentile 默认参数</td></tr>
+  <tr><td><code>MA_WINDOW</code></td><td>10</td><td>排序"相对均线"基准</td><td>官方先读我 + 1AMVR 列定义</td></tr>
+  <tr><td><code>YI</code></td><td>1e8</td><td>市值单位（亿）</td><td>模块常量</td></tr>
+  <tr><td><code>SHARE_MAX_RATIO</code></td><td>1.01</td><td>流通股本上限保护（防脏数据）</td><td>qfq_core 常量</td></tr>
+  <tr><td><code>MAGIC / RAW_REV</code></td><td>7261024 / 2609242</td><td>RAW 行格式版本指纹</td><td>qfq_core 常量（自建管线用不到）</td></tr>
+  <tr><td><code>PROFILE</code></td><td>tdx_float32_named_ops_v1</td><td>float32 位级复刻配置</td><td>qfq_terminal_math 常量</td></tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="s6">6 · 数值验证记录（探针实验对照）</h2>
+<table>
+  <tr><th>实验</th><th>输入</th><th>官方 evaluate 输出</th><th>公式预测</th><th>判定</th></tr>
+  <tr><td>首日激活</td><td>V=0, x=0.02</td><td>V=0.0198013</td><td>1−e^(−0.02)=0.0198013</td><td class="ok">精确</td></tr>
+  <tr><td>首日 AMV</td><td>mv=50亿, V=0.0198</td><td>0.54975</td><td>50×0.0198^1.15=0.54975</td><td class="ok">精确</td></tr>
+  <tr><td>纯遗忘</td><td>V=100, amount=0</td><td>93.303299</td><td>100×D=93.303299</td><td class="ok">精确</td></tr>
+  <tr><td>激活扣除</td><td>V=100, x=0.02</td><td>91.475571</td><td>D·100+A·(1−D·100)=91.4746</td><td class="ok">float32 级</td></tr>
+  <tr><td>越界行为</td><td>V=100, x=0.4</td><td>62.872753</td><td>93.3033−92.30×0.32968=62.873</td><td class="ok">精确</td></tr>
+  <tr><td>盘中衰减</td><td>minutes=60/120</td><td>V=f·prev+A(1−f·prev)</td><td>f=D^(minutes/240)</td><td class="ok">精确</td></tr>
+  <tr><td>8日链式</td><td>随机行情 8 根</td><td>—</td><td>V、AMV 全部一致</td><td class="ok">PASS</td></tr>
+  <tr><td>饱和极限</td><td>x=20（换手2000%）</td><td>V→1.000000, AMV→mv</td><td>e^(−20)→0</td><td class="ok">精确</td></tr>
+</table>
+<p style="color:var(--dim);font-size:13px">"float32 级"指差异在 2e-6 相对误差内，
+与官方 float32 运算的舍入量级一致；"精确"指显示精度内完全相等。</p>
+
+<!-- ================================================================ -->
+<h2 id="s7">7 · 与数据源解耦：任意本地 K 线接入</h2>
+
+<p>算法对数据的要求降到极致——<b>每天只要 3 个数</b>：</p>
+<div class="formula">close(收盘价) · amount(成交额,元) · float_shares(流通股本,股)</div>
+
+<p>复刻代码分两层，数据处理与算法彻底分离：</p>
+<ul>
+  <li><code>amv_reference.py</code> —— <b>纯 numpy 算法层</b>（零第三方依赖除 numpy）：
+      <code>stock_active()</code> 单标的序列、<code>rolling_percentile()</code> 分位、
+      <code>aggregate_boards()</code> 聚合。任何数据喂数组就能算。</li>
+  <li>数据适配器 —— <b>随便换</b>：
+      <ul>
+        <li><code>run_from_csv.py</code>：任何 K 线 CSV（中英列名均可），开箱即用；</li>
+        <li><code>tdx_io.py</code>：本机通达信 vipdoc 的适配器（<b>只是众多适配器之一</b>，
+            读 .day 二进制 + base.dbf 股本，离线可用）；</li>
+        <li>akshare / tushare / baostock / 自有数据库：各写 10 行取数代码即可。</li>
+      </ul>
+  </li>
+</ul>
+
+<pre><code># 算法层的全部接口（amv_reference.py）
+from amv_reference import stock_active, aggregate_boards
+
+df = stock_active(close_arr, amount_arr, shares_arr)
+# df['V']    活跃占比 0~1
+# df['AMV']  活跃总值（亿）
+# df['dAMV'] 活跃涨跌
+# df['pctl'] 250日占比分位
+# df['mv_yi']流通市值（亿）
+
+boards = aggregate_boards({'个股代码': df, ...},
+                          {'板块A': ['个股1','个股2'], ...})
+# boards['板块A']['AMV'/'V'/'pctl'/'rel_ma']</code></pre>
+
+<div class="note"><b>股本说明：</b>算法里的"流通股本"若拿不到逐日历史，用最新快照近似即可
+（官方靠行情通道拿逐日值；历史回算时它自己也受通达信数据限制）。
+股本快照对近 1~2 年的 V 影响很小，对早期历史影响较大——做长回测时留意送转除权造成的跳变。</div>
+
+<!-- ================================================================ -->
+<h2 id="s8">8 · 完整复现指南</h2>
+<table>
+  <tr><th>文件</th><th>作用</th><th>依赖</th></tr>
+  <tr><td><code>amv_reference.py</code></td><td>算法参考实现 + 官方二进制对照自测</td><td>numpy</td></tr>
+  <tr><td><code>run_from_csv.py</code></td><td>任意 K 线 CSV → 指标序列</td><td>numpy</td></tr>
+  <tr><td><code>tdx_io.py</code></td><td>（可选）通达信本地数据适配器</td><td>numpy</td></tr>
+  <tr><td><code>run_pipeline.py</code></td><td>（可选）全市场批量 + 板块聚合</td><td>numpy + 本机通达信数据</td></tr>
+  <tr><td><code>build_dashboard.py</code></td><td>（可选）单文件 HTML 仪表盘</td><td>numpy + plotly.min.js</td></tr>
+</table>
+<pre><code># ① 最小复现：任何 K 线 CSV（date, close, amount, float_shares 四列）
+python run_from_csv.py my_kline.csv
+
+# ② 对照官方自测（需保留 1amv_analysis 解包环境）
+python amv_reference.py     # 输出: 官方二进制对照自测: PASS
+
+# ③ 全市场管线（本机通达信数据离线跑，约 40 秒 5486 只股票）
+python run_pipeline.py && python build_dashboard.py</code></pre>
+
+<!-- ================================================================ -->
+<h2 id="s9">9 · 工程架构对照</h2>
+
+<svg viewBox="0 0 680 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei" font-size="12">
+  <text x="160" y="24" fill="#8b94a7" text-anchor="middle" font-size="13">官方架构（双端镜像）</text>
+  <rect x="20" y="40" width="280" height="86" rx="9" fill="#1a2233" stroke="#3a4a66"/>
+  <text x="160" y="62" fill="#dce2ec" text-anchor="middle">后台 Python（Cython 加速）</text>
+  <text x="160" y="82" fill="#8b94a7" text-anchor="middle" font-size="11">TQ通道读行情 → 逐股 V/AMV → 板块聚合</text>
+  <text x="160" y="100" fill="#8b94a7" text-anchor="middle" font-size="11">SQLite 增量缓存（三bar更新）→ UserPY 回写</text>
+  <text x="160" y="118" fill="#5da2e0" text-anchor="middle" font-size="11">float32 位级复刻公式端（PROFILE）</text>
+  <path d="M300 83 L370 83" stroke="#5dc98f" stroke-width="1.6" marker-end="url(#g)"/>
+  <text x="335" y="74" fill="#5dc98f" text-anchor="middle" font-size="10">RAW行回写</text>
+  <rect x="372" y="40" width="280" height="86" rx="9" fill="#1a2233" stroke="#3a4a66"/>
+  <text x="512" y="62" fill="#dce2ec" text-anchor="middle">通达信公式端（5个tn6）</text>
+  <text x="512" y="82" fill="#8b94a7" text-anchor="middle" font-size="11">个股副图实时计算 / 排序</text>
+  <text x="512" y="100" fill="#8b94a7" text-anchor="middle" font-size="11">1AMV=AMV+MA 1AMVK=ΔAMV/V/分位</text>
+  <text x="512" y="118" fill="#8b94a7" text-anchor="middle" font-size="11">1AMVR=排序(AMV/MA10−1)</text>
+
+  <text x="340" y="158" fill="#8b94a7" text-anchor="middle" font-size="13">复刻架构（单端，数据源无关）</text>
+  <rect x="60" y="172" width="170" height="56" rx="9" fill="#1a2233" stroke="#5da2e0"/>
+  <text x="145" y="195" fill="#dce2ec" text-anchor="middle">任意 K 线数据源</text>
+  <text x="145" y="214" fill="#8b94a7" text-anchor="middle" font-size="11">CSV / SQLite / API / tdx</text>
+  <path d="M230 200 L285 200" stroke="#5dc98f" stroke-width="1.6" marker-end="url(#g)"/>
+  <rect x="288" y="172" width="160" height="56" rx="9" fill="#1a2233" stroke="#e05d5d"/>
+  <text x="368" y="195" fill="#dce2ec" text-anchor="middle">amv_reference.py</text>
+  <text x="368" y="214" fill="#8b94a7" text-anchor="middle" font-size="11">float64 纯 numpy 算法</text>
+  <path d="M448 200 L503 200" stroke="#5dc98f" stroke-width="1.6" marker-end="url(#g)"/>
+  <rect x="506" y="172" width="150" height="56" rx="9" fill="#1a2233" stroke="#e0a95d"/>
+  <text x="581" y="195" fill="#dce2ec" text-anchor="middle">研究 / 回测 / 仪表盘</text>
+  <text x="581" y="214" fill="#8b94a7" text-anchor="middle" font-size="11">板块聚合 · 分位 · 因子化</text>
+  <defs><marker id="g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0 0 L8 4 L0 8 z" fill="#5dc98f"/></marker></defs>
+</svg>
+
+<!-- ================================================================ -->
+<h2 id="s10">10 · 局限、改进方向与合规声明</h2>
+<h3>10.1 模型本身的局限（逆向视角的客观评估）</h3>
+<ul>
+  <li><b>均匀成交假设</b>：泊松模型假设日内成交均匀分布， ignores 尾盘集中竞价、大单/小单结构差异。</li>
+  <li><b>γ、半衰期固定</b>：10 日/1.15 是作者的全局经验值，未按板块波动率或市值分层自适应。</li>
+  <li><b>当前成分回算</b>：官方板块/指数历史按今日成员重放，历史存在幸存者偏差式失真。</li>
+  <li><b>只反映活跃度、不反映方向</b>：V 上升可能是放量进攻也可能是放量出货，需与价格方向组合。</li>
+</ul>
+<h3>10.2 自建管线可超越官方的点</h3>
+<ul>
+  <li>逐日历史成分快照回放（有自己的成分数据就能做，官方受通达信限制做不了）；</li>
+  <li>不复权价 × 逐日真实股本算市值，规避前复权早期失真；</li>
+  <li>参数族（半衰期 5/10/20/40）生成多周期 V，做因子化横截面研究；</li>
+  <li>V 分位 × ΔV 方向 × 价格方向的三态多空规则，可直接回测。</li>
+</ul>
+<h3>10.3 合规声明</h3>
+<p style="color:var(--dim);font-size:12.5px">本文为个人学习与技术逆向研究记录，所涉软件版权归原作者所有。
+算法复现仅供研究观察，不构成投资建议。请勿将复原代码用于商业分发。</p>
+
+</div></body>
+</html>

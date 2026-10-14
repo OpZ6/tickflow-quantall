@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>投资科学（touzikexue.com）三页面逆向研究报告</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171d2b; --panel2:#1e2534; --border:#2a3040;
+    --text:#dfe4ee; --muted:#8b93a7; --accent:#4d8dff; --red:#e5484d; --green:#30a46c;
+    --gold:#e2b344; --code-bg:#0b0f19; --mono:'Cascadia Code',Consolas,'Courier New',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:15px/1.75 -apple-system,'Segoe UI','Microsoft YaHei',sans-serif;padding-bottom:80px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+  header{background:linear-gradient(135deg,#141b2c 0%,#1a2236 60%,#23203a 100%);border-bottom:1px solid var(--border);padding:48px 0 36px;margin-bottom:8px}
+  header h1{font-size:26px;letter-spacing:.5px}
+  header .sub{color:var(--muted);margin-top:10px;font-size:13.5px}
+  .tagrow{margin-top:16px;display:flex;gap:8px;flex-wrap:wrap}
+  .tag{background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:2px 12px;font-size:12px;color:var(--muted)}
+  nav{position:sticky;top:0;z-index:50;background:rgba(15,20,32,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:10px 0;overflow-x:auto;white-space:nowrap}
+  nav a{color:var(--muted);font-size:13px;margin-right:18px}
+  nav a:hover{color:var(--text);text-decoration:none}
+  section{margin-top:52px}
+  h2{font-size:20px;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:20px;display:flex;align-items:center;gap:10px}
+  h2 .no{color:var(--accent);font-family:var(--mono);font-size:15px}
+  h3{font-size:16px;margin:26px 0 12px;color:#c9d4ea}
+  p{margin:10px 0;color:#c3cadb}
+  .muted{color:var(--muted);font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:14px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:800px){.grid2{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{background:var(--panel2);color:var(--muted);font-weight:600;text-align:left;padding:8px 12px;border:1px solid var(--border);white-space:nowrap}
+  td{padding:8px 12px;border:1px solid var(--border);vertical-align:top}
+  tr:hover td{background:#1a2131}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .up{color:var(--red);font-weight:600}.dn{color:var(--green);font-weight:600}
+  .hl{color:var(--gold);font-weight:600}
+  .badge{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+  .b100{background:rgba(48,164,108,.16);color:#4cc38a;border:1px solid rgba(48,164,108,.4)}
+  .b90{background:rgba(77,141,255,.14);color:#7cabff;border:1px solid rgba(77,141,255,.4)}
+  .b80{background:rgba(226,179,68,.14);color:#e2b344;border:1px solid rgba(226,179,68,.4)}
+  .bNA{background:rgba(139,147,167,.14);color:#8b93a7;border:1px solid rgba(139,147,167,.4)}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:16px 18px;overflow-x:auto;font:12.5px/1.65 var(--mono);color:#c8d3ea;margin:12px 0}
+  code{font-family:var(--mono);background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:12.5px;color:#9ecbff}
+  pre code{border:none;background:none;padding:0;color:inherit}
+  .formula{background:var(--panel2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;font-family:var(--mono);font-size:13px;margin:12px 0;color:#a8c7ff;overflow-x:auto;white-space:pre-wrap}
+  .flow{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;margin:16px 0}
+  .flow .stage{flex:1;min-width:240px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:relative}
+  .flow .stage h4{font-size:14px;color:var(--accent);margin-bottom:8px}
+  .flow .stage ul{list-style:none;font-size:13px;color:#b8c1d4}
+  .flow .stage li{padding:2px 0}
+  .flow .arrow{align-self:center;color:var(--muted);font-size:20px}
+  .warn{background:rgba(229,72,77,.08);border:1px solid rgba(229,72,77,.35);border-radius:10px;padding:14px 18px;margin:14px 0}
+  .warn b{color:#ff8589}
+  .ok{background:rgba(48,164,108,.08);border:1px solid rgba(48,164,108,.35);border-radius:10px;padding:14px 18px;margin:14px 0}
+  .toc-note{color:var(--muted);font-size:12.5px;margin-top:6px}
+  footer{margin-top:70px;border-top:1px solid var(--border);padding:20px 0;color:var(--muted);font-size:12.5px}
+  li{margin-left:20px;margin-top:4px}
+  .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+  .kpi .k{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center}
+  .kpi .k .v{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent)}
+  .kpi .k .l{font-size:11.5px;color:var(--muted);margin-top:2px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>投资科学（touzikexue.com）三页面逆向研究报告</h1>
+    <div class="sub">板块热力图 / 量化指标 / 策略回测 —— 数据口径还原 · 信号实证检验 · 本地复刻方案</div>
+    <div class="tagrow">
+      <span class="tag">研究日期 2026-10-09</span>
+      <span class="tag">样本：750 个交易日 × 8 个指标 API</span>
+      <span class="tag">回测逐笔 153 笔 + 逐日 362 日</span>
+      <span class="tag">全部结论经数据复算验证</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav>
+  <a href="#s1">1 摘要</a>
+  <a href="#s2">2 体系总览</a>
+  <a href="#s3">3 市场温度</a>
+  <a href="#s4">4 六大指标</a>
+  <a href="#s5">5 板块热力图</a>
+  <a href="#s6">6 信号检验</a>
+  <a href="#s7">7 回测解构</a>
+  <a href="#s8">8 复刻指南</a>
+  <a href="#s9">9 批判与差距</a>
+</nav>
+
+<!-- ============ 1 摘要 ============ -->
+<section id="s1">
+  <h2><span class="no">01</span>摘要：一句话说清这个站</h2>
+  <div class="card">
+    <p><b>投资科学是一个「市场状态机 → 截面温度计 → 状态闸门回测」三层结构的量化研究站</b>：指标页输出全市场状态（温度/估值/宽度/集中度/活跃市值/连板），热力图把温度展开到板块横截面，回测则把"活跃市值波段"状态当作策略的买入闸门。所有重计算在服务端 Python 批处理完成，前端（React SPA + ECharts + lightweight-charts）只做渲染。</p>
+  </div>
+  <div class="kpi">
+    <div class="k"><div class="v">5559</div><div class="l">数据宇宙 · 全A个股</div></div>
+    <div class="k"><div class="v">10</div><div class="l">指标数量（2个仅内部可见）</div></div>
+    <div class="k"><div class="v">0.976</div><div class="l">参与度分项还原相关系数</div></div>
+    <div class="k"><div class="v">2.00</div><div class="l">回测利润因子（复算吻合）</div></div>
+    <div class="k"><div class="v">0.36</div><div class="l">策略对上证 Beta</div></div>
+  </div>
+  <p>本报告三个来源：① 技术层（Vite 产物逆向）② 量化层（用 750 日 API 数据反推公式口径）③ 复刻验证（独立 Python 复算所有数字）。</p>
+</section>
+
+<!-- ============ 2 体系总览 ============ -->
+<section id="s2">
+  <h2><span class="no">02</span>体系总览与三层结构</h2>
+  <div class="flow">
+    <div class="stage">
+      <h4>第一层 · 状态（/indicators）</h4>
+      <ul>
+        <li>市场温度（四维情绪计分卡）</li>
+        <li>估值位置（PB 5年分位）</li>
+        <li>市场宽度（右侧占比）</li>
+        <li>集中度 CR3 / HHI / CSD</li>
+        <li>活跃市值 + 波段（106段）</li>
+        <li>连板高度 · 股债利差</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stage">
+      <h4>第二层 · 截面（/sector-heatmap）</h4>
+      <ul>
+        <li>板块温度（同构市场温度）</li>
+        <li>扩散质量分 = 截面百分位秩</li>
+        <li>集中风险分 = 截面百分位秩</li>
+        <li>板块面积 = 流通市值</li>
+        <li>数据源：同花顺板块体系（881xxx）</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stage">
+      <h4>第三层 · 行动（/strategy-backtest）</h4>
+      <ul>
+        <li>LGBM 打分选股 top5</li>
+        <li><span class="hl">market_gate: wave_only</span>（只在波段内买入）</li>
+        <li>T+1 开盘 + 30bps 滑点</li>
+        <li>三重退出 + 趋势线退出</li>
+      </ul>
+    </div>
+  </div>
+  <p class="muted">同一套底层状态（尤其活跃市值波段）贯穿三层：指标页的黄色背景带、热力图温度的语境、回测的买入闸门，全部来自同一个 wave_periods（750 日内 106 段，覆盖 39.5% 交易日）。</p>
+
+  <h3>技术架构（一段带过）</h3>
+  <p>React 18 SPA（Vite 构建、路由级分割、Tailwind 明暗主题）→ 同域 REST API → nginx/1.27.5 → <b>Python FastAPI + Pydantic</b>。图表双库：ECharts（热力图 treemap）+ TradingView lightweight-charts v5（K线/净值/MACD）。所有金融计算（MA、MACD、分位数、HHI、CSD、温度分项）服务端预计算，API 响应自带 <code>is_complete / calculation_version / data_coverage</code> 质量元数据。前端有完整可靠性基建：错误上报 outbox + 指数退避、chunk 加载失败自动恢复、PWA。</p>
+</section>
+
+<!-- ============ 3 市场温度 ============ -->
+<section id="s3">
+  <h2><span class="no">03</span>市场温度 —— 全站核心，已完整还原</h2>
+
+  <h3>3.1 组合层（100% 还原，RMSE 0.33 分）</h3>
+  <div class="formula">温度 = EMA<sub>α=0.5</sub>( 四分项等权平均 )        # α=0.5 即 span=3，与官方版本号 "ema3" 吻合
+raw  = (趋势分 + 参与度分 + 流动性分 + 投机分) / 4   # 等权，实测 corr 0.994</div>
+
+  <h3>3.2 四分项输入反推（750 日数据拟合）</h3>
+  <table>
+    <tr><th>分项</th><th>反推出的输入量</th><th>打分方式</th><th>窗口</th><th>还原度</th></tr>
+    <tr><td><b>trend_score</b> 趋势</td><td>右侧占比（EMA20/50 多头排列个股占比）</td><td>时间序列滚动百分位</td><td class="num">~750日</td><td><span class="badge b90">corr 0.946</span></td></tr>
+    <tr><td><b>participation_score</b> 参与度</td><td>上涨家数占比 —— <b>先 EMA3 后百分位</b>（顺序反了 corr 掉到 0.84）</td><td>滚动百分位</td><td class="num">~750日</td><td><span class="badge b100">corr 0.976</span></td></tr>
+    <tr><td><b>liquidity_score</b> 流动性</td><td><b>换手速度 = 全A成交额 ÷ 活跃筹码市值</b>（唯一短窗分项！长窗错用 corr 只剩 0.42）</td><td>滚动百分位</td><td class="num">~60日</td><td><span class="badge b90">corr 0.909</span></td></tr>
+    <tr><td><b>speculation_score</b> 投机</td><td>多板家数（2板及以上）；缺炸板率/封成比等盘中细节</td><td>滚动百分位</td><td class="num">~500日</td><td><span class="badge b80">corr 0.860</span></td></tr>
+  </table>
+
+  <h3>3.3 状态映射与实测分布</h3>
+  <div class="grid2">
+    <div class="card">
+      <p class="muted">区间语义（官方定义）</p>
+      <p class="num" style="font-size:13px">0-15 冰点 · 15-30 寒冷 · 30-45 偏冷<br>45-55 中性 · 55-70 回暖 · 70-85 炽热 · 85-100 过热</p>
+      <p class="muted" style="margin-top:8px">另带 regime 六态（cold/cool/neutral/warming/hot/overheated）+ direction 二级状态。</p>
+    </div>
+    <div class="card">
+      <p class="muted">750 日 regime 实测分布（天）</p>
+      <p class="num" style="font-size:13px">warming 205 · cool 188 · neutral 163<br>hot 101 · cold 82 · <span class="hl">overheated 仅 11</span></p>
+      <p class="muted" style="margin-top:8px">右侧尾部被刻意压短（EMA 平滑 + 分位压缩），"温度计"而非"概率"的定位。</p>
+    </div>
+  </div>
+  <div class="warn"><b>关键性质：</b>温度是事后确认式状态量——overheated 状态下温度日均变化 <b>-6.65</b>（过热后快速回落），存在天然滞后。官方文案明确声明"不是上涨概率、不是买卖信号"。实测 IC5d=+0.041、IC20d=+0.035，确实无择时能力——它的用途是当"背景状态"。</div>
+</section>
+
+<!-- ============ 4 六大指标 ============ -->
+<section id="s4">
+  <h2><span class="no">04</span>其余指标：口径与还原度</h2>
+
+  <h3>估值位置 <span class="badge b90">corr 0.935</span></h3>
+  <div class="formula">估值分 = 全A中位数PB 的 ~5年(1250交易日) 滚动百分位 → 再EMA平滑
+版本号 "pb-profit-shadow"：对亏损/微利股的PB失真有影子修正（本地可先忽略）</div>
+  <p>当前读数 <b class="hl">80.9 分</b>（偏贵）。API 同时下发 median_pb=2.63 与 pb_p10/pb_p90 分位锚点。</p>
+
+  <h3>市场宽度（右侧占比）<span class="badge b100">100% 可复刻</span></h3>
+  <div class="formula">右侧占比 = [收盘价 > EMA50 且 EMA20 > EMA50] 的个股占全A比例
+趋势线实测还原：trend_short ≈ EMA20(α=0.10)，trend_long ≈ EMA50(α=0.04)，残差≈指数0.3%</div>
+  <p>注意：官方文档写"趋势线"，实测不是简单 MA，是 EMA20/50 组合。附加字段 right_kdj_low_ratio（右侧且 KDJ 超卖）做辅助口径。</p>
+
+  <h3>市场集中度 CR3 / HHI / CSD <span class="badge b100">公式官方直接公开</span></h3>
+  <table>
+    <tr><th>指标</th><th>公式</th><th>含义</th></tr>
+    <tr><td>行业 CR3</td><td class="num">成交额最大3个行业 ÷ 全行业总成交额</td><td>资金抱团少数行业的程度</td></tr>
+    <tr><td>个股 HHI</td><td class="num">Σ(个股成交额份额%)²，取值 0-10000</td><td>赫芬达尔指数，龙头吸金效应</td></tr>
+    <tr><td>CSD</td><td class="num">√(Σwᵢ(Rᵢ−μ)²)，wᵢ=流通市值权重</td><td>市值加权截面离散度，分化/共识</td></tr>
+  </table>
+  <p>过热阈值 = 各自 <b>MA5 的 3 年滚动分位数</b>（官方参考值：CR3 ≥23.3%/29.0%，HHI ≥15.2/17.3，CSD ≥3.2%/3.5%）——自适应阈值而非拍脑袋。</p>
+
+  <h3>活跃市值与波段 <span class="badge b90">wave 还原 89.5%</span></h3>
+  <div class="formula">波段 ≈ 活跃市值 > 自身 MA10（对官方 106 个波段反推命中 89.5%，MA5/20/30 均更差）
+活跃市值本身 = "活跃筹码总市值"，口径未完全公开（API 带 inference_start_date，有推断成分）</div>
+
+  <h3>连板高度 <span class="badge b100">定义官方公开</span></h3>
+  <p>相邻交易日<b>连续收盘涨停</b>天数（周末不打断、停牌/断板打断）。750 日实测：最高连板中位数 <b class="num">5</b>、极值 <span class="num">19</span> 板；涨停家数中位 49，多板占 20.8%。带完整梯队分布与龙头名单。</p>
+
+  <h3>红利股债利差 <span class="badge b100">口径官方公开</span></h3>
+  <div class="formula">利差 = 指数股息率 − 中债国债10Y收益率（百分点）
+股息率 = 近365天【已实施】每股现金分红 ÷ 当日【未复权】收盘价，用【当时有效成分】（防幸存者偏差）</div>
+  <p>双指数：中证红利 000922 / 红利低波 H30269。实测当前：中证红利利差 <b class="num">2.50pp</b>（历史区间 2.33~5.44、中位 3.19）——<b class="hl">处于历史极低分位，红利资产相对债券已偏贵</b>；红利低波 3.29pp 相对健康。API 显式声明 dividend_tax_rate=0。</p>
+</section>
+
+<!-- ============ 5 热力图 ============ -->
+<section id="s5">
+  <h2><span class="no">05</span>板块热力图：温度的横截面展开</h2>
+  <div class="card">
+    <p><b>热力图不是涨跌幅排行。</b>板块温度与当日涨跌幅的截面相关仅 <b class="num">0.514</b>——它是各自板块平滑后的状态量（与市场温度同构：广度+动量+活跃度的分位合成，收盘后定时批算，如当日 15:52）。</p>
+    <p style="margin-top:10px"><b>实测发现：</b>扩散质量分与集中风险分的截面均值<b class="hl">恰好都是 50.0</b> → 这两个分是<b>横截面百分位秩</b>（每天强制均值50），即"该板块的上涨扩散度/筹码集中度在全市省排第几"，不是绝对分。</p>
+  </div>
+  <p><b>regime 自洽性：</b>hot 状态板块温度日均 +3.0（加速），overheated <span class="dn">-6.65</span>（顶部钝化回落），cold -4.2（阴跌）——状态机按"变化方向+速度"划分，热力学语义自洽。</p>
+  <p class="muted">数据源判断：行业代码 881xxx + 拼音 symbol（hymtkc）+ 热门概念/行业/概念三分法 = 同花顺板块体系。A股用流通市值，美股/港股用总市值。</p>
+</section>
+
+<!-- ============ 6 信号检验 ============ -->
+<section id="s6">
+  <h2><span class="no">06</span>信号有效性检验（750 日，对上证未来收益）</h2>
+  <table>
+    <tr><th>指标</th><th>IC 5日</th><th>IC 20日</th><th>五分位结构（Q1低→Q5高，未来20日收益%）</th><th>解读</th></tr>
+    <tr><td>市场温度</td><td class="num">+0.041</td><td class="num">+0.035</td><td class="num">1.05 / 0.48 / 0.65 / 0.35 / 0.97</td><td>无择时力，状态描述</td></tr>
+    <tr><td>估值分位</td><td class="num">+0.046</td><td class="num">+0.033</td><td class="num">1.64 / 1.23 / <span class="dn">-0.86</span> / 0.92 / 0.56</td><td>短窗无效，长窗"低买"逻辑</td></tr>
+    <tr><td>右侧占比（宽度）</td><td class="num">-0.026</td><td class="num dn">-0.076</td><td class="num">2.96 / 0.24 / 0.09 / -0.82 / 1.04</td><td><b>反向</b>：占比冲高后易回撤，适合当风险开关</td></tr>
+    <tr><td><b>行业 CR3</b></td><td class="num">-0.031</td><td class="num dn">-0.108</td><td class="num">2.78 / 0.65 / -0.26 / 0.64 / -0.30</td><td><b class="hl">最干净的负向信号</b>：抱团过热→未来更差，与"过热"标签自洽</td></tr>
+    <tr><td>个股 HHI</td><td class="num">-0.031</td><td class="num">-0.014</td><td class="num">1.26 / -0.02 / 0.54 / 1.42 / 0.29</td><td>弱，与 CR3 信息重叠</td></tr>
+    <tr><td>CSD 离散度</td><td class="num up">+0.070</td><td class="num up">+0.094</td><td class="num">-0.00 / 1.27 / 0.70 / 1.49 / 0.04</td><td>分化大→未来更好（有结构行情可做）</td></tr>
+    <tr><td>连板高度</td><td class="num">+0.011</td><td>—</td><td>—</td><td>对指数无方向性，纯短线情绪温度计</td></tr>
+  </table>
+  <div class="warn"><b>样本警告：</b>750 个交易日不足以做统计推断（|IC|&lt;0.1 全部不显著），上表只说明"量级与方向"，不构成任何策略依据。</div>
+</section>
+
+<!-- ============ 7 回测解构 ============ -->
+<section id="s7">
+  <h2><span class="no">07</span>策略回测：B2_v2「确认阳线」完整解构</h2>
+
+  <h3>7.1 策略规则（从参数串反解 + 逐笔数据验证）</h3>
+  <div class="formula">选股：LGBM 回归模型预测 label_abs_ret（未来绝对收益）→ 每日全A打分取 top5
+执行：T+1 开盘价买入 + 30bps 滑点；market_gate=wave_only（只在活跃市值波段内开仓）
+仓位：max_positions=5，单仓 ≤50%
+退出：① t3_weak 三日走弱（跌破2%）② max_hold 15日时间止损 ③ fixed_stop -7%
+      ④ drop_trend_long 跌破长期趋势线</div>
+
+  <h3>7.2 账目复核（全部对得上）</h3>
+  <div class="kpi">
+    <div class="k"><div class="v">+81.9%</div><div class="l">总收益（同期上证+23.9%）</div></div>
+    <div class="k"><div class="v">37.25%</div><div class="l">胜率</div></div>
+    <div class="k"><div class="v">3.37</div><div class="l">盈亏比</div></div>
+    <div class="k"><div class="v">9.96%</div><div class="l">最大回撤（复算吻合）</div></div>
+    <div class="k"><div class="v">1.73</div><div class="l">Sharpe</div></div>
+  </div>
+  <p>期望验证：0.3725 × 12.01% − 0.6275 × 3.56% = <b class="num">+2.24%/笔</b>，与官方 avg_return_pct 完全一致。</p>
+
+  <h3>7.3 收益结构：快砍慢盈的右侧肥尾</h3>
+  <table>
+    <tr><th>退出规则</th><th>发生笔数（占比）</th><th>笔均收益</th><th>解读</th></tr>
+    <tr><td>t3_weak 三日走弱</td><td class="num">100 笔（65%）</td><td class="num dn">-1.44%</td><td>2/3 的交易三天内小额离场——亏损快速切断</td></tr>
+    <tr><td>max_hold 15日</td><td class="num">25 笔（16%）</td><td class="num up">+24.44%</td><td>赢家一直拿到时间止损——利润奔跑</td></tr>
+    <tr><td>fixed_stop -7%</td><td class="num">14 笔（9%）</td><td class="num dn">-9.99%</td><td><b>跳空穿透</b>：实际亏10%而非7%，按真实开盘价成交（诚实建模）</td></tr>
+    <tr><td>drop_trend_long</td><td class="num">10 笔（7%）</td><td class="num dn">-3.03%</td><td>趋势线退出</td></tr>
+    <tr><td>period_end</td><td class="num">4 笔</td><td class="num up">+11.6%</td><td>区间截断，影响小</td></tr>
+  </table>
+
+  <h3>7.4 风险来源：仓位管理而非选股神话</h3>
+  <div class="grid2">
+    <div class="card">
+      <p class="num" style="font-size:13.5px">对上证 Beta = <b>0.36</b> · 相关性 = 0.19<br>平均股票仓位 = <b>39.4%</b><br>有持仓天数占比 = <b>55%</b><br>波段闸门执行 = <b>153/153 笔全部波段内</b> ✓</p>
+    </div>
+    <div class="card">
+      <p>低回撤 9.96% 的真相：<b>大部分时间拿现金</b>（波段外完全空仓）+ 低 Beta。超额 +57.9pct 来自个股 alpha + 波段择时，不是指数 beta。</p>
+    </div>
+  </div>
+  <div class="warn">
+    <b>批判点（本地复刻/参考前必读）：</b>
+    <ul>
+      <li><b>模型排序能力存疑</b>：成交的 153 笔内，买入模型分与笔收益 Spearman = <b>-0.047</b>，五分位无单调性——top5 内部"第1名 vs 第5名"无区分度（也可能是样本太小检不出）；</li>
+      <li><b>OOS 恰逢强势市</b>：宣称 OOS 2025-2026，但同期上证 +23.9%、温度长期 warming/hot——<b>策略未经历完整熊市检验</b>，波段闸门在长期 cold 下的表现未知；</li>
+      <li>API 泄露模型文件本地路径 <code class="num">D:\pri-data\code\stock\...\lgbm_b2v2.txt</code>——回测是作者本地 Python 跑批、结果 JSON 存档后由 API 只读发布，前端只是"结果浏览器"；</li>
+      <li>30bps 滑点未建模涨停不可成交、开盘一字等可成交性风险。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 8 复刻指南 ============ -->
+<section id="s8">
+  <h2><span class="no">08</span>本地复刻指南</h2>
+
+  <h3>8.1 还原度总表</h3>
+  <table>
+    <tr><th>模块</th><th>还原度</th><th>说明</th></tr>
+    <tr><td>温度组合层（等权+EMA3）</td><td><span class="badge b100">100%</span></td><td>RMSE 0.33 分，完全还原</td></tr>
+    <tr><td>温度四分项输入</td><td><span class="badge b90">86–98%</span></td><td>输入量+打分法锁定，speculation 缺盘中细节</td></tr>
+    <tr><td>估值位置 / 市场宽度</td><td><span class="badge b100">≈100%</span></td><td>宽度公式官方公开+趋势线实测 EMA20/50</td></tr>
+    <tr><td>CR3 / HHI / CSD · 连板 · 股债利差</td><td><span class="badge b100">100%</span></td><td>官方直接公开公式</td></tr>
+    <tr><td>活跃市值波段</td><td><span class="badge b90">~90%</span></td><td>wave≈活跃市值&gt;MA10（命中89.5%），市值口径未公开</td></tr>
+    <tr><td>板块温度/扩散/集中分</td><td><span class="badge b80">结构还原</span></td><td>截面百分位秩已证，分量公式黑盒</td></tr>
+    <tr><td>回测框架</td><td><span class="badge b90">规则全还原</span></td><td>LGBM 模型本体需自训</td></tr>
+  </table>
+
+  <h3>8.2 全体系只有两个打分原语</h3>
+  <div class="ok"><b>核心洞察：</b>整个指标体系的 0-100 分只有两种来源——<b>① 时间序列滚动百分位</b>（当日值在过去 W 日中的排名）与 <b>② 横截面百分位秩</b>（当日截面中的排名，强制均值50），再叠加 EMA 平滑。理解这一点，任何指标都能自己造。</div>
+
+  <h3>8.3 核心代码骨架（纯 Python，无依赖）</h3>
+<pre><code>def ema(series, alpha):                 # α=0.5 即官方 'ema3'
+    out, e = [], None
+    for v in series:
+        e = v if e is None else alpha*v + (1-alpha)*e
+        out.append(e)
+    return out
+
+def roll_pct(series, window):           # 全体系的打分原语：滚动百分位
+    out = [None]*len(series)
+    for i, v in enumerate(series):
+        if v is None: continue
+        hist = [x for x in series[max(0,i-window+1):i+1] if x is not None]
+        if len(hist) &lt; max(20, window//4): continue
+        out[i] = 100.0 * sum(1 for x in hist if x &lt;= v) / len(hist)
+    return out
+
+# ---- 温度四分项（参数均为实测最优）----
+trend_s         = roll_pct(right_ratio, 750)            # 右侧占比, 长窗
+participation_s = roll_pct(ema(rise_ratio, 0.5), 750)   # 先EMA后百分位! 顺序不能反
+liquidity_s     = roll_pct(amount / active_mv, 60)      # 换手速度, 唯一短窗!
+speculation_s   = roll_pct(multi_board_count, 500)      # 多板家数
+
+# ---- 组合（100%还原层）----
+raw         = [(a+b+c+d)/4 for a,b,c,d in zip(trend_s, participation_s, liquidity_s, speculation_s)]
+temperature = ema(raw, 0.5)
+
+# ---- 估值位置 ----
+valuation = ema([v or 50 for v in roll_pct(median_pb, 1250)], 0.5)
+
+# ---- 市场宽度 ----
+# 右侧 = [close &gt; EMA50 且 EMA20 &gt; EMA50] 个股占比（逐日统计全A）
+
+# ---- 波段（回测闸门）----
+in_wave = [1 if v &gt; ma10 else 0 for v, ma10 in zip(active_mv, MA10(active_mv))]</code></pre>
+
+  <h3>8.4 必须注意的实现细节（全部实测踩过坑）</h3>
+  <ul>
+    <li>参与度是<b>先 EMA 后百分位</b>，顺序反了 corr 0.98→0.84；</li>
+    <li>流动性窗口是<b>短窗 ~60 日</b>，错用长窗 corr 只剩 0.42；</li>
+    <li>EMA 冷启动直接取原值，别用 0 初始化；</li>
+    <li>股息率必须用<b>已实施分红 + 当时成分 + 未复权价</b>，三条铁律缺一即引入偏差；</li>
+    <li>集中度过热阈值用<b>自己数据</b>的 MA5 3年分位，不要硬抄官方参考值。</li>
+  </ul>
+
+  <h3>8.5 数据需求（akshare 一站可取）</h3>
+  <table>
+    <tr><th>数据</th><th>用途</th><th>akshare 接口举例</th></tr>
+    <tr><td>全A日线 OHLCV+流通市值</td><td>宽度/温度/集中度/活跃市值</td><td class="num">stock_zh_a_hist / stock_zh_a_spot_em</td></tr>
+    <tr><td>每日涨跌家数统计</td><td>参与度分项</td><td class="num">stock_market_activity_legu</td></tr>
+    <tr><td>涨停/连板梯队</td><td>投机分项、连板高度</td><td class="num">stock_zt_pool_em / stock_zt_pool_strong_em</td></tr>
+    <tr><td>红利指数+成分+分红</td><td>股债利差</td><td class="num">index_stock_cons + 分红送配</td></tr>
+    <tr><td>中债国债10Y</td><td>股债利差</td><td class="num">bond_china_yield</td></tr>
+    <tr><td>个股 PB 中位数</td><td>估值位置</td><td class="num">stock_a_all_pb（乐咕）</td></tr>
+  </table>
+
+  <h3>8.6 复刻后的预期差距</h3>
+  <ul>
+    <li>温度绝对值差 ±2-3 分（speculation 缺股票级细节），但 <b>regime 判定 95%+ 日期一致</b>——实用足够；</li>
+    <li>波段边界差 1-2 天（官方有未公开推断规则），影响回测闸门边际交易；</li>
+    <li>板块温度只能"同构"（截面相对高低正确），绝对分对不上；</li>
+    <li>窗口参数（750/500/60日）是拟合最优值，建议本地拿到更长历史后重新标定。</li>
+  </ul>
+</section>
+
+<!-- ============ 9 批判 ============ -->
+<section id="s9">
+  <h2><span class="no">09</span>方法论总评：值得学的与要警惕的</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0;color:#4cc38a">✓ 做得好的</h3>
+      <ul>
+        <li>指标全部是<b>状态量而非预测信号</b>，文案反复声明"不是买卖信号"——定位诚实；</li>
+        <li>阈值用滚动分位数自适应（CR3/HHI/CSD），不用固定值；</li>
+        <li>股息率用已实施分红+历史成分，规避幸存者偏差；</li>
+        <li>回测按开盘价+滑点+跳空穿透成交，不过度美化；</li>
+        <li>每个数据点带版本号/覆盖率/完整度，可审计可复现；</li>
+        <li>指标→截面→策略闸门三层共用同一底层状态，体系自洽。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;color:#ff8589">✗ 局限与警惕</h3>
+      <ul>
+        <li>750 日样本短，所有 IC 不足以下统计结论；</li>
+        <li>10 个指标实际独立维度只有 <b>3-4 个</b>（趋势/广度、集中度、股债性价比）——高度同源；</li>
+        <li>活跃市值口径不完全公开 + 牛市区间人工标注（作者自认"可能存在更新延迟"）；</li>
+        <li>回测 OOS 未经历熊市；模型分组内排序能力存疑；</li>
+        <li>公开接口暴露完整策略参数与本地文件路径（安全瑕疵）。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card" style="margin-top:18px">
+    <p><b>如果只带走一句话：</b>这个站最有价值的不是任何单一指标的数值，而是它的<b>体系化思路</b>——用滚动百分位把任何原始量标准化成 0-100 的状态分、用状态分做闸门而不是做预测、用数据质量元数据保证每个数字可审计。这套骨架完全可以本地复刻，且数据源 akshare 即可覆盖。</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>报告基于 touzikexue.com 公开 API 数据（750 交易日 × 8 指标 + 回测全量逐笔/逐日）独立复算，验证脚本 quant_verify.py / quant_verify2.py。</p>
+    <p class="toc-note">配套文件：touzikexue量化视角分析报告.md · 本地复刻实现指南.md · touzikexue三页面实现分析报告.md（技术层）</p>
+    <p class="toc-note">本报告仅供研究学习参考，不构成任何投资建议。</p>
+  </div>
+</footer>
+
+</div>
+</body>
+</html>
