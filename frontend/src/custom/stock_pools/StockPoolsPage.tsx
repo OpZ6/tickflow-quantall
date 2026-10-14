@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, CircleDot, RefreshCw, Search, Telescope, X } fr
 import { stockPoolApi, type StockPoolCandidate, type StockPoolCluster, type StockPoolThemeContext } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
+import { getBoardType } from '@/lib/board'
 import { StockPoolHistoryReview } from './StockPoolHistoryReview'
 import { StockPoolMiniKline } from './StockPoolMiniKline'
 import { AmvPanel } from '@/components/AmvPanel'
@@ -14,6 +15,22 @@ type ChangeView = 'complete' | 'today'
 type QueueMode = 'members' | 'topic_event' | 'signal' | 'low_buy' | 'research' | 'priority' | 'pending'
 type LowEvidence = 'all' | 'logic' | 'smnc' | 'static'
 type TopicSort = 'count' | 'mean_pct' | 'up_count' | 'down_count' | 'startup' | 'pullback'
+type LimitBoard = 'all' | 'main10' | 'dual20' | 'beijing30' | 'other'
+
+const LIMIT_BOARD_OPTIONS: { key: Exclude<LimitBoard, 'all'>; label: string; chip: string }[] = [
+  { key: 'main10', label: '主板 10%', chip: 'border-slate-500/40 bg-slate-500/10 text-slate-300' },
+  { key: 'dual20', label: '双创 20%', chip: 'border-violet-500/40 bg-violet-500/10 text-violet-300' },
+  { key: 'beijing30', label: '北交所 30%', chip: 'border-amber-500/40 bg-amber-500/10 text-amber-300' },
+  { key: 'other', label: '其他 / 未识别', chip: 'border-border bg-elevated text-secondary' },
+]
+
+function getLimitBoard(symbol: string): Exclude<LimitBoard, 'all'> {
+  const board = getBoardType(symbol)
+  if (board === '沪主板' || board === '深主板') return 'main10'
+  if (board === '创业板' || board === '科创板') return 'dual20'
+  if (board === '北交所') return 'beijing30'
+  return 'other'
+}
 
 const PERSONAL_LABELS: Record<PersonalState, string> = {
   unseen: '未处理', priority: '重点跟踪', pending: '待确认', seen: '已看', ignored: '暂不关注',
@@ -249,6 +266,7 @@ export function StockPoolsPage() {
   const [changeView, setChangeView] = useState<ChangeView>('complete')
   const [changeKind, setChangeKind] = useState('all')
   const [tier, setTier] = useState('all')
+  const [limitBoard, setLimitBoard] = useState<LimitBoard>('all')
   const [exchange, setExchange] = useState('')
   const [sourceCount, setSourceCount] = useState(0)
   const [researchFilter, setResearchFilter] = useState('all')
@@ -278,6 +296,11 @@ export function StockPoolsPage() {
     enabled: Boolean(historySelection),
   })
   const rows = candidates.data?.rows ?? []
+  const limitBoardCounts = useMemo(() => {
+    const counts: Record<Exclude<LimitBoard, 'all'>, number> = { main10: 0, dual20: 0, beijing30: 0, other: 0 }
+    for (const row of rows) counts[getLimitBoard(row.symbol)]++
+    return counts
+  }, [rows])
   const lowClusters = useMemo(() => clusterLow(rows), [rows])
   const clusters = useMemo(() => mergeTopicClusters(summary.data?.clusters ?? [], lowClusters, rows), [summary.data?.clusters, lowClusters, rows])
   const sortedTopicClusters = useMemo(() => {
@@ -363,6 +386,7 @@ export function StockPoolsPage() {
     if (sources.length) result = result.filter(r => sources.every(source => r.source_ids.includes(source)))
     if (stage) result = result.filter(r => r.primary_stage === stage)
     if (topic && view === 'all') result = result.filter(r => r.topics.includes(topic))
+    if (limitBoard !== 'all') result = result.filter(r => getLimitBoard(r.symbol) === limitBoard)
     if (exchange) result = result.filter(r => r.exchange === exchange)
     if (sourceCount === 1) result = result.filter(r => r.source_ids.length === 1)
     else if (sourceCount >= 2) result = result.filter(r => r.source_ids.length >= sourceCount)
@@ -386,7 +410,7 @@ export function StockPoolsPage() {
       if (range.max !== '') result = result.filter(r => getter(r) <= parseFloat(range.max))
     }
     return result
-  }, [rows, tier, sources, stage, topic, view, exchange, sourceCount, researchFilter, freshFilter, changeView, changeKind, reviewFilter, hideReviewed, search, ranges, personal])
+  }, [rows, tier, sources, stage, topic, view, limitBoard, exchange, sourceCount, researchFilter, freshFilter, changeView, changeKind, reviewFilter, hideReviewed, search, ranges, personal])
   const sortedFiltered = useMemo(() => {
     const result = [...filtered]
     if (sortMode === 'sources') result.sort((a, b) => b.source_ids.length - a.source_ids.length || b.amount_yi - a.amount_yi)
@@ -429,6 +453,7 @@ export function StockPoolsPage() {
 
   const resetListFilters = () => {
     setSources([]); setStage(''); setTopic(''); setSearch(''); setExchange(''); setSourceCount(0)
+    setLimitBoard('all')
     setResearchFilter('all'); setFreshFilter(''); setTier('all'); setChangeKind('all')
     setReviewFilter('all'); setHideReviewed(false); setChangeView('complete'); setSortMode('default')
     setRanges({ pct: { min: '', max: '' }, amount: { min: '', max: '' }, market_cap: { min: '', max: '' }, turnover: { min: '', max: '' } })
@@ -441,6 +466,7 @@ export function StockPoolsPage() {
   if (sources.length) filterTokens.push(`来源交集:${sources.join('+')}`)
   if (stage) filterTokens.push(`阶段:${stage}`)
   if (topic && view === 'all') filterTokens.push(`题材:${topic}`)
+  if (limitBoard !== 'all') filterTokens.push(LIMIT_BOARD_OPTIONS.find(item => item.key === limitBoard)?.label ?? '板块')
   if (exchange) filterTokens.push(`交易所:${exchange}`)
   if (sourceCount === 1) filterTokens.push('仅单源')
   else if (sourceCount >= 2) filterTokens.push(`≥${sourceCount}源`)
@@ -490,25 +516,57 @@ export function StockPoolsPage() {
       <div className="border-b border-[#29292e] p-[13px]">
         <WorkbenchHeader index="01" title="今日题材分类池" actions={<><label className="flex items-center gap-1.5 text-[10px] text-muted">排序<select aria-label="题材排序" value={topicSort} onChange={event => setTopicSort(event.target.value as TopicSort)} className="rounded border border-border bg-base px-2 py-1 text-[10px] text-secondary"><option value="count">候选数量 ↓</option><option value="mean_pct">平均涨跌幅 ↓</option><option value="up_count">上涨家数 ↓</option><option value="down_count">下跌家数 ↓</option><option value="startup">启动阶段数 ↓</option><option value="pullback">回调阶段数 ↓</option></select></label><span className="text-[10px] text-muted">{clusters.length}组</span>{topic && <button onClick={() => { setTopic(''); setStage(''); setSubgroup(''); setQueueMode('topic_event') }} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">清除题材筛选</button>}{clusters.length > TOPIC_PREVIEW_LIMIT && <button onClick={() => setShowAllTopics(value => !value)} className="cursor-pointer text-[10px] text-accent hover:text-accent/80">{showAllTopics ? `收起到${TOPIC_PREVIEW_LIMIT}组` : '展开全部'}</button>}</>} />
         <p className="mt-2 text-[10px] text-muted">合并当日逻辑题材与至少3只候选共有的回调题材；静态关联只作今日成员线索。</p>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
           {(showAllTopics ? sortedTopicClusters : sortedTopicClusters.slice(0, TOPIC_PREVIEW_LIMIT)).map(cluster => {
-            const leading = Object.entries(cluster.stage_counts || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name]) => name).join('／')
-            const subgroupHint = (cluster.subgroups ?? []).slice(0, 2).map(item => `${item.name} ${item.count}`).join(' · ')
             const basis = cluster.dimension === 'logic' ? '当日逻辑' : cluster.dimension === 'mixed' ? '逻辑／静态' : '静态关联'
-            const direction = cluster.startupCount > cluster.pullbackCount ? '偏启动' : cluster.pullbackCount > cluster.startupCount ? '偏回调' : cluster.startupCount ? '启动／回调并存' : '观察中'
-            const breadth = cluster.up_count > cluster.down_count ? '上涨占优' : cluster.down_count > cluster.up_count ? '下跌占优' : '涨跌分化'
-            const breadthTone = cluster.up_count > cluster.down_count ? 'text-bull' : cluster.down_count > cluster.up_count ? 'text-bear' : 'text-secondary'
+            const spread = Math.max(1, cluster.up_count + cluster.flat_count + cluster.down_count)
+            const meanTone = cluster.mean_pct_chg > 0.05 ? 'text-bull' : cluster.mean_pct_chg < -0.05 ? 'text-bear' : 'text-secondary'
+            const stageEntries = Object.entries(cluster.stage_counts || {}).sort((a, b) => b[1] - a[1])
+            const subgroups = (cluster.subgroups ?? []).slice(0, 3)
             const observation = themeContextShort(summary.data?.theme_contexts?.[cluster.name])
-            return <button key={cluster.name} onClick={() => chooseTopic(cluster.name)} className={`grid min-h-[82px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded-[7px] border bg-[#111113] p-2.5 text-left transition-colors ${topic === cluster.name ? 'border-accent/70 bg-accent/10' : 'border-[#29292e] hover:border-accent/45 hover:bg-elevated/60'}`}>
-              <strong className="truncate text-[11px] text-foreground">{cluster.name}</strong><b className="font-mono text-[13px] text-[#aeb8ff]">{cluster.count}只</b>
-              <div className="col-span-2 mt-0.5 truncate text-[9px] text-muted">阶段{direction} · 启动 {cluster.startupCount} · 回调 {cluster.pullbackCount} · {basis}</div>
-              <div className="col-span-2 mt-0.5 flex flex-wrap items-center gap-x-2 text-[9px]">
-                <span className={`font-medium ${breadthTone}`}>{breadth}</span>
-                <span className="font-mono">均值 <b className={cluster.mean_pct_chg > 0 ? 'text-bull' : cluster.mean_pct_chg < 0 ? 'text-bear' : 'text-secondary'}>{signedPct(cluster.mean_pct_chg)}</b></span>
-                <span className="font-mono"><b className="text-bull">涨 {cluster.up_count}</b> / <b className="text-bear">跌 {cluster.down_count}</b> / 平 {cluster.flat_count}</span>
+            return <button key={cluster.name} onClick={() => chooseTopic(cluster.name)} title={cluster.catalysts?.length ? `催化：${cluster.catalysts.slice(0, 3).join('；')}` : undefined}
+              className={`flex min-h-[132px] flex-col gap-2 rounded-[9px] border p-3 text-left transition-colors ${topic === cluster.name ? 'border-accent/70 bg-accent/[.09]' : 'border-[#2e2e34] bg-[#131315] hover:border-accent/45 hover:bg-elevated/60'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <strong className="text-[12.5px] font-semibold leading-[1.35] text-foreground">{cluster.name}</strong>
+                <span className="shrink-0 rounded border border-accent/35 bg-accent/10 px-1.5 py-[1px] text-[9px] text-[#8fb6ff]">{basis}</span>
               </div>
-              <div className="col-span-2 truncate text-[9px] text-muted">池内候选 · 事件 {cluster.event_count} · {subgroupHint || leading || '阶段待确认'}</div>
-              {observation && <div className="col-span-2 mt-0.5 truncate text-[9px] text-[#9ca9c6]">{observation}</div>}
+
+              <div className="flex items-end justify-between gap-3">
+                <div className="flex items-baseline gap-1">
+                  <span className="font-mono text-[21px] font-bold leading-none text-foreground">{cluster.count}</span>
+                  <span className="text-[10px] text-muted">只候选</span>
+                </div>
+                <div className="text-right">
+                  <div className={`font-mono text-[18px] font-bold leading-none ${meanTone}`}>{signedPct(cluster.mean_pct_chg)}</div>
+                  <div className="mt-1 text-[9px] text-muted">池内均值</div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex h-[6px] w-full overflow-hidden rounded-full bg-[#232327]">
+                  <span style={{ width: `${cluster.up_count / spread * 100}%` }} className="bg-bull" />
+                  <span style={{ width: `${cluster.flat_count / spread * 100}%` }} className="bg-[#4b4b52]" />
+                  <span style={{ width: `${cluster.down_count / spread * 100}%` }} className="bg-bear" />
+                </div>
+                <div className="mt-1.5 flex items-center justify-between font-mono text-[10px]">
+                  <span className="text-bull">涨 {cluster.up_count}</span>
+                  <span className="text-muted">平 {cluster.flat_count}</span>
+                  <span className="text-bear">跌 {cluster.down_count}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1">
+                {cluster.startupCount > 0 && <span className="rounded border border-blue-500/40 bg-blue-500/10 px-1.5 py-[1px] text-[9px] text-blue-300">启动 {cluster.startupCount}</span>}
+                {cluster.pullbackCount > 0 && <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-[1px] text-[9px] text-emerald-300">回调 {cluster.pullbackCount}</span>}
+                {cluster.event_count > 0 && <span className="rounded border border-red-500/40 bg-red-500/10 px-1.5 py-[1px] text-[9px] text-red-300">事件 {cluster.event_count}</span>}
+                {stageEntries.slice(0, 2).map(([name, value]) => <span key={name} className="rounded border border-[#33333a] bg-[#1c1c20] px-1.5 py-[1px] text-[9px] text-secondary">{name} {value}</span>)}
+              </div>
+
+              <div className="mt-auto border-t border-[#26262b] pt-1.5">
+                <div className="text-[9px] text-muted">细分板块</div>
+                {subgroups.length ? <div className="mt-1 flex flex-wrap gap-1">{subgroups.map(item => <span key={item.name} className="rounded border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-[1px] text-[9px] text-indigo-300">{item.name} {item.count}</span>)}</div> : <div className="mt-1 text-[9px] text-muted">无细分归类</div>}
+                {observation && <div className="mt-1.5 truncate text-[9px] text-[#9ca9c6]" title={observation}>外部 · {observation}</div>}
+              </div>
             </button>
           })}
         </div>
@@ -607,6 +665,11 @@ export function StockPoolsPage() {
           <label className="space-y-1"><span className="text-[11px] text-muted">研究材料</span><select value={researchFilter} onChange={e => setResearchFilter(e.target.value)} className="w-full rounded border border-border bg-base px-2 py-1.5 text-xs"><option value="all">全部</option><option value="direct">有个股材料</option><option value="indirect">无个股材料</option></select></label>
           <label className="space-y-1"><span className="text-[11px] text-muted">搜索</span><div className="relative"><Search className="absolute left-2 top-1.5 text-muted" size={14} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="代码或名称" className="w-full rounded border border-border bg-base py-1.5 pl-8 pr-2 text-xs" /></div></label>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] text-muted">涨幅板块</span>
+          {[{ key: 'all' as const, label: '全部', count: rows.length }, ...LIMIT_BOARD_OPTIONS.map(item => ({ ...item, count: limitBoardCounts[item.key] }))].map(item => <button key={item.key} onClick={() => setLimitBoard(item.key)} className={`rounded border px-2.5 py-1 text-[11px] transition-colors ${limitBoard === item.key ? 'border-accent/60 bg-accent/10 text-foreground' : 'border-border bg-base text-secondary hover:border-accent/40 hover:text-foreground'}`}>{item.label} <span className="ml-1 font-mono text-muted">{item.count}</span></button>)}
+          <span className="ml-1 text-[10px] text-muted">按代码映射常规涨幅，特殊交易规则可能不同</span>
+        </div>
         <div className="mt-3 grid grid-cols-4 gap-3">
           {RANGE_DEFS.map(([field, label]) => <div key={field} className="flex items-center gap-1.5"><span className="whitespace-nowrap text-[11px] text-muted">{label}</span><input type="number" placeholder="下限" value={ranges[field].min} onChange={e => setRanges(prev => ({ ...prev, [field]: { ...prev[field], min: e.target.value } }))} className="w-16 rounded border border-border bg-base px-1.5 py-1 text-xs" /><span className="text-[11px] text-muted">~</span><input type="number" placeholder="上限" value={ranges[field].max} onChange={e => setRanges(prev => ({ ...prev, [field]: { ...prev[field], max: e.target.value } }))} className="w-16 rounded border border-border bg-base px-1.5 py-1 text-xs" /></div>)}
         </div>
@@ -642,24 +705,24 @@ function WorkbenchHeader({ index, title, note, actions }: { index: string; title
 
 function CompactCandidateRows({ rows, personal, onOpen, onPersonal, numbered, lowBuy }: { rows: StockPoolCandidate[]; personal: Record<string, PersonalState>; onOpen: (row: StockPoolCandidate) => void; onPersonal: (symbol: string, value: PersonalState) => void; numbered?: boolean; lowBuy?: boolean }) {
   if (!rows.length) return <div className="py-5 text-center text-xs text-muted">当前条件下没有候选</div>
-  return <div className="max-h-[610px] divide-y divide-[#29292e] overflow-auto [scrollbar-gutter:stable]">{rows.map((row, index) => <div key={row.symbol} className="grid min-h-[55px] grid-cols-[34px_150px_155px_minmax(200px,1fr)_150px_104px] items-center gap-2.5 px-2.5 py-2 transition-colors hover:bg-accent/10">
-    <span className="font-mono text-[10px] font-semibold text-muted">{numbered ? String(index + 1).padStart(2, '0') : '·'}</span>
-    <button onClick={() => onOpen(row)} className="min-w-0 cursor-pointer text-left"><div className="truncate text-xs font-semibold text-foreground hover:text-accent">{row.name}</div><div className="font-mono text-[9px] text-muted">{row.symbol}</div></button>
-    <div><span className={`inline-flex items-center gap-1.5 rounded border px-1.5 py-1 text-[9px] ${STAGE_CHIP[row.primary_stage] || 'border-border bg-elevated text-secondary'}`}><i className="h-1 w-1 rounded-full bg-current" />{row.primary_stage}</span><div className="mt-1 truncate text-[9px] text-muted">{lowBuy ? row.topics.length ? `当日逻辑 · ${row.topics.slice(0, 2).join('／')}` : row.unclustered_terms?.length ? '当日解读 · 未成组' : row.primary_concept ? `静态关联 · ${row.primary_concept}` : '题材待确认' : row.topics.slice(0, 2).join('／') || row.primary_concept || '题材待确认'}</div></div>
-    <div className="min-w-0 text-[9px] leading-[1.45] text-secondary"><div className="truncate" title={row.evidence || ''}>{row.evidence || row.sources.join(' · ')}</div>{lowBuy && row.price_context && <div className="truncate text-muted">距MA20 {signedPct(row.price_context.ma20_distance_pct)} · 近10日 {signedPct(row.price_context.return10_pct)}</div>}{lowBuy && !row.topics.length && Boolean(row.unclustered_terms?.length) && <div className="truncate text-amber-200">当日来源术语 · {row.unclustered_terms?.join('／')} · 未成组</div>}{lowBuy && row.research_focus?.title && <div className="truncate text-indigo-300" title={row.research_focus.title}>SMNC定向{row.research_focus.age_days != null ? ` · ${row.research_focus.age_days}天前可用` : ''}{row.research_focus.topic_mentions?.[0] ? ` · ${row.research_focus.topic_mentions[0].label}（${row.research_focus.topic_mentions[0].location === 'title' ? '标题' : '摘录'}提及）` : ''} · {row.research_focus.title}</div>}</div>
-    <div className="text-[9px] text-muted">{row.source_ids.length}类召回{(row.research_count ?? 0) > 0 ? ` · 定向材料${row.research_count}条` : ''}<br /><span className={`font-semibold ${row.pct_chg >= 0 ? 'text-bull' : 'text-bear'}`}>{row.pct_chg >= 0 ? '+' : ''}{row.pct_chg.toFixed(2)}%</span> · {row.amount_yi.toFixed(1)}亿</div>
+  return <div className="divide-y divide-[#29292e]">{rows.map((row, index) => <div key={row.symbol} className="grid min-h-[60px] grid-cols-[36px_158px_168px_minmax(200px,1fr)_132px_112px] items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-accent/10">
+    <span className="font-mono text-[11px] font-semibold text-muted">{numbered ? String(index + 1).padStart(2, '0') : '·'}</span>
+    <button onClick={() => onOpen(row)} className="min-w-0 cursor-pointer text-left"><div className="truncate text-[13px] font-semibold text-foreground hover:text-accent">{row.name}</div><div className="mt-0.5 font-mono text-[10px] text-muted">{row.symbol}</div></button>
+    <div className="min-w-0"><span className={`inline-flex items-center gap-1.5 rounded border px-1.5 py-1 text-[10px] ${STAGE_CHIP[row.primary_stage] || 'border-border bg-elevated text-secondary'}`}><i className="h-1 w-1 rounded-full bg-current" />{row.primary_stage}</span><div className="mt-1.5 truncate text-[10px] text-muted" title={lowTopicLabels(row).join('／')}>{lowBuy ? row.topics.length ? `当日逻辑 · ${row.topics.slice(0, 2).join('／')}` : row.unclustered_terms?.length ? '当日解读 · 未成组' : row.primary_concept ? `静态关联 · ${row.primary_concept}` : '题材待确认' : row.topics.slice(0, 2).join('／') || row.primary_concept || '题材待确认'}</div></div>
+    <div className="min-w-0 text-[10px] leading-[1.5] text-secondary"><div className="truncate" title={row.evidence || ''}>{row.evidence || row.sources.join(' · ')}</div>{lowBuy && row.price_context && <div className="truncate text-muted">距MA20 {signedPct(row.price_context.ma20_distance_pct)} · 近10日 {signedPct(row.price_context.return10_pct)}</div>}{lowBuy && !row.topics.length && Boolean(row.unclustered_terms?.length) && <div className="truncate text-amber-200">当日来源术语 · {row.unclustered_terms?.join('／')} · 未成组</div>}{lowBuy && row.research_focus?.title && <div className="truncate text-indigo-300" title={row.research_focus.title}>SMNC定向{row.research_focus.age_days != null ? ` · ${row.research_focus.age_days}天前可用` : ''}{row.research_focus.topic_mentions?.[0] ? ` · ${row.research_focus.topic_mentions[0].label}（${row.research_focus.topic_mentions[0].location === 'title' ? '标题' : '摘录'}提及）` : ''} · {row.research_focus.title}</div>}</div>
+    <div className="text-right"><div className={`font-mono text-[14px] font-bold leading-none ${row.pct_chg >= 0 ? 'text-bull' : 'text-bear'}`}>{row.pct_chg >= 0 ? '+' : ''}{row.pct_chg.toFixed(2)}%</div><div className="mt-1.5 font-mono text-[10px] text-muted">{row.amount_yi.toFixed(1)}亿</div><div className="mt-0.5 text-[9px] text-muted">{row.source_ids.length}类召回{(row.research_count ?? 0) > 0 ? ` · 材料${row.research_count}` : ''}</div></div>
     <div>{reviewSelect(row.symbol, personal, onPersonal)}</div>
   </div>)}</div>
 }
 
 function CandidateTable({ rows, personal, onOpen, onPersonal }: { rows: StockPoolCandidate[]; personal: Record<string, PersonalState>; onOpen: (row: StockPoolCandidate) => void; onPersonal: (symbol: string, value: PersonalState) => void }) {
-  return <div className="max-h-[720px] overflow-auto bg-[#111113] [scrollbar-gutter:stable]">
+  return <div className="bg-[#111113]">
     <table className="w-full min-w-[1540px] table-fixed border-collapse text-[10px]">
       <colgroup><col className="w-10" /><col className="w-32" /><col className="w-24" /><col className="w-20" /><col className="w-28" /><col className="w-36" /><col className="w-28" /><col className="w-52" /><col /><col className="w-28" /><col className="w-24" /><col className="w-24" /></colgroup>
       <thead><tr>{['#', '股票', '收盘 / 涨幅', '成交额', '总市值 / 换手', '概念 / 行业', '当前阶段', '召回来源', '为什么进入观察', '个人状态', '新鲜度', '观察窗口'].map(label => <th key={label} className="sticky top-0 z-[1] h-9 border-b border-[#2a2a2f] bg-[#111113] px-2.5 text-left text-[9px] font-semibold text-muted">{label}</th>)}</tr></thead>
       <tbody>{rows.map((row, index) => <tr key={row.symbol} className="border-b border-[#26262b] transition-colors hover:bg-accent/[0.04]">
         <td className="px-2.5 py-2"><span className="grid h-6 w-6 place-items-center rounded-md bg-elevated font-mono text-[9px] text-secondary">{String(index + 1).padStart(2, '0')}</span></td>
-        <td className="px-2.5 py-2"><button onClick={() => onOpen(row)} className="cursor-pointer text-left"><strong className="block truncate text-[11px] text-foreground hover:text-accent">{row.name}</strong><span className="mt-0.5 block font-mono text-[9px] text-muted">{row.symbol}</span></button></td>
+        <td className="px-2.5 py-2"><button onClick={() => onOpen(row)} className="cursor-pointer text-left"><strong className="block truncate text-[11px] text-foreground hover:text-accent">{row.name}</strong><span className="mt-0.5 block font-mono text-[9px] text-muted">{row.symbol}</span><span className={`mt-1 inline-flex rounded border px-1.5 py-0.5 text-[9px] ${LIMIT_BOARD_OPTIONS.find(item => item.key === getLimitBoard(row.symbol))?.chip ?? 'border-border bg-elevated text-secondary'}`}>{LIMIT_BOARD_OPTIONS.find(item => item.key === getLimitBoard(row.symbol))?.label ?? '其他 / 未识别'}</span></button></td>
         <td className="px-2.5 py-2"><strong className="block font-mono text-[11px] text-foreground">{row.price.toFixed(2)}</strong><span className={`mt-0.5 block font-mono text-[11px] font-semibold ${row.pct_chg >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{row.pct_chg >= 0 ? '+' : ''}{row.pct_chg.toFixed(2)}%</span></td>
         <td className="px-2.5 py-2 font-mono text-secondary">{row.amount_yi.toFixed(1)}亿</td>
         <td className="px-2.5 py-2"><span className="block font-mono text-secondary">{row.market_cap_yi.toFixed(1)}亿</span><span className="mt-0.5 block font-mono text-[9px] text-muted">{row.turnover_pct.toFixed(1)}%</span></td>
