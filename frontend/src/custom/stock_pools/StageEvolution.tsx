@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
-import type { StockPoolCandidate, StockPoolEvolution } from '@/lib/api'
+import type { StockPoolCandidate, StockPoolEvolution } from '@/custom/api'
 
 const LOW_STAGES = new Set(['趋势延续', '回踩整理', '企稳修复'])
 const KIND: Record<string, { label: string; tone: string; rank: number }> = {

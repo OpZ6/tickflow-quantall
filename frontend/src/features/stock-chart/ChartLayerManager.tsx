@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowUp, Search, Settings2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
-import type { AnnotationEvidence, ChartAnnotationLayer, ChartLayerCategory, StrategyDetail } from '@/lib/api'
+import type {StrategyDetail} from '@/lib/api'
+import type { AnnotationEvidence, ChartAnnotationLayer, ChartLayerCategory } from '@/custom/api'
 import { INDICATOR_REGISTRY } from './indicatorRegistry'
 import type { ChartIndicatorInstance, ChartIndicatorTemplate } from './chartTypes'
 

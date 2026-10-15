@@ -3,7 +3,7 @@ import { chartTheme, getTheme, useTheme } from '@/lib/theme'
 import { fmtPct } from '@/lib/format'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
-import type { ChanlunAnalysis } from '@/lib/api'
+import type { ChanlunAnalysis } from '@/custom/api'
 import { getParams } from '@/lib/indicator-params'
 import {
   calcATR, calcAO, calcAroon, calcADL, calcBIAS, calcBRAR, calcCCI, calcChaikinOsc,

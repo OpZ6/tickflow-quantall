@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Activity, RefreshCw } from 'lucide-react'
 
-import { api, type ChanlunAnalysis, type ChanlunCandleRow } from '@/lib/api'
+import {api} from '@/lib/api'
+import type { ChanlunAnalysis, ChanlunCandleRow } from '@/custom/api'
 import {
   EChartsCandlestick,
   DEFAULT_CHANLUN_CONFIG,

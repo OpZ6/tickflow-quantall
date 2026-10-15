@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
-import { amvApi, type AmvDimension, type AmvProfile } from '@/lib/api'
+import { amvApi } from '@/custom/api'
+import type { AmvDimension, AmvProfile } from '@/custom/api'
 import { QK } from '@/lib/queryKeys'
 
 function number(value: number | null | undefined, suffix = '', digits = 2) {

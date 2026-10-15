@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
-import { api, type EtfMomentumRow } from '@/lib/api'
+import {api} from '@/lib/api'
+import type { EtfMomentumRow } from '@/custom/api'
 import { QK } from '@/lib/queryKeys'
 
 type Metric = 'return_1d_pct' | 'return_5d_pct' | 'return_20d_pct' | 'return_50d_pct' | 'slope_momentum_pct' | 'weighted_momentum_pct' | 'volume_ratio_5_20'

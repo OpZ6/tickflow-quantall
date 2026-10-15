@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import { Activity, ChartPie, GitBranch, Loader2, Orbit, Radar, Table2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import type { QuantXAdvancedCard, QuantXAdvancedSnapshot } from '@/lib/api'
+import type { QuantXAdvancedCard, QuantXAdvancedSnapshot } from '@/custom/api'
 import { useChartTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
 

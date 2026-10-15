@@ -12,7 +12,8 @@ import {
   Activity, Flame, AlertTriangle, CheckCircle2, XCircle,
   Zap, Gauge, FileText, Layers3, TrendingUp, BookOpenCheck, LayoutGrid,
 } from 'lucide-react'
-import { quantxApi, type QuantXReviewData } from '@/lib/api'
+import { quantxApi } from '@/custom/api'
+import type { QuantXReviewData } from '@/custom/api'
 import { QK } from '@/lib/queryKeys'
 import { useChartTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'

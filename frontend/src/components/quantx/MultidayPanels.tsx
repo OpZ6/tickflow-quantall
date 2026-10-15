@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, CalendarDays, Radar, Shapes, TrendingUp } from 'lucide-react'
-import type { QuantXMultidaySnapshot, QuantXWindowComponent } from '@/lib/api'
+import type { QuantXMultidaySnapshot, QuantXWindowComponent } from '@/custom/api'
 import { cn } from '@/lib/cn'
 
 export type WindowSize = 5 | 10 | 20

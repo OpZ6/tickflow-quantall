@@ -1,6 +1,6 @@
 import { ShieldAlert } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import type { QuantXRiskRadar } from '@/lib/api'
+import type { QuantXRiskRadar } from '@/custom/api'
 
 type Tone = 'red' | 'amber' | 'green' | null
 

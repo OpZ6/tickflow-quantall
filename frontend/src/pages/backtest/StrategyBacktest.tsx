@@ -2,18 +2,8 @@ import { useState, useMemo, useEffect, useRef, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, FlaskConical, Clock, Loader2, Square, Search, Plus, X, SlidersHorizontal, BarChart3, Gauge, Zap, ListPlus, HelpCircle, ChevronRight, AlertTriangle, Layers, BookmarkPlus, Download, ArchiveRestore } from 'lucide-react'
-import {
-  api,
-  type StrategyBacktestResult,
-  type ResearchBacktestRunSummary,
-  type ResearchCandidate,
-  type StrategyBacktestTrade,
-  type StrategyDetail,
-  type StrategyParamDef,
-  type ScoringDirection,
-  REGIME_STATE_LABELS,
-  REGIME_STATE_COLORS,
-} from '@/lib/api'
+import {api, type StrategyBacktestResult, type ResearchCandidate, type StrategyBacktestTrade, type StrategyDetail, type StrategyParamDef, type ScoringDirection, REGIME_STATE_LABELS, REGIME_STATE_COLORS} from '@/lib/api'
+import type { ResearchBacktestRunSummary } from '@/custom/api'
 import { QK } from '@/lib/queryKeys'
 import { storage } from '@/lib/storage'
 import { fmtPct, fmtPrice, priceColorClass } from '@/lib/format'

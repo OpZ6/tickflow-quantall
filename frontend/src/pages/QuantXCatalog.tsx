@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, ExternalLink, LayoutGrid, Loader2, RefreshCw } from 'lucide-react'
-import { quantxApi } from '@/lib/api'
+import { quantxApi } from '@/custom/api'
 import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import {

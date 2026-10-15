@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { amvApi, type AmvDimension, type AmvProfile, type AmvSectorRow } from '@/lib/api'
+import { amvApi } from '@/custom/api'
+import type { AmvDimension, AmvProfile, AmvSectorRow } from '@/custom/api'
 import { QK } from '@/lib/queryKeys'
 import { AmvPanel } from './AmvPanel'
 

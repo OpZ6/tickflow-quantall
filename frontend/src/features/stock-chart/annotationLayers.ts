@@ -1,5 +1,5 @@
 import type { ChartMarker, ChartPriceLine, ChartRange } from '@/components/EChartsCandlestick'
-import type { AnnotationEvidence, AnnotationMarker, ChartAnnotationLayer } from '@/lib/api'
+import type { AnnotationEvidence, AnnotationMarker, ChartAnnotationLayer } from '@/custom/api'
 
 export interface AnnotationVisuals {
   markers: ChartMarker[]

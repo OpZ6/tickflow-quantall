@@ -1,13 +1,5 @@
-import {
-  quantxApi,
-  type CatalogData,
-  type QuantXAdvancedSnapshot,
-  type QuantXDataTables,
-  type QuantXMultidaySnapshot,
-  type QuantXNewHighClusterMembers,
-  type QuantXObservability,
-  type QuantXReviewData,
-} from '@/lib/api'
+import { quantxApi } from '@/custom/api'
+import type { CatalogData, QuantXAdvancedSnapshot, QuantXDataTables, QuantXMultidaySnapshot, QuantXNewHighClusterMembers, QuantXObservability, QuantXReviewData } from '@/custom/api'
 
 type QuantXInteractiveExportOptions = {
   root: HTMLElement

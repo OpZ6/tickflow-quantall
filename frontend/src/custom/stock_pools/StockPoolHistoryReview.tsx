@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
 import { ArrowRight, Search } from 'lucide-react'
-import { stockPoolApi, type StockPoolReviewRow } from '@/lib/api'
+import { stockPoolApi } from '@/custom/api'
+import type { StockPoolReviewRow } from '@/custom/api'
 import { QK } from '@/lib/queryKeys'
 
 const GROUPS = [

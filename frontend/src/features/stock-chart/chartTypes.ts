@@ -1,4 +1,4 @@
-import type { ChartAdjustment, ChartInterval, ChartRangeName } from '@/lib/api'
+import type { ChartAdjustment, ChartInterval, ChartRangeName } from '@/custom/api'
 
 export type IndicatorCategory = 'overlay' | 'pane' | 'structure' | 'drawing'
 

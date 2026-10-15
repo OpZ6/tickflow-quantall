@@ -8,7 +8,8 @@ import {
   type ChartMarker, type ChartPriceLine, type OHLC,
 } from '@/components/EChartsCandlestick'
 import type { LevelType, PriceLevel } from '@/components/stock-analysis/AnalysisKChart'
-import { api, type AnnotationEvidence, type ChanlunOfficialResponse, type ChartAdjustment, type ChartInterval, type ChartLayerCategory, type ChartRangeName, type StrategyDetail } from '@/lib/api'
+import {api, type StrategyDetail} from '@/lib/api'
+import type { AnnotationEvidence, ChanlunOfficialResponse, ChartAdjustment, ChartInterval, ChartLayerCategory, ChartRangeName } from '@/custom/api'
 import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import { setParams } from '@/lib/indicator-params'
