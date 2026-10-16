@@ -200,7 +200,7 @@ function DashboardHeader({ date, dates, refreshing, exporting, portable, coverag
       <div className="mr-2 flex items-center gap-2"><Zap className="h-4 w-4 text-accent" /><h1 className="text-base font-bold text-foreground">QuantX 市场驾驶舱</h1></div>
       {portable ? <span data-testid="quantx-portable-date" className="inline-flex items-center gap-1.5 rounded border border-border bg-elevated px-2.5 py-1.5 font-mono text-xs font-semibold"><CalendarDays className="h-3.5 w-3.5 text-accent" />{pickerDate}</span> : <>
         <button aria-label="前一交易日" disabled={!previous} onClick={() => previous && onDate(previous)} className="cursor-pointer rounded border border-border p-1.5 disabled:cursor-not-allowed disabled:opacity-30"><ChevronLeft className="h-3.5 w-3.5" /></button>
-        <DatePicker ariaLabel="QuantX交易日" value={pickerDate} allowedDates={pickerDates} min={pickerDates[0]} max={pickerDates.at(-1)} onChange={value => onDate(value.replaceAll('-', ''))} align="left" buttonClassName="font-semibold" />
+        <DatePicker value={pickerDate} min={pickerDates[0]} max={pickerDates.at(-1)} onChange={value => onDate(value.replaceAll('-', ''))} align="left" buttonClassName="font-semibold" />
         <button aria-label="后一交易日" disabled={!next} onClick={() => next && onDate(next)} className="cursor-pointer rounded border border-border p-1.5 disabled:cursor-not-allowed disabled:opacity-30"><ChevronRight className="h-3.5 w-3.5" /></button>
         <button type="button" disabled={!latest || latest === date} onClick={() => latest && onDate(latest)} className="cursor-pointer rounded border border-border px-2 py-1.5 text-[10px] text-muted disabled:cursor-not-allowed disabled:opacity-40">最新</button>
       </>}

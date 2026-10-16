@@ -821,6 +821,11 @@ export interface StrategyDetail {
   execution_backend: 'polars_expr' | 'matrix_native' | 'python_history_legacy' | 'composite' | 'minute_filter'
   asset_types: string[]
   timeframes: string[]
+  /** 策略图表预览能力声明 (自定义策略图表模块读取) */
+  chart_preview?: {
+    enabled: boolean
+    mode?: string
+  }
   version: string
   basic_filter: Record<string, any>
   params: StrategyParamDef[]
@@ -4224,6 +4229,10 @@ export interface PipelineJob {
     index_daily_rows?: number
     minute_rows?: number
     skipped_stages?: string[]
+    /** QuantX 复盘阶段摘要 (自定义管线后置阶段) */
+    quantx?: { trade_date: string; status: string } | null
+    /** 选股池阶段摘要 (自定义管线后置阶段) */
+    stock_pools?: { trade_date: string; status: string; candidate_count: number } | null
   } | null
   error: string | null
 }

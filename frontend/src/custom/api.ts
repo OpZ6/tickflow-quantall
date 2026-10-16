@@ -3,7 +3,7 @@
 // API 类型与客户端集中于此。上游仓库不存在此文件 → 未来同步零冲突。
 // 共享 HTTP 层 (request/ApiError) 与上游公共类型仍由 lib/api.ts 提供。
 
-import { request, COMPUTE_REQUEST_TIMEOUT_MS, type KlineRow, type LevelType, type PriceLevel } from '@/lib/api'
+import { request, COMPUTE_REQUEST_TIMEOUT_MS, type KlineRow, type LevelType, type PriceLevel, type StrategyBacktestResult } from '@/lib/api'
 
 export interface ChanlunStatus {
   available: boolean

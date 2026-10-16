@@ -2130,12 +2130,12 @@ export function EChartsCandlestick({
       infoIdxRef.current,
       linkedPrice,
       volumeCompare,
+      addedDate,
       chanlunData,
       chanlunConfig,
       chanlunOfficial,
       paneHeights,
       indicatorStyles,
-      addedDate,
     )
 
     suppressOlderRequestRef.current = true

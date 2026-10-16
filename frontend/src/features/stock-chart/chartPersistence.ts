@@ -194,7 +194,10 @@ export function loadChartLayout(): StockChartLayout {
   return normalizeChartLayout(stored)
 }
 
-export function saveChartLayout(layout: StockChartLayout): boolean { return storage.stockChartLayout.set(layout) }
+export function saveChartLayout(layout: StockChartLayout): boolean {
+  storage.stockChartLayout.set(layout)
+  return true
+}
 
 export function loadChartDrawings(): Record<string, UserDrawing[]> {
   const stored = storage.stockChartDrawings.get({})
