@@ -14,14 +14,17 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.backtest.minute_trigger import MINUTE_EXIT_TRIGGER_SIGNALS
 from app.services.ndjson_heartbeat import with_heartbeat
+from app.services.strategy_evidence import enrich_and_persist_strategy_result
+from app.services.strategy_signal_events import StrategySignalEventRepository
 from app.strategy import config as strategy_config
 from app.strategy.ai_generator import AIStrategyGenerator, find_meta_assignment
+from app.strategy.catalog import catalog_label_for, catalog_origin
 from app.strategy.engine import StrategyDef, StrategyEngine
 from app.strategy.monitor import StrategyMonitorService
 from app.strategy.prompt_builder import build_step1, build_step2
@@ -30,7 +33,6 @@ from app.strategy.scoring import (
     effective_scoring,
     effective_scoring_directions,
 )
-
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
 logger = logging.getLogger(__name__)
 
@@ -182,6 +184,7 @@ def _strategy_detail(
     # 名称/描述可被用户覆盖
     name = overrides.get("name", s.meta.get("name", "")) if overrides else s.meta.get("name", "")
     description = overrides.get("description", s.meta.get("description", "")) if overrides else s.meta.get("description", "")
+    origin = catalog_origin(str(s.meta["id"]), s.source)
 
     return {
         "id": s.meta["id"],
@@ -189,10 +192,17 @@ def _strategy_detail(
         "description": description or s.meta.get("description", ""),
         "tags": s.meta.get("tags", []),
         "source": s.source,
+        "catalog_origin": origin,
+        "catalog_label": catalog_label_for(origin),
         "research_only": s.meta.get("research_only", False),
         "execution_backend": s.execution_backend,
         "asset_types": s.meta.get("asset_types", ["stock"]),
         "timeframes": s.meta.get("timeframes", ["1d"]),
+        "chart_preview": (
+            dict(s.meta.get("chart_preview"))
+            if isinstance(s.meta.get("chart_preview"), dict)
+            else {"enabled": False}
+        ),
         "version": s.meta.get("version", "1.0.0"),
         "basic_filter": bf,
         "params": s.meta.get("params", []),
@@ -215,6 +225,17 @@ def _strategy_detail(
         "trailing_stop": overrides.get("trailing_stop", getattr(s, "trailing_stop", None)) if overrides else getattr(s, "trailing_stop", None),
         "trailing_take_profit_activate": overrides.get("trailing_take_profit_activate", getattr(s, "trailing_take_profit_activate", None)) if overrides else getattr(s, "trailing_take_profit_activate", None),
         "trailing_take_profit_drawdown": overrides.get("trailing_take_profit_drawdown", getattr(s, "trailing_take_profit_drawdown", None)) if overrides else getattr(s, "trailing_take_profit_drawdown", None),
+        # 本地回测增强: 分批盈亏锁定 / 收盘保本 / 建议最大持仓
+        "profit_lock_steps": (
+            overrides.get("profit_lock_steps", s.meta.get("profit_lock_steps"))
+            if overrides
+            else s.meta.get("profit_lock_steps")
+        ),
+        "close_breakeven_activate_pct": (
+            overrides.get("close_breakeven_activate_pct", s.meta.get("close_breakeven_activate_pct"))
+            if overrides else s.meta.get("close_breakeven_activate_pct")
+        ),
+        "recommended_max_positions": s.meta.get("recommended_max_positions"),
         "max_hold_days": overrides.get("max_hold_days", s.max_hold_days) if overrides else s.max_hold_days,
         "order_by": s.meta.get("order_by", "score"),
         "descending": s.meta.get("descending", True),
@@ -250,6 +271,24 @@ class RunRequest(BaseModel):
 
 class RunAllRequest(BaseModel):
     as_of: date | None = None
+    asset_type: str = "stock"
+    timeframe: str = "1d"
+
+
+class PreviewRequest(BaseModel):
+    symbol: str
+    asset_type: Literal["stock", "etf", "index"] = "stock"
+    timeframe: str = "1d"
+    start_date: date
+    end_date: date
+    strategy_ids: list[str] = Field(default_factory=list)
+    params_by_strategy: dict[str, dict] = Field(default_factory=dict)
+
+
+class EventBackfillRequest(BaseModel):
+    start_date: date
+    end_date: date
+    strategy_ids: list[str]
     asset_type: str = "stock"
     timeframe: str = "1d"
 
@@ -351,6 +390,107 @@ def list_strategies(
     return payload
 
 
+@router.get("/events")
+def query_strategy_events(
+    request: Request,
+    symbol: str | None = None,
+    strategy_ids: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    event_types: str | None = None,
+    source_run_id: str | None = None,
+    params_fingerprint: str | None = None,
+    limit: int = Query(1000, ge=1, le=5000),
+):
+    """查询版本化派生策略事件；不读取页面缓存或 Market Facts。"""
+    rows = StrategySignalEventRepository(_data_dir(request)).query(
+        symbol=symbol,
+        strategy_ids=(item.strip() for item in (strategy_ids or "").split(",") if item.strip()),
+        start_date=start_date,
+        end_date=end_date,
+        event_types=(item.strip() for item in (event_types or "").split(",") if item.strip()),
+        source_run_id=source_run_id,
+        params_fingerprint=params_fingerprint,
+    )
+    return {"rows": rows[-limit:], "total": len(rows), "generation": StrategySignalEventRepository(_data_dir(request)).generation()}
+
+
+@router.post("/events/backfill")
+def backfill_strategy_events(req: EventBackfillRequest, request: Request):
+    """受控重算本地已有交易日，结果显式标记为 recomputed。"""
+    if req.end_date < req.start_date:
+        raise HTTPException(status_code=422, detail="end_date 不能早于 start_date")
+    strategy_ids = list(dict.fromkeys(req.strategy_ids))
+    if not strategy_ids or len(strategy_ids) > 32:
+        raise HTTPException(status_code=422, detail="strategy_ids 需要 1—32 个")
+    engine = _get_engine(request)
+    for strategy_id in strategy_ids:
+        strategy = _get_public_strategy(engine, strategy_id)
+        if strategy.source != "builtin":
+            raise HTTPException(status_code=422, detail=f"仅允许回填内置策略: {strategy_id}")
+
+    data_dir = _data_dir(request)
+    from app.tickflow.repository import enriched_dirname
+
+    enriched_root = data_dir / enriched_dirname(req.asset_type)
+    dates: list[date] = []
+    for path in enriched_root.glob("date=*/part.parquet"):
+        try:
+            day = date.fromisoformat(path.parent.name.removeprefix("date="))
+        except ValueError:
+            continue
+        if req.start_date <= day <= req.end_date:
+            dates.append(day)
+    dates = sorted(set(dates))
+    if len(dates) > 120:
+        raise HTTPException(status_code=422, detail="单次最多回填 120 个本地交易日")
+
+    from app.services.screener import ScreenerService
+
+    service = ScreenerService(request.app.state.repo, asset_type=req.asset_type)
+    overrides_by_id = strategy_config.list_overrides(data_dir)
+    params_by_id = {
+        strategy_id: dict((overrides_by_id.get(strategy_id) or {}).get("params") or {})
+        for strategy_id in strategy_ids
+    }
+    written = 0
+    failures: list[dict[str, str]] = []
+    for day in dates:
+        try:
+            context = service.build_strategy_context(
+                engine,
+                day,
+                strategy_ids,
+                timeframe=req.timeframe,
+                params_map=params_by_id,
+                overrides_map={strategy_id: overrides_by_id.get(strategy_id, {}) for strategy_id in strategy_ids},
+            )
+            results = engine.run_all(
+                context,
+                params_map=params_by_id,
+                overrides_map={strategy_id: overrides_by_id.get(strategy_id, {}) for strategy_id in strategy_ids},
+                strategy_ids=strategy_ids,
+            )
+            for strategy_id, result in results.items():
+                written += len(enrich_and_persist_strategy_result(
+                    data_dir=data_dir,
+                    result=result,
+                    strategy=engine.get(strategy_id),
+                    params=params_by_id[strategy_id],
+                    context=context,
+                    provenance="recomputed",
+                ))
+        except Exception as exc:
+            failures.append({"date": day.isoformat(), "error": str(exc)})
+    return {
+        "dates": [day.isoformat() for day in dates],
+        "strategies": strategy_ids,
+        "events_written": written,
+        "failures": failures,
+        "provenance": "recomputed",
+    }
+
+
 @router.get("/{strategy_id}")
 def get_strategy(strategy_id: str, request: Request):
     engine = _get_engine(request)
@@ -360,6 +500,48 @@ def get_strategy(strategy_id: str, request: Request):
 
 
 # ── 执行策略 ─────────────────────────────────────────────────────────
+
+
+@router.post("/preview")
+def preview_strategy(req: PreviewRequest, request: Request):
+    """即时回放一只股票的正式策略信号，不执行全市场扫描或写入事件仓库。"""
+    if not req.symbol.strip():
+        raise HTTPException(status_code=422, detail="symbol 不能为空")
+    if req.end_date < req.start_date:
+        raise HTTPException(status_code=422, detail="end_date 不能早于 start_date")
+    strategy_ids = list(dict.fromkeys(item.strip() for item in req.strategy_ids if item.strip()))
+    if not strategy_ids or len(strategy_ids) > 3:
+        raise HTTPException(status_code=422, detail="strategy_ids 需要 1—3 个")
+
+    engine = _get_engine(request)
+    for strategy_id in strategy_ids:
+        try:
+            engine.get(strategy_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    data_dir = _data_dir(request)
+    overrides_by_strategy = {
+        strategy_id: strategy_config.load_override(data_dir, strategy_id) or {}
+        for strategy_id in strategy_ids
+    }
+    try:
+        from app.services.strategy_preview import StrategyPreviewService
+
+        return StrategyPreviewService(request.app.state.repo, engine).preview(
+            symbol=req.symbol.strip(),
+            asset_type=req.asset_type,
+            timeframe=req.timeframe,
+            start_date=req.start_date,
+            end_date=req.end_date,
+            strategy_ids=strategy_ids,
+            params_by_strategy={
+                strategy_id: dict(req.params_by_strategy.get(strategy_id) or {})
+                for strategy_id in strategy_ids
+            },
+            overrides_by_strategy=overrides_by_strategy,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/run")
@@ -403,6 +585,13 @@ def run_strategy(req: RunRequest, request: Request):
             pool=req.pool,
             params=params,
             overrides=overrides or None,
+        )
+        enrich_and_persist_strategy_result(
+            data_dir=data_dir,
+            result=result,
+            strategy=engine.get(req.strategy_id),
+            params=params,
+            context=context,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -452,6 +641,13 @@ def run_all(req: RunAllRequest, request: Request):
         overrides_map={sid: all_overrides.get(sid, {}) for sid in strategy_ids},
         strategy_ids=strategy_ids,
     ).items():
+        enrich_and_persist_strategy_result(
+            data_dir=data_dir,
+            result=result,
+            strategy=engine.get(sid),
+            params=params_map.get(sid, {}),
+            context=context,
+        )
         results[sid] = {"total": result.total, "as_of": str(as_of)}
 
     return {"as_of": str(as_of), "results": results}

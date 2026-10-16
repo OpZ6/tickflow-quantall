@@ -1,4 +1,4 @@
-﻿"""Bi (stroke) detection using czsc engine."""
+"""Bi (stroke) detection using czsc engine."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

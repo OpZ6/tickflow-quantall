@@ -13,6 +13,8 @@ from starlette.datastructures import UploadFile
 
 from app.api.ext_data import _write_upload_capped
 
+pytestmark = pytest.mark.asyncio
+
 
 def _upload(data: bytes) -> UploadFile:
     return UploadFile(io.BytesIO(data), filename="x.csv")

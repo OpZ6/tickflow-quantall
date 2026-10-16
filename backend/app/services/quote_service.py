@@ -204,6 +204,30 @@ def _monitor_name_map(repo) -> dict[str, str]:
     return {s: n for s, n in repo.get_name_map().items() if n}
 
 
+def supplement_realtime_indices(
+    records: list[dict],
+    symbols: list[str],
+) -> list[dict]:
+    """Fill index gaps left by stock-only realtime providers.
+
+    Provider routing remains authoritative for the stock snapshot.  This
+    adapter only requests explicitly configured index symbols that are absent
+    from that snapshot, allowing asset-level sources to complement each other.
+    """
+    present = {str(row.get("symbol") or "") for row in records}
+    missing = [symbol for symbol in dict.fromkeys(symbols) if symbol not in present]
+    if not missing:
+        return records
+    from app.data_providers.tencent_index import fetch_index_realtime
+
+    supplemental = fetch_index_realtime(missing)
+    if supplemental:
+        logger.info("核心指数实时补齐: %d/%d 只 (Tencent)", len(supplemental), len(missing))
+    else:
+        logger.warning("核心指数实时补齐为空: %d 只仍将使用盘后日线", len(missing))
+    return [*records, *supplemental]
+
+
 class QuoteService:
     """全局实时行情服务 — 单例。"""
 
@@ -702,50 +726,63 @@ class QuoteService:
         """
         from app.services import preferences
 
-        provider_name = preferences.get_realtime_data_provider()
-        if provider_name != "tickflow":
-            from app.data_providers import custom as custom_sources
-            if custom_sources.provider_has_dataset(provider_name, "realtime"):
-                try:
-                    t0 = time.perf_counter()
-                    now_ts = time.perf_counter()
-                    provider = custom_sources.get_provider(provider_name)
-                    records = provider.get_realtime()
-                    # 指数补充: A 股快照通常不含指数。插件可选实现
-                    # get_realtime_indices(symbols) 用独立端点补拉 (如 fuyao 指数快照);
-                    # 未实现的源指数缓存为空, 由日K兜底接管。
-                    replace_index_cache = True
-                    fetch_indices = getattr(provider, "get_realtime_indices", None)
-                    if callable(fetch_indices):
-                        # 偏离值基准指数 (科创50/创业板综指等) 一并拉取, 供盘中
-                        # attach_deviation_columns_today 实时外推; 展示层仍按核心
-                        # 四只过滤, 多拉的指数不进侧栏。
-                        from app.indicators.pipeline import BENCHMARK_INDEX_SYMBOLS
-                        wanted = sorted(
-                            set(CORE_INDEX_SYMBOLS)
-                            | BENCHMARK_INDEX_SYMBOLS
-                            | self._collect_monitor_index_symbols()
-                        )
-                        try:
-                            fetched_indices = fetch_indices(wanted)
-                            if fetched_indices is None:
-                                replace_index_cache = False
-                            else:
-                                records = records + fetched_indices
-                        except Exception as e:  # noqa: BLE001
-                            logger.warning("自定义源指数行情拉取失败: %s", e)
+        from app.data_providers import custom as custom_sources
+        from app.data_providers import routing
+
+        chain = preferences.get_data_provider_chain("realtime")
+        tickflow_enabled = "tickflow" in chain
+        for provider_name in chain:
+            if provider_name == "tickflow":
+                break
+            if not routing.is_healthy("realtime", provider_name):
+                continue
+            try:
+                if not custom_sources.provider_has_dataset(provider_name, "realtime"):
+                    raise RuntimeError("provider does not declare realtime")
+                t0 = time.perf_counter()
+                now_ts = time.perf_counter()
+                provider = custom_sources.get_provider(provider_name)
+                records = provider.get_realtime()
+                if not records:
+                    raise RuntimeError("empty result")
+                replace_index_cache = True
+                fetch_indices = getattr(provider, "get_realtime_indices", None)
+                if callable(fetch_indices):
+                    from app.indicators.pipeline import BENCHMARK_INDEX_SYMBOLS
+
+                    wanted = sorted(
+                        set(CORE_INDEX_SYMBOLS)
+                        | BENCHMARK_INDEX_SYMBOLS
+                        | self._collect_monitor_index_symbols()
+                    )
+                    try:
+                        fetched_indices = fetch_indices(wanted)
+                        if fetched_indices is None:
                             replace_index_cache = False
-                except Exception as e:  # noqa: BLE001
-                    logger.warning("自定义实时行情拉取失败: %s", e)
-                    return
-                return self._process_full_market_records(
-                    records,
-                    t0=t0,
-                    now_ts=now_ts,
-                    replace_index_cache=replace_index_cache,
-                    final_boundary_ms=final_boundary_ms,
-                )
-            # 自定义源未配置 realtime → 回退 TickFlow
+                        else:
+                            records = records + fetched_indices
+                    except Exception as index_exc:  # noqa: BLE001
+                        logger.warning("custom index quote fetch failed: %s", index_exc)
+                        replace_index_cache = False
+            except Exception as exc:  # noqa: BLE001
+                routing.record_failure("realtime", provider_name, str(exc))
+                logger.warning("realtime provider %s failed, trying next source: %s", provider_name, exc)
+                continue
+            routing.record_publication(
+                "realtime", provider_name, rows=len(records), scope="full_market_snapshot",
+            )
+            records = [{**record, "source": provider_name} for record in records]
+            self._process_full_market_records(
+                records,
+                t0=t0,
+                now_ts=now_ts,
+                replace_index_cache=replace_index_cache,
+                final_boundary_ms=final_boundary_ms,
+            )
+            return
+        if not tickflow_enabled:
+            logger.warning("realtime provider chain exhausted: %s", chain)
+            return
 
         from app.tickflow.client import get_paid_realtime_client
 
@@ -850,7 +887,7 @@ class QuoteService:
         只更新展示缓存, 不写 daily/enriched、不评估监控 —— 防止收盘后数据源仍
         返回竞价前旧价时把陈旧收盘价固化到当日分区。
         """
-        from app.services import preferences
+        records = self._normalize_custom_realtime_records(records)
         all_index_symbols = set(self._repo.get_index_symbol_set()) if self._repo else set()
         core_index_symbols = set(CORE_INDEX_SYMBOLS)
         all_index_symbols.update(core_index_symbols)
@@ -974,6 +1011,24 @@ class QuoteService:
         return out
 
     @staticmethod
+    def _normalize_custom_realtime_records(
+        records: list[dict],
+    ) -> list[dict]:
+        """Normalize provider-specific realtime units to the internal OHLCV contract."""
+        normalized: list[dict] = []
+        for record in records:
+            volume = record.get("volume")
+            normalized.append({
+                **record,
+                # TDX exposes total volume in shares; daily/enriched OHLCV uses hands.
+                "volume": (
+                    float(volume) / 100.0
+                    if record.get("source") == "tdx" and volume is not None
+                    else volume
+                ),
+            })
+        return normalized
+
     @staticmethod
     def _build_daily(records: list[dict]) -> pl.DataFrame:
         """将 API records 转为日K格式 DataFrame (OHLCV + quote_ts, 写 kline_daily 用)。"""

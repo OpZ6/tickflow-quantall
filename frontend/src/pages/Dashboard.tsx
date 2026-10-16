@@ -26,7 +26,6 @@ type PreviewSource = 'gain' | 'loss' | 'amount' | 'active' | 'concept' | 'indust
 export function Dashboard() {
   const qc = useQueryClient()
   const [selectedDate, setSelectedDate] = useState<string | undefined>()
-  const [manualFetching, setManualFetching] = useState(false)
   const [previewStock, setPreviewStock] = useState<{
     symbol: string
     name?: string
@@ -60,9 +59,15 @@ export function Dashboard() {
   // 首次使用(无数据 + 未完成引导)自动弹窗: 同一会话只弹一次
   const [showWelcomeModal, setShowWelcomeModal] = useState(false)
   const dataStatus = useDataStatus({ staleTime: 60_000 })
+  const latestDataDate = dataStatus.data?.enriched?.latest_date ?? null
+  // 选中最新交易日等价于“回到实时”。后端的 as_of 是严格历史快照语义，
+  // 只有更早日期才能传入，避免页面标着实时却强制读取历史指数。
+  const overviewAsOf = selectedDate && selectedDate !== latestDataDate
+    ? selectedDate
+    : undefined
   const overview = useQuery({
-    queryKey: QK.overviewMarket(selectedDate),
-    queryFn: () => api.overviewMarket(selectedDate),
+    queryKey: QK.overviewMarket(overviewAsOf),
+    queryFn: () => api.overviewMarket(overviewAsOf),
     staleTime: 5_000,
     placeholderData: (prev) => prev,
   })
@@ -130,8 +135,7 @@ export function Dashboard() {
   // 同步完成后刷新看板数据
   useEffect(() => {
     if (fetchSucceeded) {
-      qc.invalidateQueries({ queryKey: QK.dataStatus })
-      qc.invalidateQueries({ queryKey: QK.overviewMarket(undefined) })
+      qc.invalidateQueries()
     }
   }, [fetchSucceeded, qc])
 
@@ -149,14 +153,9 @@ export function Dashboard() {
     }).catch(() => { /* 查询失败不阻塞, 用户仍可手动点击获取 */ })
   }, [hasNoData, fetchJobId])
 
-  // 手动刷新: 先重建后端 Polars 缓存(解决跨天残留), 再重新拉看板数据
+  // 手动更新必须运行完整数据管道；单纯重读缓存无法生成新的交易日。
   const handleRefresh = () => {
-    setManualFetching(true)
-    api.refreshCache()
-      .then(() => qc.invalidateQueries({ queryKey: ['overview-market'] }))
-      .finally(() => {
-        overview.refetch().finally(() => setManualFetching(false))
-      })
+    startFetch.mutate()
   }
 
   if (overview.isLoading && !data) {
@@ -181,9 +180,11 @@ export function Dashboard() {
   }
 
   const score = data.emotion?.score ?? 50
-  const latestDate = dataStatus.data?.enriched?.latest_date ?? null
+  const latestDate = latestDataDate
   const currentDate = selectedDate ?? data.as_of ?? ''
-  const quoteRunning = (!selectedDate || selectedDate === latestDate) && data.quote_status?.running
+  const stockRealtime = !overviewAsOf && !!data.quote_status?.running && (data.quote_status?.symbol_count ?? 0) > 0
+  const indexRealtime = stockRealtime && (data.quote_status?.index_symbol_count ?? 0) > 0
+  const realtimeLabel = indexRealtime ? '实时' : stockRealtime ? '股票实时 · 指数盘后' : '非实时'
   // 实时模式: none / watchlist / full_market。
   // watchlist 模式仅自选 ≤5 只实时, 看板呈现的大盘数据实为盘后快照, 需提示避免误读。
   const quoteMode = data.quote_status?.mode as ('none' | 'watchlist' | 'full_market') | undefined
@@ -257,7 +258,7 @@ export function Dashboard() {
           {currentDate ? (
             <DatePicker
               value={currentDate}
-              onChange={setSelectedDate}
+              onChange={value => setSelectedDate(value === latestDate ? undefined : value)}
               min={dataStatus.data?.enriched?.earliest_date ?? undefined}
               max={latestDate ?? undefined}
               className="w-32"
@@ -266,13 +267,13 @@ export function Dashboard() {
             <span className="font-mono text-secondary">—</span>
           )}
           <span className="flex items-center gap-1"><Timer className="h-3 w-3" />{quoteAge(data.quote_status?.quote_age_ms)}</span>
-          <span className={quoteRunning ? 'text-accent' : 'text-warning'}>{quoteRunning ? '实时' : '非实时'}</span>
+          <span className={indexRealtime ? 'text-accent' : 'text-warning'}>{realtimeLabel}</span>
           <button
             onClick={handleRefresh}
-            disabled={manualFetching}
+            disabled={isFetching}
             className="inline-flex items-center gap-1 rounded-btn border border-border bg-elevated px-2 py-1 text-[11px] text-secondary transition-colors hover:text-foreground disabled:opacity-50"
           >
-            <RefreshCw className={`h-3 w-3 ${manualFetching ? 'animate-spin' : ''}`} />重载
+            <RefreshCw className={`h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />更新数据
           </button>
           {!dashEditing ? (
             <button

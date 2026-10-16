@@ -525,9 +525,9 @@ def _basic_filter_dependencies(config: dict) -> set[str]:
     if any(config.get(key) is not None for key in ("turnover_min", "turnover_max")):
         dependencies.add("turnover_rate")
     if any(config.get(key) is not None for key in ("market_cap_min", "market_cap_max")):
-        dependencies.add("total_shares")
+        dependencies.update(("total_shares", "raw_close"))
     if any(config.get(key) is not None for key in ("float_cap_min", "float_cap_max")):
-        dependencies.add("float_shares")
+        dependencies.update(("float_shares", "raw_close"))
     if config.get("exclude_st"):
         dependencies.add("name")
     return dependencies
@@ -612,6 +612,7 @@ class StrategyBacktestConfig:
     fees_pct: float = 0.0002
     commission_pct: float | None = None
     stamp_tax_pct: float | None = None
+    stamp_tax_policy: Literal["fixed", "a_share_historical"] = "fixed"
     slippage_bps: float = 5.0
     max_positions: int = 10
     max_exposure_pct: float = 1.0
@@ -661,6 +662,7 @@ class BacktestResultPolicy:
     include_return_distribution: bool = True
     include_benchmark: bool = True
     include_strategy_info: bool = True
+    include_execution_rejections: bool = False
 
     @classmethod
     def optimizer_trial(cls, objective: str) -> BacktestResultPolicy:
@@ -682,6 +684,7 @@ class BacktestResultPolicy:
             include_trades=self.include_trades,
             include_per_symbol_stats=self.include_per_symbol_stats,
             include_return_distribution=self.include_return_distribution,
+            include_execution_rejections=self.include_execution_rejections,
         )
 
     def select_stats(self, stats: dict) -> dict:
@@ -1116,6 +1119,8 @@ class StrategyBacktestService:
         t0 = time.perf_counter()
         run_id = uuid.uuid4().hex[:10]
         result_policy = result_policy or BacktestResultPolicy()
+        requested_start = config.start
+        requested_end = config.end
         # 因子归因快照容器: 日线路径在 _apply_score 里填充, 其余路径保持空
         factor_snapshot: dict = {}
 
@@ -1193,6 +1198,15 @@ class StrategyBacktestService:
                 f"移动止盈回撤({trailing_take_profit_drawdown:.0%})不能大于"
                 f"激活涨幅({trailing_take_profit_activate:.0%}), 请调整后再试"
             )
+        profit_lock_steps = self._override_value(
+            overrides,
+            "profit_lock_steps",
+            s.meta.get("profit_lock_steps"),
+        )
+        close_breakeven_activate_pct = self._normalize_pct(
+            self._override_value(overrides, "close_breakeven_activate_pct", s.meta.get("close_breakeven_activate_pct")),
+            0.005, 2.0,
+        )
         max_hold_days = self._override_value(overrides, "max_hold_days", s.max_hold_days)
         score_min, score_max = self._normalize_score_range(
             overrides.get("score_min"),
@@ -1378,12 +1392,16 @@ class StrategyBacktestService:
             fees_pct=config.fees_pct,
             commission_pct=config.commission_pct,
             stamp_tax_pct=config.stamp_tax_pct,
+            stamp_tax_policy=config.stamp_tax_policy,
             slippage_bps=config.slippage_bps,
             stop_loss_pct=stop_loss,
             take_profit_pct=take_profit,
             trailing_stop_pct=trailing_stop,
             trailing_take_profit_activate_pct=trailing_take_profit_activate,
             trailing_take_profit_drawdown_pct=trailing_take_profit_drawdown,
+            entry_risk_profiles=overrides.get("entry_risk_profiles"),
+            profit_lock_steps=profit_lock_steps,
+            close_breakeven_activate_pct=close_breakeven_activate_pct,
             max_hold_days=max_hold_days,
             max_positions=config.max_positions,
             max_exposure_pct=config.max_exposure_pct,
@@ -1488,6 +1506,11 @@ class StrategyBacktestService:
                 exit_delay_bars=1 if matcher_config.exit_fill == "open_t+1" else 0,
                 reference_price=reference_price,
                 minute_exit_trigger=matcher_config.exit_fill == "signal_next_minute",
+                entry_fill_time_mask=self._matrix_date_range_mask(
+                    sim_market_data.timestamp_labels,
+                    config.start,
+                    config.end,
+                ),
             )
             timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
             del sim_market_data, sim_signal_matrix
@@ -1622,6 +1645,11 @@ class StrategyBacktestService:
                 exit_delay_bars=1 if matcher_config.exit_fill == "open_t+1" else 0,
                 reference_price=reference_price,
                 minute_exit_trigger=matcher_config.exit_fill == "signal_next_minute",
+                entry_fill_time_mask=self._matrix_date_range_mask(
+                    sim_market_data.timestamp_labels,
+                    config.start,
+                    config.end,
+                ),
             )
             timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
             del sim_market_data, sim_signal_matrix
@@ -1713,6 +1741,51 @@ class StrategyBacktestService:
             timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
             del panel, sim_panel, sim_entry_mask, sim_exit_mask
 
+        requested_labels = [
+            label[:10]
+            for label in market_matrix.timestamp_labels
+            if requested_start.isoformat() <= label[:10] <= requested_end.isoformat()
+        ]
+        data_rows = np.any(
+            np.isfinite(market_matrix.close) & (market_matrix.close > 0), axis=1
+        )
+        entry_rows = np.any(market_matrix.entry != 0, axis=1)
+        data_labels = [
+            label[:10]
+            for label, present in zip(
+                market_matrix.timestamp_labels, data_rows, strict=True
+            )
+            if present and requested_start.isoformat() <= label[:10] <= requested_end.isoformat()
+        ]
+        entry_labels = [
+            label[:10]
+            for label, present in zip(
+                market_matrix.timestamp_labels, entry_rows, strict=True
+            )
+            if present and requested_start.isoformat() <= label[:10] <= requested_end.isoformat()
+        ]
+        coverage_stats = {
+            "requested_start": requested_start.isoformat(),
+            "requested_end": requested_end.isoformat(),
+            "data_start": data_labels[0] if data_labels else None,
+            "data_end": data_labels[-1] if data_labels else None,
+            "entry_start": entry_labels[0] if entry_labels else None,
+            "entry_end": entry_labels[-1] if entry_labels else None,
+            "requested_trading_days": len(requested_labels),
+            "data_trading_days": len(data_labels),
+            "entry_trading_days": len(entry_labels),
+            "data_day_coverage": (
+                round(len(data_labels) / len(requested_labels), 4)
+                if requested_labels
+                else 0.0
+            ),
+            "range_clipped": bool(
+                not data_labels
+                or (date.fromisoformat(data_labels[0]) - requested_start).days > 7
+                or (requested_end - date.fromisoformat(data_labels[-1])).days > 7
+            ),
+        }
+
         t_sim = time.perf_counter()
 
         # 撮合 — 两条生产路径共享同一只读 MarketMatrix。
@@ -1760,6 +1833,14 @@ class StrategyBacktestService:
         result.stats["matrix_data_cache_hit"] = matrix_data_cache_hit
         result.stats["matrix_data_cache_status"] = matrix_data_cache_status
         result.stats["matrix_data_cache_timing_ms"] = dict(matrix_data_cache_timing_ms)
+        trade_entry_dates = sorted(
+            str(trade.entry_date)[:10]
+            for trade in result.trades
+            if getattr(trade, "entry_date", None)
+        )
+        coverage_stats["first_trade"] = trade_entry_dates[0] if trade_entry_dates else None
+        coverage_stats["last_trade"] = trade_entry_dates[-1] if trade_entry_dates else None
+        result.stats["coverage"] = coverage_stats
         if prepared is not None:
             result.stats["shared_market_data_bytes"] = prepared.market_data.nbytes
             result.stats["shared_prepare_timing_ms"] = prepared.prepare_timing_ms
@@ -1783,6 +1864,8 @@ class StrategyBacktestService:
             "trailing_stop": trailing_stop,
             "trailing_take_profit_activate": trailing_take_profit_activate,
             "trailing_take_profit_drawdown": trailing_take_profit_drawdown,
+            "profit_lock_steps": profit_lock_steps,
+            "close_breakeven_activate_pct": close_breakeven_activate_pct,
             "max_hold_days": max_hold_days,
             "full_horizon_days": full_horizon_days,
             "score_min": score_min,
@@ -1991,6 +2074,7 @@ class StrategyBacktestService:
             fees_pct=config.fees_pct,
             commission_pct=config.commission_pct,
             stamp_tax_pct=config.stamp_tax_pct,
+            stamp_tax_policy=config.stamp_tax_policy,
             slippage_bps=config.slippage_bps,
             stop_loss_pct=stop_loss,
             take_profit_pct=take_profit,
@@ -2695,6 +2779,7 @@ class StrategyBacktestService:
             "fees_pct": c.fees_pct,
             "commission_pct": c.commission_pct,
             "stamp_tax_pct": c.stamp_tax_pct,
+            "stamp_tax_policy": c.stamp_tax_policy,
             "slippage_bps": c.slippage_bps,
             "max_positions": c.max_positions,
             "max_exposure_pct": c.max_exposure_pct,

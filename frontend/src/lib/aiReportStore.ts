@@ -29,7 +29,6 @@ export interface ActiveTask {
   doneAt?: number             // 进入 done/error 态的时间戳(用于气泡过期清理)
   dismissed?: boolean         // 用户已从气泡点击查看过 → 不再在气泡显示
 }
-
 export interface HistoryReport {
   id: string
   symbol: string
@@ -99,7 +98,6 @@ function patchTask(id: string, patch: Partial<ActiveTask>) {
   rebuildSnap()
   emit()
 }
-
 // ===== 公开:查询 hooks =====
 
 export function useBubbleTasks(): ActiveTask[] {
@@ -276,14 +274,12 @@ export function openDialog(taskId: string) {
   rebuildSnap()
   emit()
 }
-
 /** 最小化对话框 → 变成气泡。 */
 export function minimizeDialog() {
   dialogMinimized = true
   rebuildSnap()
   emit()
 }
-
 /** 关闭对话框(活跃任务继续在后台跑,仅移除对话框视图)。
  *  对历史报告:仅关闭视图。
  */
@@ -293,7 +289,6 @@ export function closeDialog() {
   rebuildSnap()
   emit()
 }
-
 /** 从气泡恢复对话框。
  *  仅对已完成/失败的任务标记 dismissed(看过结果就不必再弹);
  *  生成中的任务不标记 —— 用户再次最小化时气泡应重新出现。
@@ -308,7 +303,6 @@ export function restoreDialog(taskId: string) {
   rebuildSnap()
   emit()
 }
-
 /** 重试一个失败/已完成的任务(以新任务方式重新分析)。 */
 export async function retryAnalysis(task: { symbol: string; name: string; focus: string }): Promise<{ error?: string }> {
   return startAnalysis(task.symbol, task.name, task.focus)
@@ -333,4 +327,3 @@ export function openHistoryReport(reportId: string) {
   rebuildSnap()
   emit()
 }
-

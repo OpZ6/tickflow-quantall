@@ -144,8 +144,8 @@ export function AnalysisKChart({
       itemStyle: { color: r.close >= r.open ? THEME.volUp : THEME.volDown },
     }))
     const dateIndex = new Map(dates.map((d, i) => [d, i]))
-    // 默认显示最近 6 个月 ≈ 120 个交易日;数据不足则全部显示
-    const showBars = 120
+    // 默认显示最近一年 ≈ 250 个交易日;数据不足则全部显示
+    const showBars = 250
     const zoomStart = dates.length > showBars ? Math.round((1 - showBars / dates.length) * 100) : 0
 
     // 把后端 series(按 seriesDates 对齐)映射到前端 rows 的 dates 顺序

@@ -388,6 +388,9 @@ export interface IndexQuote {
 
 // ===== Screener =====
 export interface ScreenerStrategy {
+  /** 策略来源目录标注 (上游内置 / 本项目自研) */
+  catalog_origin?: 'upstream' | 'project' | null
+  catalog_label?: string | null
   id: string
   name: string
   description: string
@@ -407,6 +410,10 @@ export interface ScreenerResult {
   rows: any[]
   total: number
   elapsed_ms: number
+  /** 结果可追溯: 来源运行 ID 与参数指纹 */
+  source_run_id?: string | null
+  params_fingerprint?: string | null
+  input_fingerprint?: string | null
 }
 
 export interface ScreenerResultSummary {
@@ -414,6 +421,10 @@ export interface ScreenerResultSummary {
   as_of: string
   /** 渐进式 run_all 写入的计算时间戳 (Unix ms); 监控实时叠加等来源无此字段 */
   computed_at?: number | null
+  /** 结果可追溯: 来源运行 ID 与参数指纹 */
+  source_run_id?: string | null
+  params_fingerprint?: string | null
+  input_fingerprint?: string | null
 }
 
 export interface ScreenerCachedSummary {
@@ -812,6 +823,9 @@ export interface CompositeChildInfo {
 }
 
 export interface StrategyDetail {
+  /** 策略来源目录标注 (上游内置 / 本项目自研) */
+  catalog_origin?: 'upstream' | 'project' | null
+  catalog_label?: string | null
   id: string
   name: string
   description: string
@@ -843,6 +857,16 @@ export interface StrategyDetail {
   trailing_take_profit_activate: number | null
   trailing_take_profit_drawdown: number | null
   max_hold_days: number | null
+  /** 分批盈亏锁定步进 (本地回测增强) */
+  profit_lock_steps?: Array<{
+    activate_pct: number
+    floor_return_pct?: number
+    trailing_drawdown_pct?: number
+  }> | null
+  /** 收盘价保本激活阈值 (本地回测增强) */
+  close_breakeven_activate_pct?: number | null
+  /** 建议最大持仓数 (本地回测增强) */
+  recommended_max_positions?: number | null
   display_limit?: number
   order_by: string
   descending: boolean
@@ -1848,6 +1872,9 @@ export interface StrategyBacktestResult {
     trailing_stop: number | null
     trailing_take_profit_activate: number | null
     trailing_take_profit_drawdown: number | null
+    /** 收盘价保本激活阈值 (本地回测增强) */
+    close_breakeven_activate_pct?: number | null
+    recommended_max_positions?: number | null
     score_min: number | null
     score_max: number | null
     max_hold_days: number | null
@@ -1999,6 +2026,8 @@ export interface CapabilityRoute {
   effective_display: string
   candidates: CapabilityCandidate[]                // 当前可用候选 (按当前 TickFlow 档位过滤)
   pending: CapabilityCandidate[]                   // 声明了该能力但未就绪的源 (置灰提示)
+  /** 数据源优先级链 (主源在前, 后续为自动故障切换顺序) */
+  priority_chain: string[]
 }
 
 export interface CapabilityMatrix {
@@ -2970,7 +2999,7 @@ export const api = {
         : `/api/screener/cached-result/${encodeURIComponent(strategyId)}`,
     ),
   screenerCached: (extColumns?: string) =>
-    request<{ as_of: string | null; results: Record<string, { total: number; as_of: string; rows: any[] }>; today_ever_matched: Record<string, string[]> | null; today_ever_rows: Record<string, Record<string, any>> | null; updated_at: number | null }>(
+    request<{ as_of: string | null; results: Record<string, { total: number; as_of: string; rows: any[]; source_run_id?: string | null; params_fingerprint?: string | null; input_fingerprint?: string | null }>; today_ever_matched: Record<string, string[]> | null; today_ever_rows: Record<string, Record<string, any>> | null; updated_at: number | null }>(
       extColumns
         ? `/api/screener/cached?ext_columns=${encodeURIComponent(extColumns)}`
         : '/api/screener/cached',

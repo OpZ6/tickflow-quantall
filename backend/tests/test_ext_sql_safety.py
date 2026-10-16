@@ -122,6 +122,14 @@ def test_watchlist_parser_rejects_malicious_config_id():
     assert _parse_ext_columns("normal.field") == [("normal", "field")]
 
 
+def test_screener_parser_deduplicates_same_field():
+    from app.api.screener import _parse_ext_columns
+
+    assert _parse_ext_columns("concept.tags,concept.tags") == [
+        ("concept", "tags")
+    ]
+
+
 def test_kline_inline_parser_filter_via_is_valid_ext_ident():
     """kline parser 内联, 直接用 is_valid_ext_ident 验证过滤逻辑。"""
     # 模拟 kline._attach_ext 的解析过滤

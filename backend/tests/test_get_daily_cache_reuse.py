@@ -104,3 +104,27 @@ def test_get_daily_falls_back_to_scan_when_cache_does_not_cover_start():
     result = repo.get_daily(SYM, dates[0] - timedelta(days=5), dates[-1])
     assert calls["scan"] == 1
     assert not result.is_empty()
+
+
+def test_cold_stock_queries_do_not_warm_entire_market():
+    raw = _raw_frame()
+    repo, _ = _bare_repo(raw)
+    def forbidden():
+        raise AssertionError("single-stock read triggered full-market warmup")
+    repo.get_enriched_latest = forbidden
+    repo._refresh_enriched = forbidden
+    repo._scan_daily_batch = lambda symbols, start, end, columns: raw.select(columns) if columns else raw
+    dates = raw["date"].to_list()
+    for columns in (None, ["date", "close"], ["date", "signal_limit_up", "signal_broken_limit_up"]):
+        assert not repo.get_daily(SYM, dates[0], dates[-1], columns).is_empty()
+    assert not repo.get_daily_batch([SYM], dates[0], dates[-1], ["date", "close"]).is_empty()
+
+
+def test_single_stock_query_preserves_ready_latest_snapshot():
+    raw = _raw_frame()
+    repo, _ = _bare_repo(raw)
+    last = raw["date"].max()
+    repo._enriched_cache_date = last
+    repo._enriched_cache = raw.filter(pl.col("date") == last).with_columns(pl.lit(123.).alias("close"))
+    result = repo.get_daily(SYM, raw["date"].min(), last, ["date", "close"])
+    assert result.filter(pl.col("date") == last)["close"].item() == 123.

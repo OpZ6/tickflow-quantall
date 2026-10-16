@@ -16,7 +16,10 @@ import pytest
 
 from app.indicators import pipeline
 from app.jobs import daily_pipeline
-from app.jobs.daily_pipeline import _prune_partial_enriched_partitions
+from app.jobs.daily_pipeline import (
+    _classify_missing_enriched_dates,
+    _prune_partial_enriched_partitions,
+)
 from app.services import data_integrity, preferences
 from app.tickflow.capabilities import CapabilitySet
 
@@ -73,6 +76,41 @@ def test_enriched_date_without_daily_is_left_alone(tmp_path) -> None:
 
     assert _prune_partial_enriched_partitions(daily, enriched) == []
     assert (enriched / f"date={day}").exists()
+
+
+def test_intentionally_filtered_halt_row_is_not_partial(tmp_path) -> None:
+    daily = tmp_path / "kline_daily"
+    enriched = tmp_path / "kline_daily_enriched"
+    day = "2026-09-02"
+    daily_part = daily / f"date={day}"
+    daily_part.mkdir(parents=True)
+    pl.DataFrame(
+        {
+            "symbol": ["active", "halted"],
+            "open": [10.0, 0.0],
+            "high": [10.0, 0.0],
+            "volume": [100.0, 0.0],
+            "amount": [1000.0, 0.0],
+        }
+    ).write_parquet(daily_part / "part.parquet")
+    _write_partition(enriched, day, ["active"])
+
+    assert _prune_partial_enriched_partitions(daily, enriched) == []
+    assert (enriched / f"date={day}").exists()
+
+
+def test_pruned_middle_partition_requires_full_rebuild() -> None:
+    daily = ["2026-01-05", "2026-01-06", "2026-01-07"]
+    enriched = ["2026-01-05", "2026-01-07"]
+
+    assert _classify_missing_enriched_dates(daily, enriched) == (True, False)
+
+
+def test_only_trailing_dates_use_incremental_rebuild() -> None:
+    daily = ["2026-01-05", "2026-01-06", "2026-01-07"]
+    enriched = ["2026-01-05", "2026-01-06"]
+
+    assert _classify_missing_enriched_dates(daily, enriched) == (False, True)
 
 
 @pytest.mark.parametrize("legacy_halt", [False, True])
@@ -191,6 +229,7 @@ def test_pruned_interior_date_is_rebuilt_without_new_daily_or_factors(tmp_path, 
     monkeypatch.setattr(daily_pipeline.settings, "data_dir", tmp_path)
     monkeypatch.setattr(preferences, "load", lambda: {
         "pipeline_pull_a_share": False, "pipeline_regime_enabled": False,
+        "pipeline_pull_index": False, "pipeline_pull_etf": False,
         "minute_sync_enabled": False, "adj_factor_provider": "tickflow",
     })
     monkeypatch.setattr(daily_pipeline.instrument_sync, "sync_instruments", lambda *_: 0)
@@ -203,8 +242,10 @@ def test_pruned_interior_date_is_rebuilt_without_new_daily_or_factors(tmp_path, 
 
     def rebuild(**kwargs):
         calls.append(kwargs)
-        assert kwargs["new_dates_only"] is True
-        assert kwargs["symbols"] is None
+        # Quantall treats an interior hole as a backward extension so rolling
+        # indicators after the hole are rebuilt from a consistent history.
+        assert "new_dates_only" not in kwargs
+        assert "symbols" not in kwargs
         _write_partition(enriched, dates[1], ["a", "b"])
         return 2
 

@@ -4,9 +4,25 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call
 
+import pytest
+
+from app.data_providers import routing
 from app.services import depth_service as depth_module
+from app.services import preferences
 from app.services.depth_service import DepthService
 from app.tickflow.capabilities import Cap, CapabilityLimits, CapabilitySet
+
+
+@pytest.fixture(autouse=True)
+def _isolated_depth_route(monkeypatch):
+    routing.reset_health()
+    monkeypatch.setattr(
+        preferences,
+        "get_data_provider_chain",
+        lambda _dataset: [preferences.get_depth5_data_provider()],
+    )
+    yield
+    routing.reset_health()
 
 
 def _service(*, batch: int = 2, rpm: int = 30) -> DepthService:
@@ -95,7 +111,7 @@ def test_custom_depth_failure_isolated_per_batch(monkeypatch):
     monkeypatch.setattr(depth_module, "sleep_between_batches", MagicMock())
 
     assert _service()._call_depth_batch(["A", "B", "C"]) == {
-        "C": {"ask_volumes": [0]},
+        "C": {"ask_volumes": [0], "source": "custom_depth"},
     }
     assert provider.get_depth_batch.call_count == 2
 

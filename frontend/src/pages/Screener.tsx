@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ScanSearch, Clock, TrendingUp, Star, Filter, Layers, Network, Sparkles, RefreshCw, Settings2, Store, RotateCcw, X, SlidersHorizontal } from 'lucide-react'
 import { api, genRuleId, type ScreenerStrategy, type ScreenerResult } from '@/lib/api'
@@ -42,13 +43,14 @@ import {
 const SHOW_STRATEGY_STORE = false
 
 export function Screener() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [assetType, setAssetType] = useState<'stock' | 'etf'>('stock')
-  // 周期显示筛选: 全部 / 日线 / 分钟 — 只过滤卡片显示, 不影响池和执行;
-  // 执行按每个策略自己声明的 timeframes 路由 (日线走盘后缓存, 分钟走本地分钟K分区)
+  // Preserve strategy deep links while adding the upstream daily/minute view filter.
   const [tfFilter, setTfFilter] = useState<'all' | '1d' | '1m'>('all')
-  const [activeStrategy, setActiveStrategy] = useState<string | null>(null)
+  const [activeStrategy, setActiveStrategy] = useState<string | null>(() => searchParams.get('strategyId'))
   const [result, setResult] = useState<ScreenerResult | null>(null)
-  const [asOf, setAsOf] = useState<string>('')
+  const [asOf, setAsOf] = useState<string>(() => searchParams.get('asOf') ?? '')
   const [batchMsg, setBatchMsg] = useState<string>('')
   const [previewSymbol, setPreviewSymbol] = useState<string | null>(null)
   const [previewName, setPreviewName] = useState<string>('')
@@ -96,9 +98,15 @@ export function Screener() {
   }, [])
   // 截断提示可关闭 (仅本次会话, 不持久化)
   const [intradayCapDismissed, setIntradayCapDismissed] = useState(false)
-  const [showAll, setShowAll] = useState(false)
+  const [showAll, setShowAll] = useState(() => searchParams.get('showAll') === '1')
   const [showFilter, setShowFilter] = useState(false)
-  const [filter, setFilter] = useState<ScreenerFilterType>(defaultFilter)
+  const [filter, setFilter] = useState<ScreenerFilterType>(() => {
+    try {
+      const raw = searchParams.get('filter')
+      return raw ? { ...defaultFilter, ...JSON.parse(raw) } : defaultFilter
+    } catch { return defaultFilter }
+  })
+  const initialAsOf = useRef(searchParams.get('asOf'))
   const filterMap = useRef<Map<string, ScreenerFilterType>>(new Map())
   const runAllDateRef = useRef<string | null>(null)
   const minuteRunDateRef = useRef<string | null>(null)
@@ -198,7 +206,7 @@ export function Screener() {
   // 默认日期 = enriched 最新日期（始终跟随最新）
   useEffect(() => {
     const latest = dataStatus.data?.enriched?.latest_date
-    if (latest) setAsOf(latest)
+    if (latest && !initialAsOf.current) setAsOf(latest)
   }, [dataStatus.data?.enriched?.latest_date])
 
   const strategyPresets = useMemo(
@@ -338,6 +346,7 @@ export function Screener() {
         toast(`已跳过 ${data.skipped_unknown.length} 个不存在的策略，并从策略池移除`, 'success')
       }
       qc.invalidateQueries({ queryKey: ['screener-cached'] })
+      qc.invalidateQueries({ queryKey: ['kline-chart'] })
     },
   })
 
@@ -652,6 +661,7 @@ export function Screener() {
       setHitCounts(prev => ({ ...prev, [vars.id]: data.total }))
       // 单策略重跑后刷新摘要和当前按需明细，避免参数保存后回退到旧缓存。
       qc.invalidateQueries({ queryKey: ['screener-cached'] })
+      qc.invalidateQueries({ queryKey: ['kline-chart'] })
     },
   })
 
@@ -995,6 +1005,8 @@ export function Screener() {
                   name={s.name}
                   description={s.description}
                   source={s.source}
+                  catalogOrigin={s.catalog_origin}
+                  catalogLabel={s.catalog_label}
                   active={activeStrategy === s.id}
                   count={hitCounts[id]}
                   expiredCount={expiredCounts[id]}
@@ -1174,6 +1186,26 @@ export function Screener() {
                     activeSymbol={previewSymbol}
                     watchlistSet={watchlistSet}
                     onPreview={(symbol, name, navList) => { setPreviewSymbol(symbol); setPreviewName(name ?? ''); setPreviewNavList(navList ?? []) }}
+                    onOpenChart={(row) => {
+                      const rowStrategyIds = symbolStrategyMap.get(row.symbol) ?? (activeStrategy ? [activeStrategy] : [])
+                      const sourceResult = activeStrategy && result?.strategy === activeStrategy
+                        ? result
+                        : rowStrategyIds.length > 0 ? effectiveResults?.[rowStrategyIds[0]] : undefined
+                      const back = new URLSearchParams({ asOf, showAll: showAll ? '1' : '0', filter: JSON.stringify(filter) })
+                      if (activeStrategy) back.set('strategyId', activeStrategy)
+                      const params = new URLSearchParams({
+                        symbol: row.symbol,
+                        name: row.name ?? '',
+                        asOf,
+                        signalDate: asOf,
+                        strategyIds: rowStrategyIds.join(','),
+                        returnTo: `/screener?${back.toString()}`,
+                      })
+                      if (rowStrategyIds[0]) params.set('strategyId', rowStrategyIds[0])
+                      if (sourceResult?.source_run_id) params.set('sourceRunId', sourceResult.source_run_id)
+                      if (sourceResult?.params_fingerprint) params.set('paramsFingerprint', sourceResult.params_fingerprint)
+                      navigate(`/stock-analysis?${params.toString()}`)
+                    }}
                     onAddToWatchlist={(symbol, groupId) => toggleWatchlist.mutate({ symbol, action: 'add', groupId })}
                     onRemoveFromWatchlist={symbol => toggleWatchlist.mutate({ symbol, action: 'remove' })}
                     watchlistPending={toggleWatchlist.isPending}

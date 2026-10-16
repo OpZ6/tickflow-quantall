@@ -96,6 +96,7 @@ def test_custom_financial_provider_receives_shares_contract(monkeypatch):
     monkeypatch.setattr(financial_sync, "_financial_is_custom", lambda: True)
     monkeypatch.setattr(preferences, "get_financial_provider", lambda: "custom-test")
     monkeypatch.setattr(custom_sources, "get_provider", lambda _name: Provider())
+    monkeypatch.setattr(custom_sources, "provider_has_dataset", lambda _name, dataset: dataset == "financial")
 
     result = financial_sync._fetch_table(
         "shares",

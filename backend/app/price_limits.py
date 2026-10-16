@@ -23,7 +23,7 @@ def is_risk_warning_name(name: str | None) -> bool:
 def board_limit_pct(symbol: str) -> float:
     if symbol.endswith(".BJ"):
         return BEIJING_BOARD_LIMIT
-    if symbol.startswith(("300", "301", "688", "689")):
+    if symbol.startswith(("300", "301", "302", "688", "689")):
         return GROWTH_BOARD_LIMIT
     return MAIN_BOARD_LIMIT
 
@@ -132,7 +132,11 @@ def polars_price_limit_pct(
     is_risk_warning: pl.Expr,
 ) -> pl.Expr:
     """Return a vectorized Polars expression for the effective daily limit."""
-    is_growth = symbol.str.starts_with("300") | symbol.str.starts_with("301")
+    is_growth = (
+        symbol.str.starts_with("300")
+        | symbol.str.starts_with("301")
+        | symbol.str.starts_with("302")
+    )
     is_star = symbol.str.starts_with("688") | symbol.str.starts_with("689")
     is_beijing = symbol.str.ends_with(".BJ")
     is_non_main = is_growth | is_star | is_beijing

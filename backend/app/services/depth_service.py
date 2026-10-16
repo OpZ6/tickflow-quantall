@@ -8,7 +8,7 @@
 
 数据流:
   盘中轮询线程(交易时段, 独立 sleep, 不绑行情轮询):
-    读 enriched 内存缓存(线程安全) → 涨跌停名单 → tf.depth.batch
+    读 enriched 内存缓存(线程安全) → 涨跌停名单 → provider.get_depth5
     → 算 sealed → 更新内存缓存(不落盘) → sealed_ready=True
   盘后定版 job(可配置时间, 默认15:02):
     最后拉一次 → 落盘 depth5 parquet(定版)
@@ -301,58 +301,65 @@ class DepthService:
             self._persist(enriched_date)
 
     def _call_depth_batch(self, symbols: list[str]) -> dict:
-        """按独立五档路由取数; 所有 provider 共用分片限速且失败不跨源回退。"""
-        from app.services import preferences
-
-        provider_name = preferences.get_depth5_data_provider()
-        if provider_name == "tickflow":
-            from app.data_providers.registry import get_provider
-
-            provider = get_provider("tickflow")
-        else:
-            from app.data_providers import custom as custom_sources
-
-            try:
-                if not custom_sources.provider_has_dataset(provider_name, "depth5"):
-                    logger.warning("depth provider %s 未声明 depth5, 跳过本轮", provider_name)
-                    return {}
-                provider = custom_sources.get_provider(provider_name)
-            except Exception as e:
-                logger.warning("depth provider %s 解析失败, 跳过本轮: %s", provider_name, e)
-                return {}
-
-        fetch_depth = getattr(provider, "get_depth_batch", None)
-        if not callable(fetch_depth):
-            logger.warning("depth provider %s 未实现 get_depth_batch, 跳过本轮", provider_name)
-            return {}
+        """按五档专用优先级取数; 单批失败隔离, 整源无结果时才切换后备源。"""
+        from app.data_providers import custom as custom_sources
+        from app.data_providers import routing
 
         capset = self._get_capset()
         limit = resolve_limit(capset, Cap.DEPTH5_BATCH, default_batch=100, default_rpm=30)
 
-        result: dict = {}
-        chunks = chunked(symbols, limit.batch)
-        for i, chunk in enumerate(chunks):
-            sleep_between_batches(i, limit.rpm, default_interval=2.0)
-            try:
-                data = fetch_depth(chunk)
-                if isinstance(data, dict):
-                    result.update(data)
-                else:
+        def fetch(provider_name: str) -> dict:
+            if provider_name == "tickflow":
+                if not capset.has(Cap.DEPTH5_BATCH):
+                    raise RuntimeError("TickFlow depth5 capability unavailable")
+                from app.data_providers.registry import get_provider
+
+                provider = get_provider("tickflow")
+            else:
+                if not custom_sources.provider_has_dataset(provider_name, "depth5"):
+                    raise RuntimeError("provider does not declare depth5")
+                provider = custom_sources.get_provider(provider_name)
+
+            fetch_depth = getattr(provider, "get_depth_batch", None)
+            if not callable(fetch_depth):
+                fetch_depth = getattr(provider, "get_depth5", None)
+            if not callable(fetch_depth):
+                raise RuntimeError("provider does not implement a depth batch method")
+
+            result: dict = {}
+            for i, symbol_chunk in enumerate(chunked(symbols, limit.batch)):
+                sleep_between_batches(i, limit.rpm, default_interval=2.0)
+                try:
+                    data = fetch_depth(symbol_chunk)
+                    if isinstance(data, dict):
+                        result.update(data)
+                    else:
+                        logger.warning(
+                            "depth provider %s 第 %d 批返回非 dict, 已跳过",
+                            provider_name,
+                            i + 1,
+                        )
+                except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                        "depth provider %s 第 %d 批返回非 dict, 已跳过",
+                        "depth provider %s 第 %d 批失败(%d 只): %s",
                         provider_name,
                         i + 1,
+                        len(symbol_chunk),
+                        exc,
                     )
-            except Exception as e:  # noqa: BLE001
-                logger.warning(
-                    "depth provider %s 第 %d 批失败(%d 只): %s",
-                    provider_name,
-                    i + 1,
-                    len(chunk),
-                    e,
-                )
-                # 单批失败不影响其他批
-        return result
+            return result
+
+        try:
+            result, provider_name = routing.run_with_failover(
+                "depth5", fetch, is_success=bool,
+            )
+        except routing.ProviderChainExhaustedError as exc:
+            logger.warning("depth5 provider chain failed: %s", exc)
+            return {}
+        return {
+            symbol: {**record, "source": provider_name}
+            for symbol, record in result.items()
+        }
 
     def finalize(self) -> None:
         """盘后定版: 拉一次 + 落盘。"""
@@ -550,20 +557,33 @@ class DepthService:
         - user_interval: 用户设置(经套餐 clamp 后)的间隔
         """
         from app.services import preferences
-        from app.tickflow.policy import tier_label
+        provider_name = preferences.get_depth5_data_provider()
+        if provider_name == "tickflow":
+            capset = self._get_capset()
+            lim = capset.limits(
+                __import__("app.tickflow.capabilities", fromlist=["Cap"]).Cap.DEPTH5_BATCH
+            )
+            batch_size = lim.batch if lim and lim.batch else 100
+            rpm = lim.rpm if lim and lim.rpm else 30
+        else:
+            from app.data_providers import custom as custom_sources
 
-        capset = self._get_capset()
-        lim = capset.limits(__import__("app.tickflow.capabilities", fromlist=["Cap"]).Cap.DEPTH5_BATCH)
-        batch_size = (lim.batch if lim and lim.batch else 100)
-        rpm = (lim.rpm if lim and lim.rpm else 30)
+            provider = custom_sources.get_provider(provider_name)
+            batch_size = int(getattr(provider, "depth5_batch_size", 80))
+            rpm = int(getattr(provider, "depth5_rpm", 30))
 
         # ① 套餐范围 clamp
-        tier = tier_label().split()[0].split("+")[0].strip().lower()
+        if provider_name == "tickflow":
+            from app.tickflow.policy import tier_label
+
+            tier = tier_label().split()[0].split("+")[0].strip().lower()
+        else:
+            tier = "custom"
         lo, hi = TIER_INTERVAL_RANGE.get(tier, DEFAULT_RANGE)
         raw_user = preferences.get_depth_polling_interval()
         user_interval = max(lo, min(hi, raw_user))
 
-        # ② 限速安全 clamp（与 resolve_limit 共用 SAFETY_RPM_FACTOR，不叠乘）
+        # ② 限速安全 clamp (与 resolve_limit 共用 SAFETY_RPM_FACTOR, 不叠乘)
         batches = max(1, math.ceil(n_symbols / batch_size))
         usable_rpm = apply_safety_rpm(rpm) or 1
         calls_per_min = usable_rpm / batches if batches > 0 else usable_rpm

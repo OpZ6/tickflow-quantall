@@ -143,7 +143,12 @@ def _display_of(sources: list[dict], name: str) -> str:
     return name
 
 
-def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none") -> dict:
+def build_capability_matrix(
+    current: dict[str, str],
+    tickflow_tier: str = "none",
+    provider_chains: dict[str, list[str]] | None = None,
+    provider_health: dict[str, dict] | None = None,
+) -> dict:
     """注册表 + 源能力声明 + 当前偏好 → 能力路由矩阵。
 
     current 为 {偏好字段: 当前值}, 由 API 层经 preferences getters 注入;
@@ -160,7 +165,10 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
     sources = _declared_sources()
 
     capabilities = []
+    chains = provider_chains or {}
+    health_by_dataset = provider_health or {}
     for cap in CAPABILITY_REGISTRY:
+        health = health_by_dataset.get(cap["id"], {})
         # field=None → 不可路由能力 (仅 TickFlow 提供, 无路由偏好), 生效源恒为默认
         effective = current.get(cap["field"], cap["default"]) if cap["field"] else cap["default"]
         tf_available = tier_rank >= _TIER_RANK[cap["tf_tier"]]
@@ -180,7 +188,23 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
                 "note": None if s["available"] else (s["status"] or "不可用"),
             }
             (candidates if s["available"] else pending).append(entry)
-        usable = any(c["name"] == effective for c in candidates)
+        available_names = {c["name"] for c in candidates}
+        if cap["field"]:
+            priority_chain = list(dict.fromkeys(
+                chains.get(cap["id"]) or [effective],
+            ))
+            if effective not in priority_chain:
+                priority_chain.insert(0, effective)
+            effective = next(
+                (
+                    name for name in priority_chain
+                    if name in available_names and health.get(name, {}).get("healthy", True)
+                ),
+                priority_chain[0],
+            )
+        else:
+            priority_chain = [cap["default"]]
+        usable = effective in available_names
         capabilities.append({
             "id": cap["id"],
             "label": cap["label"],
@@ -190,10 +214,12 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
             "tf_tier": cap["tf_tier"],
             "tf_available": tf_available,
             "usable": usable,
-            "current": effective,
-            "current_display": _display_of(sources, effective),
+            "current": priority_chain[0],
+            "current_display": _display_of(sources, priority_chain[0]),
             "effective": effective,
             "effective_display": _display_of(sources, effective),
+            "priority_chain": priority_chain,
+            "health": health,
             "candidates": candidates,
             "pending": pending,
         })

@@ -93,6 +93,7 @@ const nav = [
   { to: '/data',             label: '数据',     icon: IconData },
 ] as const
 
+
 /** 亮/暗主题切换 — 状态存 localStorage, 生效见 lib/theme.ts */
 function ThemeToggle() {
   const theme = useTheme()
@@ -615,7 +616,11 @@ export function Layout() {
     : [...allNav].sort((a, b) => compareByDefaultNav(a.to, b.to))
 
   const hiddenIds = new Set(prefs?.nav_hidden ?? [])
-  const visibleNavItems = navItems.filter(n => !hiddenIds.has(n.to) && !hiddenIds.has(n.to.replace(/^\/analysis\//, '')))
+  const builtinIds = new Set<string>(nav.map(n => n.to))
+  const visibleNavItems = [
+    ...navItems.filter(n => builtinIds.has(n.to)),
+    ...navItems.filter(n => !builtinIds.has(n.to)),
+  ].filter(n => !hiddenIds.has(n.to) && !hiddenIds.has(n.to.replace(/^\/analysis\//, '')))
 
   // 新装用户一次性种子: 扩展域页面默认隐藏, 菜单设置里可逐个开启。
   // 老用户 (升级前已完成 onboarding) 只写标记不动偏好, 升级前后侧栏一致。

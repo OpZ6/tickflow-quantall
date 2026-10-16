@@ -44,8 +44,16 @@ function Read-DotEnvValue($Path, $Name) {
 
 $DotEnvHost = Read-DotEnvValue $EnvFile 'HOST'
 $DotEnvPort = Read-DotEnvValue $EnvFile 'PORT'
+$DotEnvDataDir = Read-DotEnvValue $EnvFile 'DATA_DIR'
 $BindAddress = if ($env:HOST) { $env:HOST } elseif ($DotEnvHost) { $DotEnvHost } else { '0.0.0.0' }
 $DisplayHost = if ($BindAddress -in @('0.0.0.0', '::')) { 'localhost' } else { $BindAddress }
+$DataDirValue = if ($env:DATA_DIR) { $env:DATA_DIR } elseif ($DotEnvDataDir) { $DotEnvDataDir } else { 'data' }
+$DataDir = if ([System.IO.Path]::IsPathRooted($DataDirValue)) {
+    [System.IO.Path]::GetFullPath($DataDirValue)
+} else {
+    [System.IO.Path]::GetFullPath((Join-Path $Root $DataDirValue))
+}
+$BackendLockFile = Join-Path $DataDir '.mining_process.lock'
 
 # Port precedence: CLI arg > BACKEND_PORT env > PORT env > .env PORT > default
 if ($BackendPort -le 0) {
@@ -67,6 +75,58 @@ function Log-Ok  ($m) { Write-Host "[dev] $m" -ForegroundColor Green }
 function Log-Warn($m) { Write-Host "[dev] $m" -ForegroundColor Yellow }
 function Log-Err ($m) { Write-Host "[dev] $m" -ForegroundColor Red }
 
+function Find-BackendLockOwnerProcessIds {
+    if (-not (Test-Path -LiteralPath $BackendLockFile)) { return @() }
+    try {
+        # Byte 0 is the locked region, so read owner metadata from byte 1.
+        $stream = [System.IO.File]::Open(
+            $BackendLockFile,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read,
+            [System.IO.FileShare]::ReadWrite
+        )
+        try {
+            $null = $stream.Seek(1, [System.IO.SeekOrigin]::Begin)
+            $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::ASCII)
+            $record = $reader.ReadToEnd()
+        } finally {
+            if ($reader) { $reader.Dispose() } else { $stream.Dispose() }
+        }
+        $pidMatches = [Regex]::Matches($record, '(?m)^pid=(\d+)\s*$')
+        $timeMatches = [Regex]::Matches($record, '(?m)^acquired_at=([0-9.]+)\s*$')
+        if ($pidMatches.Count -eq 0 -or $pidMatches.Count -ne $timeMatches.Count) { return @() }
+        [int]$ownerPid = $pidMatches[$pidMatches.Count - 1].Groups[1].Value
+        [double]$acquiredAt = $timeMatches[$timeMatches.Count - 1].Groups[1].Value
+        $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $ownerPid" -ErrorAction SilentlyContinue
+        if (-not $owner -or $owner.Name -notmatch '(?i)^python(?:w)?\.exe$') { return @() }
+
+        # A crashed owner leaves its record behind. Guard against PID reuse
+        # before acting on that record, then accept both uvicorn's reloader
+        # command line and its spawn_main server-worker command line.
+        $ownerStartedAt = ([DateTimeOffset]$owner.CreationDate).ToUnixTimeMilliseconds() / 1000.0
+        if ($ownerStartedAt -gt ($acquiredAt + 2.0)) { return @() }
+        if ($owner.CommandLine -notmatch '(?i)(uvicorn|multiprocessing\.spawn|spawn_main)') { return @() }
+        @($ownerPid)
+    } catch {
+        @()
+    }
+}
+
+function Find-BackendProcessIds($port) {
+    # Port ownership can briefly report PID 0 while a uvicorn reloader is
+    # still alive. Find launcher-owned reloaders by their command line too.
+    $portMarker = "--port\s+$port(\s|$)"
+    @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and
+            $_.CommandLine -match '(?i)uvicorn' -and
+            $_.CommandLine -match '(?i)app\.main:app' -and
+            $_.CommandLine -match $portMarker -and
+            $_.CommandLine -match [Regex]::Escape($BackendDir)
+        } |
+        Select-Object -ExpandProperty ProcessId -Unique)
+}
+
 # ===== 1. Dependency check =====
 function Require-Cmd($cmd, $hint) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
@@ -82,8 +142,13 @@ Require-Cmd 'pnpm' 'npm i -g pnpm   OR   corepack enable; corepack prepare pnpm@
 # ===== 2. Port check - kill anything listening on the target ports =====
 function Free-Port($name, $port) {
     $conns = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
-    if (-not $conns) { return }
     $pids = @($conns.OwningProcess | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+    if ($name -eq 'backend') {
+        $pids += Find-BackendProcessIds $port
+        $pids += Find-BackendLockOwnerProcessIds
+        $pids = @($pids | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+    }
+    if (-not $conns -and $pids.Count -eq 0) { return }
     if ($pids.Count -eq 0) { return }
 
     # Filter to PIDs that still exist as running processes.

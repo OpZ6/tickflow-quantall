@@ -4,12 +4,14 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import polars as pl
+import pytest
 
 from app.indicators.pipeline import (
     attach_deviation_columns,
     attach_deviation_columns_today,
     benchmark_momentum_today,
     load_benchmark_momentum,
+    repair_today_deviation_columns,
 )
 from app.market_time import cn_today
 from app.services.abnormal_moves import (
@@ -21,6 +23,8 @@ from app.services.abnormal_moves import (
     is_st_name,
     rule_for,
 )
+from app.strategy import monitor_rules
+from app.strategy.monitor import MonitorRuleEngine
 
 
 def _write_index_daily(tmp_path, rows: list[tuple[str, date, float]]) -> None:
@@ -59,6 +63,32 @@ def test_attach_deviation_columns_math(tmp_path) -> None:
     assert "momentum_3d" in out.columns  # 就地补算
     last = out.sort("date").row(-1, named=True)
     assert abs(last["deviate_3d"] - 0.0) < 1e-9
+
+
+def test_attach_deviation_columns_refreshes_stale_benchmark_cache(tmp_path) -> None:
+    days = [date(2026, 8, 11) + timedelta(days=i) for i in range(31)]
+    initial_days = days[:-1]
+    _write_index_daily(
+        tmp_path,
+        [("000001.SH", day, 100.0 + i) for i, day in enumerate(initial_days)],
+    )
+    stale = load_benchmark_momentum(tmp_path)
+    assert stale["date"].max() == initial_days[-1]
+
+    latest = days[-1]
+    _write_index_daily(tmp_path, [("000001.SH", latest, 130.0)])
+    stock = pl.DataFrame({
+        "symbol": ["600000.SH"] * len(days),
+        "date": days,
+        "close": [10.0 + i for i in range(len(days))],
+    })
+
+    out = attach_deviation_columns(stock, tmp_path)
+
+    latest_row = out.filter(pl.col("date") == latest)
+    assert latest_row["deviate_3d"][0] is not None
+    refreshed = load_benchmark_momentum(tmp_path)
+    assert refreshed["date"].max() == latest
 
 
 def test_attach_deviation_columns_missing_benchmark(tmp_path) -> None:
@@ -171,6 +201,29 @@ def test_attach_deviation_columns_today_missing_momentum(tmp_path) -> None:
     assert out["deviate_30d"][0] is not None
 
 
+def test_repair_today_deviation_when_index_partition_lags_one_day(tmp_path) -> None:
+    today = cn_today()
+    days = [today - timedelta(days=i) for i in range(40, -1, -1)]
+    _write_index_daily(
+        tmp_path,
+        [("000001.SH", day, 100.0 + i) for i, day in enumerate(days[:-1])],
+    )
+    stock = pl.DataFrame({
+        "symbol": ["600000.SH"] * len(days),
+        "date": days,
+        "close": [10.0 + i * 0.2 for i in range(len(days))],
+    })
+    cold = attach_deviation_columns(stock, tmp_path)
+    latest = cold.filter(pl.col("date") == today)
+    assert latest["deviate_3d"][0] is None
+
+    repaired = repair_today_deviation_columns(cold, tmp_path)
+    latest = repaired.filter(pl.col("date") == today)
+    assert latest["deviate_3d"][0] is not None
+    assert latest["deviate_10d"][0] is not None
+    assert latest["deviate_30d"][0] is not None
+
+
 def test_attach_deviation_columns_no_bench_close_leak(tmp_path) -> None:
     # load_benchmark_momentum 新增 bench_close 列后, 冷路径输出不应泄漏该列
     _write_sh_bench(tmp_path)
@@ -190,8 +243,11 @@ def test_attach_deviation_columns_no_bench_close_leak(tmp_path) -> None:
 def test_board_and_st_rules() -> None:
     assert board_of("600000.SH") == "主板"
     assert board_of("000001.SZ") == "主板"
+    assert board_of("003001.SZ") == "主板"
     assert board_of("301123.SZ") == "创业板"
+    assert board_of("302132.SZ") == "创业板"
     assert board_of("688123.SH") == "科创板"
+    assert board_of("689009.SH") == "科创板"
     assert board_of("920001.BJ") == "北交所"
     assert is_st_name("*ST 某某") is True
     assert is_st_name("正常股") is False
@@ -372,12 +428,36 @@ def test_build_overview_negative_side_stricter_threshold() -> None:
     assert main.thresholds[30] == (2.00, 0.70)
 
 
+def test_build_overview_drops_cached_empty_snapshot_when_repo_frame_changes() -> None:
+    with _hist_cache_lock:
+        _hist_cache.clear()
+
+    class _MutableRepo:
+        def __init__(self) -> None:
+            self.df = pl.DataFrame()
+
+        def get_enriched_latest(self):
+            return self.df, date.today()
+
+    repo = _MutableRepo()
+    first = build_overview(repo, None, min_closeness=0.0)
+    assert first["rows"] == []
+
+    repo.df = pl.DataFrame({
+        "symbol": ["600000.SH"],
+        "name": ["A"],
+        "close": [10.0],
+        "change_pct": [0.0],
+        "deviate_3d": [0.19],
+        "deviate_10d": [None],
+        "deviate_30d": [None],
+    })
+    second = build_overview(repo, None, min_closeness=0.5)
+
+    assert [row["symbol"] for row in second["rows"]] == ["600000.SH"]
+
+
 # ── 监控规则接入 (type=abnormal) ────────────────────────
-
-import pytest
-
-from app.strategy import monitor_rules
-from app.strategy.monitor import MonitorRuleEngine
 
 
 def _ab_rule(**overrides) -> dict:

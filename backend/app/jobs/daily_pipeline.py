@@ -2,8 +2,9 @@
 
 调度:
   09:10 盘前 — 同步个股维表 instruments (全量覆盖)
-  15:35 盘后 — 日K同步 + 增量除权因子 + enriched 计算 + 刷新视图
-  (默认 15:35: 盘后固定价 15:30 终止 + 供应商日线定稿缓冲, 见 preferences)
+  16:30 盘后 — 日K同步 + 增量除权因子 + enriched 计算 + 刷新视图
+    (默认 16:30: None/Free 档当日日K盘后约1-2小时才可用;付费档盘中实时已落盘,
+     收盘即刻可用。旧默认 15:30 会让免费档当天K线静默缺失。见 docs/archive/20260907/data-source-timeline.md)
 
 盘后同步策略:
   日 K: QuoteService 交易时段已实时落盘 → 有数据时跳过 batch,首次拉 1 年区间
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import date as _date
 from pathlib import Path
 
 import polars as pl
@@ -20,6 +22,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from app.indicators.pipeline import filter_halt_days, run_pipeline
 from app.config import settings
 from app.indicators.pipeline import filter_halt_days, run_pipeline
 from app.market_time import cn_today
@@ -71,6 +74,24 @@ def _prune_partial_enriched_partitions(daily_dir: Path, enriched_dir: Path) -> l
             shutil.rmtree(part, ignore_errors=True)
             pruned.append(part.stem.split("=")[1])
     return pruned
+
+
+def _classify_missing_enriched_dates(
+    daily_dates: list[str], enriched_dates: list[str]
+) -> tuple[bool, bool]:
+    """Return ``(full_rebuild, forward_incremental)`` for raw-only dates.
+
+    Only dates strictly after the latest enriched partition can use the normal
+    incremental history prefix.  A gap before or inside the existing range
+    needs a full rebuild so path-dependent stored fields retain full context;
+    otherwise a later symbol-only recomputation can recreate a pruned partition
+    with just that symbol subset.
+    """
+    if not enriched_dates:
+        return False, bool(daily_dates)
+    missing = set(daily_dates) - set(enriched_dates)
+    full_rebuild = any(value <= enriched_dates[-1] for value in missing)
+    return full_rebuild, bool(missing) and not full_rebuild
 
 
 def _prune_stale_price_partitions(
@@ -456,15 +477,9 @@ def run_now(
     if daily_days > prev_enriched_days and enriched_exists:
         daily_dates = sorted(d.stem.split("=")[1] for d in daily_dir.glob("date=*"))
         enriched_dates = sorted(d.stem.split("=")[1] for d in enriched_dir.glob("date=*"))
-        earliest_enriched = enriched_dates[0]
-        new_dates = set(daily_dates) - set(enriched_dates)
-        if new_dates:
-            # 有新日期早于 enriched 最早日期 → 往前扩展
-            if any(d < earliest_enriched for d in new_dates):
-                backward_extension = True
-            # 包含中间被删的异常分区; 没有新增末日也必须补算。
-            # 往前扩展仍由下方优先走全量分支。
-            forward_incremental = True
+        backward_extension, forward_incremental = _classify_missing_enriched_dates(
+            daily_dates, enriched_dates
+        )
 
     def _enriched_batch_progress(cur: int, tot: int) -> None:
         emit("compute_enriched", 65 + int(23 * cur / tot),
@@ -519,6 +534,49 @@ def run_now(
     etf_adj_symbols = 0
     pull_index = _prefs.get_pipeline_pull_index()
     pull_etf = _prefs.get_pipeline_pull_etf()
+    index_fallback_attempted = False
+
+    if pull_index and not capset.has(Cap.KLINE_DAILY_BATCH):
+        index_fallback_attempted = True
+        emit("sync_index", 88, "同步 QuantX 必需指数 (腾讯备用源)…")
+        try:
+            index_count = index_sync.sync_index_instruments(
+                repo,
+                pull_index=True,
+                pull_etf=False,
+            )
+            required_history = repo.get_index_daily(
+                index_sync.QUANTX_ALL_A_STORAGE_SYMBOL,
+                today - _td(days=730),
+                today,
+                ["date"],
+            )
+            if override_start_date:
+                index_start = override_start_date
+            elif not required_history.is_empty():
+                latest_required = required_history["date"].max()
+                index_start = latest_required + _td(days=1)
+            else:
+                index_start = today - _td(days=365)
+            if index_stale_day is not None and index_start > index_stale_day:
+                index_start = index_stale_day
+            written_index_daily = index_sync.sync_quantx_all_a_fallback(
+                repo,
+                start_date=_dt.combine(index_start, _dt.min.time()),
+                end_date=_dt.combine(today, _dt.min.time()),
+            )
+            _invalidate("index_instruments")
+            _invalidate("index_daily")
+            _invalidate("index_enriched")
+            emit(
+                "sync_index",
+                89,
+                f"QuantX 必需指数完成,{index_count} 只/{written_index_daily} 行 (腾讯备用源)",
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("required QuantX index fallback failed: %s", e)
+            emit("sync_index", 89, f"QuantX 必需指数备用同步失败:{e}")
+            stage_errors.append(f"required QuantX index fallback: {e}")
 
     if capset.has(Cap.KLINE_DAILY_BATCH) and (pull_index or pull_etf):
         _types = []
@@ -629,8 +687,21 @@ def run_now(
             logger.warning("sync_index/etf failed: %s", e)
             emit("sync_index", 89, f"指数/ETF同步失败:{e}")
             stage_errors.append(f"index/etf sync: {e}")
-    else:
+    elif not index_fallback_attempted:
         skipped.append("sync_index")
+
+    # The four non-exchange sentiment series are TDX-only and feed the QuantX
+    # risk view. Keep their failure isolated from ordinary index/ETF sync.
+    try:
+        sentiment_day = repo.latest_enriched_date("stock") or today
+        sentiment_rows = index_sync.sync_quantx_sentiment_indices(
+            repo, end_date=_dt.combine(sentiment_day, _dt.min.time()),
+        )
+        _invalidate("index_daily")
+        emit("sync_index", 89, f"QuantX 四情绪指数完成，{sentiment_rows} 行")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("QuantX sentiment indices unavailable: %s", exc)
+        emit("sync_index", 89, "QuantX 四情绪指数暂不可用")
 
     # Step 2.5: 分钟 K 同步(可选) — 未启用或无 capability 时静默跳过(不 emit)
     from app.services import preferences
@@ -1022,10 +1093,53 @@ def _run_tracked(fn, job_label: str) -> bool:
     return succeeded
 
 
+def _run_quantx_after_pipeline() -> dict | None:
+    """Run QuantX only after the main post-close generation is readable."""
+    app_state = _get_app_state()
+    repo = getattr(app_state, "repo", None) if app_state is not None else None
+    data_root = getattr(getattr(repo, "store", None), "data_dir", None)
+    if data_root is None:
+        logger.info("dependent QuantX run skipped: application repository unavailable")
+        return None
+    latest = repo.latest_enriched_date("stock")
+    if latest is None:
+        logger.info("dependent QuantX run skipped: no enriched partition available")
+        return None
+
+    from app.quantx_data.scheduler import run_scheduled
+
+    result = run_scheduled(data_root, trade_date=latest.strftime("%Y%m%d"))
+    logger.info("dependent QuantX result: %s", result)
+    return result
+
+
+def _run_stock_pools_after_pipeline() -> dict | None:
+    app_state = _get_app_state()
+    repo = getattr(app_state, "repo", None) if app_state is not None else None
+    if repo is None:
+        return None
+    latest = repo.latest_enriched_date("stock")
+    if latest is None:
+        return None
+    from app.stock_pools.publisher import publish_stock_pool
+
+    result = publish_stock_pool(repo, latest)
+    logger.info("dependent stock-pool result: %s", result)
+    return result
+
+
 def _scheduled_pipeline_task(pipeline_fn) -> None:
-    """Run weekly mining only after the tracked daily pipeline has fully succeeded."""
+    """Run dependent QuantX and weekly mining after the daily pipeline succeeds."""
     if not _run_tracked(pipeline_fn, "daily_pipeline"):
         return
+    try:
+        _run_quantx_after_pipeline()
+    except Exception:
+        logger.exception("dependent QuantX run failed; daily pipeline remains succeeded")
+    try:
+        _run_stock_pools_after_pipeline()
+    except Exception:
+        logger.exception("dependent stock-pool run failed; daily pipeline remains succeeded")
     try:
         from app.services.mining_schedule import run_weekly_mining
 
@@ -1272,7 +1386,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
     """启动调度器。
 
     工作日 09:10 — 同步个股维表
-    工作日 HH:MM — 盘后管道（时间由用户偏好决定，默认 15:35）
+    工作日 HH:MM — 盘后管道（时间由用户偏好决定，默认 16:30）
     """
     from app.services import preferences
     sched = preferences.get_pipeline_schedule()
@@ -1328,7 +1442,9 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
                             hour=sched["hour"], minute=sched["minute"],
                             timezone="Asia/Shanghai"),
         id="daily_pipeline",
-        misfire_grace_time=3600,
+        # A sleeping laptop can miss the configured post-close time by hours.
+        # Keep the run eligible until the next session instead of dropping it.
+        misfire_grace_time=86400,
         replace_existing=True,
     )
 

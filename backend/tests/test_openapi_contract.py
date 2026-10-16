@@ -80,6 +80,7 @@ EXPECTED_OPEN_ENDPOINTS: set[str] = {
     "POST /api/screener/run_preset",
     "GET /api/screener/strategies",
     "GET /api/strategies",
+    "GET /api/strategies/events",
     "GET /api/strategies/ai/status",
     "GET /api/strategies/{strategy_id}",
     "GET /api/strategies/{strategy_id}/source",

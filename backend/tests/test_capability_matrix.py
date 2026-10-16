@@ -222,6 +222,17 @@ def test_depth5_capability_semantics(monkeypatch):
     assert cap["effective"] == "depth_src"
     assert cap["usable"] is True
 
+    _fake_sources(
+        monkeypatch,
+        [{"name": "tdx", "display_name": "通达信", "datasets": ["depth5"],
+          "available": True, "status": "ok"}],
+    )
+    cap = _by_id(build_capability_matrix(
+        dict(DEFAULT_CURRENT, depth5_data_provider="tdx"), tickflow_tier="none",
+    ))["depth5"]
+    assert [candidate["name"] for candidate in cap["candidates"]] == ["tdx"]
+    assert cap["usable"] is True
+
 
 def test_unknown_current_display_falls_back_to_name(monkeypatch):
     """偏好指向未注册源 (正常经 getters 校验不会发生): 展示回退为原始名, 不抛异常。"""
@@ -268,6 +279,28 @@ def test_full_minute_routable_like_other_capabilities(monkeypatch):
     assert fm_default["usable"] is False
 
 
+def test_matrix_uses_first_available_provider_in_priority_chain(monkeypatch):
+    _fake_sources(
+        monkeypatch,
+        [
+            {"name": "fuyao", "display_name": "fuyao", "datasets": ["realtime"],
+             "available": False, "status": "quota limited"},
+            {"name": "tdx", "display_name": "TDX", "datasets": ["realtime"],
+             "available": True, "status": "ok"},
+        ],
+    )
+    matrix = build_capability_matrix(
+        dict(DEFAULT_CURRENT, realtime_data_provider="fuyao"),
+        tickflow_tier="free",
+        provider_chains={"realtime": ["fuyao", "tdx", "tickflow"]},
+    )
+    realtime = _by_id(matrix)["realtime"]
+    assert realtime["priority_chain"] == ["fuyao", "tdx", "tickflow"]
+    assert realtime["current"] == "fuyao"
+    assert realtime["effective"] == "tdx"
+    assert realtime["usable"] is True
+
+
 def test_api_endpoint_injects_all_routing_preferences(monkeypatch):
     """回归 (#301): get_capability_matrix 组装 current 必须覆盖注册表全部路由字段。
 
@@ -305,9 +338,9 @@ def test_api_endpoint_injects_all_routing_preferences(monkeypatch):
 
     captured: dict[str, dict] = {}
 
-    def _spy(current, tickflow_tier="none"):
+    def _spy(current, tickflow_tier="none", **kwargs):
         captured["current"] = dict(current)
-        return build_capability_matrix(current, tickflow_tier=tickflow_tier)
+        return build_capability_matrix(current, tickflow_tier=tickflow_tier, **kwargs)
 
     monkeypatch.setattr(capabilities_mod, "build_capability_matrix", _spy)
     settings_api.get_capability_matrix()

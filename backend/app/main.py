@@ -16,6 +16,7 @@ from app.api import (
     abnormal,
     alerts,
     analysis,
+    auth as auth_api,
     backtest,
     data,
     events,
@@ -36,6 +37,7 @@ from app.api import (
     regime,
     rps,
     screener,
+    settings as settings_api,
     sector_rotation,
     signals,
     stock_analysis,
@@ -43,11 +45,12 @@ from app.api import (
     task_registry,
     watchlist,
 )
-from app.api import auth as auth_api
-from app.api import settings as settings_api
 from app.api.routes import router as core_router
 from app.config import settings
-from app.enriched_generation import EnrichedGenerationUnavailableError
+from app.enriched_generation import (
+    EnrichedGenerationUnavailableError,
+    recover_orphaned_enriched_generation,
+)
 from app.extensions.loader import (
     configure_backend_extensions,
     current_extension_context,
@@ -110,6 +113,9 @@ async def _application_lifespan(app: FastAPI):
     repo = KlineRepository(store)
     app.state.datastore = store
     app.state.repo = repo
+    from app.market_facts.repository import MarketFactRepository
+
+    app.state.market_facts = MarketFactRepository(store.data_dir)
     # 去内置化种子迁移必须赶在下方 refresh_cache 之前: enriched 缓存构建时
     # 编译自定义信号表达式, 晚种会让本次启动的看板/梯队引用的 signal_limit_*
     # 列缺失 (跌停恒 0、连板梯队无数据), 直到下一次缓存刷新才自愈。
@@ -136,6 +142,8 @@ async def _application_lifespan(app: FastAPI):
     app.state.mining_manager = mining_manager
     if recovered_mining_runs:
         logger.warning("recovered %d interrupted mining runs", recovered_mining_runs)
+    if recover_orphaned_enriched_generation(store.data_dir, "stock"):
+        logger.warning("recovered orphaned enriched publication marker")
     # 在接受回测请求前固定 managed generation，避免首批并发 worker 各自创建版本。
     if settings.backtest_matrix_disk_cache_enabled:
         try:
@@ -200,6 +208,12 @@ async def _application_lifespan(app: FastAPI):
     try:
         daily_pipeline.set_app_state(app.state)  # 供 depth_finalize job 访问 depth_service
         scheduler = daily_pipeline.start_scheduler(repo, capset)
+        from app.quantx_data.scheduler import register as register_quantx_data_scheduler
+        from app.stock_pools.scheduler import run_scheduled as run_stock_pool_scheduled
+        register_quantx_data_scheduler(
+            scheduler, store.data_dir,
+            after_run=lambda day: run_stock_pool_scheduled(repo, trade_date=day),
+        )
         app.state.scheduler = scheduler
     except Exception as e:  # noqa: BLE001
         logger.warning("scheduler not started: %s", e)

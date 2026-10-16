@@ -4,15 +4,75 @@
 """
 from __future__ import annotations
 
+from datetime import date
+
 import polars as pl
 import pytest
 
+from app.api import pipeline as pipeline_api
 from app.jobs import daily_pipeline
 from app.services import pipeline_jobs, preferences, quote_service
 from app.services.pipeline_jobs import JobStore
 from app.services.quote_service import QuoteService
 from app.strategy import monitor_rules
 from app.strategy.monitor import MonitorRuleEngine
+
+
+def test_manual_pipeline_publishes_dependent_quantx(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        daily_pipeline,
+        "run_now",
+        lambda repo, capset, on_progress: calls.append("main") or {"daily_days": 1},
+    )
+    monkeypatch.setattr(
+        daily_pipeline,
+        "_run_quantx_after_pipeline",
+        lambda: calls.append("quantx") or {"trade_date": "20260827", "status": "complete"},
+    )
+    monkeypatch.setattr(
+        daily_pipeline,
+        "_run_stock_pools_after_pipeline",
+        lambda: calls.append("stock_pools") or {"status": "complete"},
+    )
+
+    # run 闭包由 _submit_job 的 make_run 提供 (已绑定 repo/capset), 这里直接模拟主管道
+    def _run_main() -> dict:
+        calls.append("main")
+        return {"daily_days": 1}
+
+    result = pipeline_api._run_pipeline_and_quantx(_run_main, lambda *_args: None)
+
+    assert calls == ["main", "quantx", "stock_pools"]
+    assert result["quantx"] == {"trade_date": "20260827", "status": "complete"}
+    assert result["stock_pools"] == {"status": "complete"}
+
+
+def test_dependent_quantx_uses_latest_persisted_session(monkeypatch, tmp_path) -> None:
+    class Store:
+        data_dir = tmp_path
+
+    class Repo:
+        store = Store()
+
+        @staticmethod
+        def latest_enriched_date(asset_type="stock"):
+            assert asset_type == "stock"
+            return date(2026, 9, 3)
+
+    calls = []
+    state = type("State", (), {"repo": Repo()})()
+    monkeypatch.setattr(daily_pipeline, "_get_app_state", lambda: state)
+    monkeypatch.setattr(
+        "app.quantx_data.scheduler.run_scheduled",
+        lambda data_root, *, trade_date=None: calls.append((data_root, trade_date))
+        or {"trade_date": trade_date},
+    )
+
+    result = daily_pipeline._run_quantx_after_pipeline()
+
+    assert calls == [(tmp_path, "20260903")]
+    assert result == {"trade_date": "20260903"}
 
 # ── JobStore 单飞 ────────────────────────────────────────────────────────
 

@@ -162,6 +162,8 @@ class StrategyDataContext:
     daily_history: pl.DataFrame | None = None
     market: Any | None = None
     cache_key: str | None = None
+    # Optional caller-owned sink; currently supported by matrix snapshot screening.
+    screening_trace: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -222,6 +224,26 @@ class StrategyResult:
     scores: dict[str, float] = field(default_factory=dict)
     entry_signal_hits: list[dict] = field(default_factory=list)
     exit_signal_hits: list[dict] = field(default_factory=list)
+    strategy_version: str | None = None
+    params_fingerprint: str | None = None
+    source_run_id: str | None = None
+    input_fingerprint: str | None = None
+    evidence: list[dict] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class StrategySignalHistory:
+    """Causal signal matrices for one registered strategy over a supplied history.
+
+    This is deliberately narrower than a screener run: it has no candidate
+    ranking, result limit, event persistence, or execution simulation.  The
+    stock-chart preview service uses it only after it has constrained the
+    input panel to one symbol.
+    """
+
+    market: Any
+    signals: Any
+    params: dict
 
 
 @dataclass
@@ -880,6 +902,79 @@ class StrategyEngine:
     # 执行
     # ================================================================
 
+    def preview_signal_history(
+        self,
+        strategy_id: str,
+        context: StrategyDataContext,
+        *,
+        params: dict | None = None,
+        overrides: dict | None = None,
+    ) -> StrategySignalHistory:
+        """Evaluate one registered matrix strategy across one asset's history.
+
+        Chart previews are signal replays, not screeners or backtests.  They
+        must therefore be explicitly enabled by the registered strategy and
+        receive exactly one symbol from the caller.  Cross-sectional scores
+        are intentionally omitted because a one-stock min/max ranking has no
+        market meaning.
+        """
+        from app.backtest.matrix import (
+            MatrixPipelineConfig,
+            MatrixStrategyPipeline,
+            build_market_data_matrix,
+        )
+
+        strategy = self.get(strategy_id)
+        self.validate_context(strategy, context)
+        preview = strategy.meta.get("chart_preview") or {}
+        if not isinstance(preview, dict) or not preview.get("enabled"):
+            raise ValueError(f"strategy {strategy_id} 不支持个股即时预览")
+        if strategy.execution_backend != "matrix_native":
+            raise ValueError(f"strategy {strategy_id} 不支持个股即时预览")
+
+        panel = context.history if context.history is not None else context.current
+        if panel is None or panel.is_empty():
+            raise ValueError(f"strategy {strategy_id} 缺少个股历史数据")
+        if "symbol" not in panel.columns:
+            raise ValueError(f"strategy {strategy_id} 个股历史缺少 symbol 列")
+        symbols = panel["symbol"].drop_nulls().cast(pl.Utf8).unique().to_list()
+        if len(symbols) != 1:
+            raise ValueError("个股即时预览只能计算一个标的")
+
+        effective_overrides = overrides or {}
+        effective_params = self.resolve_params(strategy, params, effective_overrides)
+        market = build_market_data_matrix(
+            panel,
+            field_columns=self._matrix_field_columns(
+                strategy,
+                effective_overrides,
+                effective_params,
+            ),
+        )
+        basic_filter = dict(strategy.basic_filter or {})
+        if effective_overrides.get("basic_filter"):
+            basic_filter.update(effective_overrides["basic_filter"])
+        signals = MatrixStrategyPipeline().run(
+            strategy.matrix_strategy,
+            market,
+            effective_params,
+            MatrixPipelineConfig(
+                basic_filter=basic_filter,
+                # A single asset has no cross-sectional ranking.  Signal
+                # timing remains identical; only the meaningless score is
+                # intentionally omitted from this chart-only response.
+                scoring={},
+                scoring_directions={},
+                order_by=None,
+                descending=bool(strategy.meta.get("descending", True)),
+            ),
+        )
+        return StrategySignalHistory(
+            market=market,
+            signals=signals,
+            params=effective_params,
+        )
+
     def run(
         self,
         strategy_id: str,
@@ -1370,8 +1465,15 @@ class StrategyEngine:
         from app.backtest.matrix import (
             MatrixPipelineConfig,
             MatrixStrategyPipeline,
+            build_basic_filter_mask,
             build_market_data_matrix,
+            build_matrix_score,
         )
+
+        trace = context.screening_trace
+        if trace is not None:
+            trace.clear()
+            trace.update(scope="unavailable", as_of=str(as_of), strategy_id=strategy_id, rows=[])
 
         source_panel = context.history
         market = context.market
@@ -1408,6 +1510,28 @@ class StrategyEngine:
                 count=len(market.symbols),
             )
 
+        target_ids = [i for i, label in enumerate(market.timestamp_labels) if label[:10] == str(as_of)]
+        if not target_ids:
+            return StrategyResult(as_of=as_of, strategy_id=strategy_id)
+        target_time = target_ids[-1]
+        if strategy.meta.get("completed_daily_only"):
+            from app.market_time import cn_now
+
+            now = cn_now()
+            if as_of > now.date() or (as_of == now.date() and (now.hour, now.minute) < (15, 10)):
+                raise ValueError("该策略仅使用已完成日线, 请在收盘数据更新后运行或选择历史交易日")
+        snapshot_fn = getattr(strategy.matrix_strategy, "screen_snapshot", None)
+        snapshot_signals, candidate_details = None, None
+        if callable(snapshot_fn):
+            trace_fn = getattr(strategy.matrix_strategy, "screen_snapshot_with_trace", None)
+            detector_trace = {} if trace is not None and callable(trace_fn) else None
+            if detector_trace is not None:
+                snapshot_signals, candidate_details = trace_fn(
+                    market, params, target_time, detector_trace
+                )
+            else:
+                snapshot_signals, candidate_details = snapshot_fn(market, params, target_time)
+
         signals = MatrixStrategyPipeline().run(
             strategy.matrix_strategy,
             market,
@@ -1420,6 +1544,7 @@ class StrategyEngine:
                 descending=bool(strategy.meta.get("descending", True)),
                 asset_mask=asset_mask,
             ),
+            precomputed_signals=snapshot_signals,
         )
         target_ids = [
             time_id
@@ -1499,7 +1624,45 @@ class StrategyEngine:
             signals.exit_signal_ids,
             market.symbols,
         )
-        selected_assets = np.flatnonzero(entry_active != 0)
+        candidate_mask = entry_active.astype(bool)
+        candidate_scores = signals.score
+        trace_by_symbol = {}
+        if candidate_details is not None:
+            candidate_mask = np.array([symbol in candidate_details for symbol in market.symbols])
+            basic_allowed = build_basic_filter_mask(market, basic_filter)[target_time]
+            if trace is not None:
+                for asset_id, symbol in enumerate(market.symbols):
+                    stage = "eligible_candidate"
+                    if not candidate_mask[asset_id]:
+                        stage = "strategy_no_candidate"
+                    elif not basic_allowed[asset_id]:
+                        stage = "basic_filter"
+                    elif asset_mask is not None and not asset_mask[asset_id]:
+                        stage = "pool_filter"
+                    trace_by_symbol[symbol] = {
+                        "symbol": symbol,
+                        "stage": stage,
+                        "detector_reason": (detector_trace or {})
+                        .get("detector_reasons", {})
+                        .get(symbol),
+                    }
+                trace.update(
+                    scope="matrix_snapshot_candidate_pipeline",
+                    detector_subreasons_available=detector_trace is not None,
+                    detector_reason_semantics=(detector_trace or {}).get("reason_semantics"),
+                    rows=list(trace_by_symbol.values()),
+                )
+            candidate_mask &= basic_allowed
+            if asset_mask is not None:
+                candidate_mask &= asset_mask
+            universe = np.zeros(market.shape, dtype=bool)
+            universe[target_time] = candidate_mask
+            candidate_scores = build_matrix_score(
+                market, universe, scoring, strategy.meta.get("order_by"),
+                bool(strategy.meta.get("descending", True)), fallback=snapshot_signals.score,
+                directions=effective_scoring_directions(overrides),
+            )
+        selected_assets = np.flatnonzero(candidate_mask)
         if selected_assets.size == 0:
             return StrategyResult(
                 as_of=as_of,
@@ -1518,15 +1681,25 @@ class StrategyEngine:
             symbol = market.symbols[int(asset_id)]
             row = row_by_symbol.get(symbol)
             if row is None:
+                if symbol in trace_by_symbol:
+                    trace_by_symbol[symbol]["stage"] = "missing_current_row"
                 continue
-            score = float(signals.score[target_time, int(asset_id)])
-            ranked.append((score, {**row, "score": score}))
+            score = float(candidate_scores[target_time, int(asset_id)])
+            details = (candidate_details or {}).get(symbol, {})
+            ranked.append((score, {**row, **details, "score": score}))
         ranked.sort(
             key=lambda item: item[0],
             reverse=bool(strategy.meta.get("descending", True)),
         )
         limit = self._result_limit(strategy, overrides)
         selected_rows = ranked if limit is None else ranked[:limit]
+        if trace_by_symbol:
+            displayed = {str(row["symbol"]) for _, row in selected_rows}
+            for _, row in ranked:
+                symbol = str(row["symbol"])
+                trace_by_symbol[symbol]["stage"] = (
+                    "displayed_candidate" if symbol in displayed else "display_limit"
+                )
         rows = _sanitize([row for _, row in selected_rows])
         scores = {str(row["symbol"]): float(row.get("score") or 0.0) for row in rows}
         return StrategyResult(
@@ -1689,23 +1862,23 @@ class StrategyEngine:
             exprs.append(pl.col("close") >= bf["price_min"])
         if bf.get("price_max") is not None:
             exprs.append(pl.col("close") <= bf["price_max"])
-        if bf.get("market_cap_min") is not None and "total_shares" in df.columns:
-            exprs.append(
-                pl.col("close") * pl.col("total_shares") >= bf["market_cap_min"]
-            )
-        if bf.get("market_cap_max") is not None and "total_shares" in df.columns:
-            exprs.append(
-                pl.col("close") * pl.col("total_shares") <= bf["market_cap_max"]
-            )
-        # 流通市值
-        if bf.get("float_cap_min") is not None and "float_shares" in df.columns:
-            exprs.append(
-                pl.col("close") * pl.col("float_shares") >= bf["float_cap_min"]
-            )
-        if bf.get("float_cap_max") is not None and "float_shares" in df.columns:
-            exprs.append(
-                pl.col("close") * pl.col("float_shares") <= bf["float_cap_max"]
-            )
+        # Enriched close is adjusted. Raw-only/live inputs expose raw price as
+        # close; an existing but null raw_close must never fall back to close.
+        cap_price = pl.col("raw_close" if "raw_close" in df.columns else "close")
+        for prefix, share_field in (("market_cap", "total_shares"), ("float_cap", "float_shares")):
+            minimum, maximum = bf.get(f"{prefix}_min"), bf.get(f"{prefix}_max")
+            if minimum is None and maximum is None:
+                continue
+            if share_field not in df.columns:
+                exprs.append(pl.lit(False))
+                continue
+            shares = pl.col(share_field)
+            values = cap_price * shares
+            exprs.append(values.is_finite() & (cap_price > 0) & (shares > 0))
+            if minimum is not None:
+                exprs.append(values >= minimum)
+            if maximum is not None:
+                exprs.append(values <= maximum)
         if bf.get("amount_min") is not None:
             exprs.append(pl.col("amount") >= bf["amount_min"])
         if bf.get("amount_max") is not None:
@@ -1733,9 +1906,13 @@ class StrategyEngine:
                     board_exprs.append(
                         pl.col("symbol").str.starts_with("300")
                         | pl.col("symbol").str.starts_with("301")
+                        | pl.col("symbol").str.starts_with("302")
                     )
                 elif b == "科创板":
-                    board_exprs.append(pl.col("symbol").str.starts_with("688"))
+                    board_exprs.append(
+                        pl.col("symbol").str.starts_with("688")
+                        | pl.col("symbol").str.starts_with("689")
+                    )
                 elif b == "北交所":
                     board_exprs.append(pl.col("symbol").str.contains(r"\.BJ$"))
             if board_exprs:

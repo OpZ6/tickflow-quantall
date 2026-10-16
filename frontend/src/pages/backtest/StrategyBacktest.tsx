@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, FlaskConical, Clock, Loader2, Square, Search, Plus, X, SlidersHorizontal, BarChart3, Gauge, Zap, ListPlus, HelpCircle, ChevronRight, AlertTriangle, Layers, BookmarkPlus, Download, Filter, Star, TrendingUp, CalendarRange } from 'lucide-react'
+import { Play, FlaskConical, Clock, Loader2, Square, Search, Plus, X, SlidersHorizontal, BarChart3, Gauge, Zap, ListPlus, HelpCircle, ChevronRight, AlertTriangle, Layers, BookmarkPlus, Download, ArchiveRestore, Filter, Star, TrendingUp, CalendarRange } from 'lucide-react'
+import type { ResearchBacktestRunSummary } from '@/custom/api'
 import {
   api,
   type StrategyBacktestResult,
@@ -337,6 +338,8 @@ const buildDefaultOverrides = (detail: StrategyDetail) => normalizeStrategyOverr
   trailing_stop: detail.trailing_stop,
   trailing_take_profit_activate: detail.trailing_take_profit_activate,
   trailing_take_profit_drawdown: detail.trailing_take_profit_drawdown,
+  profit_lock_steps: detail.profit_lock_steps ?? null,
+  close_breakeven_activate_pct: detail.close_breakeven_activate_pct ?? null,
   score_min: null,
   score_max: null,
   max_hold_days: detail.max_hold_days,
@@ -357,6 +360,9 @@ const strategyBacktestConfigSignature = (detail: StrategyDetail) => JSON.stringi
   trailing_stop: detail.trailing_stop,
   trailing_take_profit_activate: detail.trailing_take_profit_activate,
   trailing_take_profit_drawdown: detail.trailing_take_profit_drawdown,
+  profit_lock_steps: detail.profit_lock_steps ?? null,
+  close_breakeven_activate_pct: detail.close_breakeven_activate_pct ?? null,
+  recommended_max_positions: detail.recommended_max_positions ?? null,
   max_hold_days: detail.max_hold_days,
 })
 
@@ -397,6 +403,7 @@ function ExitReasonBadge({ reason, signalId, signalNames }: { reason: string; si
     take_profit: { label: '止盈', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
     trailing_stop: { label: '移损', cls: 'bg-orange-500/10 text-orange-400 border-orange-500/30' },
     trailing_take_profit: { label: '回撤止盈', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+    close_breakeven: { label: '收盘守成本', cls: 'bg-orange-500/10 text-orange-400 border-orange-500/30' },
     max_hold: { label: '超期', cls: 'bg-amber-400/10 text-amber-400 border-amber-400/30' },
     pending_exit: { label: '待卖', cls: 'bg-orange-400/10 text-orange-400 border-orange-400/30' },
     end: { label: '期末', cls: 'bg-secondary/10 text-secondary border-border' },
@@ -697,6 +704,24 @@ function Stat({ label, value, color }: { label: ReactNode; value: string; color?
       >
         {value}
       </div>
+    </div>
+  )
+}
+
+function BacktestCoverage({ result }: { result: StrategyBacktestResult }) {
+  const coverage = result.stats?.coverage as Record<string, any> | undefined
+  if (!coverage) return null
+  const incomplete = coverage.range_clipped === true
+  return (
+    <div className={`rounded-card border px-3 py-2 text-[11px] ${incomplete ? 'border-warning/40 bg-warning/10 text-warning' : 'border-border bg-base/40 text-secondary'}`}>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <span>请求区间 <b className="font-mono text-foreground">{coverage.requested_start} ~ {coverage.requested_end}</b></span>
+        <span>实际行情 <b className="font-mono text-foreground">{coverage.data_start ?? '—'} ~ {coverage.data_end ?? '—'}</b></span>
+        <span>入场信号 <b className="font-mono text-foreground">{coverage.entry_start ?? '无'} ~ {coverage.entry_end ?? '无'}</b></span>
+        <span>实际交易 <b className="font-mono text-foreground">{coverage.first_trade ?? '无'} ~ {coverage.last_trade ?? '无'}</b></span>
+        <span>实际行情交易日 <b className="font-mono text-foreground">{coverage.data_trading_days ?? 0}</b></span>
+      </div>
+      {incomplete && <div className="mt-1">行情未覆盖完整请求区间，本次结果不能作为完整区间回测。</div>}
     </div>
   )
 }
@@ -1003,6 +1028,7 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
   // 跨会话/拉新代码后自动渲染一个可能对应已失效策略的旧结果会造成困惑
   // (切页不卸载组件,内存中的 result 仍保留,无需靠 localStorage 恢复)。
   const [result, setResult] = useState<StrategyBacktestResult | null>(null)
+  const [selectedResearchRun, setSelectedResearchRun] = useState('')
 
   // 候选方案「载入复测」: 把保存的 23 项回测配置回填到表单 (字段缺失时保留当前值)
   useEffect(() => {
@@ -1099,6 +1125,25 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
 
   const backtestTask = useBacktestTask()
   const isPending = backtestTask?.isPending ?? false
+  const researchRuns = useQuery({
+    queryKey: ['strategy-research-runs', selectedStrategy],
+    queryFn: () => api.researchBacktestRuns(selectedStrategy, 100),
+  })
+  const loadResearchRun = useMutation({
+    mutationFn: (run: ResearchBacktestRunSummary) => api.researchBacktestRun(run.research_key, run.run_id),
+    onSuccess: loaded => {
+      setResult(loaded)
+      setResultTab('daily')
+      setDailyPage(0)
+      setTradePage(0)
+      const cfg = loaded.config ?? {}
+      if (cfg.strategy_id) setSelectedStrategy(String(cfg.strategy_id))
+      if (cfg.start) setStart(String(cfg.start).slice(0, 10))
+      if (cfg.end) setEnd(String(cfg.end).slice(0, 10))
+      toast(`已载入研究回测 ${loaded.run_id}`, 'success')
+    },
+    onError: error => toast(`载入失败 · ${String((error as Error).message || error)}`, 'error'),
+  })
   const saveCandidate = useMutation({
     mutationFn: () => {
       if (!result) throw new Error('暂无策略结果')
@@ -1122,6 +1167,9 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
   const resetConfigFromDetail = (detail: StrategyDetail) => {
     setStrategyParams(strategyDefaultParams(detail))
     setOverrides(buildDefaultOverrides(detail))
+    if (detail.recommended_max_positions != null) {
+      setMaxPositions(String(detail.recommended_max_positions))
+    }
   }
 
   // 「应用到策略」: 把弹窗里当前编辑的 overrides + params 持久化为策略定义,
@@ -1640,6 +1688,44 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
     <div className="h-full min-h-0 overflow-hidden rounded-card border border-border bg-surface/80 grid grid-cols-1 xl:grid-cols-[18rem_minmax(0,1fr)]">
       {/* 配置面板 */}
       <section className="space-y-3 border-b xl:border-b-0 xl:border-r border-border bg-base/25 px-3 py-3 xl:overflow-y-auto">
+        <div className="rounded-btn border border-border bg-surface p-2.5">
+          <div className="mb-2 flex items-center gap-1.5">
+            <ArchiveRestore className="h-3.5 w-3.5 text-accent" />
+            <span className="text-xs font-medium text-foreground">研究回测档案</span>
+            <span className="ml-auto text-[10px] text-muted">{researchRuns.data?.items.length ?? 0} 次</span>
+          </div>
+          <div className="flex gap-1.5">
+            <select
+              aria-label="研究回测档案"
+              value={selectedResearchRun}
+              onChange={event => setSelectedResearchRun(event.target.value)}
+              disabled={researchRuns.isLoading || !(researchRuns.data?.items.length)}
+              className={`${INPUT_CLS} min-w-0 flex-1`}
+            >
+              <option value="">{researchRuns.isLoading ? '正在读取…' : '选择历史运行'}</option>
+              {(researchRuns.data?.items ?? []).map(run => (
+                <option key={`${run.research_key}:${run.run_id}`} value={`${run.research_key}:${run.run_id}`}>
+                  {run.experiment} · {run.start}~{run.end} · {fmtPct(Number(run.stats.total_return ?? 0))}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!selectedResearchRun || loadResearchRun.isPending}
+              onClick={() => {
+                const run = researchRuns.data?.items.find(
+                  item => `${item.research_key}:${item.run_id}` === selectedResearchRun,
+                )
+                if (run) loadResearchRun.mutate(run)
+              }}
+              className="inline-flex shrink-0 items-center gap-1 rounded-btn border border-accent/30 bg-accent/10 px-2.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loadResearchRun.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+              载入
+            </button>
+          </div>
+          <p className="mt-1.5 text-[10px] leading-4 text-muted">载入已冻结的研究结果，可查看净值、回撤与逐笔交易。</p>
+        </div>
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs font-medium text-secondary">选择策略</label>
@@ -2210,6 +2296,8 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
         )}
 
         {/* 旧全量模拟结果: 固定前瞻收益统计 (兼容历史缓存结果) */}
+        {result && !result.error && result.stats && <BacktestCoverage result={result} />}
+
         {result && !result.error && result.stats && result.stats.mode === 'full' && result.stats.full_kind !== 'candidate_execution' && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -2338,6 +2426,9 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
                 )}
                 {result.strategy_info.max_hold_days != null && (
                   <span className="text-[10px] text-secondary">最长 {result.strategy_info.max_hold_days} 天</span>
+                )}
+                {result.strategy_info.close_breakeven_activate_pct != null && (
+                  <span className="text-[10px] text-secondary">收盘守成本 {fmtPct(result.strategy_info.close_breakeven_activate_pct)}</span>
                 )}
                 {resultTradeDays > 0 && (
                   <span className="ml-auto flex items-center gap-2 text-[11px] text-muted">

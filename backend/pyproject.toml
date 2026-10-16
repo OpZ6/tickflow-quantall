@@ -24,6 +24,8 @@ dependencies = [
     "numba>=0.65.1; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     "fastexcel>=0.10",            # Polars 读取 xlsx/xls
     "pypinyin>=0.50",             # 股票名拼音首字母搜索 (同花顺式 payh → 平安银行)
+    # Chan theory analysis (缠论)
+    "czsc>=1.0",
     # TickFlow 官方 SDK
     "tickflow[all]>=0.1.23",
     # TdxQuant 内置数据源插件的原生 TCP 客户端 (wheel 自带跨平台库, 无需系统依赖)
@@ -36,6 +38,16 @@ dependencies = [
     # AI(可选,但默认装上)
     "openai>=1.66",               # OpenAI 兼容适配器复用 openai SDK; 1.66+ 提供 Responses API
     "httpx>=0.27",
+    "socksio>=1.0",               # httpx 自动读取 ALL_PROXY/HTTPS_PROXY 时不得因缺依赖中断数据任务
+    # Independent QuantX deterministic data pipeline. These are runtime
+    # dependencies because the scheduled pipeline invokes the sources by default.
+    "tushare>=1.4",
+    "akshare>=1.18",
+    "playwright>=1.62",
+    "pywencai>=0.13",
+    # Built-in TDX provider. Keep it in the managed environment so `uv sync`
+    # does not remove a dependency previously installed from plugin metadata.
+    "eltdx==0.5.1",
     "platformdirs>=4.0",          # 桌面版用户数据目录 (跨平台持久可写)
     "winotify>=1.1; sys_platform == 'win32'",  # Windows 系统通知 (进操作中心)
     "plyer>=2.1",                 # 系统通知跨平台兜底 (macOS/Linux)
@@ -63,6 +75,12 @@ backtest = [
 # 启用:`uv sync --extra desktop`
 desktop = [
     "pywebview>=5.0",
+]
+
+# Backward-compatible installer flag. Tushare is also a core dependency because
+# the independent QuantX scheduled pipeline invokes it by default.
+tushare = [
+    "tushare>=1.4",
 ]
 
 dev = [
@@ -105,6 +123,16 @@ ignore = [
     "RUF002",  # Docstring contains ambiguous unicode character
     "RUF003",  # Comment contains ambiguous unicode character
 ]
+
+# These modules are vendored source adapters. Their public scraper contracts
+# are preserved verbatim; the independent pipeline validates their output at
+# the adapter boundary instead of reformatting their implementation.
+[tool.ruff.lint.per-file-ignores]
+"app/quantx_data/legacy_scrapers/*.py" = ["ALL"]
+# Topic labels keep the demo's fullwidth separators so both panels stay comparable.
+"app/stock_pools/topics.py" = ["RUF001"]
+"tests/test_stock_pools.py" = ["RUF001"]
+"tests/test_research_materials.py" = ["RUF001"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

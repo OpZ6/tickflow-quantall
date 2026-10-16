@@ -34,6 +34,19 @@ logger = logging.getLogger(__name__)
 # 信号布尔列 (csg_/csgi_/迁移的 signal_*) 的中文名由 _signal_label 查用户定义,
 # 此处只保留技术指标/行情字段与盘中信号。
 _SIGNAL_CN: dict[str, str] = {
+    # 内置信号
+    "signal_ma_golden_5_20": "MA5上穿MA20", "signal_ma_dead_5_20": "MA5下穿MA20",
+    "signal_ma_golden_20_60": "MA20上穿MA60", "signal_macd_golden": "MACD金叉",
+    "signal_macd_dead": "MACD死叉", "signal_ma20_breakout": "突破MA20",
+    "signal_low_volatility_trend_entry": "进入低波动趋势状态",
+    "signal_oversold_reversal_confirmed": "超跌反转确认",
+    "signal_ma20_breakdown": "跌破MA20", "signal_ma5_breakout": "突破MA5",
+    "signal_ma5_breakdown": "跌破MA5", "signal_ma10_breakout": "突破MA10",
+    "signal_ma10_breakdown": "跌破MA10", "signal_n_day_high": "60日新高",
+    "signal_n_day_low": "60日新低", "signal_boll_breakout_upper": "突破布林上轨",
+    "signal_boll_breakdown_lower": "跌破布林下轨", "signal_volume_surge": "放量",
+    "signal_limit_up": "涨停", "signal_limit_down": "跌停",
+    "signal_limit_down_recovery": "跌停翘板", "signal_broken_limit_up": "炸板",
     **INTRADAY_SIGNAL_LABELS,
     # 涨跌停判定价 (运行时列)
     "limit_up_price": "涨停判定价", "limit_down_price": "跌停判定价",
@@ -637,6 +650,8 @@ class MonitorRuleEngine:
                     continue
                 if getattr(strategy, "execution_backend", "polars_expr") != "matrix_native":
                     continue
+                if getattr(strategy, "meta", {}).get("realtime_supported") is False:
+                    continue
                 overrides = {}
                 if self._data_dir:
                     overrides = _strategy_config.load_override(self._data_dir, sid)
@@ -1205,6 +1220,8 @@ class MonitorRuleEngine:
             return []
         if s is None:
             return []
+        if getattr(s, "meta", {}).get("realtime_supported") is False:
+            return []
 
         # 运行策略: 复用当前 enriched DataFrame 跳过数据加载
         overrides = {}
@@ -1383,6 +1400,22 @@ class MonitorRuleEngine:
             "pool_entry": set() if prev_pool is None else current_pool - prev_pool,
             "pool_exit": set() if prev_pool is None else prev_pool - current_pool,
         }
+        if self._data_dir is not None and any(changes.values()):
+            try:
+                from app.services.strategy_evidence import persist_realtime_trigger_events
+
+                persist_realtime_trigger_events(
+                    data_dir=self._data_dir,
+                    strategy_id=sid,
+                    strategy_version=str(s.meta.get("version") or "1.0.0"),
+                    params=dict(overrides.get("params") or {}),
+                    as_of=result.as_of,
+                    asset_type=at,
+                    changes=changes,
+                    rows=row_map,
+                )
+            except Exception as exc:
+                logger.warning("策略 %s 实时触发事件持久化失败: %s", sid, exc)
 
         results: list[tuple[str, str, Any, Any, Any, list[str]]] = []
         signal_map = {

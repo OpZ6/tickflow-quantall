@@ -66,12 +66,20 @@ def test_process_lock_rejects_contention_and_allows_acquire_after_release(
 def test_process_lock_handle_is_not_inheritable_and_release_is_idempotent(
     tmp_path,
 ) -> None:
+    lock_path = tmp_path / ".mining_process.lock"
+    lock_path.write_text("0\npid=123\nacquired_at=1.0\n", encoding="ascii")
     lock = MiningProcessLock(tmp_path)
     lock.acquire()
 
     stream = vars(lock)["_stream"]
     assert stream is not None
     assert not os.get_inheritable(stream.fileno())
+    with lock_path.open("rb") as reader:
+        reader.seek(1)
+        owner_record = reader.read().decode("ascii")
+    assert owner_record.startswith(f"\npid={os.getpid()}\nacquired_at=")
+    assert "pid=123" not in owner_record
 
     lock.release()
+    assert lock_path.read_bytes() == b"0"
     lock.release()

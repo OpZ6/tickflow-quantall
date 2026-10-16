@@ -220,6 +220,14 @@ def get_minute_refresh_interval() -> int:
 # ===== 数据源选择 (默认 TickFlow；第一阶段仅日K切换入口) =====
 
 _ALLOWED_DATA_PROVIDERS = {"tickflow"}
+_DATASET_PROVIDER_FIELDS = {
+    "daily": "daily_data_provider",
+    "adj_factor": "adj_factor_provider",
+    "minute": "minute_data_provider",
+    "depth5": "depth5_data_provider",
+    "realtime": "realtime_data_provider",
+    "financial": "financial_data_provider",
+}
 DATA_SOURCE_JOB_TIMEOUT_MIN_S = 60
 
 
@@ -268,6 +276,61 @@ def _allowed_data_providers() -> set[str]:
         return _ALLOWED_DATA_PROVIDERS | custom_sources.names()
     except Exception:  # noqa: BLE001
         return set(_ALLOWED_DATA_PROVIDERS)
+
+
+def _normalize_provider_chain(providers) -> list[str]:
+    if not isinstance(providers, list):
+        return []
+    allowed = _allowed_data_providers()
+    result: list[str] = []
+    for raw in providers:
+        provider = str(raw or "").strip().lower()
+        if provider and provider in allowed and provider not in result:
+            result.append(provider)
+    return result
+
+
+def get_data_provider_chain(dataset: str) -> list[str]:
+    field = _DATASET_PROVIDER_FIELDS.get(dataset)
+    if field is None:
+        return []
+    data = load()
+    configured = _normalize_provider_chain(
+        (data.get("provider_chains") or {}).get(dataset),
+    )
+    getter_name = {
+        "daily": "get_daily_data_provider",
+        "adj_factor": "get_adj_factor_provider",
+        "minute": "get_minute_data_provider",
+        "depth5": "get_depth5_data_provider",
+        "realtime": "get_realtime_data_provider",
+        "financial": "get_financial_provider",
+    }[dataset]
+    getter = globals().get(getter_name)
+    primary = getter() if callable(getter) else "tickflow"
+    return [primary, *[name for name in configured if name != primary]]
+
+
+def set_data_provider_chain(dataset: str, providers: list[str]) -> list[str]:
+    field = _DATASET_PROVIDER_FIELDS.get(dataset)
+    if field is None:
+        raise ValueError(f"unsupported routable dataset: {dataset}")
+    chain = _normalize_provider_chain(providers)
+    if not chain:
+        chain = ["tickflow"]
+    data = load()
+    chains = dict(data.get("provider_chains") or {})
+    chains[dataset] = chain
+    save({"provider_chains": chains, field: chain[0]})
+    return chain
+
+
+def promote_data_provider(dataset: str, provider: str) -> list[str]:
+    name = str(provider or "").strip().lower()
+    if name not in _allowed_data_providers():
+        raise ValueError(f"unknown data provider: {provider}")
+    current = get_data_provider_chain(dataset)
+    return set_data_provider_chain(dataset, [name, *current])
 
 
 def get_daily_data_provider() -> str:
@@ -520,14 +583,14 @@ def set_pipeline_index_symbols(symbols: str) -> str:
 
 
 def get_pipeline_schedule() -> dict:
-    """返回盘后管道调度时间 {"hour": 15, "minute": 35}。
+    """返回盘后管道调度时间 {"hour": 16, "minute": 30}。
 
-    默认 15:35 而非 15:30 整: 盘后固定价交易 15:30 才彻底结束, 且供应商
-    聚合含盘后量的官方日K需要时间 —— 整点即拉可能写入不含盘后成交的
-    日线, 也与 quote 定版重试窗口终点 (15:30) 精确重合。留 5 分钟缓冲。
+    默认 16:30: None/Free 档当日日 K 经 free-api 盘后约 1-2 小时(约 16:00-17:00)
+    才可用;付费档盘中实时已落盘,收盘后即刻可用,16:30 仅多等片刻不影响当日结果。
+    更早的默认(旧 15:30)会让免费档当天 K 线静默缺失。见 docs/archive/20260907/data-source-timeline.md。
     """
-    d = load().get("pipeline_schedule", {"hour": 15, "minute": 35})
-    return {"hour": d.get("hour", 15), "minute": d.get("minute", 35)}
+    d = load().get("pipeline_schedule", {"hour": 16, "minute": 30})
+    return {"hour": d.get("hour", 16), "minute": d.get("minute", 30)}
 
 
 def set_pipeline_schedule(hour: int, minute: int) -> dict:
@@ -625,17 +688,16 @@ PUSH_CHANNELS = {"feishu", "wecom", "custom", "email"}
 
 
 def get_review_schedule() -> dict:
-    """定时复盘调度 {"enabled": False, "hour": 15, "minute": 40}。默认关闭。
+    """定时复盘调度 {"enabled": False, "hour": 16, "minute": 45}。默认关闭。
 
-    默认 15:40: 盘后管道默认 15:35 启动, 留 5 分钟缓冲, 复盘使用管道
-    产出的最终口径数据 (含盘后量校正的日K/enriched)。强制下限 15:00 —
-    偏好收盘后即时复盘 (走实时快照缓存, 不等管道) 的用户可自行调早。
+    A股 15:00 收盘, 默认时间设为 16:45(盘后管道 16:30 完成、enriched/日K 就绪后复盘),
+    强制下限 15:00。免费档当日日K盘后约1-2小时可用, 复盘不应早于盘后管道。
     """
-    d = load().get("review_schedule", {"enabled": False, "hour": 15, "minute": 40})
+    d = load().get("review_schedule", {"enabled": False, "hour": 16, "minute": 45})
     return {
         "enabled": bool(d.get("enabled", False)),
-        "hour": d.get("hour", 15),
-        "minute": d.get("minute", 40),
+        "hour": d.get("hour", 16),
+        "minute": d.get("minute", 45),
     }
 
 

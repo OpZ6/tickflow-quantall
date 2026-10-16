@@ -7,6 +7,12 @@
           raw_close, raw_high, raw_low, turnover_rate,
           consecutive_limit_ups, consecutive_limit_downs
 
+单位契约: volume 为手(100股), amount 为元, turnover_rate 为百分数值。
+历史单位断点: 旧 Quants 导入的股/千元及其派生的 100 倍换手率已由
+repair_historical_daily_units.py / repair_historical_turnover_rate.py 修复。
+2015 年遗漏区间也已补齐; 2016-12-30 不是当前数据的有效性边界。
+流水线只接收标准单位, 不按日期或数值大小再次缩放; 未修复库存须先迁移。
+
 设计:
   - 100% Polars 表达式(SQL 窗口无法表达递归 EMA)
   - 每只标的独立计算(`.over("symbol")`)
@@ -112,9 +118,9 @@ def invalidate_custom_signals() -> None:
 ENRICHED_STORAGE_COLS = [
     "symbol", "date",
     "open", "high", "low", "close",          # 前复权
-    "volume", "amount",
+    "volume", "amount",                     # 手(100股) / 元; 入库前统一单位
     "raw_close", "raw_high", "raw_low",       # 不复权原始价
-    "turnover_rate",                           # 依赖当时的 float_shares, 不可回推
+    "turnover_rate",                           # 百分数值; 依赖当时的 float_shares, 不可回推
     "consecutive_limit_ups",                   # 递推状态, 需从历史 cum_sum
     "consecutive_limit_downs",
     "quote_ts",                                # 行情时间戳(ms): 盘后校验/量比折算/跨天完整性
@@ -820,8 +826,14 @@ def compute_limit_signals(
     )
 
     # 生效涨跌停价: 维表日期与行情日期一致时使用权威值, 否则使用理论价。
+    # 部分上游会在盘前返回上一交易日的涨跌停价, 而本地同步仍把维表标成今天。
+    # 因此日期一致还不够: 有昨收时必须同时与交易所规则计算值一致。
     # 旧版维表没有 as_of, 保持仅在最新行情日使用权威值的兼容行为。
     _SENTINEL = 10000.0
+    valid_prev_raw = (
+        pl.col("_prev_raw_close").is_not_null()
+        & (pl.col("_prev_raw_close") > 0)
+    )
     if "_instrument_as_of" in df.columns:
         authoritative_date = (
             pl.col("_instrument_as_of") == pl.col("date").cast(pl.Date, strict=False)
@@ -837,6 +849,13 @@ def compute_limit_signals(
             & pl.col("limit_up").is_not_null()
             & (pl.col("limit_up") > 0)
             & (pl.col("limit_up") < _SENTINEL)
+            & (
+                ~valid_prev_raw
+                | (
+                    (pl.col("limit_up") - pl.col("_theoretical_limit_up")).abs()
+                    <= 0.005
+                )
+            )
         ).then(pl.col("limit_up")).otherwise(pl.col("_theoretical_limit_up"))
     else:
         effective_limit_up = pl.col("_theoretical_limit_up")
@@ -846,6 +865,13 @@ def compute_limit_signals(
             & pl.col("limit_down").is_not_null()
             & (pl.col("limit_down") > 0)
             & (pl.col("limit_down") < _SENTINEL)
+            & (
+                ~valid_prev_raw
+                | (
+                    (pl.col("limit_down") - pl.col("_theoretical_limit_down")).abs()
+                    <= 0.005
+                )
+            )
         ).then(pl.col("limit_down")).otherwise(pl.col("_theoretical_limit_down"))
     else:
         effective_limit_down = pl.col("_theoretical_limit_down")
@@ -1075,6 +1101,31 @@ def compute_enriched(
     return df
 
 
+def _restore_raw_daily_history(enriched: pl.DataFrame) -> pl.DataFrame:
+    """Restore raw OHLC before recomputing an already-enriched history window.
+
+    Forward-incremental builds prepend stored qfq rows to newly downloaded raw
+    rows.  Feeding those stored rows directly into ``compute_enriched`` applies
+    the adjustment factor a second time and creates a price-basis break at the
+    first new partition.  The storage schema keeps raw close/high/low; raw open
+    is recovered from the row's close adjustment ratio.
+    """
+    required = {"open", "high", "low", "close", "raw_close", "raw_high", "raw_low"}
+    if enriched.is_empty() or not required.issubset(enriched.columns):
+        return enriched
+    ratio = (
+        pl.when(pl.col("close").is_not_null() & (pl.col("close") != 0))
+        .then(pl.col("raw_close") / pl.col("close"))
+        .otherwise(1.0)
+    )
+    return enriched.with_columns(
+        (pl.col("open") * ratio).alias("open"),
+        pl.col("raw_high").alias("high"),
+        pl.col("raw_low").alias("low"),
+        pl.col("raw_close").alias("close"),
+    )
+
+
 def _select_storage_cols(df: pl.DataFrame) -> pl.DataFrame:
     """写入 parquet 前裁剪到存储列 (14 列)。"""
     cols = [c for c in ENRICHED_STORAGE_COLS if c in df.columns]
@@ -1118,7 +1169,11 @@ _benchmark_cache: dict[str, tuple[float, pl.DataFrame | None]] = {}
 _BENCHMARK_CACHE_TTL = 600.0
 
 
-def load_benchmark_momentum(data_dir: Path) -> pl.DataFrame | None:
+def load_benchmark_momentum(
+    data_dir: Path,
+    *,
+    force_refresh: bool = False,
+) -> pl.DataFrame | None:
     """读取指数日K, 计算各基准指数的滚动 N 日涨跌幅。
 
     返回长表: date, bench_key, bench_close, bench_mom3d, bench_mom10d, bench_mom30d。
@@ -1132,7 +1187,11 @@ def load_benchmark_momentum(data_dir: Path) -> pl.DataFrame | None:
     now = _time.monotonic()
     key = str(Path(data_dir).resolve())
     cached = _benchmark_cache.get(key)
-    if cached is not None and now - cached[0] < _BENCHMARK_CACHE_TTL:
+    if (
+        not force_refresh
+        and cached is not None
+        and now - cached[0] < _BENCHMARK_CACHE_TTL
+    ):
         return cached[1]
 
     frame: pl.DataFrame | None = None
@@ -1220,7 +1279,10 @@ def attach_deviation_columns(df: pl.DataFrame, data_dir: Path) -> pl.DataFrame:
     """
     if df.is_empty():
         return df
-    bench = load_benchmark_momentum(data_dir)
+    # This cold path rebuilds the repository's latest enriched frame. Index
+    # daily data may have been published moments after an earlier warmup cached
+    # the previous trading day, so the normal 10-minute cache is unsafe here.
+    bench = load_benchmark_momentum(data_dir, force_refresh=True)
     dev_cols = [f"deviate_{n}d" for n in DEVIATION_WINDOWS]
     if bench is None or bench.is_empty():
         return df.with_columns([pl.lit(None, dtype=pl.Float64).alias(c) for c in dev_cols])
@@ -1357,6 +1419,33 @@ def attach_deviation_columns_today(
     )
 
 
+def repair_today_deviation_columns(
+    df: pl.DataFrame,
+    data_dir: Path,
+) -> pl.DataFrame:
+    """Fill today's null deviation columns when index daily lags by one session.
+
+    A realtime stock snapshot may publish today's enriched partition before the
+    scheduled index-daily pipeline runs. The cold full-history join then has no
+    same-date benchmark row. Reuse the intraday benchmark extrapolation with a
+    flat index quote so the page remains usable until the index partition lands.
+    Historical dates and already-computed deviation values are left untouched.
+    """
+    if df.is_empty() or "date" not in df.columns or df["date"].max() != cn_today():
+        return df
+    dev_cols = [f"deviate_{n}d" for n in DEVIATION_WINDOWS if f"deviate_{n}d" in df.columns]
+    if not dev_cols:
+        return df
+    today_rows = df.filter(pl.col("date") == cn_today())
+    if today_rows.is_empty() or any(
+        today_rows[col].null_count() < today_rows.height for col in dev_cols
+    ):
+        return df
+    repaired = attach_deviation_columns_today(today_rows, data_dir)
+    return pl.concat(
+        [df.filter(pl.col("date") != cn_today()), repaired],
+        how="diagonal_relaxed",
+    ).sort(["symbol", "date"])
 # ================================================================
 # 全量重建流式暂存 + 自适应批次 (#208/#174)
 #
@@ -1589,7 +1678,8 @@ def run_pipeline(data_dir: Path | None = None,
                 hist_cols = [c for c in ["symbol", "date", "open", "high", "low", "close",
                                          "volume", "amount", "raw_close", "raw_high", "raw_low"]
                              if c in hist_df.columns]
-                raw_full = pl.concat([hist_df.select(hist_cols), raw_new], how="diagonal_relaxed")
+                raw_history = _restore_raw_daily_history(hist_df.select(hist_cols))
+                raw_full = pl.concat([raw_history, raw_new], how="diagonal_relaxed")
             else:
                 raw_full = raw_new
 
@@ -1872,6 +1962,7 @@ def _load_recent_history(enriched_base: Path, symbols: list[str], days: int) -> 
                 (pl.col("symbol").is_in(symbols))
                 & (pl.col("date") >= cutoff)
             )
+            .unique(subset=["symbol", "date"], keep="last")
             .sort(["symbol", "date"])
         )
         hist_cols = [c for c in ["symbol", "date", "open", "high", "low", "close",
@@ -2233,15 +2324,22 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
 
     df = df.join(inst_subset, on="symbol", how="left", suffix="_inst")
 
-    # 换手率: API 有则直接用, 无则从 float_shares 计算
-    if "turnover_rate" not in df.columns:
-        if "float_shares" in df.columns and "volume" in df.columns:
-            df = df.with_columns(
-                pl.when(pl.col("float_shares") > 0)
-                  .then(pl.col("volume") * 10000.0 / pl.col("float_shares"))
-                  .otherwise(None)
-                  .alias("turnover_rate")
+    # 换手率: API 有效值直接用; 缺列或空值时从 float_shares 计算。
+    if "float_shares" in df.columns and "volume" in df.columns:
+        calculated_turnover = (
+            pl.when(pl.col("float_shares") > 0)
+            .then(pl.col("volume") * 10000.0 / pl.col("float_shares"))
+            .otherwise(None)
+        )
+        if "turnover_rate" in df.columns:
+            turnover_rate = (
+                pl.col("turnover_rate")
+                .cast(pl.Float64, strict=False)
+                .fill_null(calculated_turnover)
             )
+        else:
+            turnover_rate = calculated_turnover
+        df = df.with_columns(turnover_rate.alias("turnover_rate"))
 
     # 涨跌停 (用 raw_close / raw_high 和前一日原始收盘价)
     # 优先用 API 原始前收盘价, 回退到 close_right, 最后回退到 raw_close
@@ -2264,9 +2362,12 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
 
     limit_up_price = polars_limit_price(prev_raw, limit_pct, up=True)
     limit_down_price = polars_limit_price(prev_raw, limit_pct, up=False)
+    valid_prev_raw = prev_raw.is_not_null() & (prev_raw > 0)
 
     # 生效涨跌停价: 维表日期与行情日期一致时优先使用交易所权威值;
-    # 维表过期或价格缺失时回退自算理论价。旧版无 as_of 维表保持兼容。
+    # 维表过期、价格缺失或与实时昨收推导值不一致时回退自算理论价。
+    # 后一个校验防止盘前维表把昨日涨停价带到今天并误报整条连板梯队。
+    # 旧版无 as_of 维表保持兼容, 但同样必须通过价格一致性校验。
     # 哨兵阈值 10000 用于识别 "新股无涨跌停限制" 的占位值 (实际涨停价不可能上万)。
     _SENTINEL = 10000.0
     authoritative_date = (
@@ -2283,6 +2384,10 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
             & pl.col("limit_up").is_not_null()
             & (pl.col("limit_up") > 0)
             & (pl.col("limit_up") < _SENTINEL)
+            & (
+                ~valid_prev_raw
+                | ((pl.col("limit_up") - limit_up_price).abs() <= 0.005)
+            )
         )
         no_price_limit = (
             authoritative_date
@@ -2300,6 +2405,10 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
             & pl.col("limit_down").is_not_null()
             & (pl.col("limit_down") > 0)
             & (pl.col("limit_down") < _SENTINEL)
+            & (
+                ~valid_prev_raw
+                | ((pl.col("limit_down") - limit_down_price).abs() <= 0.005)
+            )
         )
         effective_limit_down = pl.when(
             has_authoritative_down

@@ -1,15 +1,20 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { type KlineRow } from '@/lib/api'
+import { api, type KlineRow } from '@/lib/api'
 import { klineDailyQueryOptions } from '@/lib/kline'
 import { storage } from '@/lib/storage'
 import {
   EChartsCandlestick,
   OVERLAY_INDICATORS,
   SUB_CHARTS,
+  DEFAULT_CHANLUN_CONFIG,
+  buildTimeIndex,
+  mapChanlunData,
+  toChanlunCandles,
   type ChartMarker,
   type ChartPriceLine,
   type ChartRange,
+  type ChanlunLayerConfig,
   type OHLC,
   type VolumeCompareConfig,
 } from '@/components/EChartsCandlestick'
@@ -150,6 +155,7 @@ export function StockDailyKChart({
 }: Props) {
   const [activeIndicators, setActiveIndicators] = useState<string[]>(['vol'])
   const [showMarkers, setShowMarkers] = useState(true)
+  const [chanlunConfig, setChanlunConfig] = useState<ChanlunLayerConfig>(DEFAULT_CHANLUN_CONFIG)
   // 加入自选日标注（与「异动」标记相互独立）
   const [showAddedMark, setShowAddedMark] = useState(true)
   const [volumeCompare, setVolumeCompare] = useState<VolumeCompareConfig>(() =>
@@ -167,6 +173,23 @@ export function StockDailyKChart({
     ...(markers ?? []),
     ...(showLimitMarkers ? limitMarkers : []),
   ], [limitMarkers, markers, showLimitMarkers])
+
+  // ===== 缠论图层 (按需计算) =====
+  const chanlunCandles = useMemo(
+    () => (chanlunConfig.visible ? toChanlunCandles(rows) : []),
+    [chanlunConfig.visible, rows],
+  )
+  const chanlunQuery = useQuery({
+    queryKey: ['chanlun', 'analyze', symbol, rows.length, rows[rows.length - 1]?.date ?? ''],
+    queryFn: () => api.chanlunAnalyze(chanlunCandles),
+    enabled: chanlunCandles.length >= 10,
+    staleTime: 60_000,
+  })
+  const chanlunTimeIndex = useMemo(() => buildTimeIndex(rows), [rows])
+  const chanlunLayer = useMemo(
+    () => mapChanlunData(chanlunConfig.visible ? chanlunQuery.data : null, chanlunTimeIndex),
+    [chanlunConfig.visible, chanlunQuery.data, chanlunTimeIndex],
+  )
 
   const toggleIndicator = useCallback((key: string) => {
     setActiveIndicators(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
@@ -212,6 +235,16 @@ export function StockDailyKChart({
               onClick={() => toggleIndicator(ind.key)}
             />
           ))}
+          <button
+            onClick={() => setChanlunConfig(prev => ({ ...prev, visible: !prev.visible }))}
+            className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer transition-colors ${
+              chanlunConfig.visible
+                ? 'bg-[#a55eea]/20 text-[#a55eea]'
+                : 'bg-elevated text-muted hover:text-secondary'
+            }`}
+          >
+            缠论
+          </button>
           {activeIndicators.includes('vol') && (
             <div className="ml-0.5 flex h-5 items-center gap-1.5 border-l border-border/70 pl-2">
               <span className="text-[10px] text-muted">量比</span>
@@ -289,6 +322,8 @@ export function StockDailyKChart({
           visibleBars={visibleBars}
           activeIndicators={activeIndicators}
           volumeCompare={volumeCompare}
+          chanlunData={chanlunLayer}
+          chanlunConfig={chanlunConfig}
           addedDate={showAddedMark ? addedDate : null}
         />
       )}

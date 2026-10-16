@@ -54,6 +54,7 @@ def _limit_signal_definitions(monkeypatch):
         ("600001.SH", date(2026, 7, 6), True, 0.10),
         ("000001.SZ", date(2026, 7, 3), False, 0.10),
         ("300001.SZ", date(2026, 7, 3), True, 0.20),
+        ("302132.SZ", date(2026, 7, 3), False, 0.20),
         ("688001.SH", date(2026, 7, 3), True, 0.20),
         ("689001.SH", date(2026, 7, 3), True, 0.20),
         ("830001.BJ", date(2026, 7, 3), True, 0.30),
@@ -69,7 +70,7 @@ def test_scalar_price_limit_rules(symbol, trade_date, is_st, expected):
 
 def test_polars_and_numpy_price_limit_rules_match():
     dates = [date(2026, 7, 3), date(2026, 7, 6)]
-    symbols = ["600001.SH", "300001.SZ", "689001.SH", "830001.BJ"]
+    symbols = ["600001.SH", "302132.SZ", "689001.SH", "830001.BJ"]
     names = ["*st主板", "*ST创业", "科创ST", "北交ST"]
     panel = pl.DataFrame({
         "date": [value for value in dates for _ in symbols],
@@ -229,25 +230,30 @@ def _daily_limit_rows(current_close: float) -> pl.DataFrame:
 
 
 @pytest.mark.parametrize(
-    ("instrument_as_of", "expected"),
+    ("instrument_as_of", "instrument_limit_down", "current_close", "expected"),
     [
-        (date(2026, 7, 17), False),
-        (date(2026, 7, 20), True),
-        (None, True),
+        (date(2026, 7, 17), 9.10, 9.10, False),
+        (date(2026, 7, 20), 9.00, 9.00, True),
+        (None, 9.00, 9.00, True),
     ],
 )
-def test_daily_limit_prices_require_matching_instrument_date(instrument_as_of, expected):
+def test_daily_limit_prices_require_matching_instrument_date_and_value(
+    instrument_as_of,
+    instrument_limit_down,
+    current_close,
+    expected,
+):
     instrument_data = {
         "symbol": ["600001.SH"],
         "name": ["普通股"],
-        "limit_up": [10.90],
-        "limit_down": [9.10],
+        "limit_up": [11.00],
+        "limit_down": [instrument_limit_down],
     }
     if instrument_as_of is not None:
         instrument_data["as_of"] = [instrument_as_of]
 
     result = pipeline.compute_limit_signals(
-        _daily_limit_rows(9.10),
+        _daily_limit_rows(current_close),
         pl.DataFrame(instrument_data),
         needed={"signal_limit_down"},
     )
@@ -350,6 +356,59 @@ def test_realtime_limit_prices_ignore_stale_instrument_date():
     assert result["limit_down_price"][0] == pytest.approx(9.005)
     assert result["consecutive_limit_downs"][0] == 0
     assert "_instrument_as_of" not in result.columns
+
+
+def test_daily_limit_prices_ignore_same_day_but_inconsistent_instrument_price():
+    rows = _daily_limit_rows(10.10)
+    instruments = pl.DataFrame({
+        "symbol": ["600001.SH"],
+        "name": ["普通股"],
+        # Upstream has not rolled yesterday's 10.00 limit-up price forward,
+        # even though the local dimension sync stamps the row as today.
+        "limit_up": [10.00],
+        "limit_down": [9.00],
+        "as_of": [date(2026, 7, 20)],
+    })
+
+    result = pipeline.compute_limit_signals(
+        rows,
+        instruments,
+        needed={"signal_limit_up"},
+    )
+
+    assert result["signal_limit_up"][-1] is False
+
+
+def test_realtime_limit_prices_ignore_same_day_but_inconsistent_instrument_price():
+    today = date(2026, 7, 20)
+    rows = pl.DataFrame({
+        "symbol": ["600001.SH"],
+        "date": [today],
+        "open": [10.10],
+        "high": [10.10],
+        "low": [10.10],
+        "close": [10.10],
+        "raw_close": [10.10],
+        "raw_high": [10.10],
+        "raw_low": [10.10],
+        "_prev_close_raw": [10.0],
+        "volume": [1000.0],
+    })
+    instruments = pl.DataFrame({
+        "symbol": ["600001.SH"],
+        "name": ["普通股"],
+        "limit_up": [10.00],
+        "limit_down": [9.00],
+        "as_of": [today],
+    })
+
+    result = pipeline._compute_limit_signals_today(rows, instruments)
+
+    # 维表 limit_up=10.00 与由 _prev_close_raw 推出的 11.00 不一致 (>0.005 容差),
+    # 实时路径必须以昨收理论价为准、忽略维表值; 当日 close 10.10 低于该价 → 非涨停。
+    # (signal_* 列已改为由信号定义在 compute_enriched_today 末尾注入, 此处按等价列断言)
+    assert result["limit_up_price"][0] == pytest.approx(10.995)
+    assert rows["close"][0] < result["limit_up_price"][0]
 
 
 def test_limit_down_recovery_uses_raw_low_under_later_ex_div():

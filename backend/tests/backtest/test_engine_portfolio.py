@@ -90,6 +90,22 @@ def test_one_price_limit_up_blocks_buy():
     assert result.stats["execution"]["buy_limit_up"] == 1
 
 
+def test_new_close_signal_after_exit_can_fill_on_the_following_day():
+    panel = _panel(["A"], days=5)
+    result = _engine().simulate_portfolio(
+        panel,
+        _mask(panel, {("A", 0), ("A", 2)}),
+        _mask(panel, {("A", 1)}),
+        MatcherConfig(
+            matching="open_t+1", fees_pct=0, slippage_bps=0,
+            max_positions=1, initial_capital=100_000,
+        ),
+    )
+    assert [str(trade.entry_date)[:10] for trade in result.trades] == ["2024-01-02", "2024-01-04"]
+    assert str(result.trades[0].exit_date)[:10] == "2024-01-03"
+    assert result.stats["execution"]["buy_same_day_reentry"] == 0
+
+
 def test_failed_open_exit_keeps_slot_and_blocks_replacement_buy():
     panel = _panel(
         ["A", "B", "C", "D"],

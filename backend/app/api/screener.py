@@ -19,6 +19,7 @@ from app.config import settings
 from app.db_safe import is_valid_ext_ident, quote_ident
 from app.services import strategy_cache, strategy_run_queue
 from app.services.screener import ScreenerService
+from app.services.strategy_evidence import enrich_and_persist_strategy_result
 from app.strategy import config as strategy_config
 
 logger = logging.getLogger(__name__)
@@ -285,15 +286,7 @@ def _update_cache_strategy(data_dir, as_of: str, strategy_id: str, safe_data: di
     cached = strategy_cache.read_cache(data_dir)
     if cached and cached.get("as_of") == as_of:
         results = cached.get("results", {})
-        results[strategy_id] = {
-            "total": safe_data.get("total", 0),
-            "as_of": as_of,
-            "rows": safe_data.get("rows", []),
-        }
-        if safe_data.get("warnings"):
-            # 数据不足提示 (#303) 随缓存下发 (get_cached 原样读出),
-            # 单跑刷新不得冲掉 run_all 写入的提示
-            results[strategy_id]["warnings"] = safe_data["warnings"]
+        results[strategy_id] = {**safe_data, "as_of": as_of, "strategy": strategy_id}
         strategy_cache.write_cache(data_dir, as_of, results)
 
 
@@ -318,10 +311,15 @@ def strategies(
             continue
         sid = meta["id"]
         overrides = strategy_config.load_override(data_dir, sid)
+        from app.strategy.catalog import catalog_label_for, catalog_origin
+
+        origin = catalog_origin(sid, meta.get("source"))
         presets.append({
             **meta,
             "name": overrides.get("name") or meta["name"],
             "description": overrides.get("description") or meta.get("description", ""),
+            "catalog_origin": origin,
+            "catalog_label": catalog_label_for(origin),
         })
 
     return {"presets": presets, "load_errors": engine.load_errors()}
@@ -389,11 +387,25 @@ def run_preset(req: PresetRequest, request: Request):
             params=params,
             overrides=overrides or None,
         )
+        # The local evidence store and strategy cache both use daily-bar
+        # semantics. Minute presets are intentionally transient until they
+        # have a dedicated minute event schema.
+        if req.timeframe == "1d":
+            enrich_and_persist_strategy_result(
+                data_dir=data_dir,
+                result=result,
+                strategy=engine.get(req.strategy_id),
+                params=params,
+                context=context,
+            )
     except ValueError as e:
         status_code = 404 if "unknown strategy" in str(e) else 400
         raise HTTPException(status_code=status_code, detail=str(e)) from e
 
     safe_data = _safe(asdict(result))
+    safe_data["strategy"] = req.strategy_id
+    # 分钟周期结果不写入盘后缓存 (strategy_cache 是日线语义, as_of/updated_at
+    # 混入分钟结果会污染页面秒加载路径)。
     if req.timeframe == "1d":
         # 数据不足提示随结果返回并写入盘后缓存 (#303); 分钟周期结果不写入盘后缓存
         # (strategy_cache 是日线语义, as_of/updated_at 混入分钟结果会污染页面秒加载路径),
@@ -423,7 +435,14 @@ def _cached_with_realtime(request: Request) -> dict:
         realtime_results = monitor_engine.latest_strategy_results()
         if realtime_results:
             results = dict(cached.get("results") or {})
-            results.update(realtime_results)
+            for strategy_id, realtime_result in realtime_results.items():
+                previous = results.get(strategy_id)
+                if isinstance(previous, dict) and isinstance(realtime_result, dict):
+                    # 实时监控快照只负责更新 rows/total/as_of；保留最近一次可追溯
+                    # 策略运行的版本、参数和批次，避免策略页深链丢失证据上下文。
+                    results[strategy_id] = {**previous, **realtime_result}
+                else:
+                    results[strategy_id] = realtime_result
             cached = dict(cached)
             cached["results"] = results
             # 有实时数据时, 以最新时间戳为准
@@ -533,6 +552,13 @@ def get_cached_result(
         "rows": _rows_with_ext(raw_result.get("rows") or [], ext_values),
         "total": int(raw_result.get("total") or 0),
         "elapsed_ms": 0.0,
+        "strategy_version": raw_result.get("strategy_version"),
+        "params_fingerprint": raw_result.get("params_fingerprint"),
+        "source_run_id": raw_result.get("source_run_id"),
+        "input_fingerprint": raw_result.get("input_fingerprint"),
+        "entry_signal_hits": raw_result.get("entry_signal_hits") or [],
+        "exit_signal_hits": raw_result.get("exit_signal_hits") or [],
+        "evidence": raw_result.get("evidence") or [],
     }
 
     ever_rows = None
@@ -846,12 +872,17 @@ def run_all(request: Request, body: Optional[dict] = None):
 
     results: dict[str, dict] = {}
     for sid, result in engine_results.items():
-        safe_rows = _safe(asdict(result)).get("rows", [])
-        results[sid] = {
-            "total": result.total,
-            "as_of": str(as_of),
-            "rows": safe_rows,
-        }
+        enrich_and_persist_strategy_result(
+            data_dir=data_dir,
+            result=result,
+            strategy=engine.get(sid),
+            params=params_map.get(sid, {}),
+            context=context,
+        )
+        safe_result = _safe(asdict(result))
+        safe_result["strategy"] = sid
+        safe_result["as_of"] = str(as_of)
+        results[sid] = safe_result
         if timeframe == "1d":
             w = _coverage_warnings(
                 svc, as_of, engine=engine, strategy_ids=[sid],
@@ -1161,6 +1192,7 @@ def limit_ladder(
 def _parse_ext_columns(ext_columns: str) -> list[tuple[str, str]]:
     """解析 'config_id1.field1,config_id2.field2' 为 [(config_id, field_name), ...]。"""
     result = []
+    seen: set[tuple[str, str]] = set()
     for part in ext_columns.split(","):
         part = part.strip()
         if "." not in part:
@@ -1172,5 +1204,9 @@ def _parse_ext_columns(ext_columns: str) -> list[tuple[str, str]]:
             continue
         if not is_valid_ext_ident(config_id) or "\x00" in field_name:
             continue
-        result.append((config_id, field_name))
+        spec = (config_id, field_name)
+        if spec in seen:
+            continue
+        seen.add(spec)
+        result.append(spec)
     return result

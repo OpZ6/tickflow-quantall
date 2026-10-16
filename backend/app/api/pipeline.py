@@ -7,6 +7,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.api.data import invalidate_storage_cache
 from app.jobs import daily_pipeline
 from app.services.pipeline_jobs import (
     JobCancelledError,
@@ -15,7 +16,6 @@ from app.services.pipeline_jobs import (
     run_with_capacity,
     try_acquire_run_slot,
 )
-from app.api.data import invalidate_storage_cache
 
 # 长时间任务专用线程池（隔离于 FastAPI 默认线程池，防止阻塞请求处理）
 _long_task_executor = _cf.ThreadPoolExecutor(max_workers=2, thread_name_prefix="long-task")
@@ -23,6 +23,19 @@ _long_task_executor = _cf.ThreadPoolExecutor(max_workers=2, thread_name_prefix="
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
+
+
+def _run_pipeline_and_quantx(run, progress) -> dict:
+    """Run the main data pipeline and all dependent daily publications.
+
+    run 由 _submit_job 的 make_run 闭包提供 (已绑定 repo/capset), 这里只负责
+    在主管道成功后再追加 QuantX 复盘与选股池两个后置发布阶段。
+    """
+
+    result = run()
+    result["quantx"] = daily_pipeline._run_quantx_after_pipeline()
+    result["stock_pools"] = daily_pipeline._run_stock_pools_after_pipeline()
+    return result
 
 
 @router.post("/run")
@@ -84,8 +97,8 @@ async def _submit_job(repo, quote_service, make_run) -> dict:
                 try:
                     if qs:
                         with qs.paused():
-                            return run()
-                    return run()
+                            return _run_pipeline_and_quantx(run, progress)
+                    return _run_pipeline_and_quantx(run, progress)
                 finally:
                     repo.refresh_cache()
 

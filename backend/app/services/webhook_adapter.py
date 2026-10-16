@@ -317,7 +317,6 @@ def send_wecom(webhook_url: str, title: str, body: str) -> bool:
     payload: dict = {"msgtype": "text", "text": {"content": text}}
     return _post_wecom(webhook_url, payload)
 
-
 def send_wecom_markdown(webhook_url: str, title: str, body_md: str) -> bool:
     """推送一条 Markdown 消息到企业微信群推送 Webhook —— 承载完整复盘报告。
 
@@ -345,8 +344,6 @@ def send_wecom_markdown(webhook_url: str, title: str, body_md: str) -> bool:
 
     payload: dict = {"msgtype": "markdown", "markdown": {"content": content}}
     return _post_wecom(webhook_url, payload)
-
-
 # ================================================================
 # 通用第三方 JSON Webhook
 # ================================================================

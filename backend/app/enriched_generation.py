@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 import polars as pl
+import psutil
 
 
 class EnrichedGenerationUnavailableError(RuntimeError):
@@ -133,6 +134,11 @@ def _process_is_alive(pid: Any) -> bool:
         return False
     if pid == os.getpid():
         return True
+    if os.name == "nt":
+        # Windows Python versions do not consistently implement ``os.kill(pid, 0)``:
+        # some return a non-process error even for a valid pid.  Use the process
+        # table directly so orphaned publication markers can be recovered safely.
+        return psutil.pid_exists(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -140,9 +146,7 @@ def _process_is_alive(pid: Any) -> bool:
     except (OSError, PermissionError) as exc:
         # Windows 对不存在的 pid 返回 WinError 87 (ERROR_INVALID_PARAMETER),
         # 不会映射为 ProcessLookupError; 按存活处理会让孤儿发布锁永远无法恢复。
-        if getattr(exc, "winerror", None) == 87:
-            return False
-        return True
+        return getattr(exc, "winerror", None) != 87
     return True
 
 
@@ -252,6 +256,31 @@ def enriched_publication_incomplete(
     )
 
 
+def recover_orphaned_enriched_generation(
+    data_dir: Path,
+    asset_type: str = "stock",
+) -> bool:
+    """Restore a stable generation marker when its publishing process is dead.
+
+    This is intentionally conservative: an active owner is never displaced, and
+    the existing generation is preserved because no data files are changed.
+    """
+    path = _marker_path(data_dir, asset_type)
+    with _exclusive_generation_lock(data_dir, asset_type):
+        payload = _read_marker(path)
+        if payload is None or payload.get("state", "ready") == "ready":
+            return False
+        if _process_is_alive(payload.get("owner_pid")):
+            return False
+        generation = payload.get("generation")
+        if not isinstance(generation, str) or not generation:
+            raise EnrichedGenerationUnavailableError(
+                "orphaned enriched publication has no recoverable generation"
+            )
+        _write_marker(path, _ready_payload(generation))
+        return True
+
+
 def bump_enriched_generation(data_dir: Path, asset_type: str = "stock") -> str:
     path = _marker_path(data_dir, asset_type)
     with _exclusive_generation_lock(data_dir, asset_type):
@@ -315,6 +344,13 @@ class EnrichedPublication:
                 os.replace(temporary, out)
                 _fsync_directory(out.parent)
                 self._changed = True
+        except Exception:
+            # 发布在产生任何数据变更前失败 (如 Windows 目标文件被占用): 恢复 ready
+            # 标记, 否则本进程内所有 enriched 区间读取都会因 publishing 状态
+            # fail-closed, 直到下一次成功发布或重启。已产生变更时 abandon 不改标记,
+            # 保持 fail-closed 语义。
+            self.abandon()
+            raise
         finally:
             temporary.unlink(missing_ok=True)
 
