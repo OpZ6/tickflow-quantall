@@ -1,0 +1,38 @@
+{
+  "audit_id": "security-name-first-page-audit-20260908-v1",
+  "audited_at": "2026-09-08T14:47:06+08:00",
+  "source": {
+    "manifest": "data/research/security-snapshots/20260907-namechange-v1/manifest.json",
+    "page": "data/research/security-snapshots/20260907-namechange-v1/page-000000.json",
+    "page_sha256": "ba70f9316a0f55dd7165596821f495d5d3b96a43b4546696aa2e49f5a0d75cfe",
+    "rows": 10000,
+    "status": "incomplete",
+    "next_page": 1,
+    "production_published": false
+  },
+  "fail_closed_findings": {
+    "invalid_source_codes": [
+      {
+        "source_symbol": "X19363.SH",
+        "rows": 1,
+        "disposition": "retain raw evidence; reject until an explicit identity mapping is verified"
+      }
+    ],
+    "remaining_rows_checked_in_memory": 9999,
+    "overlap_pairs": 6,
+    "overlap_symbols": [
+      "300132.SZ",
+      "600388.SH",
+      "600768.SH"
+    ],
+    "overlap_pattern": "Each symbol has an announcement-date open interval followed by a later same-name open interval while the prior name ends immediately before the later interval.",
+    "disposition": "Do not infer effective dates or publish name facts until source semantics and later pages are verified."
+  },
+  "decision": "rejected_incomplete_source_and_ambiguous_intervals",
+  "strategy_blocking": false,
+  "reason": "The current Shanghai/Shenzhen VCP research baseline does not consume this unpublished historical-name fact set.",
+  "later_resolutions": [
+    "docs/research/security-name-announcement-shadow-resolution-20260908-v1.json",
+    "docs/research/security-name-x19363-disposition-20260908-v1.json"
+  ]
+}

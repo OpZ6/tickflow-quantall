@@ -1,0 +1,17 @@
+{
+  "experiment": "production-leader-final-leg-rs-resilience-audit-2017-2026-v1",
+  "decision": "close_inconclusive_protocol_implementation_mismatch",
+  "protocol": "docs/research/vcp/production-leader-final-leg-rs-resilience-audit-2017-2026-v1.json",
+  "raw_result": "data/research/vcp/analysis/final-leg-rs-resilience-2017-2026-v1.json",
+  "implementation": "scripts/analyze_vcp_rs_resilience.py",
+  "findings": [
+    "The protocol specifies a share of market sessions; the implementation removes nonfinite ranks before computing the denominator.",
+    "A nonempty partial interval can produce the primary feature even when the signal-date rank is missing.",
+    "Therefore reported feature coverage and acceptance gates do not establish acceptance or falsification of the registered mechanism."
+  ],
+  "mechanism_conclusion": "inconclusive",
+  "raw_artifacts_retained": true,
+  "strategy_changed": false,
+  "data_repair_required_by_this_decision": false,
+  "next_action": "Close this implementation without threshold or window variants. Continue method development on accepted daily data; any future revisit must explicitly resolve the measurement contract and disclose prior exposure."
+}

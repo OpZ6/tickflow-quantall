@@ -1,0 +1,12 @@
+{
+  "experiment": "two-bar-no-demand-full-candidate-v1",
+  "source_run": "20260909T030431101979Z",
+  "hypothesis": "The previously retained two-bar no-demand exit improves mean net returns on the complete independent filled-candidate ledger, not only four-slot portfolio fills.",
+  "source": "goal.md baseline coverage correction; prior four-slot result already exposed",
+  "only_change": "Add the exact existing apply_two_bar_no_demand_to_fill rule to frozen independent fills; same entries, original exits and costs otherwise.",
+  "training": "Entry in 2016-2022 and original exit no later than 2022-12-31",
+  "primary": "Independent-trade win rate, mean win / absolute mean nonwin, mean net return; no portfolio metric",
+  "gate": "Keep only if mean net return does not fall and remains positive; report payoff and winner damage explicitly.",
+  "scope": "Reuse existing full-mode ledger; inspect execution path before treating it as uncapped. No new detector or parameter search. Training result is not live qualification.",
+  "output": "data/research/vcp/two-bar-no-demand-full-candidate-v1"
+}

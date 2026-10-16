@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-first-cross-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-exit-ma10-v1",
+  "purpose": "cycle2_exit_mechanism_test",
+  "hypothesis": "Use a close cross below MA10 to recognize failed breakouts earlier than the MA20 baseline.",
+  "backtest": {"params": {"exit_ma_days": 10}}
+}

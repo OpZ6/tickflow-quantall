@@ -1,0 +1,53 @@
+{
+  "experiment": "intact-pivot-pullback-entry-train-v1",
+  "family": "VCP post-breakout entry structure",
+  "frozen_at": "2026-09-10 before this experiment's outcome computation",
+  "source": "AI hypothesis from archived early-failure paths and user preference for right-side low-volume pullbacks",
+  "baseline_run": "20260909T135940874097Z",
+  "data_archive": "data/research/vcp/forward/archives/vcp-forward-v2-20260908-baseline.zip",
+  "execution_attempt": "execution-r3",
+  "technical_revision": "Attempts 1 and 2 stopped before outcome computation: live partitions changed; older immutable archive has a different forward-adjustment price basis. Full archive reconstruction matches all 4240 scale/setup/entry-eligibility identities, with identical pretrigger volume ratios; maximum pivot/entry-price relative discrepancy is 0.000021958, consistent with stored price rounding. Use reconstructed archive pivots with archive prices in all arms; never mix price bases. Strategy, windows, costs and gates unchanged. Failed attempts and input comparison retained.",
+  "prior_evidence": [
+    "production-leader-mechanism-review-2016-2026-v1.md",
+    "production-leader-failed-retrigger-current-execution-replay-2016-2026-v1-decision.json",
+    "iteration3-confirm2-v1.json",
+    "matched-exit-experiments-20260910-decision.md"
+  ],
+  "exposure": "2016-2022 repeatedly exposed training; VCP 2023+ also previously exposed, but not read by this experiment. One new structural representation, no parameter search. Historical family contains numerous failed representations, so local inference cannot establish family-wide discovery significance.",
+  "hypothesis": "A first declining close with lower volume than the original breakout, while every completed close holds the original pivot, followed by a close above that pullback bar's high, distinguishes absorbed supply from failed demand. This may improve entry expectancy enough to offset missed immediate expansions.",
+  "distinct_from_prior": "Requires an actual pullback followed by a new price trigger without first losing the original pivot. Prior two-close confirmation required no pullback; failed-retrigger required pivot failure; generic launch-pullback discarded VCP identity.",
+  "opportunities": "All 4240 archived executable signal_quants_vcp_breakout events, excluding 156 cheat entries by signal ID. No filters based on PnL or subsequent paths. The 15 unfilled original candidates lack archived pivot evidence and are outside this conditional paired experiment; a passing result requires full-candidate replay before any promotion.",
+  "training_data_end": "2022-12-31",
+  "arms": ["immediate", "intact_pullback", "wait_five"],
+  "rule": {
+    "watch_sessions": 5,
+    "cancel": "First missing/nontradable completed bar or close strictly below the frozen original pivot cancels the event. No restart or replacement pivot.",
+    "pullback": "First post-breakout session with close below previous close and volume strictly below original breakout volume; freeze this bar's high.",
+    "confirmation": "On a later session, completed close strictly above the frozen pullback high, while all closes still hold pivot. First trigger only, no resetting pullback high.",
+    "fill": "Next market-session open only; rejected orders become cash, never postponed.",
+    "control": "immediate buys at s+1 open; wait_five ignores the path and buys at s+6 open. This tests a generic delay, not pure identification of every component or randomized causality."
+  },
+  "endpoint_session_offset": 11,
+  "evaluation": "All arms end at the same s+11 open, giving immediate entry ten market-session intervals. Fixed scheduled sale; blocked/missing sale is censored and marked using last observed close by the endpoint, never silently dropped. No additional stop or profit-taking rule. Untriggered/unfilled events hold zero-return cash throughout.",
+  "cost": {"commission_pct": 0.0003, "slippage_bps": 10, "stamp_tax_policy": "a_share_historical"},
+  "benchmark": "Gross SH/SZ daily equal-weight observed-price benchmark: initial open-to-close, intervening close-to-close, terminal previous-close-to-open; consecutive market-session returns only, finite and within +/-50%. Descriptive broad-market return, not an executable account. Same benchmark over the original full window for every arm, including cash time.",
+  "execution_limit": "Reuse archived-name limit flags and existing independent matcher; historical ST/lifecycle coverage is incomplete and daily bars do not prove queue fills.",
+  "statistics": {
+    "primary": "signal-date equal-weight net return difference, intact_pullback minus immediate",
+    "secondary_contrasts": ["intact_pullback minus wait_five", "intact_pullback minus broad benchmark"],
+    "calendar_block_sessions": 20,
+    "replicates": 4000,
+    "seed": 20260910,
+    "local_family_size": 3,
+    "method": "Circular market-calendar block bootstrap of date-level means; jointly resample arms, keep no-event dates in the calendar but exclude them from the event-date denominator. Report nominal 95% and local Bonferroni 98.333% intervals plus centered-bootstrap approximate two-sided p. These are training diagnostics, not adjustment for the entire adaptive historical family."
+  },
+  "gates": {
+    "minimum_delayed_fills": 200,
+    "minimum_delayed_fill_signal_dates": 100,
+    "minimum_mean_paired_improvement": 0.005,
+    "minimum_positive_broad_years": 5,
+    "all_three_local_adjusted_lower_bounds_above_zero": true
+  },
+  "diagnostics": "Report all arm fills/cash/censoring, date and event means, all seven years, delayed filled-trade returns, baseline-winning opportunities missed, exposure days, zero-recovery treatment of censored positions. Event statistics are not portfolio returns, turnover or drawdown.",
+  "decision": "If any gate fails, stop this exact representation and adjacent watch/volume/pivot/confirmation/horizon thresholds. If all pass, retain only an entry-research candidate and restore missing original candidates before a portfolio check. No live or holdout qualification."
+}

@@ -1,0 +1,72 @@
+{
+  "experiment": "right-side-short-window-autopsy-2016-2022-v1",
+  "hypothesis_source": "User identity (A-share short-term swing, daily bars, 5-20 sessions, right-side breakout/pullback) plus the 2026-09-10 operating-system contract. Prior 40-day / month-end tables do not accept this identity. This round asks whether each default event stream has a cost-adjusted signal-day-equal-weight edge at the swing windows.",
+  "distinct_from_failed_representations": "No new detector, no pool-internal ranking, no exit-variant, no graphic-semantic gate, no monthly factor. Recompute scheduled 5/10/20-day open-to-open labels on frozen filled trades only. Difference from 40-day gross close-path early_excess_returns: those are not net round-trips and are not the primary metric here.",
+  "exposure": "Training 2016-01-01 through 2022-12-31, including prior family-wide reads of the same years. 2023+ on the leader ledger is exposure only. Not a clean holdout.",
+  "reused_runs": {
+    "wide_vcp": {
+      "run_id": "20260909T135940874097Z",
+      "strategy_id": "quants_vcp_legacy_v1",
+      "cited_trades": 4396,
+      "decision": "docs/research/vcp/legacy-wide-vcp-full-candidate-train-2016-2022-v1-decision.json"
+    },
+    "leader_vcp": {
+      "run_id": "20260908T024521089151Z",
+      "strategy_id": "vcp_leader_breakout",
+      "cited_trades": 290,
+      "decision": "docs/research/vcp/production-leader-historical-stamp-tax-2016-2026-v1-decision.json",
+      "slice": "Keep trades whose entry, scheduled exit and labels all fall on or before 2022-12-31. Do not re-detect."
+    },
+    "cup_handle": {
+      "run_id": "20260909T133226351846Z",
+      "strategy_id": "quants_cup_handle_legacy_v1",
+      "cited_trades": 98489,
+      "decision": "docs/research/cup-handle/legacy-cup-handle-full-candidate-train-2016-2022-v2-decision.json"
+    },
+    "high_tight_flag": {
+      "run_id": "20260909T130617820559Z",
+      "strategy_id": "quants_high_tight_flag_legacy_v1",
+      "cited_trades": 1245,
+      "decision": "docs/research/high-tight-flag/legacy-high-tight-flag-full-candidate-train-2016-2022-v2-decision.json",
+      "appendix_v1_run_id": "20260909T051105816621Z"
+    },
+    "launch_pullback": {
+      "run_id": "20260909T053715693165Z",
+      "strategy_id": "launch_pullback_support",
+      "cited_trades": 32193,
+      "decision": "docs/research/pullback/launch-pullback-first-event-full-candidate-train-2016-2022-v1-decision.json"
+    }
+  },
+  "windows": {
+    "diagnostic": 5,
+    "primary": [10, 20],
+    "definition": "Filled T+1 open entry already on the ledger; scheduled exit is the open of the 5th / 10th / 20th subsequent market session (signal-day + 6 / 11 / 21 market sessions). Missing stock bar, limit/suspension or calendar overrun does not roll to the next stock bar; that window is incomplete.",
+    "training_end": "2022-12-31"
+  },
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical",
+    "formula": "net = (exit_open / entry_price) * (1 - sell_cost_pct(exit_date)) / (1 + buy_cost_pct) - 1. entry_price is the frozen fill open. Do not treat entry-day open-to-close or gross early_close_returns as a net round-trip."
+  },
+  "contrasts": {
+    "vs_market": "Same-window SH/SZ equal-weight observed-price open-to-open: entry-day oc, intervening cc, exit-day co. Geometric excess (1+stock)/(1+market)-1.",
+    "vs_same_day_unselected": "Only if a same-day unselected set exists in the frozen inputs. Event-stream ledgers that take every detector hit have no such set; mark unavailable and do not reconstruct a full-market non-hit book.",
+    "aggregation": "Primary: signal-day equal-weight (mean of daily means) of net excess. Appendix: pooled trade mean. Group by entry_signal_date."
+  },
+  "early_death": "Among trades with highs on the entry session and the next market session, share whose max high/entry_price-1 over those two bars is < 0.03.",
+  "pass_fail": {
+    "keep_as_tradable_seed": "Training 10-day and 20-day signal-day-equal-weight net excess vs market are not both negative, and the stream is already a leader-gated event rather than a wide detector.",
+    "demote_to_observation_pool": "Point estimate of 10-day or 20-day date-EW net excess vs market is negative, or same-day selection (if available) ranks the wrong way. Stop using the detector as a default executable selector. Do not decorate.",
+    "stop_as_selector": "10-day and 20-day date-EW net excess vs market are both negative and the 5-day diagnostic is also negative, or every training year is negative. Neighborhood of the default event definition stays stopped.",
+    "not_claimed": "No live qualification, no clean 2023-2026 OOS, no parameter search."
+  },
+  "halt": "If a named run directory is missing, trade count mismatches the cited decision, or referenced opens for a complete window cannot be read, write a gap list and publish no invented numbers. Do not re-run full-market pattern detection.",
+  "bar_source": "kline_daily_enriched partitions already listed in each run's data-references.json; same directory the original trade-path analysis used. Rebuild daily SH/SZ oc/cc/co from those bars rather than treating frozen early_excess_returns as net.",
+  "outputs": [
+    "docs/research/right-side-short-window-autopsy-2016-2022-v1-analysis.json",
+    "family decisions under vcp / cup-handle / high-tight-flag / pullback",
+    "docs/research/leader-universe-market-gate-v1-draft.md (design only, not a passed rule)"
+  ]
+}

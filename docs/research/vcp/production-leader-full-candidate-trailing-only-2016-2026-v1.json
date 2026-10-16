@@ -1,0 +1,18 @@
+{
+  "base_protocol": "production-leader-full-candidate-ledger-2016-2026-v1.json",
+  "experiment": "production-leader-full-candidate-trailing-only-2016-2026-v1",
+  "purpose": "isolate_early_breakeven_effect_from_confirmed_leader_trailing_exit",
+  "question": "Does removing the 10 percent breakeven floor let constructive retests survive while retaining the 20 percent leader trailing exit?",
+  "single_change": "Remove the 10 percent breakeven step and retain only the 20 percent activation with a 10 percent peak-drawdown exit.",
+  "backtest": {
+    "overrides": {
+      "profit_lock_steps": [
+        {
+          "activate_pct": 0.2,
+          "trailing_drawdown_pct": 0.1
+        }
+      ]
+    }
+  },
+  "stop_rule": "Complete the two-component ablation and stop this branch. Do not scan activation, floor or drawdown percentages on the exposed interval."
+}

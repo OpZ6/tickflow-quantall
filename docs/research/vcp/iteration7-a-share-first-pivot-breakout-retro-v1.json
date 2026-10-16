@@ -1,0 +1,10 @@
+{
+  "base_protocol": "iteration7-a-share-cycle-confirmed-retro-v1.json",
+  "experiment": "vcp-iteration7-a-share-first-pivot-breakout-retro-v1",
+  "purpose": "require_first_close_through_a_fresh_vcp_pivot_retro",
+  "backtest": {
+    "params": {
+      "prebreakout_pivot_closes_max": 0
+    }
+  }
+}

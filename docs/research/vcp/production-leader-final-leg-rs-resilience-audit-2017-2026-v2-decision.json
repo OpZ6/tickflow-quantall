@@ -1,0 +1,37 @@
+{
+  "experiment": "production-leader-final-leg-rs-resilience-audit-2017-2026-v2",
+  "decision": "reject_final_leg_rs_persistence_as_a_strategy_increment",
+  "protocol": "docs/research/vcp/production-leader-final-leg-rs-resilience-audit-2017-2026-v2.json",
+  "result": "data/research/vcp/analysis/final-leg-rs-resilience-2017-2026-v2.json",
+  "population": {
+    "unique_setups": 3771,
+    "date_range": [
+      "2017-11-15",
+      "2026-06-30"
+    ],
+    "complete_windows": 3696,
+    "feature_coverage": 0.9801113762927606
+  },
+  "gates": {
+    "overall_pairwise_probability": {
+      "value": 0.5110858297664058,
+      "required": 0.56,
+      "passed": false
+    },
+    "years_above_0_5": {
+      "value": 5,
+      "required": 7,
+      "passed": false
+    },
+    "top_minus_bottom_quintile_breakout_rate": {
+      "value": -0.08844679649590975,
+      "required": 0.05,
+      "passed": false
+    }
+  },
+  "mechanism_conclusion": "The corrected measurement does not support final-leg RS persistence as a useful discriminator on the exposed development population.",
+  "next_action": "Stop RS-window and threshold variants; retain the existing signal-day RS gate and make no strategy change from this audit.",
+  "strategy_changed": false,
+  "threshold_search": false,
+  "portfolio_backtest": false
+}

@@ -1,0 +1,31 @@
+{
+  "experiment": "watchlist-ma20-reclaim-no-gap-up-v1",
+  "layer": 4,
+  "prior": "docs/research/watchlist-ma20-reclaim-v1-decision.md",
+  "hypothesis_source": "MA20 reclaim passed vs same-day untriggered leaders. Sequence 4 asks how to buy. Overnight gap-up is the chase leg of a T+1 open fill. Rule: skip the buy when next-open > signal close. Same trigger set, entry filter only. Not a percentage scan.",
+  "distinct_from_failed_representations": "Not the next-open chase percent scan that reversed across years on VCP. Binary: gap up or not. Same reclaim candidates as v1.",
+  "exposure": "Training 2016-01-01 through 2022-12-31.",
+  "trigger": {"unchanged_from": "watchlist-ma20-reclaim-v1"},
+  "entry": {
+    "id": "skip_gap_up",
+    "definition": "Fill T+1 open only if that open <= signal-day close. Gap-up voids the signal, no roll."
+  },
+  "control": "All T+1 fills of the same reclaim signals (v1).",
+  "windows": {"diagnostic": 5, "primary": [10, 20]},
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "10-day and 20-day date-EW net of skip-gap-up is not worse than all T+1 fills on the same reclaim days.",
+    "fail": "Stop skip-gap-up. Keep T+1 buy-all of the reclaim. Do not scan a gap percent.",
+    "not_claimed": "No live qualification."
+  },
+  "outputs": [
+    "docs/research/watchlist-ma20-reclaim-no-gap-up-v1.json",
+    "docs/research/watchlist-ma20-reclaim-no-gap-up-v1-analysis.json",
+    "docs/research/watchlist-ma20-reclaim-no-gap-up-v1-decision.md"
+  ]
+}

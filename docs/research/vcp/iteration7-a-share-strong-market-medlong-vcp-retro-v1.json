@@ -1,0 +1,17 @@
+{
+  "base_protocol": "iteration7-a-share-cycle-confirmed-retro-v1.json",
+  "experiment": "vcp-iteration7-a-share-strong-market-medlong-retro-v1",
+  "purpose": "test_medium_and_long_vcp_in_broad_positive_market_retro",
+  "backtest": {
+    "params": {
+      "prebreakout_pivot_closes_max": 20,
+      "short_scale_enabled": false,
+      "market_breadth_ma20_min": 0.7,
+      "market_breadth_ma20_max": 1.0,
+      "market_breadth_rising_days": 0,
+      "market_equal_weight_return_lookback": 63,
+      "market_equal_weight_return_min": 0.0
+    },
+    "max_positions": 5
+  }
+}

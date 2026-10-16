@@ -1,0 +1,57 @@
+{
+  "experiment": "vcp-five-year-liquid-pool-v1",
+  "purpose": "training_mechanism_test",
+  "hypothesis": "A daily point-in-time investable pool (price 3-200 yuan and amount at least 50 million yuan) may reduce weak VCP breakouts without current-name or current-share look-ahead.",
+  "universe_date": "2021-09-03",
+  "sample_size": 0,
+  "backtest": {
+    "strategy_id": "quants_vcp_legacy_v1",
+    "symbols": null,
+    "start": "2021-09-06",
+    "end": "2024-09-04",
+    "params": {
+      "trend_filter": true,
+      "rs_min": 85.0,
+      "distance_high_max": 0.12,
+      "min_legs": 2,
+      "plan_stop_pct": 0.03
+    },
+    "overrides": {
+      "basic_filter": {
+        "enabled": true,
+        "price_min": 3.0,
+        "price_max": 200.0,
+        "amount_min": 50000000.0
+      },
+      "stop_loss": -0.05,
+      "take_profit": null,
+      "trailing_stop": null,
+      "trailing_take_profit_activate": null,
+      "trailing_take_profit_drawdown": null,
+      "max_hold_days": 40
+    },
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.0005,
+    "slippage_bps": 10.0,
+    "max_positions": 10,
+    "max_exposure_pct": 1.0,
+    "initial_capital": 1000000.0,
+    "position_sizing": "equal",
+    "mode": "position",
+    "asset_type": "stock",
+    "minute_fill": false,
+    "regime_filter": null
+  },
+  "data_directory": "research/vcp/datasets/five-year-20260904-v1",
+  "universe_mode": "historical_union",
+  "phases": {
+    "train": {"start": "2021-09-06", "end": "2024-09-04"},
+    "validation": {"start": "2024-09-05", "end": "2025-09-04"},
+    "holdout": {"start": "2025-09-05", "end": "2026-09-04"},
+    "baseline": {"start": "2021-09-06", "end": "2026-09-04"}
+  },
+  "pool_note": "Filters use each trading day's adjusted close and amount. Current instrument name and current shares are deliberately not used because they are not historical point-in-time facts. Amount is yuan."
+}

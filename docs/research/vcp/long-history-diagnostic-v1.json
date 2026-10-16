@@ -1,0 +1,45 @@
+{
+  "experiment": "vcp-r1-long-history-diagnostic-v1",
+  "purpose": "limited_universe_engineering_diagnostic",
+  "hypothesis": "Verify the VCP entry, MA20 exit, account stop and position lifecycle before strategy comparisons.",
+  "universe_date": "2023-12-29",
+  "sample_size": 0,
+  "backtest": {
+    "strategy_id": "quants_vcp_legacy_v1",
+    "symbols": null,
+    "start": "2024-01-02",
+    "end": "2025-06-30",
+    "params": {
+      "trend_filter": true,
+      "rs_min": 85.0,
+      "distance_high_max": 0.12,
+      "min_legs": 2,
+      "plan_stop_pct": 0.03
+    },
+    "overrides": {
+      "basic_filter": {
+        "enabled": false
+      },
+      "stop_loss": -0.05,
+      "take_profit": null,
+      "trailing_stop": null,
+      "trailing_take_profit_activate": null,
+      "trailing_take_profit_drawdown": null,
+      "max_hold_days": 40
+    },
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.0005,
+    "slippage_bps": 10.0,
+    "max_positions": 10,
+    "max_exposure_pct": 1.0,
+    "initial_capital": 1000000.0,
+    "position_sizing": "equal",
+    "mode": "position",
+    "asset_type": "stock",
+    "minute_fill": false,
+    "regime_filter": null
+  }
+}

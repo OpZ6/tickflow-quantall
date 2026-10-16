@@ -1,0 +1,11 @@
+{
+  "base_protocol": "iteration7-a-share-first-pivot-time20-v1.json",
+  "experiment": "vcp-iteration7-a-share-first-pivot-time20-ma60-v1",
+  "purpose": "reduce_ma20_whipsaw_before_the_20_session_outcome_window",
+  "hypothesis": "VCP failure is handled by the 5 percent account stop; a slower MA60 trend exit avoids closing normal post-breakout pullbacks before the 20-session follow-through window.",
+  "backtest": {
+    "params": {
+      "exit_ma_days": 60
+    }
+  }
+}

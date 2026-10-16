@@ -1,0 +1,22 @@
+{
+  "base_protocol": "production-leader-full-candidate-ledger-2016-2026-v1.json",
+  "experiment": "production-middle-expansion-train-2016-2022-v1",
+  "purpose": "train_one_structural_broadening_of_vcp_candidate_recall",
+  "question": "Does an advancing middle-breadth market contain additional executable medium or long VCP breakouts with positive independent-trade expectancy and meaningful large-winner yield?",
+  "single_change": "Add medium and long VCP first-pivot breakouts when MA20 breadth is 30 to 70 percent, above five sessions earlier, and the 63-session equal-weight market return is nonnegative.",
+  "development_note": "Only 2016 through 2022 may be used to accept or reject the proposed branch. The rule is frozen before the later temporal test.",
+  "backtest": {
+    "strategy_id": "vcp_middle_expansion",
+    "start": "2016-01-04",
+    "end": "2022-12-30"
+  },
+  "acceptance": {
+    "minimum_incremental_candidates": 100,
+    "minimum_incremental_average_excess_return_held": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "years_evaluated": 7,
+    "minimum_incremental_mfe_20pct_rate": 0.2
+  },
+  "evaluation_priority": "Accept on SH/SZ equal-weight market-relative returns and cross-market-outcome stability. Absolute return is diagnostic only and must not substitute for alpha.",
+  "stop_rule": "Run the frozen 2023-2026 temporal test only if all training gates pass. Do not adjust breadth, momentum, scale, RS or structure thresholds from either result."
+}

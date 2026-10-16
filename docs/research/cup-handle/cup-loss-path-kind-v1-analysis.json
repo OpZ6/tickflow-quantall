@@ -1,0 +1,138 @@
+{
+  "experiment": "cup-loss-path-kind-v1",
+  "baseline_run": "20260909T133226351846Z",
+  "not_vcp_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\cup-handle\\cup-loss-path-kind-v1.json",
+  "change": {
+    "id": "cup_entry_day_close_below_cost",
+    "kind": "止损",
+    "attacked_path": "失败突破",
+    "definition": "On the frozen cup 2,034 fills, if the entry-day close is strictly below entry price, sell next market open. Equal close does not fire. Does not look at a second bar or a +3% high print. Not cup 5% 守成本. Holes and one-price limit-down do not roll."
+  },
+  "training_2016_2022": {
+    "book_n": 2023,
+    "loser_n": 1338,
+    "incomplete": 11,
+    "paths": {
+      "赢家": {
+        "n": 685,
+        "share_of_book": 0.338606,
+        "share_of_losers": null,
+        "avg_pnl": 0.099168,
+        "avg_mfe": 0.199898,
+        "median_holding_bars": 21.0
+      },
+      "给回": {
+        "n": 352,
+        "share_of_book": 0.173999,
+        "share_of_losers": 0.263079,
+        "avg_pnl": -0.044579,
+        "avg_mfe": 0.092627,
+        "median_holding_bars": 11.0
+      },
+      "失败突破": {
+        "n": 762,
+        "share_of_book": 0.376668,
+        "share_of_losers": 0.569507,
+        "avg_pnl": -0.044134,
+        "avg_mfe": 0.011704,
+        "median_holding_bars": 3.0
+      },
+      "磨掉": {
+        "n": 224,
+        "share_of_book": 0.110727,
+        "share_of_losers": 0.167414,
+        "avg_pnl": -0.035729,
+        "avg_mfe": 0.039644,
+        "median_holding_bars": 6.0
+      }
+    },
+    "attacked_path": "失败突破",
+    "stats": {
+      "n_trades": 2034,
+      "win_rate": 0.339725,
+      "profit_factor": 2.32,
+      "avg_pnl": 0.005438,
+      "avg_win": 0.09965,
+      "avg_loss": 0.043036
+    },
+    "lower_half": 1712,
+    "missing_signal_bar": 4,
+    "leader_open_n": 3750,
+    "overlay": {
+      "baseline": {
+        "n_trades": 2034,
+        "win_rate": 0.339725,
+        "profit_factor": 2.32,
+        "avg_pnl": 0.005438,
+        "avg_win": 0.09965,
+        "avg_loss": 0.043036
+      },
+      "variant": {
+        "n_trades": 2034,
+        "win_rate": 0.25762,
+        "profit_factor": 2.6,
+        "avg_pnl": -0.002245,
+        "avg_win": 0.079052,
+        "avg_loss": 0.030457
+      },
+      "shortened": 673,
+      "blocked_kept_baseline": 0,
+      "delta": {
+        "avg_pnl": -0.007683,
+        "win_rate": -0.082105,
+        "profit_factor": 0.28
+      },
+      "rule": "drop"
+    }
+  },
+  "validation_2023_2026": {
+    "book_n": 0,
+    "loser_n": 0,
+    "incomplete": 0,
+    "paths": {},
+    "attacked_path": null,
+    "stats": {
+      "n_trades": 0,
+      "win_rate": null,
+      "profit_factor": null,
+      "avg_pnl": null,
+      "avg_win": null,
+      "avg_loss": null
+    },
+    "lower_half": 0,
+    "missing_signal_bar": 0,
+    "leader_open_n": 0,
+    "incomplete_excluded": 0,
+    "overlay": {
+      "baseline": {
+        "n_trades": 0,
+        "win_rate": null,
+        "profit_factor": null,
+        "avg_pnl": null,
+        "avg_win": null,
+        "avg_loss": null
+      },
+      "variant": {
+        "n_trades": 0,
+        "win_rate": null,
+        "profit_factor": null,
+        "avg_pnl": null,
+        "avg_win": null,
+        "avg_loss": null
+      },
+      "shortened": 0,
+      "blocked_kept_baseline": 0,
+      "delta": {
+        "avg_pnl": null,
+        "win_rate": null,
+        "profit_factor": null
+      },
+      "rule": "drop"
+    }
+  },
+  "validation_note": "exposure, not clean OOS",
+  "autopsy_only": false,
+  "rule": "drop",
+  "gaps": []
+}

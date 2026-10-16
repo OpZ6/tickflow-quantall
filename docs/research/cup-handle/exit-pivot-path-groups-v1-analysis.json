@@ -1,0 +1,160 @@
+{
+  "run_id": "20260909T133226351846Z",
+  "scope": "descriptive cup original-pivot state groups at exit signal; no alternative execution tested",
+  "reconstruction_matched": 98489,
+  "groups": {
+    "below_entry_pivot": {
+      "overall": {
+        "n": 35063,
+        "median_minimum_low_return": -0.09266440770554274,
+        "recovery_share": 0.8810997347631406,
+        "loss10_before_recovery_share": 0.1540084989875367,
+        "mean_endpoint_change": 0.005860166018236936,
+        "median_endpoint_change": -0.015804994880980416,
+        "positive_endpoint_share": 0.44816473205373186
+      },
+      "by_year": {
+        "2016": {
+          "n": 2639,
+          "median_minimum_low_return": -0.08046088354359593,
+          "recovery_share": 0.8870784388025768,
+          "loss10_before_recovery_share": 0.12087912087912088,
+          "mean_endpoint_change": -0.003605717888657024,
+          "median_endpoint_change": -0.011276099641252646,
+          "positive_endpoint_share": 0.4513073133762789
+        },
+        "2017": {
+          "n": 5946,
+          "median_minimum_low_return": -0.08566415928701326,
+          "recovery_share": 0.8802556340396905,
+          "loss10_before_recovery_share": 0.1296670030272452,
+          "mean_endpoint_change": -0.014840600543111452,
+          "median_endpoint_change": -0.023055523525020716,
+          "positive_endpoint_share": 0.42179616548940463
+        },
+        "2018": {
+          "n": 4508,
+          "median_minimum_low_return": -0.12038140643623363,
+          "recovery_share": 0.8535936113575865,
+          "loss10_before_recovery_share": 0.21029281277728482,
+          "mean_endpoint_change": -0.02870830486154208,
+          "median_endpoint_change": -0.037695302947841736,
+          "positive_endpoint_share": 0.3611357586512866
+        },
+        "2019": {
+          "n": 5676,
+          "median_minimum_low_return": -0.09275056137718884,
+          "recovery_share": 0.8743833685694151,
+          "loss10_before_recovery_share": 0.1525722339675828,
+          "mean_endpoint_change": 0.011054922772316254,
+          "median_endpoint_change": -0.018620990578424035,
+          "positive_endpoint_share": 0.4383368569415081
+        },
+        "2020": {
+          "n": 4591,
+          "median_minimum_low_return": -0.08455857911409048,
+          "recovery_share": 0.8904378131126116,
+          "loss10_before_recovery_share": 0.1594423872794598,
+          "mean_endpoint_change": 0.03631371781338654,
+          "median_endpoint_change": 0.002638627415626038,
+          "positive_endpoint_share": 0.5068612502722718
+        },
+        "2021": {
+          "n": 6226,
+          "median_minimum_low_return": -0.07932030759251085,
+          "recovery_share": 0.9092515258592997,
+          "loss10_before_recovery_share": 0.11676839061998072,
+          "mean_endpoint_change": 0.033346960405609624,
+          "median_endpoint_change": 0.0028475854696368152,
+          "positive_endpoint_share": 0.5077096048827497
+        },
+        "2022": {
+          "n": 5477,
+          "median_minimum_low_return": -0.10688658988987942,
+          "recovery_share": 0.8689063355851744,
+          "loss10_before_recovery_share": 0.18933722840971334,
+          "mean_endpoint_change": -0.0008092853517382181,
+          "median_endpoint_change": -0.01982239079925674,
+          "positive_endpoint_share": 0.4402044915099507
+        }
+      }
+    },
+    "at_or_above_entry_pivot": {
+      "overall": {
+        "n": 37796,
+        "median_minimum_low_return": -0.08811632263973646,
+        "recovery_share": 0.8658323632130385,
+        "loss10_before_recovery_share": 0.16745158217800826,
+        "mean_endpoint_change": 0.004569597434162006,
+        "median_endpoint_change": -0.013264153591689476,
+        "positive_endpoint_share": 0.45343422584400467
+      },
+      "by_year": {
+        "2016": {
+          "n": 2487,
+          "median_minimum_low_return": -0.07858858575175853,
+          "recovery_share": 0.8661037394451147,
+          "loss10_before_recovery_share": 0.1463610776035384,
+          "mean_endpoint_change": -0.0013195737053945656,
+          "median_endpoint_change": -0.0033361134278566684,
+          "positive_endpoint_share": 0.48532368315239244
+        },
+        "2017": {
+          "n": 7349,
+          "median_minimum_low_return": -0.07282882678575575,
+          "recovery_share": 0.8731800244931284,
+          "loss10_before_recovery_share": 0.13022179888420193,
+          "mean_endpoint_change": -0.005647420679032279,
+          "median_endpoint_change": -0.014704927972478798,
+          "positive_endpoint_share": 0.4441420601442373
+        },
+        "2018": {
+          "n": 3537,
+          "median_minimum_low_return": -0.12401868860676368,
+          "recovery_share": 0.8088775798699462,
+          "loss10_before_recovery_share": 0.26039016115351993,
+          "mean_endpoint_change": -0.03352143565521316,
+          "median_endpoint_change": -0.04161616718225658,
+          "positive_endpoint_share": 0.363019508057676
+        },
+        "2019": {
+          "n": 7674,
+          "median_minimum_low_return": -0.08212587117919679,
+          "recovery_share": 0.8711232733906698,
+          "loss10_before_recovery_share": 0.1558509252019807,
+          "mean_endpoint_change": 0.0026262449113920536,
+          "median_endpoint_change": -0.013524610845734308,
+          "positive_endpoint_share": 0.4497002866823039
+        },
+        "2020": {
+          "n": 5525,
+          "median_minimum_low_return": -0.08094567161282962,
+          "recovery_share": 0.885972850678733,
+          "loss10_before_recovery_share": 0.16687782805429865,
+          "mean_endpoint_change": 0.03546487318901415,
+          "median_endpoint_change": 0.0046896258290656245,
+          "positive_endpoint_share": 0.5127601809954752
+        },
+        "2021": {
+          "n": 6352,
+          "median_minimum_low_return": -0.08929601610578486,
+          "recovery_share": 0.8718513853904282,
+          "loss10_before_recovery_share": 0.16168136020151133,
+          "mean_endpoint_change": 0.017545882512713766,
+          "median_endpoint_change": -0.011738394599163704,
+          "positive_endpoint_share": 0.46363350125944586
+        },
+        "2022": {
+          "n": 4872,
+          "median_minimum_low_return": -0.10521442763125205,
+          "recovery_share": 0.8569376026272578,
+          "loss10_before_recovery_share": 0.1933497536945813,
+          "mean_endpoint_change": 0.001747500691608572,
+          "median_endpoint_change": -0.021980566876708352,
+          "positive_endpoint_share": 0.4421182266009852
+        }
+      }
+    }
+  },
+  "promotion_authorized": false
+}

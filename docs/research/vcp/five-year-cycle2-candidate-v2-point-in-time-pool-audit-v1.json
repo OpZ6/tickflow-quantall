@@ -1,0 +1,25 @@
+{
+  "base_protocol": "five-year-cycle2-candidate-v2-investable-pool-v1.json",
+  "experiment": "vcp-five-year-cycle2-candidate-v2-point-in-time-pool-audit-v1",
+  "purpose": "candidate_v2_post_holdout_methodology_audit",
+  "hypothesis": "Removing engine-injected current-name and current-share filters does not create the development-period edge.",
+  "backtest": {
+    "overrides": {
+      "basic_filter": {
+        "enabled": true,
+        "price_min": 3.0,
+        "price_max": null,
+        "market_cap_min": null,
+        "float_cap_min": null,
+        "float_cap_max": null,
+        "amount_min": 20000000.0,
+        "amount_max": null,
+        "turnover_min": null,
+        "turnover_max": null,
+        "exclude_st": false,
+        "exclude_new_days": 0
+      }
+    }
+  },
+  "audit_note": "This correction was defined after the holdout result was known. It is a bias audit only and cannot create a new independently validated candidate."
+}

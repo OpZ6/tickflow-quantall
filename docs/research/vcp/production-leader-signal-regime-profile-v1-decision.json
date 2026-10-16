@@ -1,0 +1,177 @@
+{
+  "protocol": "docs\\research\\vcp\\production-leader-signal-regime-profile-v1.json",
+  "source_run": "20260909T030431101979Z",
+  "branches": {
+    "broad_bull": {
+      "signal_id": "signal_quants_vcp_broad_advance",
+      "training": {
+        "trades": 399,
+        "average_absolute_return": 0.007900721804511278,
+        "average_excess_return_held": -0.004609901599470534,
+        "average_40d_excess_return": -0.003758373343692506,
+        "mfe_20pct_rate": 0.3659147869674185,
+        "mfe_20pct_count": 146,
+        "mfe_50pct_count": 22,
+        "mfe_100pct_count": 3,
+        "positive_alpha_years": 2,
+        "by_signal_year_alpha": {
+          "2016": -0.019900671862468744,
+          "2017": -0.00491617827518688,
+          "2018": 0.02495597378059192,
+          "2019": -0.01921933916702696,
+          "2020": 0.018675710382199347,
+          "2021": -0.0014149200976393888,
+          "2022": -0.051071611355402974
+        },
+        "by_signal_year_40d_alpha": {
+          "2016": -0.027246323117822442,
+          "2017": 0.04531875705736551,
+          "2018": -0.01898704816934193,
+          "2019": -0.024292716655582136,
+          "2020": -0.02351397987450749,
+          "2021": 0.02566283423603187,
+          "2022": -0.01285554496926472
+        },
+        "average_early_excess_returns": {
+          "5": 0.0003137912316673022,
+          "10": -0.0038136753842577717,
+          "20": -0.0028351770211643796
+        },
+        "by_exit_reason": {
+          "max_hold": {
+            "trades": 6,
+            "average_excess_return_held": 0.3415328209033044,
+            "average_40d_excess_return": 0.36236196732160325
+          },
+          "signal": {
+            "trades": 138,
+            "average_excess_return_held": -0.02705961065327175,
+            "average_40d_excess_return": 0.0239349113404993
+          },
+          "staged_profit_lock": {
+            "trades": 119,
+            "average_excess_return_held": 0.05657040684306188,
+            "average_40d_excess_return": 0.013302746830783016
+          },
+          "stop_loss": {
+            "trades": 136,
+            "average_excess_return_held": -0.050633822116039943,
+            "average_40d_excess_return": -0.06293976033761038
+          }
+        },
+        "by_future_market_outcome_held": {
+          "down": {
+            "trades": 27,
+            "average_excess_return_held": 0.07042839139463986,
+            "average_40d_excess_return": 0.017693163465945384
+          },
+          "sideways": {
+            "trades": 316,
+            "average_excess_return_held": -0.009114042042500967,
+            "average_40d_excess_return": -0.005834055724955706
+          },
+          "up": {
+            "trades": 56,
+            "average_excess_return_held": -0.015372857507387745,
+            "average_40d_excess_return": -0.0023882994397827185
+          }
+        }
+      },
+      "training_checks": {
+        "minimum_trades": true,
+        "minimum_average_excess_return_held": false,
+        "minimum_positive_alpha_years": false,
+        "minimum_mfe_20pct_rate": true
+      },
+      "passed_training": false,
+      "temporal_test": null,
+      "conditional_strategy_success": false
+    },
+    "early_recovery": {
+      "signal_id": "signal_quants_vcp_early_recovery",
+      "training": {
+        "trades": 78,
+        "average_absolute_return": 0.018778410256410256,
+        "average_excess_return_held": -0.0036902005267482117,
+        "average_40d_excess_return": 0.01378005739885008,
+        "mfe_20pct_rate": 0.34615384615384615,
+        "mfe_20pct_count": 27,
+        "mfe_50pct_count": 8,
+        "mfe_100pct_count": 0,
+        "positive_alpha_years": 3,
+        "by_signal_year_alpha": {
+          "2016": -0.03681073032226012,
+          "2017": -0.01977479196982502,
+          "2018": -0.02512197320525272,
+          "2019": 0.0024465138778654812,
+          "2020": 0.06542547549959682,
+          "2021": -0.04474067328889301,
+          "2022": 0.000353961648232759
+        },
+        "by_signal_year_40d_alpha": {
+          "2016": -0.05551470517932405,
+          "2017": 0.04151864850939768,
+          "2018": -0.00815450809660977,
+          "2019": 0.029062074850628866,
+          "2020": 0.05014766175951274,
+          "2021": 0.044370289130574614,
+          "2022": -0.04245645392858096
+        },
+        "average_early_excess_returns": {
+          "5": -0.006776538325078803,
+          "10": 0.012075754705292333,
+          "20": 0.003582153796246285
+        },
+        "by_exit_reason": {
+          "max_hold": {
+            "trades": 1,
+            "average_excess_return_held": 0.018585806797870585,
+            "average_40d_excess_return": 0.025617523840862466
+          },
+          "signal": {
+            "trades": 20,
+            "average_excess_return_held": -0.029383457995487798,
+            "average_40d_excess_return": -0.014959105285670848
+          },
+          "staged_profit_lock": {
+            "trades": 22,
+            "average_excess_return_held": 0.08304428698078631,
+            "average_40d_excess_return": 0.13866576760212365
+          },
+          "stop_loss": {
+            "trades": 35,
+            "average_excess_return_held": -0.04416361718719354,
+            "average_40d_excess_return": -0.04863536652182456
+          }
+        },
+        "by_future_market_outcome_held": {
+          "down": {
+            "trades": 5,
+            "average_excess_return_held": 0.047739839515440294,
+            "average_40d_excess_return": 0.10847189195910145
+          },
+          "sideways": {
+            "trades": 49,
+            "average_excess_return_held": -0.019132533914855337,
+            "average_40d_excess_return": 0.00933521367322887
+          },
+          "up": {
+            "trades": 24,
+            "average_excess_return_held": 0.0171233051318479,
+            "average_40d_excess_return": 0.0031274811386076823
+          }
+        }
+      },
+      "training_checks": {
+        "minimum_trades": true,
+        "minimum_average_excess_return_held": false,
+        "minimum_positive_alpha_years": false,
+        "minimum_mfe_20pct_rate": true
+      },
+      "passed_training": false,
+      "temporal_test": null,
+      "conditional_strategy_success": false
+    }
+  },
+  "successful_conditional_branches": []
+}

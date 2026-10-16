@@ -1,0 +1,24 @@
+{
+  "experiment": "production-vcp-gate-funnel-train-2016-2022-v1",
+  "purpose": "locate_structural_recall_bottlenecks_before_another_vcp_relaxation",
+  "training_period": ["2016-01-04", "2022-12-30"],
+  "generic_opportunity": "First close above the prior 20-session high after a 20-session cooldown, followed by a tradable next-open entry; SH/SZ stocks, close 3 to 300 and signal-day amount at least CNY 20 million.",
+  "labels": "Post-entry 40-tradable-session MFE and close return, plus geometric excess over the daily rebalanced SH/SZ equal-weight market. Future bars are labels only.",
+  "funnel_order": [
+    "trend_ma_alignment",
+    "positive_63_126_252_returns",
+    "near_52_week_high",
+    "rs_85",
+    "dual_market_regime",
+    "valid_vcp_structure",
+    "allowed_scale",
+    "executable_breakout",
+    "first_pivot_in_recovery"
+  ],
+  "direction_rule": "A gate may motivate one new structural relaxation only if it is the largest first-failure source among missed +20% paths, has at least 100 such paths, and its omitted cohort has positive average 40-session alpha in at least four training years. Otherwise do not register a relaxation from this funnel.",
+  "constraints": [
+    "Do not alter thresholds or gate order after reading outcomes.",
+    "Do not use 2023-2026 data for direction selection.",
+    "The funnel selects at most one method-level relaxation and does not validate a strategy."
+  ]
+}

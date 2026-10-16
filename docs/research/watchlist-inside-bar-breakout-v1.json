@@ -1,0 +1,32 @@
+{
+  "experiment": "watchlist-inside-bar-breakout-v1",
+  "layer": 3,
+  "prior": "docs/research/watchlist-20d-high-breakout-v2-decision.md",
+  "hypothesis_source": "20-session highs on the leader watch list mean-revert at 10/20 days (v1 rest-then-pop and v2 rolling new high both worse than untriggered leaders). Mechanism of those failures: buying strength already at a month high. Replacement: an inside bar (range inside the prior bar) then a close above that inside high. That is a two-bar compression-then-expansion, not a Donchian N-day high and not VCP.",
+  "distinct_from_failed_representations": "Not a 20-day window scan. Not VCP/cup/flag. Not all-market trend_breakout. Not sequence-2 buy-all. Difference from v1/v2: trigger is leaving a one-bar enclosed range, not leaving a 20-session high.",
+  "exposure": "Training 2016-01-01 through 2022-12-31. Labels must not cross 2022-12-31.",
+  "watch_list": {"unchanged_from": "watchlist-20d-high-breakout-v1"},
+  "trigger": {
+    "id": "inside_bar_breakout",
+    "definition": "Bar t-1 is inside bar t-2 (high[t-1] <= high[t-2] and low[t-1] >= low[t-2], all finite and positive). Signal bar t close > high[t-1]. Calendar lag on the market session axis. Missing prior bars do not trigger."
+  },
+  "selected": "Watch list AND inside-bar breakout.",
+  "control": "Same-day watch-list names without that inside-bar breakout.",
+  "windows": {"diagnostic": 5, "primary": [10, 20]},
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "10-day and 20-day date-EW net of the trigger subset is not worse than same-day watch names without the trigger.",
+    "fail": "Rewrite only this inside-bar event (one mechanistic change) or stop it and pick another non-20d-high, non-VCP breakout. Stay on layer 3. Do not skip to pullback as the selector.",
+    "not_claimed": "No live qualification."
+  },
+  "outputs": [
+    "docs/research/watchlist-inside-bar-breakout-v1.json",
+    "docs/research/watchlist-inside-bar-breakout-v1-analysis.json",
+    "docs/research/watchlist-inside-bar-breakout-v1-decision.md"
+  ]
+}

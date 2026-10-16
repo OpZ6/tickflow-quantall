@@ -1,0 +1,15 @@
+{
+  "experiment": "breakout-volume-filter-v1",
+  "hypothesis_source": "goal.md next action; AI continuation of two-bar-no-demand decision",
+  "prior_exposure": "2016-2022 baseline and prior VCP experiments already observed; exploratory training comparison",
+  "baseline_run": "20260908T024521089151Z",
+  "baseline": "171 frozen fills plus two-bar-no-demand exits",
+  "only_change": "Keep fills whose completed entry_signal_date volume is >= arithmetic mean volume of the preceding 20 market trading sessions, excluding the signal day. Missing, nonfinite or nonpositive observations block classification, not silently reject.",
+  "training": "Entry in 2016-2022, original exit <= 2022-12-31",
+  "cost": "Reuse original filled-trade net returns and existing two-bar exit cost computation: T+1, commission 0.0003, slippage 10bps, historical stamp tax",
+  "scope": "Matched subset experiment explicitly requested by goal.md. Source fills came from max_positions=4; this is not proof covering all uncapped strategy signals.",
+  "primary": ["win_rate", "average_win / absolute_average_nonwin", "average_net_return"],
+  "decision": "Drop if selected mean net return is below the full baseline or nonpositive. Otherwise provisionally retain for full-candidate validation; never claim live qualification.",
+  "failure_action": "Do not scan volume thresholds or invert this filter. Keep baseline and diagnose execution coverage for uncapped independent replay.",
+  "output": "data/research/vcp/breakout-volume-filter-v1"
+}

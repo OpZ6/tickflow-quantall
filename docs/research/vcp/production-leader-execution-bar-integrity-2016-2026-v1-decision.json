@@ -1,0 +1,43 @@
+{
+  "decision": "accept_daily_execution_bar_integrity_with_intraday_suspension_residual",
+  "scope": "production_leader_vcp_run_20260908T024521089151Z",
+  "strategy_rules_changed": false,
+  "audited_run": "20260908T024521089151Z",
+  "audit": {
+    "trades": 290,
+    "execution_legs": 580,
+    "entry_legs": 290,
+    "exit_legs": 290,
+    "missing_raw_daily_bars": 0,
+    "invalid_ohlc_legs": 0,
+    "zero_or_missing_volume_legs": 0,
+    "zero_volume_with_price_spread_legs": 0,
+    "engine_buy_suspended_rejections": 21,
+    "engine_sell_suspended_rejections": 0,
+    "trade_timing_violations": 0
+  },
+  "method": {
+    "trade_source": "data/research/vcp/runs/20260908T024521089151Z/result.json",
+    "bar_source": "data/kline_daily/date=*/part.parquet",
+    "join_key": [
+      "symbol",
+      "entry_date_or_exit_date"
+    ],
+    "bar_rules": "Each executed leg must have finite OHLC and positive volume in the raw daily partition."
+  },
+  "source_probe": {
+    "provider": "tushare_suspend_d",
+    "request_scope": "one official example date, all market, suspend_type=S",
+    "trade_date": "2020-03-12",
+    "result": "entitlement_denied",
+    "data_published": false,
+    "retry_started": false
+  },
+  "residual": {
+    "full_day_missing_or_zero_volume_execution_risk": "not_observed_on_executed_legs_and_fail_closed_on_entry",
+    "intraday_partial_suspension_at_open": "unverified",
+    "reason": "The available daily bars cannot prove the intraday suspension interval, and the configured Tushare account has no suspend_d entitlement.",
+    "effect_on_status": "Keep P0-F incomplete for intraday execution evidence; do not block the frozen daily VCP diagnostic baseline or trigger parameter changes."
+  },
+  "interpretation": "The current VCP baseline has no executed trade on a missing, invalid, or zero-volume daily bar. Historical suspension work is narrowed to intraday timing evidence instead of an unbounded all-security repair."
+}

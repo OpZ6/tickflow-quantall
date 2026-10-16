@@ -1,0 +1,43 @@
+{
+  "experiment": "production-leader-trend-control-complementarity-audit-2016-2026-v1",
+  "decision": "stop_no_p3_portfolio_promotion",
+  "reason": "The simple control is economically nonviable. Its low correlation with the VCP leader is dominated by early capital depletion and later inactivity, while its deep drawdown covers every deep-drawdown day of the primary strategy. A combined portfolio would add capital conflict without an acceptable standalone return source.",
+  "inputs": {
+    "primary_run": "20260908T024521089151Z",
+    "simple_control_run": "20260908T061825556454Z",
+    "market_days": 2546,
+    "primary_trades": 290,
+    "simple_control_trades": 744,
+    "timing_violations": 0
+  },
+  "results": {
+    "daily_return_correlation_all_days": 0.120323,
+    "daily_return_correlation_union_exposed_days": 0.122898,
+    "primary_average_exposure": 0.2656,
+    "simple_control_average_exposure": 0.5414,
+    "both_exposed_days": 621,
+    "exposed_day_jaccard": 0.298414,
+    "combined_exposure_above_100pct_days": 567,
+    "maximum_combined_exposure": 1.999,
+    "simple_control_entries_primary_eod_four_positions": 79,
+    "simple_control_entries_primary_eod_exposure_at_least_99pct": 64,
+    "same_symbol_concurrent_trade_intervals": 1,
+    "primary_days_at_or_below_minus_10pct_drawdown": 978,
+    "simple_control_days_at_or_below_minus_10pct_drawdown": 2513,
+    "both_at_or_below_minus_10pct_drawdown_days": 978,
+    "simple_control_top_five_winner_share_of_gross_positive_pnl": 0.392831
+  },
+  "interpretation": [
+    "The signal families are distinct at the actual-trade level, with only one same-symbol concurrent interval, but distinct trades are not useful diversification when one path loses 99.82 percent.",
+    "All 978 primary deep-drawdown days occur while the control is also more than 10 percent below its peak. The control supplies no observed deep-drawdown hedge.",
+    "Correlation near 0.12 is not promotion evidence because the control fell below half capital in 2016 and below one percent in 2020, then became constrained by minimum-lot affordability."
+  ],
+  "stop_rule_applied": "Do not combine, reweight or repair this control on the exposed interval. Keep it as a null reference showing that unrestricted default trend breakout behavior is insufficient.",
+  "p3_effect": "The current VCP branch has no secondary portfolio candidate: same-pivot retrigger is dependent and weak, while the simple trend control is economically nonviable. P3 remains closed until a genuinely distinct causal method first passes its own frozen single-strategy evidence gate.",
+  "next_action": "Continue forward-v1 for the frozen VCP leader. Do not expand the portfolio merely to fill a strategy slot.",
+  "evidence": [
+    "docs/research/vcp/production-leader-trend-control-complementarity-audit-2016-2026-v1.json",
+    "data/research/vcp/analysis/leader-trend-control-complementarity-2016-2026-v1.json",
+    "docs/research/vcp/production-trend-breakout-simple-control-2016-2026-v1-decision.json"
+  ]
+}

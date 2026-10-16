@@ -1,0 +1,9 @@
+{
+  "base_protocol": "production-leader-baseline-20260907.json",
+  "experiment": "production-leader-filter-diagnostic-20260907",
+  "purpose": "isolate_basic_filter_effect_on_absent_early_entries_not_strategy_optimization",
+  "development_note": "Diagnostic ablation only. All strategy parameters, universe, dates and costs match baseline; disable basic filtering solely to locate the first failing stage, not to select a better-performing trading rule.",
+  "backtest": {
+    "overrides": {"basic_filter": {"enabled": false}}
+  }
+}

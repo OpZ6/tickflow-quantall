@@ -1,0 +1,64 @@
+{
+  "decision": "retain_frozen_forward_v1_without_rule_change",
+  "strategy_id": "vcp_leader_breakout",
+  "strategy_version": "forward-v1",
+  "as_of": "2026-09-08",
+  "snapshot": "data/research/vcp/forward/forward-v1/2026-09-08.json",
+  "snapshot_sha256": "8045f359a1db82e09b408374ac7130a9258c53980c92875fb17e94ace1b630b8",
+  "latest_completed_data_date": "2026-09-08",
+  "universe_symbols": 5838,
+  "candidate_count": 0,
+  "entry_signal_count": 0,
+  "raw_exit_signal_count": 210,
+  "portfolio_exit_count": 0,
+  "paper_ledger_status": "empty_before_first_entry_signal",
+  "detector_reason_counts": {
+    "trend_ma_alignment": 5203,
+    "invalid_close": 289,
+    "near_52_week_high": 131,
+    "positive_returns": 100,
+    "market_regime": 88,
+    "rs_threshold": 27
+  },
+  "comparison_with_2026_09_07": {
+    "universe_change": 0,
+    "trend_ma_alignment_change": 65,
+    "invalid_close_change": 0,
+    "near_52_week_high_change": -38,
+    "positive_returns_change": -21,
+    "market_regime_change": 9,
+    "rs_threshold_change": -15
+  },
+  "entered_vcp_structure_detection": 0,
+  "market_regime_diagnostic": {
+    "valid_symbols": 5532,
+    "breadth_above_ma20": 0.6059291395516992,
+    "breadth_five_sessions_prior": 0.6914585595367354,
+    "breadth_change_five_sessions": -0.08552941998503616,
+    "equal_weight_return_63_sessions": -0.0007397015377991201,
+    "early_recovery_branch": false,
+    "broad_advance_branch": false,
+    "allowed": false,
+    "signal_timing": "completed 2026-09-08 close for a possible next-session open fill",
+    "shanghai_shenzhen_scope_check": {
+      "matrix_symbols": 5252,
+      "valid_symbols": 5198,
+      "breadth_above_ma20": 0.6013851481338977,
+      "breadth_five_sessions_prior": 0.6881616939364774,
+      "breadth_change_five_sessions": -0.08677654580257976,
+      "equal_weight_return_63_sessions": 0.0047291117104941716,
+      "early_recovery_branch": false,
+      "broad_advance_branch": false,
+      "decision_changed": false
+    }
+  },
+  "interpretation": "Eighty-eight securities passed the preceding stock-level trend and RS gates but were stopped by the frozen dual-regime gate. The market was not simply weak: 60.59% of valid symbols were above MA20, but breadth had fallen 8.55 percentage points in five sessions and the 63-session equal-weight return was slightly negative. This is an excluded middle or fading-breadth state, satisfying neither early recovery nor broad advance. The completed dataset is present; zero candidates are a strategy-state result, not a missing-data result. Raw exit signals do not imply portfolio exits because no forward position exists.",
+  "guardrails": {
+    "strategy_changed": false,
+    "threshold_changed": false,
+    "snapshot_rewritten_after_acceptance": false,
+    "raw_exit_signal_claimed_as_portfolio_exit": false,
+    "result_used_for_parameter_selection": false
+  },
+  "next_action": "Continue append-only forward observation. Do not relabel this observation as a generic weak regime or change thresholds to force candidates; reopen strategy logic only if repeated unseen observations provide a causal reason to model the excluded middle state."
+}

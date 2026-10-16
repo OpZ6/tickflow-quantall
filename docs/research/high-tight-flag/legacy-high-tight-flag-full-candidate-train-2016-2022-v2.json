@@ -1,0 +1,7 @@
+{
+  "base_protocol": "legacy-high-tight-flag-full-candidate-train-2016-2022-v1.json",
+  "experiment": "legacy-high-tight-flag-full-candidate-train-2016-2022-v2",
+  "training_data_end": "2022-12-31",
+  "backtest": {"end": "2022-10-11"},
+  "boundary_note": "Conservative final-signal purge accommodates execution and 80-calendar-day label reads inside 2022; incomplete 40-trading-bar labels fail analysis. V1 exposed labels through 2023-02-17; this rerun cannot undo that exposure."
+}

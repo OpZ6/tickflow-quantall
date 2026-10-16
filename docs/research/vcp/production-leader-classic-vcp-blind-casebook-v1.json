@@ -1,0 +1,45 @@
+{
+  "experiment": "production-leader-classic-vcp-blind-casebook-v1",
+  "type": "blind_structure_labeling",
+  "registered_before_sampling": true,
+  "question": "Does the broad detector's candidate set visibly contain the full classic VCP supply-demand sequence, or is it mixing materially different chart structures under the same label?",
+  "sampling": {
+    "years": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    "cases_per_year": 3,
+    "selection": "ascending SHA-256 of symbol|signal_date|scale|pivot_date within each year",
+    "minimum_visible_history_bars": 100,
+    "outcome_used_for_selection": false
+  },
+  "blind_packet": "data/research/vcp/casebooks/classic-vcp-blind-v1",
+  "visible_information": [
+    "normalized OHLC and volume through signal day",
+    "broad detector pivot date and level",
+    "recorded broad final-leg low date",
+    "pattern scale and anonymous case id"
+  ],
+  "hidden_until_labels_frozen": [
+    "symbol",
+    "calendar date",
+    "future breakout label",
+    "future return and MFE"
+  ],
+  "rubric": {
+    "classic": "clear prior advance, at least two visibly contracting reactions, progressively quieter supply toward the right edge, and a clean line of least resistance",
+    "partial": "broad VCP logic is visible but one core element is ambiguous or absent",
+    "nonclassic": "the chart is primarily a loose range, bottoming/reversal, repeated leakage, or another structure that should not be called classic VCP"
+  },
+  "required_reason_codes": [
+    "prior_advance",
+    "contracting_depth",
+    "higher_lows",
+    "right_edge_tightness",
+    "volume_dry_up",
+    "clean_pivot",
+    "pivot_leakage",
+    "loose_or_erratic",
+    "insufficient_history"
+  ],
+  "anti_overfit": "Labels must be written before opening outcomes.json. The first packet is not resampled after viewing charts or outcomes. No trading rule or numeric threshold is inferred directly from 24 cases.",
+  "next_if_mixed": "Separate candidate semantics before further backtests; preserve broad watchlist but create an explicitly labeled classic-structure research subset.",
+  "next_if_coherent": "Keep the detector structure and move research to non-price catalyst evidence."
+}

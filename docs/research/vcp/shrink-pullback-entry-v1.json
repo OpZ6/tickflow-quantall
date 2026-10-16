@@ -1,0 +1,24 @@
+{
+  "experiment": "vcp-shrink-pullback-entry-v1",
+  "thought": "Same VCP leader upper-half breakout signals. Change only the buy: 缩量回踩 instead of T+1 breakout fill. Intact-pivot-pullback already stopped; this is not that 5-day pivot-hold + reclaim-high rule.",
+  "hypothesis": "Buying the first shrink-volume pullback within 8 market sessions after the signal, without undercutting the signal low, has higher independent avg_pnl than buying the breakout next open on the same 321-name book.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close on entry_signal_date",
+    "n_train_cited": 321,
+    "entry": "T+1 open after signal",
+    "exits": "original"
+  },
+  "change": {
+    "id": "shrink_pullback_within_8",
+    "definition": "Do not take the original T+1 fill. After entry_signal_date, on the next 8 market sessions, take the first bar with volume < mean volume of the prior 20 market sessions, close < signal close, and low >= signal low. Buy the next market open if that session is strictly before the original exit. PnL is new entry open to original exit price, same costs. A hole, missing 20-session volume history, or blocked buy does not roll; that signal is absent from the variant book."
+  },
+  "metric": {
+    "primary": "independent win_rate, profit_factor, avg_pnl of pullback fills vs the 321 breakout fills",
+    "validation_if_keep": "same rule on 2023-2026 completed upper-half signals"
+  },
+  "pass_fail": {
+    "pass": "variant avg_pnl not below the 321-trade breakout baseline and remains positive",
+    "fail": "Drop this buy. Baseline stays 321 T+1 breakout. Next still VCP (企稳买) or pause VCP and open 放量突破·缩量回踩 as its own book."
+  }
+}

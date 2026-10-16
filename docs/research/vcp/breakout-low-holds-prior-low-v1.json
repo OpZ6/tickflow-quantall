@@ -1,0 +1,24 @@
+{
+  "experiment": "vcp-breakout-low-holds-prior-low-v1",
+  "thought": "VCP breakout should not undercut the prior day's low (wide bar that sold off then recovered). Signal-day visible selection.",
+  "hypothesis": "Keeping fills whose breakout-bar low >= prior market-session low excludes failed-then-reclaimed wide breaks and raises independent avg_pnl vs the full 474-trade original-exit book.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "kind": "full independent candidate_execution",
+    "training": "entry 2016-01-01..2022-12-31 and original exit_date <= 2022-12-31",
+    "n_cited": 474,
+    "avg_pnl": 0.009139,
+    "win_rate": 0.2743,
+    "profit_factor": 3.56
+  },
+  "change": {
+    "id": "breakout_low_ge_prior_session_low",
+    "definition": "Keep if low[entry_signal_date] >= low[previous market session]. A missing prior or signal bar is not kept (no roll)."
+  },
+  "not_baseline": "The 171 four-slot book and 97-trade pre-expand subset are not this contrast.",
+  "metric": {"primary": "independent win_rate, profit_factor, avg_pnl vs all 474 original-exit trades"},
+  "pass_fail": {
+    "pass": "avg_pnl not below 474-trade baseline.",
+    "fail": "Drop. Next still in VCP/cup/flag/volume-break/pullback thought."
+  }
+}

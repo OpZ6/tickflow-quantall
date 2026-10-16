@@ -1,0 +1,19 @@
+{
+  "base_protocol": "iteration4-turnover-rank25-stop7-v1.json",
+  "experiment": "vcp-iteration4-early-recovery-turnover3-v1",
+  "purpose": "iteration4_false_breakout_filter",
+  "hypothesis": "VCP breakouts with at least 3% signal-day turnover, during a 30%-50% MA20 breadth recovery that is higher than five trading days earlier, remove low-attention and weak-market false breakouts with consistent yearly direction.",
+  "backtest": {
+    "params": {
+      "market_breadth_ma20_min": 0.30,
+      "market_breadth_ma20_max": 0.50,
+      "market_breadth_rising_days": 5
+    },
+    "overrides": {
+      "basic_filter": {
+        "turnover_min": 3.0
+      }
+    }
+  },
+  "trial_note": "The joint gate was diagnosed on development years only. Portfolio slots remain at 10 so this run tests signal quality before concentration or capital deployment changes."
+}

@@ -1,0 +1,16 @@
+{
+  "experiment": "cup-fresh-pivot-cross-v1",
+  "frozen_at": "2026-09-12",
+  "hypothesis_source": "AI reading the causal detector and the existing failed-breakout autopsy; development data, not independent discovery",
+  "baseline_run": "20260909T133226351846Z",
+  "baseline": "2034 independent cup fills: dual regime AND RS>=85 AND upper-half signal close; mean net +0.54%",
+  "attacked_path": "762 failed breakouts, average net -4.41%",
+  "change": "Keep only previous market-session close <= signal-day reconstructed cup pivot < signal-day close. This is a crossing event, with no parameter search or change of pivot offset.",
+  "execution": "Subset of the complete frozen independent fills, same next-market-open entry, original exit, T+1 and original historical costs. No new or delayed entries. Missing previous market bar or pivot fails closed and is reported.",
+  "training": "2016-2022, original exit within 2022; load no bars after 2022",
+  "exposure": "Earlier experiments and 2023+ exposed; source run contains no validation trades. No clean OOS claim.",
+  "initial_gate": "At least 100 trades, positive mean net strictly better than baseline, signal-day equal-weight actual net not worse than baseline. Otherwise drop this representation and its crossing-buffer neighbours.",
+  "passing_action": "Research candidate only: verify complete opportunity execution and fixed-window comparisons before any promotion or product change.",
+  "artifacts": "analysis JSON, decision Markdown; per-trade selection ledger under data/research/cup-handle/",
+  "constraints": ["VCP remains frozen", "one buy-kind change", "no stop change", "no threshold tuning", "no product change"]
+}

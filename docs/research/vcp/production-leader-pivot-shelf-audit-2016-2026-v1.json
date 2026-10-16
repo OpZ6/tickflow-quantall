@@ -1,0 +1,42 @@
+{
+  "analysis": "production-leader-pivot-shelf-audit-2016-2026-v1",
+  "source_run": "20260907T123519390606Z",
+  "artifact": "data/research/vcp/runs/20260907T123519390606Z/pivot-shelf-analysis.json",
+  "scope": "298 executed entries; all shelf inputs end strictly before the breakout signal date; future bars are labels only",
+  "method": "Describe 5/10/20/40-bar high-low range, close range, nested range contraction, support distance and volume contraction as continuous distributions. Compare winners with no-follow failures without selecting cutoffs.",
+  "key_evidence": {
+    "range_5_median": {
+      "winner": 0.082449,
+      "no_follow_failure": 0.083157,
+      "probability_winner_lower": 0.491628
+    },
+    "range_10_median": {
+      "winner": 0.102821,
+      "no_follow_failure": 0.103462,
+      "probability_winner_lower": 0.508372
+    },
+    "close_range_5_median": {
+      "winner": 0.050440,
+      "no_follow_failure": 0.044600,
+      "probability_winner_lower": 0.461666
+    },
+    "volume_5_to_20_median": {
+      "winner": 1.079457,
+      "no_follow_failure": 1.006554,
+      "probability_winner_lower": 0.423662
+    },
+    "volume_10_to_40_median": {
+      "winner": 1.012596,
+      "no_follow_failure": 0.923026,
+      "probability_winner_lower": 0.428619
+    },
+    "range_40_median": {
+      "winner": 0.195065,
+      "no_follow_failure": 0.226082,
+      "probability_winner_lower": 0.564111
+    }
+  },
+  "decision": "stop_fixed_window_shelf_filter_direction",
+  "interpretation": "Immediate pre-breakout tightness and dry-up do not separate winners from no-follow failures inside the frozen executed sample. A weak difference at forty bars is insufficient to justify a cutoff, while shorter windows are effectively indistinguishable and recent volume is not lower for winners.",
+  "next_action": "Study breakout-day demand and leadership as continuous causal evidence. The next question is whether demand expansion relative to the stock's own base and the same-day market explains immediate follow-through; do not add a shelf threshold."
+}

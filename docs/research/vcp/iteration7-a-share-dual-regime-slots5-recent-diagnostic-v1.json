@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration7-a-share-dual-regime-slots5-continuous-v1.json",
+  "experiment": "vcp-iteration7-a-share-dual-regime-slots5-recent-diagnostic-v1",
+  "purpose": "recent_regime_and_execution_stress_diagnostic",
+  "phases": {
+    "train": {
+      "start": "2024-01-02",
+      "end": "2026-06-30"
+    }
+  },
+  "development_note": "This recent interval was exposed by earlier candidate evaluations and engineering pilots. It is a stress diagnostic, not untouched out-of-sample validation, and must not be used for further threshold tuning."
+}

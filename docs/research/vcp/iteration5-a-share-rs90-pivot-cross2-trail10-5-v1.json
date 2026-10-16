@@ -1,0 +1,13 @@
+{
+  "base_protocol": "iteration5-a-share-stop5-rs90-pivot-cross2-v1.json",
+  "experiment": "vcp-iteration5-a-share-rs90-pivot-cross2-trail10-5-v1",
+  "purpose": "iteration5_a_share_profit_protection",
+  "hypothesis": "After a clean RS90 VCP advances 10%, a 5% drawdown from its subsequent peak should protect confirmed-breakout gains while preserving materially more upside than a fixed target.",
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": 0.10,
+      "trailing_take_profit_drawdown": 0.05
+    }
+  },
+  "trial_note": "Only the post-10% profit-protection exit changes relative to the clean-pivot protocol. Initial stop, entry rules, costs, slots, universe and development interval remain frozen."
+}

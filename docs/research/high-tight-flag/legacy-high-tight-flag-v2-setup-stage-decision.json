@@ -1,0 +1,56 @@
+{
+  "experiment": "legacy-high-tight-flag-v2-setup-stage-audit",
+  "decision": "register_single_structural_hypothesis_exclude_short_scale",
+  "run_id": "20260909T130617820559Z",
+  "strategy_id": "quants_high_tight_flag_legacy_v1",
+  "question": "Which pre-signal semantic subgroups of the legacy multiscale high-tight-flag pool explain the negative fixed-40-day Alpha, and do any subgroups preserve right-tail recall?",
+  "method": "Re-derived the exact archived detector at each trade's signal date from source.zip; no parameter, data, or exit changes. Post-hoc decomposition of the frozen v2 training ledger only.",
+  "detector_reconciliation": "1242 of 1245 trades reproduce executable status; 3 differ due to valid-bar window edge cases (0.24 percent). No material effect on conclusions.",
+  "findings": {
+    "by_scale": {
+      "short": {"n": 510, "mean_40d_excess": -0.0577, "positive_share": 0.322, "mfe20": 205, "mfe50": 54},
+      "medium": {"n": 332, "mean_40d_excess": 0.0006, "positive_share": 0.434, "mfe20": 117, "mfe50": 26},
+      "long": {"n": 403, "mean_40d_excess": 0.0027, "positive_share": 0.434, "mfe20": 161, "mfe50": 37}
+    },
+    "by_pole_gain": {
+      "0.8_1.0": {"n": 498, "mean_40d_excess": 0.0029, "mfe50": 51},
+      "1.0_1.5": {"n": 426, "mean_40d_excess": -0.0226, "mfe50": 38},
+      "1.5_plus": {"n": 319, "mean_40d_excess": -0.0638, "mfe50": 27}
+    },
+    "scale_x_pole_gain": {
+      "short_is_negative_in_every_pole_gain_bucket": true,
+      "medium_positive_below_1.5_pole_gain": [0.0087, 0.0031],
+      "long_positive_below_1.5_pole_gain": [0.0188, 0.0053],
+      "pole_gain_1.5_plus_negative_in_every_scale": [-0.0739, -0.0459, -0.0490]
+    },
+    "scale_x_flag_depth": {
+      "short_negative_in_every_depth_bucket": [-0.0341, -0.0271, -0.0669],
+      "medium_deep_positive": 0.0055,
+      "long_mid_deep_positive": [0.0093, 0.0042]
+    }
+  },
+  "interpretation": [
+    "The negative bulk is not uniform: short-scale flags are negative in every pole-gain and depth slice, and pole gain at or above 1.5 is negative in every scale.",
+    "Medium and long scale flags with pole gain below 1.5 are approximately Alpha-neutral to slightly positive, and together retain the majority of right-tail hits (278 of 483 paths above 20 percent MFE; 63 of 117 above 50 percent).",
+    "Excluding short-scale candidates removes 41 percent of the pool and essentially the entire negative bulk, leaving a roughly Alpha-neutral medium/long pool with preserved majority right-tail recall. It does not by itself create a positive-Alpha strategy."
+  ],
+  "pre_registered_hypothesis": {
+    "change": "Restrict the executable flag pool to medium and long scales; exclude short-scale flags from entry.",
+    "type": "single_structural_entry_change",
+    "mechanism": "Sub-60-bar short flags are too short to filter post-pole reversion; they are the dominant negative-bulk contributor across all pole-gain and depth states.",
+    "unchanged": "Detector thresholds, exits, stop, costs, universe, and the 2016-2022 training boundary.",
+    "test": "Run a frozen full-candidate training baseline with the same protocol and default exits; register success only if mean 40-day excess is nonnegative and mean fixed-horizon Alpha is nonnegative in at least four training years while preserving the majority of 50-percent-MFE paths.",
+    "not_authorized": "Parameter grid searches, temporal-test inspection, or reusing the 2023-2026 exposed period as a clean holdout."
+  },
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "pole gain thresholds alone",
+    "flag depth thresholds alone",
+    "short-scale pole-gain or depth sub-slices"
+  ],
+  "next_action": "Pre-register and run the single scale-restriction baseline only after the current cup and wide-VCP runs finish; do not launch a third concurrent research run.",
+  "evidence": [
+    "data/research/vcp/runs/20260909T130617820559Z/trade-path-analysis.json",
+    "docs/research/high-tight-flag/legacy-high-tight-flag-v2-setup-stage-audit.json"
+  ]
+}

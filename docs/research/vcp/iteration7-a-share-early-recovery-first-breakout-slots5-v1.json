@@ -1,0 +1,9 @@
+{
+  "base_protocol": "iteration7-a-share-early-recovery-first-breakout-v1.json",
+  "experiment": "vcp-iteration7-a-share-early-recovery-first-breakout-slots5-v1",
+  "purpose": "balanced_portfolio_risk_budget_for_sparse_vcp_signals",
+  "hypothesis": "Five equal-weight slots improve capital use while retaining enough diversification to preserve cross-cycle expectancy.",
+  "backtest": {
+    "max_positions": 5
+  }
+}

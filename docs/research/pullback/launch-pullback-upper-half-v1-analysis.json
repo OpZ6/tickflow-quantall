@@ -1,0 +1,33 @@
+{
+  "experiment": "launch-pullback-upper-half-v1",
+  "baseline_run": "20260909T053715693165Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\pullback\\launch-pullback-upper-half-v1.json",
+  "training_2016_2022": {
+    "lower_half": 564,
+    "missing": 0,
+    "baseline": {
+      "n_trades": 1421,
+      "win_rate": 0.278677,
+      "profit_factor": 2.61,
+      "avg_pnl": 0.000351,
+      "avg_win": 0.146477,
+      "avg_loss": 0.056103
+    },
+    "variant": {
+      "n_trades": 857,
+      "win_rate": 0.281214,
+      "profit_factor": 2.48,
+      "avg_pnl": -0.001153,
+      "avg_win": 0.139631,
+      "avg_loss": 0.056233
+    },
+    "delta": {
+      "avg_pnl": -0.001504,
+      "win_rate": 0.002537,
+      "profit_factor": -0.13
+    },
+    "rule": "drop"
+  },
+  "rule": "drop",
+  "gaps": []
+}

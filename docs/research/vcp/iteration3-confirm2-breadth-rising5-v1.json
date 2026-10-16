@@ -1,0 +1,7 @@
+{
+  "base_protocol": "iteration3-confirm2-v1.json",
+  "experiment": "vcp-iteration3-confirm2-breadth-rising5-v1",
+  "purpose": "iteration3_structural_development",
+  "hypothesis": "Require current breadth to exceed its level five trading days earlier so confirmed breakouts occur during improving participation.",
+  "backtest": {"params": {"market_breadth_rising_days": 5}}
+}

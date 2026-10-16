@@ -1,0 +1,27 @@
+{
+  "experiment": "pivot-ma20-support-exit-v1",
+  "baseline_run": "20260909T135940874097Z",
+  "hypothesis": "Original-pivot exits improve early structural loss control but leave a static floor after an advance. A support line equal to max(original entry pivot, current completed-day MA20) preserves the original floor while tracking later trend support.",
+  "arms": ["ma20_cross", "pivot_ma20_support"],
+  "unique_change": "Exit after the first post-entry close below max(original entry-signal pivot, current causal MA20), using the original next-open fill constraints. The floor never falls below the entry pivot; it may fall with MA20 above that floor. This is not a high-watermark trailing stop.",
+  "training_data_end": "2022-12-31",
+  "horizon": "Same archived 40-valid-bar endpoint for both arms and all original 4396 entries.",
+  "execution": "Same independent matcher and entry prices, commission 0.0003, slippage 10 bps, a_share_historical stamp tax, no extra stops or holding-day changes.",
+  "terminal_accounting": "Real exits retain net proceeds in zero-interest cash until the fixed endpoint. Censored positions mark at endpoint close after entry cost without hypothetical sell cost. Report censor counts separately.",
+  "benchmark": "Identical archived fixed-horizon equal-weight market return; excess = endpoint wealth / market gross return - 1.",
+  "gates": {
+    "matched_entry_count": 4396,
+    "minimum_mean_paired_excess_improvement": 0.0,
+    "minimum_positive_improvement_years": 4,
+    "minimum_variant_mean_fixed_endpoint_excess": 0.0,
+    "minimum_baseline_positive_excess_retention": 0.9,
+    "maximum_mean_negative_excess_magnitude_deterioration": 0.005,
+    "paired_improvement_95pct_ci_lower_strictly_positive": true
+  },
+  "statistics": {"bootstrap_replicates": 2000, "block_trading_days": 60, "seed": 20260910, "method": "Circular moving blocks of complete signal-date trading calendar; resample same-day sums and counts jointly, event-weighted mean paired excess. Centered two-sided bootstrap p. Exploratory follow-up, not independent confirmation."},
+  "required_outputs": ["entry and baseline-arm parity with v1", "both-arm records and censor counts", "annual paired effects", "50-percent-MFE subgroup outcomes", "all gates"],
+  "success_action": "Research support only; separately validate candidate selection, portfolio overlap and unseen data. Do not promote production defaults.",
+  "failure_action": "Stop this combined support representation and MA-length, pivot-buffer or confirmation-day neighbors; return to entry/selection mechanisms.",
+  "temporal_test_authorized": false,
+  "previous_evidence": "entry-pivot-exit-replacement-v1 improved paired excess but failed nonnegative variant excess and original-positive retention. The current hypothesis changes the moving exit structure, not its numerical thresholds."
+}

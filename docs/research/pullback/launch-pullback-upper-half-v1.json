@@ -1,0 +1,19 @@
+{
+  "experiment": "launch-pullback-upper-half-v1",
+  "thought": "Same 1,421 launch_pullback fills on dual-regime-open RS>=85 days. One filter: signal-day close in the upper half of the bar, same definition as the VCP breakout book.",
+  "hypothesis": "Demand into the pullback close should lift independent avg_pnl above +0.035%.",
+  "baseline": {
+    "run_id": "20260909T053715693165Z",
+    "selection": "dual_regime_open AND rs>=85",
+    "n_train": 1421,
+    "avg_pnl": 0.000351
+  },
+  "change": {
+    "id": "signal_close_location_ge_0_5",
+    "definition": "Keep if (close-low)/(high-low) >= 0.5 on entry_signal_date. Zero range or missing bar is not kept. Do not scan 0.5."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +0.035% baseline and remains positive. If keep, report 2023-2026 (this ledger has few post-2022 fills).",
+    "fail": "Drop. Thin pullback book stays 1,421. Next: return to VCP 321 or one more pullback sell, not a new 0.5 scan."
+  }
+}

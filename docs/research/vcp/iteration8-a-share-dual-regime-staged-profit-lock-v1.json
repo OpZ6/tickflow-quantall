@@ -1,0 +1,23 @@
+{
+  "base_protocol": "iteration7-a-share-dual-regime-slots5-continuous-v1.json",
+  "experiment": "vcp-iteration8-a-share-dual-regime-staged-profit-lock-v1",
+  "purpose": "protect_a_confirmed_breakout_without_clipping_the_right_tail",
+  "hypothesis": "After a 10 percent peak gain, protecting break-even can remove round trips while allowing the trade to continue; after a 20 percent peak gain, a 10 percent trailing drawdown can preserve the asymmetric VCP payoff.",
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": null,
+      "trailing_take_profit_drawdown": null,
+      "profit_lock_steps": [
+        {
+          "activate_pct": 0.1,
+          "floor_return_pct": 0.0
+        },
+        {
+          "activate_pct": 0.2,
+          "trailing_drawdown_pct": 0.1
+        }
+      ]
+    }
+  },
+  "development_note": "This theory-driven exit rule is evaluated on already-opened development data and is not untouched validation."
+}

@@ -1,0 +1,61 @@
+{
+  "experiment": "vcp-breakout-bullish-bar-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\breakout-bullish-bar-v1.json",
+  "training_2016_2022": {
+    "yin_dropped": 14,
+    "missing": 0,
+    "baseline": {
+      "n_trades": 321,
+      "win_rate": 0.267913,
+      "profit_factor": 3.94,
+      "avg_pnl": 0.0124,
+      "avg_win": 0.150736,
+      "avg_loss": 0.038225
+    },
+    "variant": {
+      "n_trades": 307,
+      "win_rate": 0.270358,
+      "profit_factor": 4.0,
+      "avg_pnl": 0.013509,
+      "avg_win": 0.153374,
+      "avg_loss": 0.038316
+    },
+    "delta": {
+      "avg_pnl": 0.001109,
+      "win_rate": 0.002445,
+      "profit_factor": 0.06
+    },
+    "rule": "keep"
+  },
+  "rule": "keep",
+  "gaps": [],
+  "validation_2023_2026": {
+    "yin_dropped": 21,
+    "missing": 0,
+    "baseline": {
+      "n_trades": 258,
+      "win_rate": 0.271318,
+      "profit_factor": 3.68,
+      "avg_pnl": 0.011578,
+      "avg_win": 0.157703,
+      "avg_loss": 0.042831
+    },
+    "variant": {
+      "n_trades": 237,
+      "win_rate": 0.261603,
+      "profit_factor": 3.54,
+      "avg_pnl": 0.007922,
+      "avg_win": 0.150017,
+      "avg_loss": 0.04242
+    },
+    "incomplete_excluded": 0,
+    "delta": {
+      "avg_pnl": -0.003656,
+      "win_rate": -0.009715,
+      "profit_factor": -0.14
+    },
+    "rule": "drop"
+  },
+  "validation_note": "exposure, not a clean holdout"
+}

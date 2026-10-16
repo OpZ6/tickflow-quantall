@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration5-a-share-stop5-v1.json",
+  "experiment": "vcp-iteration5-a-share-stop5-short-penalty8-v1",
+  "purpose": "iteration5_a_share_shape_quality_ranking",
+  "hypothesis": "Penalizing short-scale VCP candidates by eight technical-score points should preserve recall but give scarce portfolio slots to medium and long contraction structures, whose development-set forward returns were more stable across calendar years.",
+  "backtest": {
+    "params": {
+      "short_scale_score_penalty": 8.0
+    }
+  },
+  "trial_note": "Only the ranking score of short-scale candidates changes relative to the stop5 protocol. No VCP setup is removed, and all entry, exit, cost, slot and development-period settings remain frozen."
+}

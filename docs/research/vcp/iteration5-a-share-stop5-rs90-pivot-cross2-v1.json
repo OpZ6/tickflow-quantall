@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration5-a-share-stop5-rs90-v1.json",
+  "experiment": "vcp-iteration5-a-share-stop5-rs90-pivot-cross2-v1",
+  "purpose": "iteration5_a_share_clean_pivot_filter",
+  "hypothesis": "Among RS90 leaders, allowing at most two closes at or above the final pivot during the preceding 20 sessions should reject worn-out resistance levels while retaining clean first-break supply release; development candidates improved on fast, medium and large-winner labels under this rule.",
+  "backtest": {
+    "params": {
+      "prebreakout_pivot_closes_max": 2
+    }
+  },
+  "trial_note": "Only prior pivot-cross cleanliness changes relative to the RS90 protocol. The VCP detector, stop, exit, costs, slots, universe and development interval remain frozen."
+}

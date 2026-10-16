@@ -1,0 +1,33 @@
+{
+  "experiment": "production-leader-long-baseline-2016-2026-v1",
+  "purpose": "fixed_defaults_long_history_development_baseline_after_unit_repair",
+  "hypothesis": "The frozen production leader rules can now be evaluated continuously from 2016 after aligning historical daily volume and amount to the current contract.",
+  "universe_date": "2015-12-31",
+  "universe_mode": "historical_union",
+  "sample_size": 0,
+  "data_directory": "",
+  "development_note": "The entire interval is exposed development data. This run changes no strategy parameter and is not an independent validation or live qualification.",
+  "backtest": {
+    "strategy_id": "vcp_leader_breakout",
+    "symbols": null,
+    "start": "2016-01-04",
+    "end": "2026-06-30",
+    "params": null,
+    "overrides": {},
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.0005,
+    "stamp_tax_policy": "a_share_historical",
+    "slippage_bps": 10.0,
+    "max_positions": 4,
+    "max_exposure_pct": 1.0,
+    "initial_capital": 1000000.0,
+    "position_sizing": "equal",
+    "mode": "position",
+    "asset_type": "stock",
+    "minute_fill": false,
+    "regime_filter": null
+  }
+}

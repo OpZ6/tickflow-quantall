@@ -1,0 +1,207 @@
+{
+  "candidate": "vcp_recovery_breakout_v1",
+  "evaluated_at": "2026-09-06",
+  "development_range": {
+    "start": "2021-09-06",
+    "end": "2025-09-04"
+  },
+  "final_holdout_range": {
+    "start": "2025-09-05",
+    "end": "2026-06-30",
+    "opened": false
+  },
+  "run_ids": {
+    "main": "20260906T002822311043Z",
+    "neighbor_28_36": "20260906T002934003469Z",
+    "neighbor_32_37": "20260906T003003482715Z",
+    "cost_stress": "20260906T003029531553Z"
+  },
+  "checks": [
+    {
+      "name": "main_total_return",
+      "actual": 0.2003,
+      "operator": ">",
+      "threshold": 0,
+      "passed": true,
+      "run_id": "20260906T002822311043Z"
+    },
+    {
+      "name": "main_monetary_profit_factor",
+      "actual": 1.6632375648075526,
+      "operator": ">=",
+      "threshold": 1.2,
+      "passed": true,
+      "run_id": "20260906T002822311043Z"
+    },
+    {
+      "name": "main_max_drawdown",
+      "actual": -0.0993,
+      "operator": ">=",
+      "threshold": -0.15,
+      "passed": true,
+      "run_id": "20260906T002822311043Z"
+    },
+    {
+      "name": "main_closed_trades",
+      "actual": 90,
+      "operator": ">=",
+      "threshold": 80,
+      "passed": true,
+      "run_id": "20260906T002822311043Z"
+    },
+    {
+      "name": "main_positive_calendar_segments",
+      "actual": 4,
+      "operator": ">=",
+      "threshold": 4,
+      "passed": true,
+      "run_id": "20260906T002822311043Z"
+    },
+    {
+      "name": "main_net_pnl_without_largest_winner",
+      "actual": 76317.97000000002,
+      "operator": ">",
+      "threshold": 0,
+      "passed": true,
+      "run_id": "20260906T002822311043Z"
+    },
+    {
+      "name": "main_top5_gross_profit_share",
+      "actual": 0.6458648329648967,
+      "operator": "<=",
+      "threshold": 0.7,
+      "passed": true,
+      "run_id": "20260906T002822311043Z"
+    },
+    {
+      "name": "neighbor_28_36_total_return",
+      "actual": 0.1075,
+      "operator": ">",
+      "threshold": 0,
+      "passed": true,
+      "run_id": "20260906T002934003469Z"
+    },
+    {
+      "name": "neighbor_28_36_monetary_profit_factor",
+      "actual": 1.2321414475735186,
+      "operator": ">",
+      "threshold": 1.05,
+      "passed": true,
+      "run_id": "20260906T002934003469Z"
+    },
+    {
+      "name": "neighbor_28_36_max_drawdown",
+      "actual": -0.1258,
+      "operator": ">=",
+      "threshold": -0.18,
+      "passed": true,
+      "run_id": "20260906T002934003469Z"
+    },
+    {
+      "name": "neighbor_32_37_total_return",
+      "actual": 0.0553,
+      "operator": ">",
+      "threshold": 0,
+      "passed": true,
+      "run_id": "20260906T003003482715Z"
+    },
+    {
+      "name": "neighbor_32_37_monetary_profit_factor",
+      "actual": 1.1655586973410386,
+      "operator": ">",
+      "threshold": 1.05,
+      "passed": true,
+      "run_id": "20260906T003003482715Z"
+    },
+    {
+      "name": "neighbor_32_37_max_drawdown",
+      "actual": -0.1007,
+      "operator": ">=",
+      "threshold": -0.18,
+      "passed": true,
+      "run_id": "20260906T003003482715Z"
+    },
+    {
+      "name": "cost_stress_total_return",
+      "actual": 0.167,
+      "operator": ">",
+      "threshold": 0,
+      "passed": true,
+      "run_id": "20260906T003029531553Z"
+    },
+    {
+      "name": "cost_stress_monetary_profit_factor",
+      "actual": 1.5202783275604976,
+      "operator": ">=",
+      "threshold": 1.05,
+      "passed": true,
+      "run_id": "20260906T003029531553Z"
+    },
+    {
+      "name": "cost_stress_max_drawdown",
+      "actual": -0.1057,
+      "operator": ">=",
+      "threshold": -0.18,
+      "passed": true,
+      "run_id": "20260906T003029531553Z"
+    },
+    {
+      "name": "main_completed_and_timing_clean",
+      "actual": {
+        "status": "completed",
+        "violations": 0
+      },
+      "operator": "==",
+      "threshold": {
+        "status": "completed",
+        "violations": 0
+      },
+      "passed": true,
+      "run_id": "20260906T002822311043Z"
+    },
+    {
+      "name": "neighbor_28_36_completed_and_timing_clean",
+      "actual": {
+        "status": "completed",
+        "violations": 0
+      },
+      "operator": "==",
+      "threshold": {
+        "status": "completed",
+        "violations": 0
+      },
+      "passed": true,
+      "run_id": "20260906T002934003469Z"
+    },
+    {
+      "name": "neighbor_32_37_completed_and_timing_clean",
+      "actual": {
+        "status": "completed",
+        "violations": 0
+      },
+      "operator": "==",
+      "threshold": {
+        "status": "completed",
+        "violations": 0
+      },
+      "passed": true,
+      "run_id": "20260906T003003482715Z"
+    },
+    {
+      "name": "cost_stress_completed_and_timing_clean",
+      "actual": {
+        "status": "completed",
+        "violations": 0
+      },
+      "operator": "==",
+      "threshold": {
+        "status": "completed",
+        "violations": 0
+      },
+      "passed": true,
+      "run_id": "20260906T003029531553Z"
+    }
+  ],
+  "passed": true,
+  "next_action": "run frozen final holdout once"
+}

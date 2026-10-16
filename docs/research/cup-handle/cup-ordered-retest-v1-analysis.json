@@ -1,0 +1,228 @@
+{
+  "source_run": "20260909T133226351846Z",
+  "n": 2034,
+  "status_counts": {
+    "executable": 2034
+  },
+  "stage_counts": {
+    "cup_lip_support_retest": 2032,
+    "right_rim_breakout_without_pullback": 2
+  },
+  "scope": "Signal-day detector reconstruction; no outcome-based category or return comparison",
+  "protocol": {
+    "experiment": "cup-ordered-retest-v1",
+    "frozen_at": "2026-09-12",
+    "source": "AI after causal reconstruction found 2032/2034 support labels; code tests unordered extrema rather than an actual current-day retest. No subgroup returns read before rule freeze.",
+    "change": "Within the frozen detector's selected scale, require a post-right-rim high at or above its existing pivot on a market date strictly before the signal day; require today's low <= existing left-rim*1.01 and today's close >= left rim. This replaces the historical-anywhere support label with a current-day retest after an earlier breakout. Existing tolerances unchanged; no prior-close/pivot-cross condition.",
+    "scope": "Strict subset of original executable events; no delayed or newly generated signals. Evaluate every original thin-book fill, retain original independent T+1 execution and exits. Excluded signals cannot affect other fills because there are no position constraints.",
+    "baseline": "2034 cup thin-book fills, +0.5438% mean net",
+    "training": "2016-2022 only, causal detection ending on each signal date",
+    "initial_gate": "At least 100 kept fills, positive mean net strictly above baseline, signal-day equal-weight actual net not worse and at least baseline count of positive years. Passing is research candidate only; further validation needed.",
+    "failure": "Stop this current-day ordered-retest representation and its tolerance/window neighbours. Do not change VCP or product."
+  },
+  "baseline": {
+    "n_trades": 2034,
+    "win_rate": 0.339725,
+    "profit_factor": 2.32,
+    "avg_pnl": 0.005438,
+    "avg_win": 0.09965,
+    "avg_loss": 0.043036,
+    "signal_days": 298,
+    "signal_day_equal_weight_net": 0.0036128729883041655,
+    "years": {
+      "2016": {
+        "n_trades": 99,
+        "win_rate": 0.191919,
+        "profit_factor": 1.38,
+        "avg_pnl": -0.02308,
+        "avg_win": 0.058787,
+        "avg_loss": 0.042524
+      },
+      "2017": {
+        "n_trades": 516,
+        "win_rate": 0.327519,
+        "profit_factor": 2.14,
+        "avg_pnl": 0.000836,
+        "avg_win": 0.063718,
+        "avg_loss": 0.02979
+      },
+      "2018": {
+        "n_trades": 327,
+        "win_rate": 0.259939,
+        "profit_factor": 1.2,
+        "avg_pnl": -0.019125,
+        "avg_win": 0.053508,
+        "avg_loss": 0.044637
+      },
+      "2019": {
+        "n_trades": 633,
+        "win_rate": 0.418641,
+        "profit_factor": 3.12,
+        "avg_pnl": 0.032881,
+        "avg_win": 0.141631,
+        "avg_loss": 0.045431
+      },
+      "2020": {
+        "n_trades": 250,
+        "win_rate": 0.316,
+        "profit_factor": 1.64,
+        "avg_pnl": -0.009475,
+        "avg_win": 0.093403,
+        "avg_loss": 0.057003
+      },
+      "2021": {
+        "n_trades": 109,
+        "win_rate": 0.394495,
+        "profit_factor": 1.63,
+        "avg_pnl": 0.00218,
+        "avg_win": 0.092019,
+        "avg_loss": 0.056351
+      },
+      "2022": {
+        "n_trades": 100,
+        "win_rate": 0.31,
+        "profit_factor": 2.58,
+        "avg_pnl": 0.004856,
+        "avg_win": 0.114738,
+        "avg_loss": 0.044511
+      }
+    }
+  },
+  "variant": {
+    "n_trades": 1705,
+    "win_rate": 0.331965,
+    "profit_factor": 2.27,
+    "avg_pnl": 0.00346,
+    "avg_win": 0.09319,
+    "avg_loss": 0.04113,
+    "signal_days": 289,
+    "signal_day_equal_weight_net": 0.0011601531342586542,
+    "years": {
+      "2016": {
+        "n_trades": 85,
+        "win_rate": 0.188235,
+        "profit_factor": 1.07,
+        "avg_pnl": -0.025602,
+        "avg_win": 0.044905,
+        "avg_loss": 0.041952
+      },
+      "2017": {
+        "n_trades": 439,
+        "win_rate": 0.332574,
+        "profit_factor": 2.15,
+        "avg_pnl": 0.001382,
+        "avg_win": 0.061927,
+        "avg_loss": 0.028788
+      },
+      "2018": {
+        "n_trades": 288,
+        "win_rate": 0.25,
+        "profit_factor": 1.03,
+        "avg_pnl": -0.020671,
+        "avg_win": 0.042991,
+        "avg_loss": 0.041891
+      },
+      "2019": {
+        "n_trades": 527,
+        "win_rate": 0.40797,
+        "profit_factor": 3.19,
+        "avg_pnl": 0.031055,
+        "avg_win": 0.139811,
+        "avg_loss": 0.043889
+      },
+      "2020": {
+        "n_trades": 199,
+        "win_rate": 0.296482,
+        "profit_factor": 1.64,
+        "avg_pnl": -0.011768,
+        "avg_win": 0.089571,
+        "avg_loss": 0.054475
+      },
+      "2021": {
+        "n_trades": 90,
+        "win_rate": 0.4,
+        "profit_factor": 1.72,
+        "avg_pnl": 0.004609,
+        "avg_win": 0.091253,
+        "avg_loss": 0.053154
+      },
+      "2022": {
+        "n_trades": 77,
+        "win_rate": 0.285714,
+        "profit_factor": 1.38,
+        "avg_pnl": -0.013213,
+        "avg_win": 0.057317,
+        "avg_loss": 0.041425
+      }
+    }
+  },
+  "removed": {
+    "n_trades": 329,
+    "win_rate": 0.379939,
+    "profit_factor": 2.4,
+    "avg_pnl": 0.015689,
+    "avg_win": 0.128903,
+    "avg_loss": 0.053683,
+    "signal_days": 181,
+    "signal_day_equal_weight_net": 0.009319222033675344,
+    "years": {
+      "2016": {
+        "n_trades": 14,
+        "win_rate": 0.214286,
+        "profit_factor": 2.88,
+        "avg_pnl": -0.007769,
+        "avg_win": 0.132822,
+        "avg_loss": 0.046111
+      },
+      "2017": {
+        "n_trades": 77,
+        "win_rate": 0.298701,
+        "profit_factor": 2.13,
+        "avg_pnl": -0.002276,
+        "avg_win": 0.07509,
+        "avg_loss": 0.035228
+      },
+      "2018": {
+        "n_trades": 39,
+        "win_rate": 0.333333,
+        "profit_factor": 1.66,
+        "avg_pnl": -0.007712,
+        "avg_win": 0.111757,
+        "avg_loss": 0.067446
+      },
+      "2019": {
+        "n_trades": 106,
+        "win_rate": 0.471698,
+        "profit_factor": 2.77,
+        "avg_pnl": 0.041956,
+        "avg_win": 0.149454,
+        "avg_loss": 0.054025
+      },
+      "2020": {
+        "n_trades": 51,
+        "win_rate": 0.392157,
+        "profit_factor": 1.53,
+        "avg_pnl": -0.000527,
+        "avg_win": 0.104708,
+        "avg_loss": 0.068421
+      },
+      "2021": {
+        "n_trades": 19,
+        "win_rate": 0.368421,
+        "profit_factor": 1.36,
+        "avg_pnl": -0.009323,
+        "avg_win": 0.095959,
+        "avg_loss": 0.070738
+      },
+      "2022": {
+        "n_trades": 23,
+        "win_rate": 0.391304,
+        "profit_factor": 4.5,
+        "avg_pnl": 0.065351,
+        "avg_win": 0.255101,
+        "avg_loss": 0.056632
+      }
+    }
+  },
+  "rule": "drop"
+}

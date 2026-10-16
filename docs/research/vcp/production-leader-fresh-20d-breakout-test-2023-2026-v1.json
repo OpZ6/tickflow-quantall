@@ -1,0 +1,24 @@
+{
+  "base_protocol": "production-leader-fresh-20d-breakout-train-2016-2022-v1.json",
+  "experiment": "production-leader-fresh-20d-breakout-test-2023-2026-v1",
+  "purpose": "one_time_untouched_temporal_test_of_the_frozen_fresh_breakout_vcp_entry_rule",
+  "evidence_status": "The rule and gates are frozen before inspecting this interval. Test outcomes may only accept or reject them.",
+  "backtest": {
+    "start": "2023-03-08",
+    "end": "2026-06-30"
+  },
+  "temporal_test_gates": {
+    "minimum_candidates": 40,
+    "minimum_average_40d_alpha": 0.0,
+    "minimum_positive_40d_alpha_years": 3,
+    "minimum_mfe_20pct_rate": 0.25,
+    "minimum_mfe_50pct_count": 5
+  },
+  "constraints": [
+    "Do not change the 20-session high, 20-valid-bar cooldown, VCP defaults, exits, or 40-session evaluation horizon.",
+    "Do not split or select test subperiods after reading results.",
+    "Report current-exit alpha separately from fixed-40-session selection alpha."
+  ],
+  "failure_action": "Reject this entry rule and return to a new mechanism hypothesis; do not tune adjacent windows or thresholds.",
+  "success_action": "Register the entry rule as time-tested selection evidence, then study exit realization without changing selection."
+}

@@ -1,0 +1,9 @@
+{
+  "base_protocol": "iteration7-a-share-early-recovery-first-breakout-v1.json",
+  "experiment": "vcp-iteration7-a-share-early-recovery-first-breakout-slots3-v1",
+  "purpose": "match_portfolio_risk_budget_to_sparse_high_quality_vcp_signals",
+  "hypothesis": "Three equal-weight slots increase capital use during the sparse low-breadth recovery window while retaining cross-sectional diversification.",
+  "backtest": {
+    "max_positions": 3
+  }
+}

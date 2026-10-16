@@ -1,0 +1,25 @@
+{
+  "experiment": "earnings-catalyst-availability-2018-2025-v1",
+  "decision": "stop",
+  "question": "Can the configured point-in-time source support a candidate-scoped 2018-2025 test of earnings surprise, forecast revision or earnings express catalysts?",
+  "checks": [
+    {
+      "endpoint": "forecast",
+      "sample_window": ["2018-01-01", "2018-01-31"],
+      "result": "entitlement_denied"
+    },
+    {
+      "endpoint": "express",
+      "sample_window": ["2018-01-01", "2018-01-31"],
+      "result": "entitlement_denied"
+    }
+  ],
+  "coverage_evaluation": "not_started_because_neither_required_endpoint_is_accessible",
+  "stopped_expansion": [
+    "alternative-provider search",
+    "full-market historical catalyst backfill",
+    "static-fundamental proxy reuse",
+    "combining previously rejected weak factors"
+  ],
+  "next_action": "Keep forward-v2 frozen and begin its append-only observation clock after the 2026-09-09 market day is complete and production data is ready. Do not reopen historical rule selection without a genuinely new causal dataset or untouched sample."
+}

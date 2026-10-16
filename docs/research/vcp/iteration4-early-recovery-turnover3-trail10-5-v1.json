@@ -1,0 +1,14 @@
+{
+  "base_protocol": "iteration4-early-recovery-turnover3-v1.json",
+  "experiment": "vcp-iteration4-early-recovery-turnover3-trail10-5-v1",
+  "purpose": "iteration4_profit_exit_comparison",
+  "hypothesis": "Within the filtered high-quality setup pool, activating a 5% peak drawdown exit after a 10% gain preserves more VCP right-tail return than the fixed 10% target without reducing monetary profit factor below one.",
+  "backtest": {
+    "overrides": {
+      "take_profit": null,
+      "trailing_take_profit_activate": 0.10,
+      "trailing_take_profit_drawdown": 0.05
+    }
+  },
+  "trial_note": "This is the sole alternative to the fixed 10% target. The better exit must win on both total return and monetary profit factor; otherwise the fixed target is retained."
+}

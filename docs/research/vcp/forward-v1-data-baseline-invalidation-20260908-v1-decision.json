@@ -1,0 +1,23 @@
+{
+  "decision_id": "forward-v1-data-baseline-invalidation-20260908-v1",
+  "decided_at": "2026-09-08T22:28:44+08:00",
+  "strategy_id": "vcp_leader_breakout",
+  "strategy_version": "forward-v1",
+  "invalidated_manifest": "docs/research/vcp/forward-v1-version-manifest-r2.json",
+  "invalidated_archive": "data/research/vcp/forward/archives/vcp-forward-v1-20260908-r2-baseline.zip",
+  "evidence": {
+    "archive_enriched_partition_count": 2840,
+    "incomplete_enriched_partitions": 61,
+    "incomplete_date_range": [
+      "2025-08-26",
+      "2026-08-12"
+    ],
+    "incomplete_partition_rows": [18, 19],
+    "repaired_long_backtest_trade_count": 303,
+    "archived_baseline_long_backtest_trade_count": 290
+  },
+  "decision": "stop_forward_v1_due_to_invalid_data_baseline",
+  "preservation": "Keep the manifest, archive and 2026-09-07/08 observations unchanged as invalidation evidence; they are not an accepted recoverable research baseline.",
+  "next_action": "Start a new forward version with unchanged strategy rules, the repaired data snapshot and a new observation clock after 2026-09-08.",
+  "strategy_rules_changed": false
+}

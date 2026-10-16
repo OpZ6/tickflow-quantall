@@ -20,6 +20,7 @@ from typing import Any
 
 import polars as pl
 
+from app.config import settings
 from app.data_providers.base import AssetType
 from app.indicators.pipeline import filter_halt_days
 from app.market_time import CN_TZ, cn_now, cn_today
@@ -364,7 +365,10 @@ def sync_and_persist_daily_batch(
         return written
 
     original = list(symbols)
-    symbols, resolved, skipped_bare = _normalize_bare_symbols(symbols, repo.store.data_dir)
+    store = getattr(repo, "store", None)
+    symbols, resolved, skipped_bare = _normalize_bare_symbols(
+        symbols, getattr(store, "data_dir", settings.data_dir)
+    )
     requested = symbols
     # 完整符号 → 调用方原始写法: 0 行回报用用户输入的形式, 裸符号也能对上
     orig_by_full: dict[str, str] = {}
@@ -442,6 +446,11 @@ def sync_and_persist_daily_batch(
         seen.update(df["symbol"].cast(pl.Utf8).unique().to_list())
 
     if df.is_empty():
+        if failed_syms:
+            # fail-closed: 全量失败时不再"显示成功实则全空", 抛错并保留旧数据
+            raise RuntimeError(
+                f"日K同步失败: {len(failed_syms)}/{len(symbols)} 只标的未获取, 已保留旧数据"
+            )
         return _finalize(0)
 
     repo.append_daily(df)

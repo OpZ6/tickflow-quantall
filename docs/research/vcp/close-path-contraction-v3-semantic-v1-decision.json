@@ -1,0 +1,31 @@
+{
+  "experiment": "close-path-contraction-v3-semantic-v1",
+  "decision": "stop",
+  "reason": "The fixed close-confirmed representation could not form the pre-registered cross-year blind packet. It produced no supported case in 2018, so it is too regime-specific to serve as the VCP semantic foundation.",
+  "causal_availability": {
+    "future_outcomes_opened": false,
+    "events": 37449,
+    "required_per_status_per_year": 2,
+    "by_year": {
+      "2018": {"supported": 0, "unsupported": 1128},
+      "2019": {"supported": 5, "unsupported": 3836},
+      "2020": {"supported": 8, "unsupported": 6638},
+      "2021": {"supported": 8, "unsupported": 6191},
+      "2022": {"supported": 3, "unsupported": 2969},
+      "2023": {"supported": 7, "unsupported": 4868},
+      "2024": {"supported": 4, "unsupported": 3356},
+      "2025": {"supported": 7, "unsupported": 8421}
+    }
+  },
+  "semantic_evaluation": "not_started_because_pre_registered_packet_could_not_be_constructed",
+  "stopped_variants": [
+    "dropping 2018",
+    "reversal-size changes",
+    "leg-persistence changes",
+    "wave-count changes",
+    "right-edge changes",
+    "trend-context changes"
+  ],
+  "direction_conclusion": "Stop hand-coded geometric price-path refinement. The repeated failures show that adding increasingly specific path rules either retains nonclassic charts or collapses across regimes.",
+  "next_action": "Keep forward-v2 frozen. Run one candidate-scoped availability sample for point-in-time earnings surprise or forecast-revision evidence across 2018-2025; proceed to one causal catalyst audit only if cross-year announcement-time coverage is adequate, otherwise stop without expanding to a full-market backfill."
+}

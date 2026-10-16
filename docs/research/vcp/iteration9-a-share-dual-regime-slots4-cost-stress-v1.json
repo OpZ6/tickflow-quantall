@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration9-a-share-dual-regime-contraction-rank-slots4-v1.json",
+  "experiment": "vcp-iteration9-a-share-dual-regime-slots4-cost-stress-v1",
+  "purpose": "stress_execution_costs_for_the_four_slot_candidate",
+  "hypothesis": "A practical VCP candidate should retain positive absolute and market-relative performance when commissions, stamp tax and slippage are doubled from the frozen research assumptions.",
+  "backtest": {
+    "commission_pct": 0.0006,
+    "stamp_tax_pct": 0.001,
+    "slippage_bps": 20.0
+  },
+  "development_note": "This is a robustness check with deliberately conservative fixed costs, not a new optimization target."
+}

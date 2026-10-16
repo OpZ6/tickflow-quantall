@@ -1,0 +1,56 @@
+{
+  "decision_id": "security-name-announcement-shadow-resolution-20260908-v1",
+  "source_page": "data/research/security-snapshots/20260907-namechange-v1/page-000000.json",
+  "source_page_sha256": "ba70f9316a0f55dd7165596821f495d5d3b96a43b4546696aa2e49f5a0d75cfe",
+  "source_rows": 10000,
+  "resolved_pattern": "proposal_announcement_shadow_followed_by_exchange_effective_interval",
+  "rule": "Drop an open interval starting on ann_date only when exactly one later open row has the same symbol, name and ann_date, and exactly one prior different-name row ends on the calendar day before the later start.",
+  "resolved_rows": [
+    {
+      "symbol": "600768.SH",
+      "old_name": "宁波富邦",
+      "new_name": "富邦新材",
+      "proposal_announcement_date": "2026-07-25",
+      "effective_date": "2026-08-18",
+      "evidence": "https://static.sse.com.cn/disclosure/listedinfo/announcement/c/new/2026-08-13/600768_20260813_5A6V.pdf"
+    },
+    {
+      "symbol": "600388.SH",
+      "old_name": "龙净环保",
+      "new_name": "紫金龙净",
+      "proposal_announcement_date": "2026-04-22",
+      "effective_date": "2026-08-17",
+      "evidence": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?id=12487930&stockid=600388",
+      "evidence_note": "issuer implementation announcement mirrored by Sina"
+    },
+    {
+      "symbol": "300132.SZ",
+      "old_name": "青松股份",
+      "new_name": "诺斯贝尔",
+      "proposal_announcement_date": "2026-07-18",
+      "effective_date": "2026-08-11",
+      "evidence": "https://static.cninfo.com.cn/finalpage/2026-08-10/1225466903.PDF"
+    }
+  ],
+  "offline_result_excluding_unresolved_identifier": {
+    "excluded_only_for_diagnostic": "X19363.SH",
+    "normalized_rows": 9996,
+    "symbols": 5647,
+    "duplicate_fact_keys": 0,
+    "null_names": 0,
+    "internal_interval_gaps": 0,
+    "fact_batch_valid": true
+  },
+  "guardrails": {
+    "raw_page_modified": false,
+    "generic_overlap_clipping": false,
+    "announcement_date_used_as_effective_date": false,
+    "unmatched_overlap_behavior": "reject",
+    "production_published": false
+  },
+  "remaining_blockers": [
+    "X19363.SH identity mapping is unresolved",
+    "namechange pagination is incomplete"
+  ],
+  "decision": "accept_exact_shadow_collapse_but_keep_source_snapshot_rejected"
+}

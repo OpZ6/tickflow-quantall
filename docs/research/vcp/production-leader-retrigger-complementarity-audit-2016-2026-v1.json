@@ -1,0 +1,29 @@
+{
+  "experiment": "production-leader-retrigger-complementarity-audit-2016-2026-v1",
+  "purpose": "P3_same_origin_secondary_entry_complementarity_audit",
+  "research_question": "Does the frozen failed-breakout retrigger branch add a distinct timing and risk path that merits separate forward shadow observation, despite being derived from the same VCP breakout and having near-zero standalone return under current costs?",
+  "inputs": {
+    "primary_run": "20260908T024521089151Z",
+    "secondary_run": "20260908T050534093286Z",
+    "required_date_alignment": true,
+    "required_timing_violations": 0
+  },
+  "source_dependency": "The retrigger strategy reconstructs the frozen leader breakout pivots before observing failure and recovery. It is therefore a secondary entry state of the same setup, not an independent alpha source.",
+  "pre_registered_metrics": [
+    "daily return correlation on all dates and the union of exposed dates",
+    "exposed-day intersection and Jaccard overlap",
+    "combined end-of-day exposure above 100 percent",
+    "retrigger entries when the primary portfolio ends the day at four positions",
+    "same-symbol concurrent trade intervals and prior primary trades within 60 market sessions",
+    "drawdown-series correlation and overlap below minus 10 percent",
+    "retrigger top-five winner share of gross positive PnL"
+  ],
+  "decision_rules": [
+    "Never classify the retrigger branch as an independent strategy because its candidate source is the primary breakout stream.",
+    "Do not interpret low return correlation as diversification without checking exposure overlap and the branch's much lower average exposure.",
+    "Do not run a combined-weight or position-count search on this exposed interval.",
+    "Keep it only as a frozen forward shadow state if the audit confirms causal timing, nonzero sample and no contradiction of the current secondary-mechanism decision."
+  ],
+  "stop_condition": "Produce this descriptive audit once. Do not optimize allocation, entry bands, recovery windows or portfolio weights from the result.",
+  "development_note": "This is exposed historical evidence for mechanism classification, not independent validation, portfolio promotion or live qualification."
+}

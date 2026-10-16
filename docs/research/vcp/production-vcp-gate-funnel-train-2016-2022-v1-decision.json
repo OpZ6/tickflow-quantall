@@ -1,0 +1,30 @@
+{
+  "protocol": "production-vcp-gate-funnel-train-2016-2022-v1.json",
+  "decision": "no_automatic_relaxation",
+  "opportunities": 98459,
+  "largest_missed_20pct_path_gate": {
+    "gate": "trend_ma_alignment",
+    "mfe_20pct_count": 22535,
+    "average_40d_alpha": -0.016997994,
+    "positive_alpha_years": 0,
+    "years_present": 7,
+    "passed_direction_rule": false
+  },
+  "current_vcp_pass_group": {
+    "opportunities": 120,
+    "mfe_20pct_count": 53,
+    "average_40d_alpha": 0.034775516,
+    "positive_alpha_years": 6
+  },
+  "diagnostic_only": {
+    "rs_85_first_failure": {
+      "opportunities": 4200,
+      "mfe_20pct_count": 1302,
+      "average_40d_alpha": 0.005976777,
+      "positive_alpha_years": 4,
+      "note": "This cohort is not the largest missed-winner gate, so the registered funnel does not authorize promotion. It may only motivate a separately preregistered method-level study."
+    }
+  },
+  "interpretation": "Counting missed future winners alone would incorrectly favor removing the trend template. Market-relative outcomes reject that direction. No gate satisfies the complete registered direction rule.",
+  "evidence": "data/research/vcp/gate-funnel/production-vcp-gate-funnel-train-2016-2022-v1/summary.json"
+}

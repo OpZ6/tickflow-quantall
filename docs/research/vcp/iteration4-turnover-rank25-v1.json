@@ -1,0 +1,13 @@
+{
+  "base_protocol": "iteration4-setup-dedup-control-v1.json",
+  "experiment": "vcp-iteration4-turnover-rank25-v1",
+  "purpose": "iteration4_candidate_ranking",
+  "hypothesis": "Blending a fixed 25% signal-day turnover percentile into the existing VCP quality and RS score improves which candidates receive scarce slots while preserving the full candidate pool and portfolio exposure.",
+  "backtest": {
+    "params": {
+      "deduplicate_setups": false,
+      "turnover_rank_weight": 0.25
+    }
+  },
+  "trial_note": "The 25% blend is the sole tested ranking weight in this mechanism round. No threshold grid is permitted before evaluation."
+}

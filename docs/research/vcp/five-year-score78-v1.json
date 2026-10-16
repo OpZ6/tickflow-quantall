@@ -1,0 +1,6 @@
+{
+  "base_protocol": "five-year-score80-v1.json",
+  "experiment": "vcp-five-year-score78-v1",
+  "hypothesis": "A nearby lower quality threshold tests whether the score-80 result is stable rather than a single cutoff accident.",
+  "backtest": {"overrides": {"score_min": 78.0}}
+}

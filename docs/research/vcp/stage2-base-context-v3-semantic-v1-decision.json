@@ -1,0 +1,30 @@
+{
+  "experiment": "stage2-base-context-v3-semantic-v1",
+  "decision": "stop",
+  "reason": "The fixed relational context could not produce the pre-registered cross-year blind packet: after excluding all prior samples, 2021 had zero supported cases. A representation absent for an entire market year is too regime-specific to serve as the v3 semantic foundation.",
+  "causal_availability": {
+    "future_outcomes_opened": false,
+    "total_supported": 126,
+    "total_unsupported": 3222,
+    "by_year": {
+      "2018": {"supported": 5, "unsupported": 321},
+      "2019": {"supported": 24, "unsupported": 454},
+      "2020": {"supported": 34, "unsupported": 394},
+      "2021": {"supported": 0, "unsupported": 88},
+      "2022": {"supported": 4, "unsupported": 378},
+      "2023": {"supported": 19, "unsupported": 733},
+      "2024": {"supported": 16, "unsupported": 416},
+      "2025": {"supported": 24, "unsupported": 438}
+    },
+    "required_per_status_per_year": 2
+  },
+  "semantic_evaluation": "not_started_because_pre_registered_packet_could_not_be_constructed",
+  "stopped_variants": [
+    "block length changes",
+    "gain-retention boundary changes",
+    "positive-return concentration changes",
+    "range comparison changes",
+    "dropping 2021 from the packet"
+  ],
+  "next_action": "Stop geometric context conjunctions. Test one causal overhead-supply absorption hypothesis using historical float shares and turnover since the pre-breakout supply peak, without changing forward-v2 or reopening historical price thresholds."
+}

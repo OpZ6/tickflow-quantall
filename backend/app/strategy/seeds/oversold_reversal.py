@@ -54,7 +54,7 @@ META = {
 }
 
 EXECUTION_BACKEND = "matrix_native"
-ENTRY_SIGNALS = []
+ENTRY_SIGNALS = ["signal_oversold_reversal_confirmed"]
 EXIT_SIGNALS = ["signal_ma20_breakdown"]
 STOP_LOSS = -0.05
 MAX_HOLD_DAYS = 15
@@ -69,15 +69,23 @@ class OversoldReversalMatrixStrategy:
         return 60
 
     def compute_signals(self, market: MarketDataMatrix, params: dict) -> SignalMatrix:
-        entry = np.ones(market.shape, dtype=bool)
+        qualifying = np.ones(market.shape, dtype=bool)
         if params.get("use_rsi_filter", True):
-            entry &= matrix_feature(market, "rsi_14") < float(params.get("rsi_max", 30.0))
+            qualifying &= matrix_feature(market, "rsi_14") < float(
+                params.get("rsi_max", 30.0)
+            )
         if params.get("use_change_filter", True):
-            entry &= (
+            qualifying &= (
                 matrix_feature(market, "change_pct") > float(params.get("min_change", 1.0)) / 100.0
             )
         if params.get("require_above_ma5", True):
-            entry &= market.close > matrix_feature(market, "ma5")
+            qualifying &= market.close > matrix_feature(market, "ma5")
+        previous_qualifying = shift(
+            qualifying,
+            1,
+            valid_mask=np.isfinite(market.close),
+        ) > 0.5
+        entry = qualifying & ~previous_qualifying
         ma20 = matrix_feature(market, "ma20")
         exit_ = (market.close < ma20) & (shift(market.close, 1) >= shift(ma20, 1))
         return make_signal_matrix(
@@ -86,6 +94,7 @@ class OversoldReversalMatrixStrategy:
             exit=exit_.astype(np.uint8),
             entry_signal_code=np.where(entry, 0, -1).astype(np.int16),
             exit_signal_code=np.where(exit_, 0, -1).astype(np.int16),
+            entry_signal_ids=tuple(ENTRY_SIGNALS),
             exit_signal_ids=("signal_ma20_breakdown",),
         )
 

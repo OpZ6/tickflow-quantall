@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-first-cross-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-breadth28-36-v1",
+  "purpose": "cycle2_regime_stability",
+  "hypothesis": "Perturb both early-recovery boundaries outward to 28%-36% and require the result to retain the core direction.",
+  "backtest": {"params": {"market_breadth_ma20_min": 0.28, "market_breadth_ma20_max": 0.36}}
+}

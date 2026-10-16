@@ -1,0 +1,32 @@
+{
+  "experiment": "watchlist-20d-high-breakout-v2",
+  "layer": 3,
+  "prior": "docs/research/watchlist-20d-high-breakout-v1-decision.md",
+  "hypothesis_source": "v1: first 20-session high after a 20-bar rest was worse than same-day watch names without the breakout (10/20-day date-EW spread -0.58%/-0.90%). Mechanism: rest-then-pop is a chase. Replacement: any signal-day close above the prior 20 valid-bar high, no cooldown. That is 'currently leaving the month range', not 'first pop after sitting'. Same 20-session lookback, not a window scan.",
+  "distinct_from_failed_representations": "Not a 19/21-day scan. Not VCP. Not all-market trend_breakout. Difference from v1: drop the 20-bar cooldown so consecutive expansion days can trigger. Difference from sequence-2 buy-all: still only trade the trigger subset.",
+  "exposure": "Training 2016-01-01 through 2022-12-31. Labels must not cross 2022-12-31.",
+  "watch_list": {"unchanged_from": "v1"},
+  "trigger": {
+    "id": "close_above_prior_20_high",
+    "definition": "Causal close > prior 20 valid-bar high (high shifted by 1 valid bar). No cooldown. Reuse valid_rolling_max + valid_shift."
+  },
+  "selected": "Watch list AND close above prior 20-session high.",
+  "control": "Same-day watch-list names without that close-above-high.",
+  "windows": {"diagnostic": 5, "primary": [10, 20]},
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "10-day and 20-day date-EW net of the trigger subset is not worse than same-day watch names without the trigger.",
+    "fail": "This is the one allowed rewrite of the breakout event. If still worse than same-day untriggered leaders, stop this 20-session-high family; next gun on layer 3 must be a different breakout event (not VCP, not a 20-day scan). Do not skip to pullback as the selector.",
+    "not_claimed": "No live qualification."
+  },
+  "outputs": [
+    "docs/research/watchlist-20d-high-breakout-v2.json",
+    "docs/research/watchlist-20d-high-breakout-v2-analysis.json",
+    "docs/research/watchlist-20d-high-breakout-v2-decision.md"
+  ]
+}

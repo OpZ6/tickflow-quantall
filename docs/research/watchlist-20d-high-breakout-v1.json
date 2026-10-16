@@ -1,0 +1,36 @@
+{
+  "experiment": "watchlist-20d-high-breakout-v1",
+  "layer": 3,
+  "hypothesis_source": "First-principles restatement 2026-09-11: the trade is a right-side trigger, not a VCP label. Sequence-2 buy-all of RS>=85 on dual-regime days lost at 10/20-day date-EW vs market and vs same-day eligible names. All-market trend_breakout already failed (744 trades, 21% win, -3.51% mean). This round tests whether a fresh 20-session-high breakout inside the watch list beats the same-day watch names that did not break out.",
+  "distinct_from_failed_representations": "Not VCP/cup/flag. Not all-market trend_breakout. Not sequence-2 buy-all of the watch list. Difference from v1/v2: the watch list is not traded; the event is price leaving the prior-20-session high after a 20-bar cooldown. Reuse shipped fresh_20d_breakout_opportunity_mask. Do not scan 20.",
+  "exposure": "Training 2016-01-01 through 2022-12-31. Fills and 5/10/20-day labels must not cross 2022-12-31. 2023+ is exposure only if computed.",
+  "watch_list": {
+    "gate": "frozen a_share_dual_regime, include_middle_expansion_regime=false",
+    "rs": "frozen vcp_leader_breakout RS, rs_min=85, trend_filter=false",
+    "eligibility": "SH/SZ, non-ST name tokens, listing session age > 30, raw_close 3-300, amount >= 20e6",
+    "role": "look-at set, not a buy-all book"
+  },
+  "trigger": {
+    "id": "fresh_20d_breakout_opportunity_mask",
+    "definition": "First liquid close above the prior 20 valid-bar high after a 20-bar cooldown. Shipped function, not a new detector."
+  },
+  "selected": "Watch list AND fresh 20-session-high breakout.",
+  "control": "Same-day watch-list names without that breakout. Real same-day set.",
+  "windows": {"diagnostic": 5, "primary": [10, 20]},
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "Training 10-day and 20-day date-EW net of the breakout subset is not worse than same-day watch names without the breakout (spread >= 0). Still report vs market; vs-market is not the pass line.",
+    "fail": "Rewrite only the breakout event with a mechanistic difference. Stay on layer 3. Do not add VCP. Do not scan the 20-day window. Do not skip to pullback as the selector.",
+    "not_claimed": "No live qualification, no clean 2023-2026 OOS."
+  },
+  "outputs": [
+    "docs/research/watchlist-20d-high-breakout-v1.json",
+    "docs/research/watchlist-20d-high-breakout-v1-analysis.json",
+    "docs/research/watchlist-20d-high-breakout-v1-decision.md"
+  ]
+}

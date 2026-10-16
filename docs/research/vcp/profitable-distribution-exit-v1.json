@@ -1,0 +1,12 @@
+{
+  "experiment": "profitable-distribution-exit-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "hypothesis_source": "AI next mechanism after two early-no-demand exits reduced mean return; baseline loss/return history already exposed",
+  "hypothesis": "Sell a profitable position when increasing supply is accompanied by price breakdown, rather than cut slow starts by elapsed days.",
+  "only_change": "On the first completed holding-session bar with entry_price < close < previous market-session low AND volume > previous market-session volume, sell all at next market-session open if strictly before baseline exit. The preceding session must be at or after entry. No threshold search. Missing adjacent bar prevents the event. If next open is absent, invalid, zero-volume or one-price, keep baseline exit without retry.",
+  "cost": "Reuse T+1, commission 0.0003, slippage 10bps, historical stamp tax; one-price exclusion is conservative existing replay convention",
+  "training": "474 full-mode completed entries in 2016-2022 with original exits <= 2022-12-31",
+  "gate": "Provisional keep only when average net return >= baseline and positive. Report win rate, payoff, yearly differences and changed winners; no live qualification.",
+  "failure_action": "Drop event and keep baseline; do not scan relative volume thresholds, low-price buffers or confirmation counts.",
+  "output": "data/research/vcp/profitable-distribution-exit-v1"
+}

@@ -1,0 +1,18 @@
+{
+  "experiment": "launch-pullback-dual-regime-v1",
+  "thought": "Same launch_pullback_support fills. One filter: signal day must have a_share_dual_regime open (early recovery or broad advance, middle expansion closed). Same gate as vcp_leader_breakout.",
+  "hypothesis": "All-market pullbacks in the closed middle-expansion regime drag the -0.98% mean. Keeping only dual-regime-open days should lift avg_pnl.",
+  "baseline": {
+    "run_id": "20260909T053715693165Z",
+    "n_train": 32086,
+    "avg_pnl": -0.009777
+  },
+  "change": {
+    "id": "a_share_dual_regime_open",
+    "definition": "Keep if market_breadth_allowed(..., a_share_dual_regime=True, include_middle_expansion_regime=False) is true on entry_signal_date. Missing date not kept."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below baseline and remains positive. If keep, report 2023-2026.",
+    "fail": "Drop. Pullback book stays all-market. Next: return to frozen VCP 321 or one more pullback filter, not both."
+  }
+}

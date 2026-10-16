@@ -1,0 +1,48 @@
+{
+  "experiment": "production-leader-failed-retrigger-2016-2026-v1",
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "purpose": "entry_method_mechanism_test",
+  "hypothesis": "A VCP breakout that quickly loses its pivot but later rebuilds a quiet, narrow range around the same pivot contains renewed demand evidence. Waiting for that causal retrigger may reduce immediate stop-outs while preserving the right-tail payoff mechanism.",
+  "unique_change": "Use the frozen vcp_leader_breakout candidate stream, pivot, market regime, ranking, exits, costs and portfolio rules; replace the initial-breakout entry with the original Quants failed-breakout recovery state machine.",
+  "causal_contract": "A setup becomes observable only on its frozen breakout close. Failure and each recovery condition use completed bars at or before the signal timestamp. A qualifying close is filled at the next tradable open.",
+  "source_method": {
+    "breakout_observation_bars": 18,
+    "failure": "low below 97.5% of pivot or close below 99.2% of pivot",
+    "recovery_wait_bars": "3 through 30 asset trading bars after failure",
+    "retrigger": "latest close within 98.5%-102% of pivot; recent post-failure range <=7%; recent low >=97.2% of pivot; at least two near-pivot closes; recent mean volume <=108% of current 20-bar mean"
+  },
+  "success_gate": {
+    "minimum_trades": 30,
+    "maximum_timing_violations": 0,
+    "minimum_stop_loss_share_reduction_vs_baseline": 0.05,
+    "must_preserve_positive_mean_win_loss_asymmetry": true
+  },
+  "stop_condition": "Run this frozen method once. If the sample or failure-path gate is not met, stop this entry direction; do not vary its windows or thresholds on the exposed interval.",
+  "universe_date": "2015-12-31",
+  "universe_mode": "historical_union",
+  "sample_size": 0,
+  "data_directory": "",
+  "backtest": {
+    "strategy_id": "vcp_failed_breakout_retrigger",
+    "symbols": null,
+    "start": "2016-01-04",
+    "end": "2026-06-30",
+    "params": null,
+    "overrides": {},
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.0005,
+    "slippage_bps": 10.0,
+    "max_positions": 4,
+    "max_exposure_pct": 1.0,
+    "initial_capital": 1000000.0,
+    "position_sizing": "equal",
+    "mode": "position",
+    "asset_type": "stock",
+    "minute_fill": false,
+    "regime_filter": null
+  },
+  "development_note": "The entire interval is exposed development data. This is a method diagnosis, not independent validation or live qualification."
+}

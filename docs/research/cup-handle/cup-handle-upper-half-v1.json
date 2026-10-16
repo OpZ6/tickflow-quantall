@@ -1,0 +1,19 @@
+{
+  "experiment": "cup-handle-upper-half-v1",
+  "thought": "Same 3,750 cup-handle fills on dual-regime-open RS>=85 days. One filter: signal-day close in the upper half of the bar, same definition as the VCP breakout book.",
+  "hypothesis": "Demand into the cup breakout/retest close should lift independent avg_pnl above +0.026%.",
+  "baseline": {
+    "run_id": "20260909T133226351846Z",
+    "selection": "dual_regime_open AND rs>=85",
+    "n_train": 3750,
+    "avg_pnl": 0.000264
+  },
+  "change": {
+    "id": "signal_close_location_ge_0_5",
+    "definition": "Keep if (close-low)/(high-low) >= 0.5 on entry_signal_date. Zero range or missing bar is not kept. Original exits. Do not scan 0.5."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +0.026% baseline and remains positive. If keep, report 2023-2026 as exposure not clean OOS.",
+    "fail": "Drop. Thin cup book stays 3,750 / +0.026%. Do not restack K-line filters on this cup book. VCP 321 is not replaced."
+  }
+}

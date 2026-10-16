@@ -1,0 +1,30 @@
+{
+  "experiment": "vcp-breakout-volume-expansion-v1",
+  "thought": "VCP leader breakout. Same entries and current exits (including two-bar no-demand). One selection filter: 放量 on the breakout bar.",
+  "hypothesis": "Demand on the breakout day should show as volume at least the prior 20 market-session average. Dropping quiet breakouts should lift 盈亏比 / avg_pnl versus taking every frozen fill.",
+  "baseline": {
+    "strategy_id": "vcp_leader_breakout",
+    "run_id": "20260908T024521089151Z",
+    "exits": "recorded exits plus two-bar never-+3% overlay",
+    "fills": "training entries 2016-01-01..2022-12-31 with baseline exit_date <= 2022-12-31"
+  },
+  "change": {
+    "id": "breakout_volume_ge_prior_20_mean",
+    "breakout_day": "entry_signal_date",
+    "definition": "Keep the fill only if breakout-day volume >= mean volume of the prior 20 market-calendar sessions. A hole in those 20 sessions, or missing breakout volume, is not expanded (trade dropped from the variant, not rolled)."
+  },
+  "metric": {
+    "primary": "independent-trade win_rate, profit_factor, avg_pnl on the kept subset vs the full current-baseline book",
+    "not_used_as_pass": ["equity curve", "forced 10-day hold"]
+  },
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below current baseline.",
+    "fail": "Drop this filter. Baseline stays two-bar overlay. Next edit still in VCP/cup/flag/volume-break/pullback thought."
+  }
+}

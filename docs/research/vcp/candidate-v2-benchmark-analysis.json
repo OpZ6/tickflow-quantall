@@ -1,0 +1,115 @@
+{
+  "run_id": "20260906T003318629495Z",
+  "range": {
+    "start": "2025-09-05",
+    "end": "2026-06-30"
+  },
+  "strategy": {
+    "return": 0.015513539999999937,
+    "average_exposure": 0.07849278350515464,
+    "annualized_volatility": 0.07056756708733844
+  },
+  "benchmarks": [
+    {
+      "symbol": "000001.SH",
+      "name": "SSE Composite",
+      "benchmark_return": 0.07393625308654594,
+      "strategy_return": 0.015513539999999937,
+      "raw_excess": -0.05842271308654601,
+      "exposure_matched_benchmark_return": 0.006801025521412596,
+      "exposure_matched_excess": 0.008712514478587341,
+      "beta": 0.1245461027184672,
+      "annualized_alpha_rf0": 0.00981731522357367,
+      "alpha_t_stat": 0.1250246065226619,
+      "correlation": 0.24237112993871407
+    },
+    {
+      "symbol": "000300.SH",
+      "name": "CSI 300",
+      "benchmark_return": 0.11638322319561922,
+      "strategy_return": 0.015513539999999937,
+      "raw_excess": -0.10086968319561929,
+      "exposure_matched_benchmark_return": 0.005788757355927876,
+      "exposure_matched_excess": 0.00972478264407206,
+      "beta": 0.06829522113971132,
+      "annualized_alpha_rf0": 0.01181920882605262,
+      "alpha_t_stat": 0.14788669716043076,
+      "correlation": 0.16192866284256907
+    },
+    {
+      "symbol": "000905.SH",
+      "name": "CSI 500",
+      "benchmark_return": 0.30625403441417665,
+      "strategy_return": 0.015513539999999937,
+      "raw_excess": -0.2907404944141767,
+      "exposure_matched_benchmark_return": 0.03969538274871831,
+      "exposure_matched_excess": -0.024181842748718374,
+      "beta": 0.06891923182472587,
+      "annualized_alpha_rf0": -0.00339611568063866,
+      "alpha_t_stat": -0.04296311614495594,
+      "correlation": 0.23145233389158335
+    },
+    {
+      "symbol": "000852.SH",
+      "name": "CSI 1000",
+      "benchmark_return": 0.2158695672875941,
+      "strategy_return": 0.015513539999999937,
+      "raw_excess": -0.20035602728759416,
+      "exposure_matched_benchmark_return": 0.02366221493354903,
+      "exposure_matched_excess": -0.008148674933549094,
+      "beta": 0.0768867200254529,
+      "annualized_alpha_rf0": 0.0009557376990087408,
+      "alpha_t_stat": 0.01216942471420911,
+      "correlation": 0.24901957560013352
+    },
+    {
+      "symbol": "000985.SH",
+      "name": "CSI All Share",
+      "benchmark_return": 0.1611000188920202,
+      "strategy_return": 0.015513539999999937,
+      "raw_excess": -0.14558647889202025,
+      "exposure_matched_benchmark_return": 0.014836250321285549,
+      "exposure_matched_excess": 0.0006772896787143878,
+      "beta": 0.08413971263632058,
+      "annualized_alpha_rf0": 0.004650854975215937,
+      "alpha_t_stat": 0.058926700721584416,
+      "correlation": 0.22731524240768777
+    },
+    {
+      "symbol": "399001.SZ",
+      "name": "SZ Component",
+      "benchmark_return": 0.28711943120569217,
+      "strategy_return": 0.015513539999999937,
+      "raw_excess": -0.27160589120569223,
+      "exposure_matched_benchmark_return": 0.02128532691440843,
+      "exposure_matched_excess": -0.005771786914408494,
+      "beta": 0.05719146671014529,
+      "annualized_alpha_rf0": 0.0022224107600311792,
+      "alpha_t_stat": 0.027847951041358534,
+      "correlation": 0.1865678408499053
+    },
+    {
+      "symbol": "399006.SZ",
+      "name": "ChiNext",
+      "benchmark_return": 0.46803457935805826,
+      "strategy_return": 0.015513539999999937,
+      "raw_excess": -0.4525210393580583,
+      "exposure_matched_benchmark_return": 0.02491909017651661,
+      "exposure_matched_excess": -0.009405550176516675,
+      "beta": 0.039579001014215735,
+      "annualized_alpha_rf0": 0.00092883894390266,
+      "alpha_t_stat": 0.011583226021842656,
+      "correlation": 0.16988871975684777
+    }
+  ],
+  "all_stock_equal_weight": {
+    "return": 0.059269643200532185,
+    "days": 194,
+    "mean_constituents": 5448.412371134021,
+    "method": "point-in-time daily equal weight of finite adjusted-close returns, clipped to (-50%, +50%)"
+  },
+  "interpretation": {
+    "raw_excess_positive": false,
+    "alpha_statistically_established": false
+  }
+}

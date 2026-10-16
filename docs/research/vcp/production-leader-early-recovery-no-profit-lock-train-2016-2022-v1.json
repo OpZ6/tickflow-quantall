@@ -1,0 +1,27 @@
+{
+  "base_protocol": "production-leader-full-candidate-no-profit-lock-2016-2026-v1.json",
+  "experiment": "production-leader-early-recovery-no-profit-lock-train-2016-2022-v1",
+  "purpose": "test_one_method_level_exit_hypothesis_for_the_frozen_early_recovery_branch",
+  "question": "Does removing staged profit protection convert the early-recovery branch's positive fixed-horizon selection Alpha into realized held Alpha?",
+  "single_change": "Remove the complete staged profit-lock schedule while retaining frozen selection, T+1 entry, costs, MA20 signal exit, 5 percent stop and 40-bar maximum hold; evaluate only early-recovery trades.",
+  "backtest": {
+    "start": "2016-01-04",
+    "end": "2022-12-30"
+  },
+  "evaluation_branch": "signal_quants_vcp_early_recovery",
+  "training_gate": {
+    "minimum_trades": 75,
+    "minimum_average_excess_return_held": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "minimum_mfe_20pct_rate": 0.2
+  },
+  "temporal_test_period": [
+    "2023-01-03",
+    "2026-06-30"
+  ],
+  "constraints": [
+    "Do not change profit thresholds, holding days, selection, entry, stop or signal-exit rules.",
+    "Ignore broad-advance results because they are outside this hypothesis.",
+    "Do not run the temporal test unless every training gate passes."
+  ]
+}

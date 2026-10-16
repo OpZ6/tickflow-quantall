@@ -1,0 +1,19 @@
+{
+  "n": 87,
+  "all_original_exits_signal": true,
+  "raised_support": 87,
+  "mean_delta": 0.0011075402298850556,
+  "recovery_groups": {
+    "True": {
+      "n": 56,
+      "improved": 32,
+      "mean_delta": 0.043094553571428565
+    },
+    "False": {
+      "n": 31,
+      "improved": 6,
+      "mean_delta": -0.0747399677419355
+    }
+  },
+  "scope": "Post-exit recovery is retrospective, not signal-day information; no actionable gate or threshold proposed"
+}

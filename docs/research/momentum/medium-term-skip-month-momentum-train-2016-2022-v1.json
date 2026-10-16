@@ -1,0 +1,32 @@
+{
+  "experiment": "medium-term-skip-month-momentum-train-2016-2022-v1",
+  "purpose": "test_a_standard_medium_term_cross_sectional_momentum_mechanism_before_building_entry_or_exit_rules",
+  "hypothesis": "Stocks with the strongest return from 252 to 21 valid sessions before month-end retain market-relative strength over the next 40 sessions because information is incorporated gradually.",
+  "training_data_period": ["2015-01-05", "2022-12-30"],
+  "training_signal_period": ["2016-01-04", "2022-11-03"],
+  "label_horizon_bars": 40,
+  "signal_schedule": "last_market_trading_session_of_each_month",
+  "entry": "next_market_session_open_if_the_stock_is_tradable_on_that_session",
+  "selection": {
+    "feature": "close_t_minus_21 / close_t_minus_252 - 1",
+    "eligible_signal_close": [3.0, 300.0],
+    "minimum_signal_amount_cny": 20000000.0,
+    "candidate_percentile_min": 0.9,
+    "control_percentile_max": 0.1
+  },
+  "training_gate": {
+    "minimum_candidates": 1000,
+    "minimum_average_40d_alpha": 0.0,
+    "minimum_top_minus_bottom_40d_alpha": 0.01,
+    "minimum_positive_alpha_years": 5,
+    "minimum_mfe_20pct_rate": 0.2,
+    "minimum_mfe_50pct_count": 50
+  },
+  "temporal_test_period": ["2023-03-08", "2026-06-30"],
+  "constraints": [
+    "All entry and 40-session labels must remain inside the training data boundary.",
+    "Do not scan lookback, skip, percentile, schedule or horizon variants.",
+    "Do not add VCP, volume, market-regime, industry or fundamental filters.",
+    "This stage evaluates selection paths only and does not claim an executable exit or portfolio."
+  ]
+}

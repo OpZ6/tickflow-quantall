@@ -1,0 +1,17 @@
+{
+  "base_protocol": "iteration5-a-share-rs90-pivot-cross2-trail10-5-v1.json",
+  "experiment": "vcp-iteration6-a-share-relative-breadth-regime-v1",
+  "purpose": "iteration6_distribution_adaptive_market_regime",
+  "hypothesis": "A causal 252-session MA20-breadth percentile between 25% and 60%, combined with five-session breadth improvement, should preserve the early-to-middle recovery mechanism while adapting to shifts in the absolute breadth distribution.",
+  "backtest": {
+    "params": {
+      "market_breadth_ma20_min": 0.0,
+      "market_breadth_ma20_max": 1.0,
+      "market_breadth_rising_days": 5,
+      "market_breadth_percentile_lookback": 252,
+      "market_breadth_percentile_min": 0.25,
+      "market_breadth_percentile_max": 0.60
+    }
+  },
+  "trial_note": "This is the only rolling-percentile band tested in this mechanism round. Individual-stock filters, exits, costs, ten slots, universe and the 2021-2023 development interval remain frozen."
+}

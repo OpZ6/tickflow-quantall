@@ -1,0 +1,36 @@
+{
+  "base_protocol": "five-year-v1.json",
+  "experiment": "vcp-iteration4-setup-dedup-control-v1",
+  "purpose": "iteration4_setup_identity_ablation",
+  "hypothesis": "Measure the breakout-only control with point-in-time liquidity filters before suppressing repeat entries for the same VCP base.",
+  "backtest": {
+    "params": {
+      "allow_cheat": false,
+      "require_pivot_cross": false,
+      "deduplicate_setups": false
+    },
+    "overrides": {
+      "basic_filter": {
+        "enabled": true,
+        "price_min": 3.0,
+        "amount_min": 20000000.0,
+        "turnover_min": 0.0,
+        "exclude_st": false,
+        "exclude_new_days": 0
+      },
+      "stop_loss": -0.05,
+      "take_profit": null,
+      "trailing_stop": null,
+      "trailing_take_profit_activate": null,
+      "trailing_take_profit_drawdown": null,
+      "max_hold_days": 40
+    }
+  },
+  "phases": {
+    "train": {
+      "start": "2021-09-06",
+      "end": "2023-12-29"
+    }
+  },
+  "development_note": "Both 2021-2022 and 2023 have been inspected and are development data. The 2024-01-01 onward interval is not opened in this ablation."
+}

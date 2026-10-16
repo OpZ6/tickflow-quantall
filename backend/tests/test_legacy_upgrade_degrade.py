@@ -49,12 +49,12 @@ class _Svc:
 
 
 def test_builtin_factor_rank_research_shim_forwards_to_research_module():
-    import app.strategy.builtin.factor_rank_research as legacy
+    import app.strategy.research.factor_rank_research as legacy
     import app.strategy.research.factor_rank_research as current
 
     assert legacy is current
     # 旧策略文件的真实用法: from ... import 常量/类
-    from app.strategy.builtin.factor_rank_research import META  # noqa: F401
+    from app.strategy.research.factor_rank_research import META  # noqa: F401
 
 
 def test_run_all_skips_unknown_ids_and_reports_them(monkeypatch, tmp_path):

@@ -1,0 +1,51 @@
+{
+  "experiment": "production-leader-pivot-failure-exit-2016-2026-v1",
+  "baseline_run": "20260907T123519390606Z",
+  "experiment_run": "20260907T140039383354Z",
+  "decision": "mechanism_supported_reject_as_primary_exit",
+  "reason": "A close below pivot identifies many weak trades and reduces average loss, but the pivot is also crossed during constructive retests. The rule passed its coarse preregistered risk gates while reducing matched-trade expectancy and total portfolio return, so it is retained as a diagnostic label rather than promoted.",
+  "comparison": {
+    "baseline": {
+      "entry_candidates": 837,
+      "trades": 298,
+      "avg_loss": 0.0409,
+      "avg_win": 0.1645,
+      "best_trade": 1.2163,
+      "annual_return": 0.1377,
+      "max_drawdown": -0.2592,
+      "avg_exposure": 0.2714
+    },
+    "pivot_failure_exit": {
+      "entry_candidates": 837,
+      "trades": 370,
+      "avg_loss": 0.0305,
+      "avg_win": 0.1511,
+      "best_trade": 1.2163,
+      "annual_return": 0.0925,
+      "max_drawdown": -0.2726,
+      "avg_exposure": 0.2261,
+      "pivot_exit_trades": 156,
+      "pivot_exit_mean_return": -0.01785
+    }
+  },
+  "gate_results": {
+    "minimum_trades_250": "pass",
+    "maximum_timing_violations_0": "pass",
+    "minimum_average_loss_reduction_0_005": "pass",
+    "minimum_average_win_retention_ratio_0_90": "pass",
+    "maximum_drawdown_deterioration_0_03": "pass"
+  },
+  "matched_trade_audit": {
+    "common_trades": 290,
+    "baseline_mean_return": 0.01761,
+    "experiment_mean_return": 0.01419,
+    "mean_return_change": -0.00342,
+    "baseline_winners": 85,
+    "winners_remaining_positive": 64,
+    "mean_change_for_baseline_winners": -0.03407,
+    "newly_executed_experiment_trades": 80,
+    "new_trade_mean_return": 0.00260
+  },
+  "stop_rule_applied": "Do not add a pivot buffer or confirmation-day variant on this exposed interval.",
+  "next_action": "Audit setup-level structural risk. The invalidation level must come from a causally identified tight pivot shelf or base structure, rather than a percentage adjustment around the pivot."
+}

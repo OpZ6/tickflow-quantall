@@ -1,0 +1,23 @@
+{
+  "experiment": "production-leader-signal-regime-profile-v1",
+  "source_run": "20260909T030431101979Z",
+  "purpose": "test_whether_frozen_vcp_has_a_successful_causal_applicability_period",
+  "branches": {
+    "broad_bull": "signal_quants_vcp_broad_advance",
+    "early_recovery": "signal_quants_vcp_early_recovery"
+  },
+  "training_period": ["2016-01-04", "2022-12-30"],
+  "temporal_test_period": ["2023-01-03", "2026-06-30"],
+  "training_gate": {
+    "minimum_trades": 75,
+    "minimum_average_excess_return_held": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "minimum_mfe_20pct_rate": 0.2
+  },
+  "success_semantics": "A branch that passes training and retains positive average held Alpha in the temporal test is a successful conditional VCP strategy conclusion even if the other branch or combined all-period strategy fails.",
+  "constraints": [
+    "Applicability is the frozen signal-time branch, never the future market outcome.",
+    "Do not change branch definitions, market thresholds, entries or exits from the profile result.",
+    "A failing training branch is not inspected in the temporal test."
+  ]
+}

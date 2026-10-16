@@ -1,0 +1,11 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-structure-v1.json",
+  "experiment": "vcp-five-year-cycle2-breadth-first-cross-v1",
+  "purpose": "cycle2_mechanism_test",
+  "hypothesis": "Within the recovery-regime, breakout-only, 3% stop structure, enter only on the first close across the current pivot to avoid late repeated entries.",
+  "backtest": {
+    "params": {
+      "require_pivot_cross": true
+    }
+  }
+}

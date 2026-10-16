@@ -1,0 +1,18 @@
+{
+  "experiment": "vcp-stabilize-entry-v1",
+  "thought": "Same 321 upper-half VCP signals. Buy 企稳: first yang bar that closes above the prior close within 3 market sessions after the signal. Distinct from shrink-pullback (no volume shrink, no dip required).",
+  "hypothesis": "Waiting one to three days for a stabilizing up-close avoids chasing the breakout bar without waiting for a deep pullback that misses the right tail.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "n_train_cited": 321,
+    "entry": "T+1 breakout"
+  },
+  "change": {
+    "id": "stabilize_yang_within_3",
+    "definition": "Do not take original T+1. On the next 3 market sessions after entry_signal_date, take the first bar with close > open and close > previous market-session close. Buy the next market open if strictly before original exit. PnL uses new open to original exit price. Holes do not roll."
+  },
+  "pass_fail": {
+    "pass": "variant avg_pnl not below 321-trade baseline and remains positive. If keep, report 2023-2026.",
+    "fail": "Drop. Pause more delayed-entry overlays. Next: open 放量突破·缩量回踩 as its own independent book (direction 2), baseline stays 321 VCP breakout."
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-candidate-v2-point-in-time-pool-audit-v1.json",
+  "experiment": "vcp-iteration3-breadth25-60-v1",
+  "purpose": "iteration3_structural_development",
+  "hypothesis": "A wider recovery-to-healthy breadth range increases opportunity without changing VCP entry quality.",
+  "backtest": {"params": {"market_breadth_ma20_min": 0.25, "market_breadth_ma20_max": 0.60}}
+}

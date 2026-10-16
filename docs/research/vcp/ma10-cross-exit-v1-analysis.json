@@ -1,0 +1,34 @@
+{
+  "experiment": "vcp-ma10-cross-exit-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\ma10-cross-exit-v1.json",
+  "upper_half_train": 321,
+  "training_2016_2022": {
+    "baseline": {
+      "n_trades": 321,
+      "win_rate": 0.267913,
+      "profit_factor": 3.94,
+      "avg_pnl": 0.0124,
+      "avg_win": 0.150736,
+      "avg_loss": 0.038225
+    },
+    "variant": {
+      "n_trades": 321,
+      "win_rate": 0.286604,
+      "profit_factor": 2.88,
+      "avg_pnl": 0.003958,
+      "avg_win": 0.100924,
+      "avg_loss": 0.034997
+    },
+    "shortened": 139,
+    "blocked_kept_baseline": 8,
+    "delta": {
+      "avg_pnl": -0.008442,
+      "win_rate": 0.018691,
+      "profit_factor": -1.06
+    },
+    "rule": "drop"
+  },
+  "rule": "drop",
+  "gaps": []
+}

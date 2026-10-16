@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration7-a-share-strong-market-medlong-vcp-retro-v1.json",
+  "experiment": "vcp-iteration7-a-share-strong-market-medlong-recent-v1",
+  "purpose": "strong_market_medium_long_vcp_recent_diagnostic",
+  "phases": {
+    "train": {
+      "start": "2024-01-02",
+      "end": "2026-06-30"
+    }
+  },
+  "development_note": "Recent dates are exposed diagnostic data and cannot serve as untouched validation."
+}

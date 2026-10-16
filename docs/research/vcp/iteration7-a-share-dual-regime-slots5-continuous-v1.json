@@ -1,0 +1,18 @@
+{
+  "base_protocol": "iteration7-a-share-early-recovery-first-breakout-slots5-continuous-v1.json",
+  "experiment": "vcp-iteration7-a-share-dual-regime-slots5-continuous-v1",
+  "purpose": "combine_cross_cycle_early_recovery_and_broad_advance_vcp_edges",
+  "hypothesis": "A-share VCP has two causal opportunity states: first pivot breakouts during low-breadth recovery, and medium/long VCP breakouts during broad advances with positive 63-session equal-weight momentum.",
+  "backtest": {
+    "params": {
+      "a_share_dual_regime": true,
+      "market_breadth_ma20_min": 0.0,
+      "market_breadth_ma20_max": 1.0,
+      "market_breadth_rising_days": 0,
+      "market_equal_weight_return_lookback": 0,
+      "short_scale_enabled": true,
+      "prebreakout_pivot_closes_max": 20
+    }
+  },
+  "development_note": "Both component regimes were selected on already-opened data. This continuous run measures portfolio interaction and remains development evidence."
+}

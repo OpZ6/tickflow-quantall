@@ -1,0 +1,62 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1AMV 研究独立核验 · 2026-09-30</title><style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#101217;color:#e7e9ed;font:15px/1.75 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1180px;margin:auto;padding:40px 28px 64px}h1{font-size:29px;line-height:1.4;margin:0 0 12px}h2{font-size:21px;margin:34px 0 14px}h3{font-size:17px;margin:20px 0 8px}p{margin:10px 0}.muted{color:#a3aab7}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0}.card,section{background:#171a21;border:1px solid #2b303b;border-radius:12px;padding:20px}.card b{font-size:23px;display:block}.ok{color:#81c99e}.warn{color:#efbf78}.bad{color:#efa0a0}section{margin:18px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#101318;border-radius:8px;padding:16px;line-height:1.7}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:14px}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid #303541;white-space:nowrap}th{color:#aeb9cd;font-weight:600}.scroll{overflow:auto}a{color:#92baff}li{margin:8px 0}.note{border-left:3px solid #cf9a57;padding:10px 16px;background:#241f19;border-radius:6px}@media(max-width:760px){main{padding:24px 16px}.cards{grid-template-columns:1fr}h1{font-size:24px}section{padding:16px}}
+</style></head><body><main>
+<h1>1AMV 研究独立核验</h1><p class="muted">2026-09-30 · 原始 TXT、报告正文、复现脚本及本地数据交叉检查 · 112 组参数重算</p>
+<div class="cards"><div class="card"><b class="ok">主要数字可复现</b>10,251,046 行、5,862 股、2,367 日；默认 CV=3.48%。</div><div class="card"><b class="bad">正文化简错误</b>原始 TXT 与实验脚本一致；正文写成了另一条递推。</div><div class="card"><b class="warn">候选参数有价值</b>H=8、γ=1 更稳定；KF 随训练窗口变化。不能确认指南针原参数。</div></div>
+
+<h2>一、正确公式已经能确定</h2><section>
+<p>通达信 <a href="https://help.tdx.com.cn/gspt/docs/markdown/redword/functionlist.html">官方函数说明</a>定义 DMA(X,W) 为 W×X+(1−W)×前值。原始 01_AMVSTK 的 W=1−d(1−u)、X=u/W，直接代入即可：</p>
+<pre>Mₜ = 不复权收盘价 Cₜ × 自由流通股本 FFₜ
+qₜ = 当日成交额 / Mₜ
+uₜ = 1 − exp(−qₜ)
+d = 2^(−1/H)
+Aₜ = uₜ + d(1−uₜ)Aₜ₋₁
+Vₜ = Mₜ × Aₜ^γ / 100,000,000（亿元）
+套件参数：H=10，γ=1.15；首根 A=u。</pre>
+<p>报告正文的 Aₜ=(1−d)uₜ+dAₜ₋₁ 不等价，所给“恒等式”也不成立。以持续 q=2% 为例，正确式的稳态活跃占比约 <b>18.61%</b>，正文错误式约 <b>1.10%</b>。对 1,000 个随机输入，把字面 DMA 与正确递推对比，最大绝对差为 2.22×10⁻¹⁶。</p>
+<p>实验脚本使用的是正确式，故这项正文错误没有使已复现的表格作废。项目当前计算模块也使用正确式。</p>
+<p>该模型含义是“今天激活 u 比例，尚未被今天覆盖的旧活跃状态继续衰减”。它是随换手改变记忆的状态模型。旧状态保留系数为 d·exp(−q)，实际半衰期为 ln2/(ln2/H+q)：H=10、q=2% 时约 7.76 日；10 日是零换手时的衰减尺度。</p>
+<p>γ=1.15 是套件给定参数，未看到其推导或原始标定证据。网格另有更优参数不能证明作者当初一定用过拟合。</p>
+</section>
+
+<h2>二、数值复现成立，输入口径需纠正</h2><section>
+<p>报告附带脚本实际只读取 amount、turnover_rate，定义 M=amount/(turnover_rate/100)、q=turnover_rate/100。没有读取 FINANCE(46)，没有使用 C×FF。</p>
+<p>普通换手率若为成交股数/普通流通股本，则上述 M 等于成交均价×普通流通股本。它与收盘价市值、自由流通市值各有区别。<a href="https://help.tdx.com.cn/gspt/docs/markdown/redword/functionlist.html">通达信说明</a>的 FINANCE(46) 是普通流通股本扣除持股超过 5% 部分后的自由流通股本。</p>
+<div class="scroll"><table><tr><th>抽查日期</th><th>匹配股票数</th><th>反推 M / 收盘价×普通流通股本，中位</th><th>5%—95% 范围</th></tr><tr><td>2019-01-02</td><td>3371</td><td>1.0019</td><td>0.9892—1.0147</td></tr><tr><td>2024-09-24</td><td>5322</td><td>0.9864</td><td>0.9731—0.9957</td></tr><tr><td>2026-09-30</td><td>5546</td><td>1.0011</td><td>0.9861—1.0199</td></tr></table></div>
+<p>因此，报告实测应命名为“普通换手率与成交均价市值的 1AMV 代理实验”。价格与股本的两个口径差异尚未被分离，无法把全部偏差归因为自由股本。</p>
+<ul><li>参照序列来自 touzikexue；没有指南针原始导出值，不能把它标为已认证原版真值。</li><li>参照含 inference_start_date=2026-09-21。原报告纳入末尾 6 个推断日；本次验证另排除这些日期。</li><li>2026-09-30 的本地分区是当日快照，本次统计不把其当作已收盘样本；与参照的比较也未使用该日。</li><li>“5,559 只可交易股票”实际只是通过数据数值筛选的有效股，不是完成全部交易资格判定的证券集合。</li></ul>
+</section>
+
+<h2>三、“最佳参数”究竟成立到哪一步</h2><section>
+<p>CV 是 <b>比值序列的变异系数</b>，不是交叉验证分数，也不是预测收益。它衡量模型/参照的比值是否稳定，不能同时保证读数水平接近。</p>
+<div class="scroll"><table><tr><th>比较口径</th><th>H / γ / KF</th><th>样本数</th><th>比值均值</th><th>比值中位</th><th>CV</th><th>未标定 MAPE</th></tr><tr><td>原报告默认，含推断值</td><td>10 / 1.15 / 1</td><td>1879</td><td>0.8660</td><td>0.8620</td><td>3.48%</td><td>13.40%</td></tr><tr><td>原报告候选，含推断值</td><td>8 / 1 / 1.3</td><td>1879</td><td>1.1209</td><td>1.1212</td><td>2.12%</td><td>12.13%</td></tr><tr><td>默认，排除推断值</td><td>10 / 1.15 / 1</td><td>1873</td><td>0.8661</td><td>0.8619</td><td>3.34%</td><td>13.39%</td></tr><tr><td>网格 CV 最优，排除推断值</td><td>8 / 1 / 1.3</td><td>1873</td><td>1.1212</td><td>1.1213</td><td>1.82%</td><td>12.12%</td></tr><tr><td>水平更接近的候选，排除推断值</td><td>8 / 1 / 1.15</td><td>1873</td><td>1.0251</td><td>1.0256</td><td>1.85%</td><td>2.80%</td></tr></table></div>
+<p>原报告把 0.8660、1.1209 列成“中位比值”，实际函数返回的是均值。默认的实际中位约 0.8620。</p>
+<p>排除推断值后，H=8、γ=1、KF=1.3 仍是预设 112 组中的 CV 最优。但是其未标定平均绝对百分比误差约 12.12%，不能直接称为读数最准确。KF=1.15 的 CV 仅差约 0.029 个百分点，未标定 MAPE 为 2.80%。</p>
+<h3>只用训练段选参，再检查后面的时间段</h3>
+<div class="scroll"><table><tr><th>训练期</th><th>验证期</th><th>选择方式</th><th>H / γ / KF</th><th>验证 CV</th><th>原始验证 MAPE</th><th>训练段水平标定后的验证 MAPE</th></tr><tr><td>2019—2022</td><td>2023—2026-09-18</td><td>套件默认</td><td>10 / 1.15 / 1.0</td><td>3.02%</td><td>11.83%</td><td>3.60%</td></tr><tr><td>2019—2022</td><td>2023—2026-09-18</td><td>仅训练段选参</td><td>8 / 1.0 / 1.3</td><td>1.57%</td><td>13.07%</td><td>1.67%</td></tr><tr><td>2019—2024</td><td>2025—2026-09-18</td><td>套件默认</td><td>10 / 1.15 / 1.0</td><td>1.11%</td><td>9.51%</td><td>5.71%</td></tr><tr><td>2019—2024</td><td>2025—2026-09-18</td><td>仅训练段选参</td><td>8 / 1.0 / 1.15</td><td>1.72%</td><td>3.75%</td><td>1.68%</td></tr></table></div>
+<p>水平标定只用训练期比值中位数，系数冻结后应用于验证期；不使用验证期反算系数。第一折最优仍为 8/1/1.3；第二折改为 8/1/1.15。2025—2026 验证期内，套件默认的 CV 甚至更低，但其水平漂移使训练期标定后的误差更高。</p>
+<h3>逐年滚动留出</h3><div class="scroll"><table><tr><th>验证年</th><th>仅此前数据选出的 H / γ / KF</th><th>验证 CV</th><th>训练期标定后 MAPE</th></tr><tr><td>2022</td><td>8 / 1.0 / 1.3</td><td>0.86%</td><td>0.77%</td></tr><tr><td>2023</td><td>8 / 1.0 / 1.3</td><td>0.63%</td><td>1.20%</td></tr><tr><td>2024</td><td>8 / 1.0 / 1.15</td><td>1.04%</td><td>1.89%</td></tr><tr><td>2025</td><td>8 / 1.0 / 1.15</td><td>1.63%</td><td>2.32%</td></tr><tr><td>2026</td><td>8 / 1.0 / 1.3</td><td>1.04%</td><td>1.18%</td></tr></table></div>
+<p>这支持 H=8、γ=1 是值得保留的候选，KF≈1.15—1.3 的精确值还不稳定。上述是事后追加的时间切分检验，不是从未接触过的前瞻测试；目标仍然只是拟合第三方序列。</p>
+<div class="note">KF 不是纯粹的水平系数。它进入 exp(−KF·q)，同时改变激活和衰减，也可能改变拐点及排序。若 KF 真用来代替普通/自由股本差异，应同时令 M'=M/KF；现脚本只放大 q，不能等同于换成自由流通股本。纯输出常数标定不会改变 CV，但会改变 V/M 的经济解释，不能把标定后的值再称作实际活跃筹码比例。</div>
+</section>
+
+<h2>四、套件工程与数据检查</h2><section>
+<ul><li><b>七个输出与板块引用正确。</b>原 TXT 的 AMVBK 汇总输出 1/4/6/7；活跃总值、加权占比、净增、净增占流通、活跃涨跌的口径一致。概念重叠不能加总成全市场。</li>
+<li><b>板块数据不是只有 57 条主题。</b>theme_member_daily 是每日观察主题；项目另有概念/行业成分映射。它可支持当前成分下的研究，但不能冒充已具备完整历史成员。</li>
+<li><b>百分位前四股复现。</b>21.4 / 99.8 / 25.4 / 13.0 可复现。第 5 股在最后 250 个全市场交易日只有 245 个有效记录；把缺席日当零换手衰减再计入窗口可得到 1.8。它与个股自身 250 根有效日 K 不是同一口径，不能据此确认通达信终端结果。</li>
+<li><b>预热 250 日足够消除初始化影响，但不是完整分位窗口要求。</b>本次重启计算后的末日全市场偏差：60 日约 −0.555%、120 日约 −0.00285%、250 日约 −0.000000133%、367 日约 −0.0000000000159%。250 日初始化衰减 d²⁵⁰=2.98×10⁻⁸，原文的 10⁻⁹·⁶ 不准确。要计算最近 250 日成熟状态的分位，还应在分位窗口之前保留预热数据。</li>
+<li><b>停牌与缺数据须分开。</b>脚本把不在有效筛选中的所有股票都当停牌衰减，并从当日市值汇总排除；缺源、零换手、新上市、真正停牌的含义不同。需要明确是否按个股 K 线根数或全市场日历衰减。</li>
+<li><b>0% 与 100% 是模型边界。</b>零成交与数值饱和可得到边界值；严格要求所有值都大于 0 且小于 100 不是通用数据校验规则。</li>
+<li><b>2015 单位缺口已修复。</b>真实断点为 2015 年末/2016 年初，旧 amount 为千元而非万元。2015 年 raw/enriched 各 244 分区、535,663 行完成显式单位换算，其他 5,222 分区指纹不变。原报告“必须从 2017 起算”的结论不再适用。</li>
+<li><b>自检脚本另有索引问题。</b>个股“V≤M”的断言用了 M[iL]，iL 是证券 ID，不是末日行位置；该断言不能验证末日市值取数。它也没有实现报告所称的五股百分位核验，本次另行补算。</li></ul>
+</section>
+
+<h2>五、对 tickflow-quantall 的实际安排</h2><section>
+<ol><li><b>项目默认采用研究优选。</b>按用户授权使用正确递推、H=8、γ=1、KF=1.15；该组合由训练段选优，样本外保持靠前，并在独立比较中兼顾形状与水平。明确普通流通股本的项目版本与 FINANCE(46) 的原套件版本；不称为指南针原参数。</li>
+<li><b>保留两组对照。</b>原套件 H=10、γ=1.15、KF=1 与全样本候选 H=8、γ=1、KF=1.3 可在指标中心切换。KF 是作用于换手率的研究参数，不是自由股本真值或纯输出缩放。</li>
+<li><b>个股和板块优先看相对变化。</b>活跃市值、活跃占比、日/5日增减、历史分位、扩张成分占比与集中度，配合价格方向；活跃增加本身不等于资金净流入。</li>
+<li><b>原版 0AMV 的认证仍需原始值。</b>有真实指南针导出序列、对应市场口径和自由股本后，再检验误差、参数及覆盖。</li></ol>
+<p><b>最终判断：</b>实验确实完成了大量有效工作，数字并非凭空生成；但正文数学错误、自由股本缺失和参照身份未认证，使“0AMV/1AMV 已全部研究定案”的结论不能成立。当前最佳的可复用成果，是正确状态递推与一组经过时间切分检验的代理参数候选。</p>
+</section><p class="muted">证据文件：原始 00—04 TXT；reproduce_1amv_suite.py；本次 audit-1amv-result.json、audit-share-basis.json。原报告和原 TXT 均保持原样。</p>
+</main></body></html>

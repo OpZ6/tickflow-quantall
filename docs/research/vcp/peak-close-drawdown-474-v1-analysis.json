@@ -1,0 +1,61 @@
+{
+  "experiment": "peak-close-drawdown-474-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\peak-close-drawdown-474-v1.json",
+  "training_2016_2022": {
+    "baseline": {
+      "n_trades": 474,
+      "win_rate": 0.274262,
+      "profit_factor": 3.56,
+      "avg_pnl": 0.009139,
+      "avg_win": 0.129955,
+      "avg_loss": 0.036518
+    },
+    "variant": {
+      "n_trades": 474,
+      "win_rate": 0.2827,
+      "profit_factor": 3.46,
+      "avg_pnl": 0.009664,
+      "avg_win": 0.127832,
+      "avg_loss": 0.036908
+    },
+    "shortened": 13,
+    "blocked_kept_baseline": 12,
+    "delta": {
+      "avg_pnl": 0.000525,
+      "win_rate": 0.008438,
+      "profit_factor": -0.1
+    },
+    "rule": "keep"
+  },
+  "rule": "keep",
+  "gaps": [],
+  "validation_2023_2026": {
+    "baseline": {
+      "n_trades": 370,
+      "win_rate": 0.259459,
+      "profit_factor": 3.35,
+      "avg_pnl": 0.005399,
+      "avg_win": 0.140457,
+      "avg_loss": 0.04192
+    },
+    "variant": {
+      "n_trades": 370,
+      "win_rate": 0.262162,
+      "profit_factor": 3.25,
+      "avg_pnl": 0.004815,
+      "avg_win": 0.136665,
+      "avg_loss": 0.042033
+    },
+    "shortened": 9,
+    "blocked_kept_baseline": 1,
+    "delta": {
+      "avg_pnl": -0.000584,
+      "win_rate": 0.002703,
+      "profit_factor": -0.1
+    },
+    "rule": "drop",
+    "incomplete_excluded": 0
+  },
+  "validation_note": "exposure, not a clean holdout"
+}

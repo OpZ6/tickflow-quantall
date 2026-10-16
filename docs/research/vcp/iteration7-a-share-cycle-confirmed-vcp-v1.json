@@ -1,0 +1,42 @@
+{
+  "base_protocol": "five-year-v1.json",
+  "experiment": "vcp-iteration7-a-share-cycle-confirmed-v1",
+  "purpose": "test_cycle_confirmed_source_vcp_without_stock_level_overfiltering",
+  "hypothesis": "The original high-recall VCP structure has positive expectancy when medium-term A-share equal-weight momentum is non-negative and MA20 breadth is in an early rising recovery state.",
+  "backtest": {
+    "params": {
+      "allow_cheat": false,
+      "require_pivot_cross": false,
+      "deduplicate_setups": false,
+      "rs_min": 85.0,
+      "market_breadth_ma20_min": 0.3,
+      "market_breadth_ma20_max": 0.5,
+      "market_breadth_rising_days": 5,
+      "market_equal_weight_return_lookback": 63,
+      "market_equal_weight_return_min": 0.0
+    },
+    "overrides": {
+      "basic_filter": {
+        "enabled": true,
+        "price_min": 3.0,
+        "amount_min": 20000000.0,
+        "turnover_min": 0.0,
+        "exclude_st": false,
+        "exclude_new_days": 0
+      },
+      "stop_loss": -0.05,
+      "take_profit": null,
+      "trailing_stop": null,
+      "trailing_take_profit_activate": 0.1,
+      "trailing_take_profit_drawdown": 0.05,
+      "max_hold_days": 40
+    }
+  },
+  "phases": {
+    "train": {
+      "start": "2021-09-06",
+      "end": "2023-12-29"
+    }
+  },
+  "development_note": "All dates in this phase have already been opened for development. The rule is supported by candidate-path stability in both 2017-2020 and 2021-2023; portfolio results remain development evidence."
+}

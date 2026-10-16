@@ -1,0 +1,1596 @@
+{
+  "source_commit": "51b6ef059030d851a82a9bb9620d3f3015df4226",
+  "scope": "synthetic source examples; core semantics only",
+  "cases": [
+    {
+      "strategy": "v1",
+      "case": "synthetic_three_contraction_vcp",
+      "history": [
+        {
+          "trade_date": "2026-01-01",
+          "open_for_factor": 92.08725,
+          "high_for_factor": 93.6606,
+          "low_for_factor": 91.16175,
+          "close_for_factor": 92.55,
+          "volume_for_factor": 2000000
+        },
+        {
+          "trade_date": "2026-01-02",
+          "open_for_factor": 92.63449999999999,
+          "high_for_factor": 94.21719999999999,
+          "low_for_factor": 91.70349999999999,
+          "close_for_factor": 93.1,
+          "volume_for_factor": 1980000
+        },
+        {
+          "trade_date": "2026-01-05",
+          "open_for_factor": 93.18175,
+          "high_for_factor": 94.7738,
+          "low_for_factor": 92.24524999999998,
+          "close_for_factor": 93.64999999999999,
+          "volume_for_factor": 1960000
+        },
+        {
+          "trade_date": "2026-01-06",
+          "open_for_factor": 93.72899999999998,
+          "high_for_factor": 95.33039999999998,
+          "low_for_factor": 92.78699999999999,
+          "close_for_factor": 94.19999999999999,
+          "volume_for_factor": 1940000
+        },
+        {
+          "trade_date": "2026-01-07",
+          "open_for_factor": 94.27624999999999,
+          "high_for_factor": 95.88699999999999,
+          "low_for_factor": 93.32874999999999,
+          "close_for_factor": 94.74999999999999,
+          "volume_for_factor": 1920000
+        },
+        {
+          "trade_date": "2026-01-08",
+          "open_for_factor": 94.82349999999998,
+          "high_for_factor": 96.44359999999999,
+          "low_for_factor": 93.87049999999998,
+          "close_for_factor": 95.29999999999998,
+          "volume_for_factor": 1900000
+        },
+        {
+          "trade_date": "2026-01-09",
+          "open_for_factor": 95.37074999999999,
+          "high_for_factor": 97.00019999999998,
+          "low_for_factor": 94.41224999999999,
+          "close_for_factor": 95.84999999999998,
+          "volume_for_factor": 1880000
+        },
+        {
+          "trade_date": "2026-01-12",
+          "open_for_factor": 95.91799999999998,
+          "high_for_factor": 97.55679999999998,
+          "low_for_factor": 94.95399999999998,
+          "close_for_factor": 96.39999999999998,
+          "volume_for_factor": 1860000
+        },
+        {
+          "trade_date": "2026-01-13",
+          "open_for_factor": 96.46524999999997,
+          "high_for_factor": 98.11339999999997,
+          "low_for_factor": 95.49574999999997,
+          "close_for_factor": 96.94999999999997,
+          "volume_for_factor": 1840000
+        },
+        {
+          "trade_date": "2026-01-14",
+          "open_for_factor": 97.01249999999997,
+          "high_for_factor": 98.66999999999997,
+          "low_for_factor": 96.03749999999997,
+          "close_for_factor": 97.49999999999997,
+          "volume_for_factor": 1820000
+        },
+        {
+          "trade_date": "2026-01-15",
+          "open_for_factor": 95.76874999999997,
+          "high_for_factor": 97.40499999999997,
+          "low_for_factor": 94.80624999999998,
+          "close_for_factor": 96.24999999999997,
+          "volume_for_factor": 1800000
+        },
+        {
+          "trade_date": "2026-01-16",
+          "open_for_factor": 94.52499999999998,
+          "high_for_factor": 96.13999999999997,
+          "low_for_factor": 93.57499999999997,
+          "close_for_factor": 94.99999999999997,
+          "volume_for_factor": 1780000
+        },
+        {
+          "trade_date": "2026-01-19",
+          "open_for_factor": 93.28124999999997,
+          "high_for_factor": 100.0,
+          "low_for_factor": 92.34374999999997,
+          "close_for_factor": 93.74999999999997,
+          "volume_for_factor": 1760000
+        },
+        {
+          "trade_date": "2026-01-20",
+          "open_for_factor": 92.03749999999997,
+          "high_for_factor": 93.60999999999997,
+          "low_for_factor": 91.11249999999997,
+          "close_for_factor": 92.49999999999997,
+          "volume_for_factor": 1740000
+        },
+        {
+          "trade_date": "2026-01-21",
+          "open_for_factor": 90.79374999999997,
+          "high_for_factor": 92.34499999999997,
+          "low_for_factor": 89.88124999999997,
+          "close_for_factor": 91.24999999999997,
+          "volume_for_factor": 1720000
+        },
+        {
+          "trade_date": "2026-01-22",
+          "open_for_factor": 89.54999999999997,
+          "high_for_factor": 91.07999999999997,
+          "low_for_factor": 88.64999999999998,
+          "close_for_factor": 89.99999999999997,
+          "volume_for_factor": 1700000
+        },
+        {
+          "trade_date": "2026-01-23",
+          "open_for_factor": 88.30624999999998,
+          "high_for_factor": 89.81499999999997,
+          "low_for_factor": 87.41874999999997,
+          "close_for_factor": 88.74999999999997,
+          "volume_for_factor": 1680000
+        },
+        {
+          "trade_date": "2026-01-26",
+          "open_for_factor": 87.06249999999997,
+          "high_for_factor": 88.54999999999997,
+          "low_for_factor": 86.18749999999997,
+          "close_for_factor": 87.49999999999997,
+          "volume_for_factor": 1660000
+        },
+        {
+          "trade_date": "2026-01-27",
+          "open_for_factor": 87.95799999999997,
+          "high_for_factor": 89.46079999999998,
+          "low_for_factor": 87.07399999999997,
+          "close_for_factor": 88.39999999999998,
+          "volume_for_factor": 1640000
+        },
+        {
+          "trade_date": "2026-01-28",
+          "open_for_factor": 88.85349999999998,
+          "high_for_factor": 90.37159999999999,
+          "low_for_factor": 87.96049999999998,
+          "close_for_factor": 89.29999999999998,
+          "volume_for_factor": 1620000
+        },
+        {
+          "trade_date": "2026-01-29",
+          "open_for_factor": 89.749,
+          "high_for_factor": 91.2824,
+          "low_for_factor": 88.847,
+          "close_for_factor": 90.19999999999999,
+          "volume_for_factor": 1600000
+        },
+        {
+          "trade_date": "2026-01-30",
+          "open_for_factor": 90.6445,
+          "high_for_factor": 92.19319999999999,
+          "low_for_factor": 89.73349999999999,
+          "close_for_factor": 91.1,
+          "volume_for_factor": 1580000
+        },
+        {
+          "trade_date": "2026-02-02",
+          "open_for_factor": 91.54,
+          "high_for_factor": 93.104,
+          "low_for_factor": 90.62,
+          "close_for_factor": 92.0,
+          "volume_for_factor": 1560000
+        },
+        {
+          "trade_date": "2026-02-03",
+          "open_for_factor": 92.4355,
+          "high_for_factor": 94.01480000000001,
+          "low_for_factor": 91.5065,
+          "close_for_factor": 92.9,
+          "volume_for_factor": 1540000
+        },
+        {
+          "trade_date": "2026-02-04",
+          "open_for_factor": 93.33100000000002,
+          "high_for_factor": 94.92560000000002,
+          "low_for_factor": 92.39300000000001,
+          "close_for_factor": 93.80000000000001,
+          "volume_for_factor": 1520000
+        },
+        {
+          "trade_date": "2026-02-05",
+          "open_for_factor": 94.22650000000002,
+          "high_for_factor": 95.83640000000001,
+          "low_for_factor": 93.27950000000001,
+          "close_for_factor": 94.70000000000002,
+          "volume_for_factor": 1500000
+        },
+        {
+          "trade_date": "2026-02-06",
+          "open_for_factor": 95.12200000000003,
+          "high_for_factor": 96.74720000000002,
+          "low_for_factor": 94.16600000000003,
+          "close_for_factor": 95.60000000000002,
+          "volume_for_factor": 1480000
+        },
+        {
+          "trade_date": "2026-02-09",
+          "open_for_factor": 96.01750000000003,
+          "high_for_factor": 97.65800000000003,
+          "low_for_factor": 95.05250000000002,
+          "close_for_factor": 96.50000000000003,
+          "volume_for_factor": 1460000
+        },
+        {
+          "trade_date": "2026-02-10",
+          "open_for_factor": 96.91300000000004,
+          "high_for_factor": 98.56880000000004,
+          "low_for_factor": 95.93900000000004,
+          "close_for_factor": 97.40000000000003,
+          "volume_for_factor": 1440000
+        },
+        {
+          "trade_date": "2026-02-11",
+          "open_for_factor": 97.80850000000004,
+          "high_for_factor": 99.47960000000005,
+          "low_for_factor": 96.82550000000003,
+          "close_for_factor": 98.30000000000004,
+          "volume_for_factor": 1420000
+        },
+        {
+          "trade_date": "2026-02-12",
+          "open_for_factor": 97.16175000000004,
+          "high_for_factor": 98.82180000000004,
+          "low_for_factor": 96.18525000000004,
+          "close_for_factor": 97.65000000000003,
+          "volume_for_factor": 1400000
+        },
+        {
+          "trade_date": "2026-02-13",
+          "open_for_factor": 96.51500000000003,
+          "high_for_factor": 98.16400000000003,
+          "low_for_factor": 95.54500000000003,
+          "close_for_factor": 97.00000000000003,
+          "volume_for_factor": 1380000
+        },
+        {
+          "trade_date": "2026-02-16",
+          "open_for_factor": 95.86825000000002,
+          "high_for_factor": 100.0,
+          "low_for_factor": 94.90475000000002,
+          "close_for_factor": 96.35000000000002,
+          "volume_for_factor": 1360000
+        },
+        {
+          "trade_date": "2026-02-17",
+          "open_for_factor": 95.22150000000002,
+          "high_for_factor": 96.84840000000001,
+          "low_for_factor": 94.26450000000001,
+          "close_for_factor": 95.70000000000002,
+          "volume_for_factor": 1340000
+        },
+        {
+          "trade_date": "2026-02-18",
+          "open_for_factor": 94.57475000000001,
+          "high_for_factor": 96.19060000000002,
+          "low_for_factor": 93.62425,
+          "close_for_factor": 95.05000000000001,
+          "volume_for_factor": 1320000
+        },
+        {
+          "trade_date": "2026-02-19",
+          "open_for_factor": 93.92800000000001,
+          "high_for_factor": 95.53280000000001,
+          "low_for_factor": 92.98400000000001,
+          "close_for_factor": 94.4,
+          "volume_for_factor": 1300000
+        },
+        {
+          "trade_date": "2026-02-20",
+          "open_for_factor": 93.28125,
+          "high_for_factor": 94.875,
+          "low_for_factor": 92.34375,
+          "close_for_factor": 93.75,
+          "volume_for_factor": 1280000
+        },
+        {
+          "trade_date": "2026-02-23",
+          "open_for_factor": 92.63449999999999,
+          "high_for_factor": 94.21719999999999,
+          "low_for_factor": 91.70349999999999,
+          "close_for_factor": 93.1,
+          "volume_for_factor": 1260000
+        },
+        {
+          "trade_date": "2026-02-24",
+          "open_for_factor": 93.05239999999999,
+          "high_for_factor": 94.64224,
+          "low_for_factor": 92.1172,
+          "close_for_factor": 93.52,
+          "volume_for_factor": 1240000
+        },
+        {
+          "trade_date": "2026-02-25",
+          "open_for_factor": 93.4703,
+          "high_for_factor": 95.06728,
+          "low_for_factor": 92.5309,
+          "close_for_factor": 93.94,
+          "volume_for_factor": 1220000
+        },
+        {
+          "trade_date": "2026-02-26",
+          "open_for_factor": 93.8882,
+          "high_for_factor": 95.49232,
+          "low_for_factor": 92.9446,
+          "close_for_factor": 94.36,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-02-27",
+          "open_for_factor": 94.3061,
+          "high_for_factor": 95.91736,
+          "low_for_factor": 93.3583,
+          "close_for_factor": 94.78,
+          "volume_for_factor": 1180000
+        },
+        {
+          "trade_date": "2026-03-02",
+          "open_for_factor": 94.724,
+          "high_for_factor": 96.3424,
+          "low_for_factor": 93.772,
+          "close_for_factor": 95.2,
+          "volume_for_factor": 1160000
+        },
+        {
+          "trade_date": "2026-03-03",
+          "open_for_factor": 95.1419,
+          "high_for_factor": 96.76744000000001,
+          "low_for_factor": 94.1857,
+          "close_for_factor": 95.62,
+          "volume_for_factor": 1140000
+        },
+        {
+          "trade_date": "2026-03-04",
+          "open_for_factor": 95.55980000000001,
+          "high_for_factor": 97.19248,
+          "low_for_factor": 94.5994,
+          "close_for_factor": 96.04,
+          "volume_for_factor": 1120000
+        },
+        {
+          "trade_date": "2026-03-05",
+          "open_for_factor": 95.97770000000001,
+          "high_for_factor": 97.61752000000001,
+          "low_for_factor": 95.01310000000001,
+          "close_for_factor": 96.46000000000001,
+          "volume_for_factor": 1100000
+        },
+        {
+          "trade_date": "2026-03-06",
+          "open_for_factor": 96.39560000000002,
+          "high_for_factor": 98.04256000000001,
+          "low_for_factor": 95.42680000000001,
+          "close_for_factor": 96.88000000000001,
+          "volume_for_factor": 1080000
+        },
+        {
+          "trade_date": "2026-03-09",
+          "open_for_factor": 96.8135,
+          "high_for_factor": 98.46760000000002,
+          "low_for_factor": 95.8405,
+          "close_for_factor": 97.30000000000001,
+          "volume_for_factor": 1060000
+        },
+        {
+          "trade_date": "2026-03-10",
+          "open_for_factor": 97.23140000000001,
+          "high_for_factor": 98.89264000000001,
+          "low_for_factor": 96.25420000000001,
+          "close_for_factor": 97.72000000000001,
+          "volume_for_factor": 1040000
+        },
+        {
+          "trade_date": "2026-03-11",
+          "open_for_factor": 97.64930000000001,
+          "high_for_factor": 99.31768000000001,
+          "low_for_factor": 96.66790000000002,
+          "close_for_factor": 98.14000000000001,
+          "volume_for_factor": 1020000
+        },
+        {
+          "trade_date": "2026-03-12",
+          "open_for_factor": 98.06720000000001,
+          "high_for_factor": 99.74272000000002,
+          "low_for_factor": 97.08160000000001,
+          "close_for_factor": 98.56000000000002,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-13",
+          "open_for_factor": 98.48510000000002,
+          "high_for_factor": 100.0,
+          "low_for_factor": 97.49530000000001,
+          "close_for_factor": 98.98000000000002,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-16",
+          "open_for_factor": 98.28610000000002,
+          "high_for_factor": 99.96536000000002,
+          "low_for_factor": 97.29830000000001,
+          "close_for_factor": 98.78000000000002,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-17",
+          "open_for_factor": 98.0871,
+          "high_for_factor": 99.76296,
+          "low_for_factor": 97.10130000000001,
+          "close_for_factor": 98.58000000000001,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-18",
+          "open_for_factor": 97.88810000000001,
+          "high_for_factor": 100.0,
+          "low_for_factor": 96.9043,
+          "close_for_factor": 98.38000000000001,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-19",
+          "open_for_factor": 97.68910000000001,
+          "high_for_factor": 99.35816000000001,
+          "low_for_factor": 96.7073,
+          "close_for_factor": 98.18,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-20",
+          "open_for_factor": 97.4901,
+          "high_for_factor": 99.15576,
+          "low_for_factor": 96.5103,
+          "close_for_factor": 97.98,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-23",
+          "open_for_factor": 97.2911,
+          "high_for_factor": 98.95336,
+          "low_for_factor": 96.3133,
+          "close_for_factor": 97.78,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-24",
+          "open_for_factor": 97.0921,
+          "high_for_factor": 98.75096,
+          "low_for_factor": 96.1163,
+          "close_for_factor": 97.58,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-25",
+          "open_for_factor": 96.89309999999999,
+          "high_for_factor": 98.54856,
+          "low_for_factor": 95.91929999999999,
+          "close_for_factor": 97.38,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-26",
+          "open_for_factor": 96.97269999999999,
+          "high_for_factor": 98.62952,
+          "low_for_factor": 95.9981,
+          "close_for_factor": 97.46,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-27",
+          "open_for_factor": 97.05229999999999,
+          "high_for_factor": 98.71047999999999,
+          "low_for_factor": 96.0769,
+          "close_for_factor": 97.53999999999999,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-30",
+          "open_for_factor": 97.13189999999999,
+          "high_for_factor": 98.79144,
+          "low_for_factor": 96.1557,
+          "close_for_factor": 97.61999999999999,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-03-31",
+          "open_for_factor": 97.21149999999999,
+          "high_for_factor": 98.87239999999998,
+          "low_for_factor": 96.23449999999998,
+          "close_for_factor": 97.69999999999999,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-04-01",
+          "open_for_factor": 97.29109999999999,
+          "high_for_factor": 98.95335999999999,
+          "low_for_factor": 96.31329999999998,
+          "close_for_factor": 97.77999999999999,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-04-02",
+          "open_for_factor": 97.37069999999999,
+          "high_for_factor": 99.03431999999998,
+          "low_for_factor": 96.39209999999999,
+          "close_for_factor": 97.85999999999999,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-04-03",
+          "open_for_factor": 97.45029999999998,
+          "high_for_factor": 99.11527999999998,
+          "low_for_factor": 96.47089999999999,
+          "close_for_factor": 97.93999999999998,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-04-06",
+          "open_for_factor": 97.52989999999998,
+          "high_for_factor": 99.19623999999999,
+          "low_for_factor": 96.54969999999999,
+          "close_for_factor": 98.01999999999998,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-04-07",
+          "open_for_factor": 97.60949999999998,
+          "high_for_factor": 99.27719999999998,
+          "low_for_factor": 96.62849999999997,
+          "close_for_factor": 98.09999999999998,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-04-08",
+          "open_for_factor": 97.68909999999998,
+          "high_for_factor": 99.35815999999998,
+          "low_for_factor": 96.70729999999998,
+          "close_for_factor": 98.17999999999998,
+          "volume_for_factor": 1000000
+        }
+      ],
+      "reference": {
+        "valid": true,
+        "reason": null,
+        "status": "wait_breakout",
+        "setup": "breakout",
+        "scale": "medium",
+        "stage": "tight_below_pivot",
+        "pivot": 100.0,
+        "quality": 6.8785,
+        "stop_price": 97.0,
+        "alternates": 1
+      }
+    },
+    {
+      "strategy": "v3",
+      "case": "right_rim_under_high_then_handle",
+      "history": [
+        {
+          "trade_date": "2026-01-01",
+          "open_for_factor": 91.54,
+          "high_for_factor": 92.92,
+          "low_for_factor": 91.08,
+          "close_for_factor": 92.0,
+          "volume_for_factor": 2000000
+        },
+        {
+          "trade_date": "2026-01-02",
+          "open_for_factor": 95.52,
+          "high_for_factor": 96.96000000000001,
+          "low_for_factor": 95.03999999999999,
+          "close_for_factor": 96.0,
+          "volume_for_factor": 1970000
+        },
+        {
+          "trade_date": "2026-01-05",
+          "open_for_factor": 99.5,
+          "high_for_factor": 100.0,
+          "low_for_factor": 99.0,
+          "close_for_factor": 100.0,
+          "volume_for_factor": 1940000
+        },
+        {
+          "trade_date": "2026-01-06",
+          "open_for_factor": 96.515,
+          "high_for_factor": 97.97,
+          "low_for_factor": 96.03,
+          "close_for_factor": 97.0,
+          "volume_for_factor": 1910000
+        },
+        {
+          "trade_date": "2026-01-07",
+          "open_for_factor": 89.55,
+          "high_for_factor": 90.9,
+          "low_for_factor": 89.1,
+          "close_for_factor": 90.0,
+          "volume_for_factor": 1880000
+        },
+        {
+          "trade_date": "2026-01-08",
+          "open_for_factor": 81.59,
+          "high_for_factor": 82.82000000000001,
+          "low_for_factor": 81.17999999999999,
+          "close_for_factor": 82.0,
+          "volume_for_factor": 1850000
+        },
+        {
+          "trade_date": "2026-01-09",
+          "open_for_factor": 75.62,
+          "high_for_factor": 76.76,
+          "low_for_factor": 75.24,
+          "close_for_factor": 76.0,
+          "volume_for_factor": 1820000
+        },
+        {
+          "trade_date": "2026-01-12",
+          "open_for_factor": 73.63,
+          "high_for_factor": 74.74,
+          "low_for_factor": 74.0,
+          "close_for_factor": 74.0,
+          "volume_for_factor": 1790000
+        },
+        {
+          "trade_date": "2026-01-13",
+          "open_for_factor": 77.61,
+          "high_for_factor": 78.78,
+          "low_for_factor": 77.22,
+          "close_for_factor": 78.0,
+          "volume_for_factor": 1760000
+        },
+        {
+          "trade_date": "2026-01-14",
+          "open_for_factor": 82.585,
+          "high_for_factor": 83.83,
+          "low_for_factor": 82.17,
+          "close_for_factor": 83.0,
+          "volume_for_factor": 1730000
+        },
+        {
+          "trade_date": "2026-01-15",
+          "open_for_factor": 88.55499999999999,
+          "high_for_factor": 89.89,
+          "low_for_factor": 88.11,
+          "close_for_factor": 89.0,
+          "volume_for_factor": 1700000
+        },
+        {
+          "trade_date": "2026-01-16",
+          "open_for_factor": 94.525,
+          "high_for_factor": 95.95,
+          "low_for_factor": 94.05,
+          "close_for_factor": 95.0,
+          "volume_for_factor": 1670000
+        },
+        {
+          "trade_date": "2026-01-19",
+          "open_for_factor": 87.56,
+          "high_for_factor": 88.88,
+          "low_for_factor": 87.12,
+          "close_for_factor": 88.0,
+          "volume_for_factor": 1640000
+        },
+        {
+          "trade_date": "2026-01-20",
+          "open_for_factor": 91.54,
+          "high_for_factor": 92.92,
+          "low_for_factor": 91.08,
+          "close_for_factor": 92.0,
+          "volume_for_factor": 1610000
+        },
+        {
+          "trade_date": "2026-01-21",
+          "open_for_factor": 94.525,
+          "high_for_factor": 95.95,
+          "low_for_factor": 94.05,
+          "close_for_factor": 95.0,
+          "volume_for_factor": 1580000
+        },
+        {
+          "trade_date": "2026-01-22",
+          "open_for_factor": 97.51,
+          "high_for_factor": 98.0,
+          "low_for_factor": 97.02,
+          "close_for_factor": 98.0,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-23",
+          "open_for_factor": 95.52,
+          "high_for_factor": 96.96000000000001,
+          "low_for_factor": 95.03999999999999,
+          "close_for_factor": 96.0,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-26",
+          "open_for_factor": 93.53,
+          "high_for_factor": 94.94,
+          "low_for_factor": 93.06,
+          "close_for_factor": 94.0,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-27",
+          "open_for_factor": 92.0375,
+          "high_for_factor": 93.425,
+          "low_for_factor": 91.575,
+          "close_for_factor": 92.5,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-28",
+          "open_for_factor": 92.73400000000001,
+          "high_for_factor": 94.132,
+          "low_for_factor": 92.268,
+          "close_for_factor": 93.2,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-29",
+          "open_for_factor": 93.6295,
+          "high_for_factor": 95.041,
+          "low_for_factor": 93.15899999999999,
+          "close_for_factor": 94.1,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-30",
+          "open_for_factor": 94.525,
+          "high_for_factor": 95.95,
+          "low_for_factor": 94.05,
+          "close_for_factor": 95.0,
+          "volume_for_factor": 1550000
+        }
+      ],
+      "reference": {
+        "valid": true,
+        "reason": null,
+        "status": "watch",
+        "setup": "watch",
+        "scale": "short",
+        "stage": "right_rim_under_high",
+        "pivot": 100.1,
+        "quality": 6.69,
+        "stop_price": 93.093,
+        "alternates": 0
+      }
+    },
+    {
+      "strategy": "v3",
+      "case": "breakout_then_cup_lip_support",
+      "history": [
+        {
+          "trade_date": "2026-01-01",
+          "open_for_factor": 91.54,
+          "high_for_factor": 92.92,
+          "low_for_factor": 91.08,
+          "close_for_factor": 92.0,
+          "volume_for_factor": 2000000
+        },
+        {
+          "trade_date": "2026-01-02",
+          "open_for_factor": 95.52,
+          "high_for_factor": 96.96000000000001,
+          "low_for_factor": 95.03999999999999,
+          "close_for_factor": 96.0,
+          "volume_for_factor": 1970000
+        },
+        {
+          "trade_date": "2026-01-05",
+          "open_for_factor": 99.5,
+          "high_for_factor": 100.0,
+          "low_for_factor": 99.0,
+          "close_for_factor": 100.0,
+          "volume_for_factor": 1940000
+        },
+        {
+          "trade_date": "2026-01-06",
+          "open_for_factor": 96.515,
+          "high_for_factor": 97.97,
+          "low_for_factor": 96.03,
+          "close_for_factor": 97.0,
+          "volume_for_factor": 1910000
+        },
+        {
+          "trade_date": "2026-01-07",
+          "open_for_factor": 89.55,
+          "high_for_factor": 90.9,
+          "low_for_factor": 89.1,
+          "close_for_factor": 90.0,
+          "volume_for_factor": 1880000
+        },
+        {
+          "trade_date": "2026-01-08",
+          "open_for_factor": 81.59,
+          "high_for_factor": 82.82000000000001,
+          "low_for_factor": 81.17999999999999,
+          "close_for_factor": 82.0,
+          "volume_for_factor": 1850000
+        },
+        {
+          "trade_date": "2026-01-09",
+          "open_for_factor": 75.62,
+          "high_for_factor": 76.76,
+          "low_for_factor": 75.24,
+          "close_for_factor": 76.0,
+          "volume_for_factor": 1820000
+        },
+        {
+          "trade_date": "2026-01-12",
+          "open_for_factor": 73.63,
+          "high_for_factor": 74.74,
+          "low_for_factor": 74.0,
+          "close_for_factor": 74.0,
+          "volume_for_factor": 1790000
+        },
+        {
+          "trade_date": "2026-01-13",
+          "open_for_factor": 77.61,
+          "high_for_factor": 78.78,
+          "low_for_factor": 77.22,
+          "close_for_factor": 78.0,
+          "volume_for_factor": 1760000
+        },
+        {
+          "trade_date": "2026-01-14",
+          "open_for_factor": 82.585,
+          "high_for_factor": 83.83,
+          "low_for_factor": 82.17,
+          "close_for_factor": 83.0,
+          "volume_for_factor": 1730000
+        },
+        {
+          "trade_date": "2026-01-15",
+          "open_for_factor": 88.55499999999999,
+          "high_for_factor": 89.89,
+          "low_for_factor": 88.11,
+          "close_for_factor": 89.0,
+          "volume_for_factor": 1700000
+        },
+        {
+          "trade_date": "2026-01-16",
+          "open_for_factor": 94.525,
+          "high_for_factor": 95.95,
+          "low_for_factor": 94.05,
+          "close_for_factor": 95.0,
+          "volume_for_factor": 1670000
+        },
+        {
+          "trade_date": "2026-01-19",
+          "open_for_factor": 87.56,
+          "high_for_factor": 88.88,
+          "low_for_factor": 87.12,
+          "close_for_factor": 88.0,
+          "volume_for_factor": 1640000
+        },
+        {
+          "trade_date": "2026-01-20",
+          "open_for_factor": 91.54,
+          "high_for_factor": 92.92,
+          "low_for_factor": 91.08,
+          "close_for_factor": 92.0,
+          "volume_for_factor": 1610000
+        },
+        {
+          "trade_date": "2026-01-21",
+          "open_for_factor": 94.525,
+          "high_for_factor": 95.95,
+          "low_for_factor": 94.05,
+          "close_for_factor": 95.0,
+          "volume_for_factor": 1580000
+        },
+        {
+          "trade_date": "2026-01-22",
+          "open_for_factor": 100.495,
+          "high_for_factor": 101.0,
+          "low_for_factor": 99.99,
+          "close_for_factor": 101.0,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-23",
+          "open_for_factor": 102.485,
+          "high_for_factor": 104.03,
+          "low_for_factor": 101.97,
+          "close_for_factor": 103.0,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-26",
+          "open_for_factor": 103.48,
+          "high_for_factor": 105.04,
+          "low_for_factor": 102.96,
+          "close_for_factor": 104.0,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-27",
+          "open_for_factor": 100.99249999999999,
+          "high_for_factor": 102.515,
+          "low_for_factor": 100.485,
+          "close_for_factor": 101.5,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-28",
+          "open_for_factor": 98.70400000000001,
+          "high_for_factor": 100.19200000000001,
+          "low_for_factor": 98.208,
+          "close_for_factor": 99.2,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-29",
+          "open_for_factor": 100.29599999999999,
+          "high_for_factor": 101.80799999999999,
+          "low_for_factor": 99.792,
+          "close_for_factor": 100.8,
+          "volume_for_factor": 1550000
+        },
+        {
+          "trade_date": "2026-01-30",
+          "open_for_factor": 101.49,
+          "high_for_factor": 103.02,
+          "low_for_factor": 100.98,
+          "close_for_factor": 102.0,
+          "volume_for_factor": 1550000
+        }
+      ],
+      "reference": {
+        "valid": true,
+        "reason": null,
+        "status": "executable",
+        "setup": "support",
+        "scale": "short",
+        "stage": "cup_lip_support_retest",
+        "pivot": 100.1,
+        "quality": 7.69,
+        "stop_price": 93.093,
+        "alternates": 0
+      }
+    },
+    {
+      "strategy": "v4",
+      "case": "flagpole_no_flag",
+      "history": [
+        {
+          "trade_date": "2026-01-01",
+          "open_for_factor": 19.9,
+          "high_for_factor": 20.2,
+          "low_for_factor": 19.8,
+          "close_for_factor": 20,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-01-02",
+          "open_for_factor": 21.89,
+          "high_for_factor": 22.22,
+          "low_for_factor": 21.78,
+          "close_for_factor": 22,
+          "volume_for_factor": 1080000
+        },
+        {
+          "trade_date": "2026-01-05",
+          "open_for_factor": 24.875,
+          "high_for_factor": 25.25,
+          "low_for_factor": 24.75,
+          "close_for_factor": 25,
+          "volume_for_factor": 1160000
+        },
+        {
+          "trade_date": "2026-01-06",
+          "open_for_factor": 28.855,
+          "high_for_factor": 29.29,
+          "low_for_factor": 28.71,
+          "close_for_factor": 29,
+          "volume_for_factor": 1240000
+        },
+        {
+          "trade_date": "2026-01-07",
+          "open_for_factor": 33.83,
+          "high_for_factor": 34.34,
+          "low_for_factor": 33.66,
+          "close_for_factor": 34,
+          "volume_for_factor": 1320000
+        },
+        {
+          "trade_date": "2026-01-08",
+          "open_for_factor": 41.79,
+          "high_for_factor": 42.42,
+          "low_for_factor": 41.58,
+          "close_for_factor": 42,
+          "volume_for_factor": 1400000
+        },
+        {
+          "trade_date": "2026-01-09",
+          "open_for_factor": 50.745,
+          "high_for_factor": 51.51,
+          "low_for_factor": 50.49,
+          "close_for_factor": 51,
+          "volume_for_factor": 1480000
+        },
+        {
+          "trade_date": "2026-01-12",
+          "open_for_factor": 62.685,
+          "high_for_factor": 63.63,
+          "low_for_factor": 62.37,
+          "close_for_factor": 63,
+          "volume_for_factor": 1560000
+        },
+        {
+          "trade_date": "2026-01-13",
+          "open_for_factor": 75.62,
+          "high_for_factor": 76.76,
+          "low_for_factor": 75.24,
+          "close_for_factor": 76,
+          "volume_for_factor": 1640000
+        },
+        {
+          "trade_date": "2026-01-14",
+          "open_for_factor": 91.54,
+          "high_for_factor": 92.92,
+          "low_for_factor": 91.08,
+          "close_for_factor": 92,
+          "volume_for_factor": 1720000
+        },
+        {
+          "trade_date": "2026-01-15",
+          "open_for_factor": 95.52,
+          "high_for_factor": 96.96000000000001,
+          "low_for_factor": 95.03999999999999,
+          "close_for_factor": 96,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-16",
+          "open_for_factor": 77.61,
+          "high_for_factor": 78.78,
+          "low_for_factor": 77.22,
+          "close_for_factor": 78,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-19",
+          "open_for_factor": 69.65,
+          "high_for_factor": 70.7,
+          "low_for_factor": 69.3,
+          "close_for_factor": 70,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-20",
+          "open_for_factor": 65.67,
+          "high_for_factor": 66.66,
+          "low_for_factor": 65.34,
+          "close_for_factor": 66,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-21",
+          "open_for_factor": 61.69,
+          "high_for_factor": 62.62,
+          "low_for_factor": 61.38,
+          "close_for_factor": 62,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-22",
+          "open_for_factor": 59.7,
+          "high_for_factor": 60.6,
+          "low_for_factor": 59.4,
+          "close_for_factor": 60,
+          "volume_for_factor": 1200000
+        }
+      ],
+      "reference": {
+        "valid": false,
+        "reason": "invalid_deep_flag",
+        "status": "invalid",
+        "setup": "invalid",
+        "scale": "short",
+        "stage": "invalid_deep_flag",
+        "pivot": 96.96,
+        "quality": 0.0,
+        "stop_price": null,
+        "alternates": 0
+      }
+    },
+    {
+      "strategy": "v4",
+      "case": "tight_flag_breakout",
+      "history": [
+        {
+          "trade_date": "2026-01-01",
+          "open_for_factor": 19.9,
+          "high_for_factor": 20.2,
+          "low_for_factor": 19.8,
+          "close_for_factor": 20,
+          "volume_for_factor": 1000000
+        },
+        {
+          "trade_date": "2026-01-02",
+          "open_for_factor": 21.89,
+          "high_for_factor": 22.22,
+          "low_for_factor": 21.78,
+          "close_for_factor": 22,
+          "volume_for_factor": 1080000
+        },
+        {
+          "trade_date": "2026-01-05",
+          "open_for_factor": 24.875,
+          "high_for_factor": 25.25,
+          "low_for_factor": 24.75,
+          "close_for_factor": 25,
+          "volume_for_factor": 1160000
+        },
+        {
+          "trade_date": "2026-01-06",
+          "open_for_factor": 28.855,
+          "high_for_factor": 29.29,
+          "low_for_factor": 28.71,
+          "close_for_factor": 29,
+          "volume_for_factor": 1240000
+        },
+        {
+          "trade_date": "2026-01-07",
+          "open_for_factor": 33.83,
+          "high_for_factor": 34.34,
+          "low_for_factor": 33.66,
+          "close_for_factor": 34,
+          "volume_for_factor": 1320000
+        },
+        {
+          "trade_date": "2026-01-08",
+          "open_for_factor": 41.79,
+          "high_for_factor": 42.42,
+          "low_for_factor": 41.58,
+          "close_for_factor": 42,
+          "volume_for_factor": 1400000
+        },
+        {
+          "trade_date": "2026-01-09",
+          "open_for_factor": 50.745,
+          "high_for_factor": 51.51,
+          "low_for_factor": 50.49,
+          "close_for_factor": 51,
+          "volume_for_factor": 1480000
+        },
+        {
+          "trade_date": "2026-01-12",
+          "open_for_factor": 62.685,
+          "high_for_factor": 63.63,
+          "low_for_factor": 62.37,
+          "close_for_factor": 63,
+          "volume_for_factor": 1560000
+        },
+        {
+          "trade_date": "2026-01-13",
+          "open_for_factor": 75.62,
+          "high_for_factor": 76.76,
+          "low_for_factor": 75.24,
+          "close_for_factor": 76,
+          "volume_for_factor": 1640000
+        },
+        {
+          "trade_date": "2026-01-14",
+          "open_for_factor": 91.54,
+          "high_for_factor": 92.92,
+          "low_for_factor": 91.08,
+          "close_for_factor": 92,
+          "volume_for_factor": 1720000
+        },
+        {
+          "trade_date": "2026-01-15",
+          "open_for_factor": 93.53,
+          "high_for_factor": 94.94,
+          "low_for_factor": 93.06,
+          "close_for_factor": 94,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-16",
+          "open_for_factor": 90.545,
+          "high_for_factor": 91.91,
+          "low_for_factor": 90.09,
+          "close_for_factor": 91,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-19",
+          "open_for_factor": 91.54,
+          "high_for_factor": 92.92,
+          "low_for_factor": 91.08,
+          "close_for_factor": 92,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-20",
+          "open_for_factor": 89.55,
+          "high_for_factor": 90.9,
+          "low_for_factor": 89.1,
+          "close_for_factor": 90,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-21",
+          "open_for_factor": 92.535,
+          "high_for_factor": 93.93,
+          "low_for_factor": 92.07,
+          "close_for_factor": 93,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-22",
+          "open_for_factor": 94.525,
+          "high_for_factor": 95.95,
+          "low_for_factor": 94.05,
+          "close_for_factor": 95,
+          "volume_for_factor": 1200000
+        },
+        {
+          "trade_date": "2026-01-23",
+          "open_for_factor": 96.515,
+          "high_for_factor": 97.97,
+          "low_for_factor": 96.03,
+          "close_for_factor": 97,
+          "volume_for_factor": 2500000
+        }
+      ],
+      "reference": {
+        "valid": true,
+        "reason": null,
+        "status": "executable",
+        "setup": "breakout",
+        "scale": "short",
+        "stage": "flag_breakout_confirmed",
+        "pivot": 95.95,
+        "quality": 10.0,
+        "stop_price": 88.274,
+        "alternates": 0
+      }
+    },
+    {
+      "strategy": "v5",
+      "case": "positive",
+      "history": [
+        {
+          "trade_date": "2026-01-01",
+          "open_for_factor": 9.95,
+          "high_for_factor": 10.1,
+          "low_for_factor": 9.850499999999998,
+          "close_for_factor": 10.0,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-02",
+          "open_for_factor": 9.99975,
+          "high_for_factor": 10.150500000000001,
+          "low_for_factor": 9.8997525,
+          "close_for_factor": 10.05,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-03",
+          "open_for_factor": 10.0495,
+          "high_for_factor": 10.201,
+          "low_for_factor": 9.949005,
+          "close_for_factor": 10.1,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-04",
+          "open_for_factor": 10.09925,
+          "high_for_factor": 10.2515,
+          "low_for_factor": 9.9982575,
+          "close_for_factor": 10.15,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-05",
+          "open_for_factor": 10.149,
+          "high_for_factor": 10.302,
+          "low_for_factor": 10.047509999999999,
+          "close_for_factor": 10.2,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-06",
+          "open_for_factor": 10.19875,
+          "high_for_factor": 10.352500000000001,
+          "low_for_factor": 10.0967625,
+          "close_for_factor": 10.25,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-07",
+          "open_for_factor": 10.0,
+          "high_for_factor": 10.806999999999999,
+          "low_for_factor": 9.9,
+          "close_for_factor": 10.7,
+          "volume_for_factor": 2200.0,
+          "pct_chg": 0.07,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 1500.0
+        },
+        {
+          "trade_date": "2026-01-08",
+          "open_for_factor": 10.29825,
+          "high_for_factor": 10.4535,
+          "low_for_factor": 10.1952675,
+          "close_for_factor": 10.35,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 200.0
+        },
+        {
+          "trade_date": "2026-01-09",
+          "open_for_factor": 10.348,
+          "high_for_factor": 10.504000000000001,
+          "low_for_factor": 10.244520000000001,
+          "close_for_factor": 10.4,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 300.0
+        },
+        {
+          "trade_date": "2026-01-10",
+          "open_for_factor": 10.397749999999998,
+          "high_for_factor": 10.554499999999999,
+          "low_for_factor": 10.293772499999998,
+          "close_for_factor": 10.45,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 400.0
+        },
+        {
+          "trade_date": "2026-01-11",
+          "open_for_factor": 10.4475,
+          "high_for_factor": 10.605,
+          "low_for_factor": 10.343024999999999,
+          "close_for_factor": 10.5,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 500.0
+        },
+        {
+          "trade_date": "2026-01-12",
+          "open_for_factor": 10.55,
+          "high_for_factor": 10.706,
+          "low_for_factor": 10.444500000000001,
+          "close_for_factor": 10.6,
+          "volume_for_factor": 800.0,
+          "pct_chg": 0.005,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 600.0
+        }
+      ],
+      "reference": {
+        "valid": true,
+        "reason": null,
+        "status": "watch",
+        "setup": "low_absorb",
+        "scale": null,
+        "stage": null,
+        "pivot": 10.6,
+        "quality": null,
+        "stop_price": null,
+        "alternates": 0
+      }
+    },
+    {
+      "strategy": "v5",
+      "case": "negative_flow",
+      "history": [
+        {
+          "trade_date": "2026-01-01",
+          "open_for_factor": 9.95,
+          "high_for_factor": 10.1,
+          "low_for_factor": 9.850499999999998,
+          "close_for_factor": 10.0,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-02",
+          "open_for_factor": 9.99975,
+          "high_for_factor": 10.150500000000001,
+          "low_for_factor": 9.8997525,
+          "close_for_factor": 10.05,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-03",
+          "open_for_factor": 10.0495,
+          "high_for_factor": 10.201,
+          "low_for_factor": 9.949005,
+          "close_for_factor": 10.1,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-04",
+          "open_for_factor": 10.09925,
+          "high_for_factor": 10.2515,
+          "low_for_factor": 9.9982575,
+          "close_for_factor": 10.15,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-05",
+          "open_for_factor": 10.149,
+          "high_for_factor": 10.302,
+          "low_for_factor": 10.047509999999999,
+          "close_for_factor": 10.2,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-06",
+          "open_for_factor": 10.19875,
+          "high_for_factor": 10.352500000000001,
+          "low_for_factor": 10.0967625,
+          "close_for_factor": 10.25,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 100.0
+        },
+        {
+          "trade_date": "2026-01-07",
+          "open_for_factor": 10.0,
+          "high_for_factor": 10.806999999999999,
+          "low_for_factor": 9.9,
+          "close_for_factor": 10.7,
+          "volume_for_factor": 2200.0,
+          "pct_chg": 0.07,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": 1500.0
+        },
+        {
+          "trade_date": "2026-01-08",
+          "open_for_factor": 10.29825,
+          "high_for_factor": 10.4535,
+          "low_for_factor": 10.1952675,
+          "close_for_factor": 10.35,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": -100.0
+        },
+        {
+          "trade_date": "2026-01-09",
+          "open_for_factor": 10.348,
+          "high_for_factor": 10.504000000000001,
+          "low_for_factor": 10.244520000000001,
+          "close_for_factor": 10.4,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": -100.0
+        },
+        {
+          "trade_date": "2026-01-10",
+          "open_for_factor": 10.397749999999998,
+          "high_for_factor": 10.554499999999999,
+          "low_for_factor": 10.293772499999998,
+          "close_for_factor": 10.45,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": -100.0
+        },
+        {
+          "trade_date": "2026-01-11",
+          "open_for_factor": 10.4475,
+          "high_for_factor": 10.605,
+          "low_for_factor": 10.343024999999999,
+          "close_for_factor": 10.5,
+          "volume_for_factor": 1000.0,
+          "pct_chg": 0.003,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": -100.0
+        },
+        {
+          "trade_date": "2026-01-12",
+          "open_for_factor": 10.55,
+          "high_for_factor": 10.706,
+          "low_for_factor": 10.444500000000001,
+          "close_for_factor": 10.6,
+          "volume_for_factor": 800.0,
+          "pct_chg": 0.005,
+          "vol_ma20": 1000.0,
+          "ma10": 10.4,
+          "net_mf_amount": -100.0
+        }
+      ],
+      "reference": {
+        "valid": false,
+        "reason": "net_mf_5d_not_positive",
+        "status": "invalid",
+        "setup": "invalid",
+        "scale": null,
+        "stage": null,
+        "pivot": null,
+        "quality": null,
+        "stop_price": null,
+        "alternates": 0
+      }
+    }
+  ]
+}

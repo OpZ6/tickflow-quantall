@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration7-a-share-early-recovery-first-breakout-slots5-retro-v1.json",
+  "experiment": "vcp-iteration7-a-share-early-recovery-first-breakout-slots5-continuous-v1",
+  "purpose": "continuous_cross_cycle_development_summary",
+  "phases": {
+    "train": {
+      "start": "2017-11-15",
+      "end": "2023-12-29"
+    }
+  },
+  "development_note": "This is a continuous summary over already-opened development periods, not an independent validation result."
+}

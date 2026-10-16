@@ -1,0 +1,38 @@
+{
+  "experiment": "production-leader-early-recovery-no-profit-lock-train-2016-2022-v1",
+  "decision": "stop_exit_direction",
+  "run_id": "20260909T045629746159Z",
+  "evaluated_branch": "signal_quants_vcp_early_recovery",
+  "training_result": {
+    "trades": 78,
+    "average_absolute_return": 0.026136,
+    "average_excess_return_held": -0.002258,
+    "average_40d_excess_return": 0.013780,
+    "positive_alpha_years": 2,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 27,
+    "mfe_50pct_count": 8,
+    "mfe_100pct_count": 0
+  },
+  "training_checks": {
+    "minimum_trades_75": true,
+    "nonnegative_average_excess_return_held": false,
+    "minimum_four_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_2": true
+  },
+  "comparison_with_staged_profit_lock": {
+    "held_alpha_before": -0.003690,
+    "held_alpha_after": -0.002258,
+    "positive_alpha_years_before": 3,
+    "positive_alpha_years_after": 2
+  },
+  "interpretation": "Removing the whole profit-lock schedule increased absolute return and slightly reduced the held-Alpha deficit, but it did not create positive average Alpha and reduced yearly stability. The fixed 40-day advantage is therefore not converted into a robust executable exit by this representative method.",
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "profit-lock thresholds",
+    "profit floors",
+    "trailing percentages",
+    "holding-day selection from exposed 5/10/20/40 paths"
+  ],
+  "next_action": "Stop modifying exits on the current selected set. Test whether continuous VCP dimensions have stable monotonic Alpha across the full 2016-2022 breakout opportunity universe before designing another selector."
+}

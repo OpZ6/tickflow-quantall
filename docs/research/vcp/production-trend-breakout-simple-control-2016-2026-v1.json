@@ -1,0 +1,22 @@
+{
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "production-trend-breakout-simple-control-2016-2026-v1",
+  "purpose": "P3_existing_simple_trend_breakout_control",
+  "research_question": "Does the repository's existing simple MA60 and 60-day-high volume breakout strategy produce a distinct historical path under the current VCP research universe, execution and cost contract?",
+  "hypothesis": "A simple trend breakout is a useful null reference for strategy-level overlap. Similar results would weaken claims that the frozen VCP implementation adds distinct portfolio behavior; different results would justify an overlap audit, not prove that either method is superior.",
+  "unique_change": "Use the existing trend_breakout strategy with all builtin defaults. Keep the 2016-2026 interval, Shanghai/Shenzhen historical union, open_t+1 execution, historical stamp tax, costs, four positions and equal sizing fixed.",
+  "universe_suffixes": [
+    ".SH",
+    ".SZ"
+  ],
+  "decision_rules": [
+    "Run the existing defaults once; do not vary the 60-day window, MA, volume ratio, stop, holding period, score or position count.",
+    "Report candidates, trades, timing violations, exposure, drawdown, payoff concentration and execution rejections before any overlap interpretation.",
+    "Do not treat the performance difference as isolated VCP structure alpha because the strategies also differ in filters, ranking and exits.",
+    "Only proceed to a descriptive P3 overlap audit if the run is causal and nonempty. Do not run a combined portfolio or allocation search on this exposed interval."
+  ],
+  "development_note": "This is an exposed historical null reference using an existing strategy, not parameter optimization, independent validation, portfolio promotion or live qualification.",
+  "backtest": {
+    "strategy_id": "trend_breakout"
+  }
+}

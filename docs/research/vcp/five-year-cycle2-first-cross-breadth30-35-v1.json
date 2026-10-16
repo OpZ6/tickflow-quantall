@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-first-cross-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-breadth30-35-v1",
+  "purpose": "cycle2_regime_mechanism_test",
+  "hypothesis": "Focus on the early recovery state where 30%-35% of the universe is above MA20; trade-level development evidence is positive in four of five calendar segments.",
+  "backtest": {"params": {"market_breadth_ma20_min": 0.30, "market_breadth_ma20_max": 0.35}}
+}

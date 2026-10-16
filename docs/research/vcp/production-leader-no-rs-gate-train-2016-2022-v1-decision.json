@@ -1,0 +1,25 @@
+{
+  "protocol": "production-leader-no-rs-gate-train-2016-2022-v1.json",
+  "run_id": "20260909T040548044921Z",
+  "decision": "stop_current_exit_contract",
+  "temporal_test_allowed": false,
+  "incremental_results": {
+    "executed_trades": 801,
+    "average_absolute_return": -0.006486486,
+    "average_equal_weight_excess_return_held": -0.008048032,
+    "positive_alpha_years": 1,
+    "mfe_at_least_20pct_count": 230,
+    "mfe_at_least_20pct_rate": 0.287141074,
+    "average_40_session_excess_return": 0.014844349
+  },
+  "exit_diagnostic": {
+    "ma20_signal_exits": 366,
+    "ma20_signal_exit_average_excess_return_held": -0.016091861,
+    "ma20_signal_exit_average_40_session_excess_return": 0.021869701,
+    "stop_loss_exits": 274,
+    "stop_loss_average_40_session_excess_return": -0.030202823
+  },
+  "interpretation": "Removing RS85 expands candidate recall and the incremental cohort has positive fixed-horizon alpha, but the frozen exit contract realizes negative alpha. The registered combined strategy fails and cannot enter the temporal test. The divergence is concentrated in MA20 signal exits, while stopped trades remain negative at 40 sessions.",
+  "next_action": "Register one method-level MA20 signal-exit ablation on the no-RS training candidate stream. Keep the hard stop, staged profit lock and 40-session cap. Do not vary MA periods or RS thresholds.",
+  "evidence": "data/research/vcp/runs/20260909T040548044921Z/trade-path-analysis.json"
+}

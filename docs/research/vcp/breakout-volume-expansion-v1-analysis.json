@@ -1,0 +1,33 @@
+{
+  "experiment": "vcp-breakout-volume-expansion-v1",
+  "baseline_run": "20260908T024521089151Z",
+  "training_start": "2016-01-01",
+  "kept": 168,
+  "quiet_breakout": 0,
+  "missing_volume_history": 3,
+  "baseline": {
+    "n_trades": 171,
+    "win_rate": 0.315789,
+    "profit_factor": 3.22,
+    "avg_pnl": 0.010753,
+    "avg_win": 0.104258,
+    "avg_loss": 0.032403
+  },
+  "variant": {
+    "n_trades": 168,
+    "win_rate": 0.315476,
+    "profit_factor": 3.21,
+    "avg_pnl": 0.010661,
+    "avg_win": 0.104038,
+    "avg_loss": 0.032373
+  },
+  "delta": {
+    "avg_pnl": -9.2e-05,
+    "win_rate": -0.000313,
+    "profit_factor": -0.01
+  },
+  "rule": "drop",
+  "pass_metric": "independent_avg_pnl_and_payoff",
+  "gaps": [],
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\breakout-volume-expansion-v1.json"
+}

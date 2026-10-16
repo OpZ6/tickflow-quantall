@@ -1,0 +1,34 @@
+{
+  "experiment": "abnormal-demand-shock-train-2016-2022-v1",
+  "research_question": "Does an unusually large, broad-market-relative volume shock add forward alpha after controlling for the same day's price strength?",
+  "mechanism_hypothesis": "A strong close accompanied by an exceptional increase in participation reflects information-driven demand whose price impact diffuses over subsequent sessions.",
+  "data_period": ["2015-01-05", "2022-12-30"],
+  "signal_period": ["2016-01-04", "2022-12-30"],
+  "event_definition": {
+    "universe": "SH/SZ stocks with adjusted close from CNY 3 to 300 and signal-day amount at least CNY 20 million",
+    "price_confirmation": "positive close-to-close return, close in the top 30% of the daily range, and same-day return percentile at least 80 among eligible stocks",
+    "volume_shock": "signal-day volume divided by the strictly prior 20-valid-session median volume",
+    "candidate": "volume-shock percentile at least 90 among eligible stocks on the signal date",
+    "matched_control": "same-date price-confirmed stock with volume-shock percentile from 40 through 60, chosen by nearest return percentile and then symbol",
+    "event_identity": "retain only the first candidate event for a stock within each 20-valid-session cooldown"
+  },
+  "execution": "Signal after the completed daily bar and enter at the next common market session open when the stock is tradable.",
+  "primary_horizon_bars": 20,
+  "reported_horizon_bars": [5, 20, 40],
+  "training_gate": {
+    "minimum_matched_candidates": 500,
+    "minimum_average_20d_alpha": 0.005,
+    "minimum_candidate_minus_control_20d_alpha": 0.005,
+    "minimum_positive_candidate_alpha_years": 5,
+    "minimum_positive_pair_spread_years": 5,
+    "minimum_40d_mfe_20pct_rate": 0.15,
+    "minimum_40d_mfe_20pct_enrichment_vs_control": 1.10
+  },
+  "success_action": "Freeze this exact event definition and run it once on 2023-01-03 through the available 2026 data.",
+  "failure_action": "Stop abnormal-demand threshold and window variants and return to the mechanism map.",
+  "constraints": [
+    "Do not inspect 2023-2026 outcomes unless every training gate passes.",
+    "Do not scan return ranks, volume ranks, close location, median window, cooldown or holding horizon.",
+    "Do not add VCP, market-regime, exit, position or portfolio filters."
+  ]
+}

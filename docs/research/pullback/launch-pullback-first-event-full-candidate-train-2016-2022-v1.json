@@ -1,0 +1,33 @@
+{
+  "base_protocol": "../vcp/launch-pullback-long-baseline-2016-2026-v1.json",
+  "experiment": "launch-pullback-first-event-full-candidate-train-2016-2022-v1",
+  "purpose": "evaluate_the_causal_first_pullback_event_after_each_volume_launch",
+  "hypothesis": "The first low-volume test that holds a launch-day midpoint may provide a better-priced continuation entry than buying the breakout itself.",
+  "semantic_fix": "Emit at most one entry for each prior launch event; no window, price, volume, support, stop or exit threshold changed.",
+  "backtest": {
+    "start": "2016-01-04",
+    "end": "2022-12-30",
+    "mode": "full",
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "universe_suffixes": [".SH", ".SZ"],
+  "analysis": {
+    "evaluation_horizon_bars": 40,
+    "early_path_bars": [5, 10, 20],
+    "large_winner_mfe_thresholds": [0.2, 0.5, 1.0]
+  },
+  "training_gate": {
+    "minimum_trades": 500,
+    "minimum_average_excess_return_held": 0.0,
+    "minimum_average_40d_excess_return": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "minimum_mfe_20pct_rate": 0.2
+  },
+  "temporal_test_period": ["2023-01-03", "2026-06-30"],
+  "constraints": [
+    "Execute every first-pullback event independently with T+1 fills and frozen costs.",
+    "Do not change launch, pullback, volume, support, stop or exit thresholds.",
+    "Do not inspect the temporal test unless every training gate passes.",
+    "A failed baseline stops this representation without adjacent variants."
+  ]
+}

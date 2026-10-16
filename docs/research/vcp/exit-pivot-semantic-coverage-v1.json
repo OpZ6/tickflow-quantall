@@ -1,0 +1,20 @@
+{
+  "run_id": "20260909T135940874097Z",
+  "scope": "exploratory exit-signal-day semantic coverage; not a preregistered strategy test",
+  "reconstruction_matched": 4396,
+  "signal_exit_count": 4394,
+  "cutoff": "exit signal day completed close versus original entry-signal pivot; no re-detection at exit",
+  "groups": {
+    "below_entry_pivot": {
+      "n": 2700,
+      "mean_realized_alpha": -0.051412119515506914,
+      "mean_fixed40_gross_alpha": -0.04570646001043399
+    },
+    "at_or_above_entry_pivot": {
+      "n": 1694,
+      "mean_realized_alpha": 0.06311355468385617,
+      "mean_fixed40_gross_alpha": 0.07893305902619932
+    }
+  },
+  "promotion_authorized": false
+}

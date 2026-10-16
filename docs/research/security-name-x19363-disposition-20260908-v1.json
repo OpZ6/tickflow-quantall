@@ -1,0 +1,42 @@
+{
+  "decision_id": "security-name-x19363-disposition-20260908-v1",
+  "reviewed_at": "2026-09-08T18:20:51+08:00",
+  "source_record": {
+    "source_symbol": "X19363.SH",
+    "name": "万联证券",
+    "start_date": "2019-08-21",
+    "ann_date": "2019-08-21",
+    "change_reason": "其他",
+    "source_page": "data/research/security-snapshots/20260907-namechange-v1/page-000000.json",
+    "source_page_sha256": "ba70f9316a0f55dd7165596821f495d5d3b96a43b4546696aa2e49f5a0d75cfe"
+  },
+  "verified_evidence": [
+    {
+      "finding": "The issuer still had an initial-public-offering application under CSRC feedback review on 2020-04-17.",
+      "source": "https://www.csrc.gov.cn/csrc/c100089/c1510739/content.shtml"
+    },
+    {
+      "finding": "The namechange contract calls ts_code a TS code but does not define an X prefix or any applicant placeholder convention.",
+      "source": "https://tushare.pro/document/2?doc_id=100"
+    }
+  ],
+  "local_cross_check": {
+    "other_rows_with_source_symbol": 0,
+    "other_rows_with_name": 0,
+    "standard_trading_symbol_mapping_found": false
+  },
+  "inference": "The company context is consistent with an IPO applicant, but the available evidence does not prove that X19363.SH is an IPO placeholder or identify a tradable security mapping.",
+  "decision": "retain_raw_and_reject_unresolved_identifier",
+  "production_behavior": {
+    "map_to_standard_symbol": false,
+    "silently_drop": false,
+    "publish_as_name_fact": false,
+    "normalizer_behavior_changed": false
+  },
+  "reopen_only_if": [
+    "the provider documents the exact identifier semantics",
+    "a later source page supplies an explicit identity mapping",
+    "an authoritative exchange or regulator record links the exact identifier to a trading symbol"
+  ],
+  "strategy_blocking": false
+}

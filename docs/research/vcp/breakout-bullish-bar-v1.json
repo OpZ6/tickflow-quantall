@@ -1,0 +1,19 @@
+{
+  "experiment": "vcp-breakout-bullish-bar-v1",
+  "thought": "VCP breakout should close up on the signal bar (demand into the close). Selection on the 321 upper-half book.",
+  "hypothesis": "Among bars that already close in the upper half, requiring close > open drops selling-into-close wicks and raises avg_pnl.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close",
+    "n_train_cited": 321,
+    "exits": "original"
+  },
+  "change": {
+    "id": "breakout_close_gt_open",
+    "definition": "Keep if signal-day close > open. Missing bar not kept, no roll. Do not scan a body-size threshold."
+  },
+  "pass_fail": {
+    "pass": "training avg_pnl not below the 321-trade baseline. If keep, also report 2023-2026 completed upper-half∩yang fills.",
+    "fail": "Drop. Next still VCP."
+  }
+}

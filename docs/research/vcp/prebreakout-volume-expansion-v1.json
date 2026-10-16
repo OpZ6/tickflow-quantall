@@ -1,0 +1,19 @@
+{
+  "experiment": "vcp-prebreakout-volume-expansion-v1",
+  "thought": "放量突破: the pivot is already in demand. Contraction-before-break lost. One filter: last 5 session mean volume >= 20-session mean.",
+  "hypothesis": "The 97 fills that were not contracted pulled the book. Keeping only pre-break expansion should raise avg_pnl versus the full 171-trade baseline.",
+  "baseline": {
+    "run_id": "20260908T024521089151Z",
+    "exits": "recorded exits plus two-bar never-+3%",
+    "prior_fail": "prebreakout 5d < 20d mean"
+  },
+  "change": {
+    "id": "prebreakout_5d_volume_ge_20d_mean",
+    "definition": "Keep the fill if mean volume of the 5 market sessions before entry_signal_date >= mean of the 20 market sessions before it. Holes are not in the variant."
+  },
+  "metric": {"primary": "independent-trade win_rate, profit_factor, avg_pnl vs full current baseline"},
+  "pass_fail": {
+    "pass": "avg_pnl not below baseline.",
+    "fail": "Drop. Next: entry 回踩/企稳 or a sell, still in the four thoughts."
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "base_protocol": "five-year-score80-breakout-v1.json",
+  "experiment": "vcp-five-year-score80-breakout-cross-v1",
+  "purpose": "training_mechanism_test",
+  "hypothesis": "Require a first close across the pivot for the score-80 breakout-only candidate to avoid repeated entries after an already extended break.",
+  "backtest": {
+    "params": {
+      "require_pivot_cross": true
+    }
+  }
+}

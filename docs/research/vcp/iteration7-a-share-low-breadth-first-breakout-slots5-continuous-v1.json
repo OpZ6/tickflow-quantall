@@ -1,0 +1,11 @@
+{
+  "base_protocol": "iteration7-a-share-early-recovery-first-breakout-slots5-continuous-v1.json",
+  "experiment": "vcp-iteration7-a-share-low-breadth-first-breakout-slots5-continuous-v1",
+  "purpose": "increase_signal_coverage_across_all_low_breadth_sessions",
+  "hypothesis": "First VCP pivot breakouts retain positive expectancy throughout sub-30-percent MA20 breadth, increasing opportunity count beyond only five-session breadth improvements.",
+  "backtest": {
+    "params": {
+      "market_breadth_rising_days": 0
+    }
+  }
+}

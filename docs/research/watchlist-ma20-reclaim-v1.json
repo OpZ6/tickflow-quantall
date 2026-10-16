@@ -1,0 +1,32 @@
+{
+  "experiment": "watchlist-ma20-reclaim-v1",
+  "layer": 3,
+  "prior": "docs/research/watchlist-prior-bar-high-breakout-v1-decision.md",
+  "hypothesis_source": "Every high-takeout breakout on the leader watch list lost to same-day untriggered names at 10/20 days (20d high, rolling 20d high, inside-bar, prior-bar high). Mechanism: on already-strong names, taking out a high is a chase that mean-reverts in the swing window. Remaining trigger in the OS: pullback confirmation. Definition: prior close below MA20, signal close back above MA20. Demand returning after a dip, not a new high.",
+  "distinct_from_failed_representations": "Not taking out a high. Not all-market launch_pullback_support. Not waiting after a breakout. Not VCP. Difference from high-takeout family: the event is reclaiming the 20-session mean after being below it.",
+  "exposure": "Training 2016-01-01 through 2022-12-31.",
+  "watch_list": {"unchanged_from": "watchlist-20d-high-breakout-v1"},
+  "trigger": {
+    "id": "ma20_reclaim",
+    "definition": "MA20 is valid_rolling_mean of close over 20 valid bars. Prior session close < prior MA20, signal close > signal MA20. Missing MA20 or prior close does not trigger."
+  },
+  "selected": "Watch list AND MA20 reclaim.",
+  "control": "Same-day watch-list names without that reclaim.",
+  "windows": {"diagnostic": 5, "primary": [10, 20]},
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "10-day and 20-day date-EW net of the reclaim subset is not worse than same-day watch names without the reclaim.",
+    "fail": "Rewrite only the reclaim event once (mechanistic difference, e.g. hold-above-MA20 then up-close, not a 19/21 MA scan). Stay on the trigger layer. Do not add VCP. Do not reopen high-takeout.",
+    "not_claimed": "No live qualification."
+  },
+  "outputs": [
+    "docs/research/watchlist-ma20-reclaim-v1.json",
+    "docs/research/watchlist-ma20-reclaim-v1-analysis.json",
+    "docs/research/watchlist-ma20-reclaim-v1-decision.md"
+  ]
+}

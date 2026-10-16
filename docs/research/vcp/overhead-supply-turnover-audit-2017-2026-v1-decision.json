@@ -1,0 +1,34 @@
+{
+  "experiment": "overhead-supply-turnover-audit-2017-2026-v1",
+  "decision": "stop",
+  "reason": "Cumulative float turnover since the final pivot had only a weak association with the binary breakout label, was not stable across years or quintiles, and was negatively associated with 40-day return. More ownership rotation cannot be treated as overhead-supply absorption by itself.",
+  "coverage": {
+    "candidate_setups": 3436,
+    "usable_setups": 3432,
+    "rate": 0.9988358556461001,
+    "share_history_rejections": 0,
+    "no_interval_sessions": 4
+  },
+  "results": {
+    "pairwise_probability": 0.5217383414790644,
+    "years_positive": 5,
+    "years_negative": 3,
+    "top_minus_bottom_quintile_breakout_rate": 0.020410946934095453,
+    "spearman_return_40d": -0.08473018994297266,
+    "all_gates_passed": false
+  },
+  "quintile_direction": {
+    "lowest_turnover_breakout_rate": 0.3671071953010279,
+    "highest_turnover_breakout_rate": 0.3875181422351234,
+    "lowest_turnover_median_return_40d": -0.004287600517272949,
+    "highest_turnover_median_return_40d": -0.04424780607223511
+  },
+  "stopped_variants": [
+    "per-day turnover",
+    "alternate pivot windows",
+    "absolute turnover cutoffs",
+    "turnover-weighted VCP scores",
+    "portfolio backtest using this feature"
+  ],
+  "next_action": "Close the auxiliary-factor path on forward-v2. Build the next v3 candidate generator directly from the SH/SZ trend universe with an explicit causal VCP state machine, and validate its own candidates against fresh outcome-blind semantic samples."
+}

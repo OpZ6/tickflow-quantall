@@ -1,0 +1,35 @@
+{
+  "experiment": "production-leader-next-open-chase-audit-2016-2026-v1",
+  "registered_before_outcome_analysis": true,
+  "question": "Does reapplying the frozen 2.5 percent pivot chase boundary to the actual T+1 opening fill remove materially worse VCP entries?",
+  "baseline_run": "20260908T143326722024Z",
+  "development_scope": "The full 2016-01-04 through 2026-06-30 interval is exposed frozen development data. Results select a research version and are not independent validation.",
+  "fixed_intervention": {
+    "rule": "Cancel a pending entry when the actual T+1 opening price exceeds the signal-date pivot by more than the detector's existing max_chase value of 2.5 percent.",
+    "causality": "The pivot is frozen at the completed signal close and the opening price is known before an opening fill. No later bar or trade outcome is used.",
+    "unchanged": [
+      "candidate detector",
+      "market regime",
+      "candidate ranking",
+      "T+1 validity",
+      "four-position portfolio",
+      "exit rules",
+      "costs"
+    ]
+  },
+  "diagnostic_gates": {
+    "entry_reconstruction_mismatches_max": 0,
+    "rejected_trades_min": 20,
+    "rejected_entry_years_min": 5,
+    "rejected_average_pnl_below_retained": true,
+    "rejected_stop_loss_share_above_retained": true,
+    "three_fixed_eras_all_have_rejected_average_pnl_below_retained": [
+      "2016-2018",
+      "2019-2022",
+      "2023-2026"
+    ]
+  },
+  "next_if_pass": "Register a separate VCP strategy version with the fixed actual-open chase cancellation and run one same-cost portfolio comparison over the three fixed eras and full interval.",
+  "next_if_fail": "Stop actual-open chase handling without trying adjacent percentages. Continue strategy iteration at the next full trade-lifecycle mechanism.",
+  "stop_rule": "Do not test another chase percentage or combine this rule with any other entry filter on this exposed interval."
+}

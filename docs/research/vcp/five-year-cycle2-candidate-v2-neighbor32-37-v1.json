@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-candidate-v2-investable-pool-v1.json",
+  "experiment": "vcp-five-year-cycle2-candidate-v2-neighbor32-37-v1",
+  "purpose": "candidate_v2_pre_holdout_boundary_stability",
+  "hypothesis": "The investable candidate remains profitable under the frozen shifted 32%-37% neighboring breadth band.",
+  "backtest": {"params": {"market_breadth_ma20_min": 0.32, "market_breadth_ma20_max": 0.37}}
+}

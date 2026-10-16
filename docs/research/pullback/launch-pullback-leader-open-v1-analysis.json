@@ -1,0 +1,60 @@
+{
+  "experiment": "launch-pullback-leader-open-v1",
+  "baseline_run": "20260909T053715693165Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\pullback\\launch-pullback-leader-open-v1.json",
+  "training_2016_2022": {
+    "skipped": 30665,
+    "baseline": {
+      "n_trades": 32086,
+      "win_rate": 0.25014,
+      "profit_factor": 2.25,
+      "avg_pnl": -0.009777,
+      "avg_win": 0.117306,
+      "avg_loss": 0.05217
+    },
+    "variant": {
+      "n_trades": 1421,
+      "win_rate": 0.278677,
+      "profit_factor": 2.61,
+      "avg_pnl": 0.000351,
+      "avg_win": 0.146477,
+      "avg_loss": 0.056103
+    },
+    "delta": {
+      "avg_pnl": 0.010128,
+      "win_rate": 0.028537,
+      "profit_factor": 0.36
+    },
+    "rule": "keep"
+  },
+  "kept": 1421,
+  "rule": "keep",
+  "gaps": [],
+  "validation_2023_2026": {
+    "baseline": {
+      "n_trades": 22,
+      "win_rate": 0.636364,
+      "profit_factor": 1.69,
+      "avg_pnl": 0.030915,
+      "avg_win": 0.073432,
+      "avg_loss": 0.04349
+    },
+    "variant": {
+      "n_trades": 7,
+      "win_rate": 0.428571,
+      "profit_factor": 1.59,
+      "avg_pnl": 0.005643,
+      "avg_win": 0.081869,
+      "avg_loss": 0.051527
+    },
+    "kept": 7,
+    "incomplete_excluded": 0,
+    "delta": {
+      "avg_pnl": -0.025272,
+      "win_rate": -0.207793,
+      "profit_factor": -0.1
+    },
+    "rule": "drop"
+  },
+  "validation_note": "exposure, not a clean holdout; this ledger has few 2023+ fills"
+}

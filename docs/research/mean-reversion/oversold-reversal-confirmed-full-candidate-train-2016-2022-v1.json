@@ -1,0 +1,34 @@
+{
+  "base_protocol": "../vcp/production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "oversold-reversal-confirmed-full-candidate-train-2016-2022-v1",
+  "purpose": "establish_a_causal_full_candidate_alpha_baseline_for_oversold_mean_reversion",
+  "hypothesis": "An oversold stock that posts a positive day and regains MA5 may exhibit short-horizon market-relative mean reversion.",
+  "selection_reason": "Represents a different mechanism from trend following, uses available point-in-time daily price fields, and provides price confirmation without adding a second volume hypothesis; selection did not use historical returns.",
+  "semantic_fix": "Register a dedicated signal and emit it only when the complete oversold-reversal confirmation changes from false to true.",
+  "backtest": {
+    "strategy_id": "oversold_reversal",
+    "start": "2016-01-04",
+    "end": "2022-12-30",
+    "mode": "full"
+  },
+  "universe_suffixes": [".SH", ".SZ"],
+  "analysis": {
+    "evaluation_horizon_bars": 40,
+    "early_path_bars": [5, 10, 20],
+    "large_winner_mfe_thresholds": [0.2, 0.5, 1.0]
+  },
+  "training_gate": {
+    "minimum_trades": 500,
+    "minimum_average_excess_return_held": 0.0,
+    "minimum_average_40d_excess_return": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "minimum_positive_5d_excess_return": 0.0
+  },
+  "temporal_test_period": ["2023-01-03", "2026-06-30"],
+  "constraints": [
+    "Use builtin default RSI, positive-day, MA5 confirmation, stop and exit definitions.",
+    "Execute each confirmation transition independently with T+1 fills and frozen costs.",
+    "Do not inspect the temporal test unless every training gate passes.",
+    "A failed baseline stops the default representation without RSI, return, MA or holding-period searches."
+  ]
+}

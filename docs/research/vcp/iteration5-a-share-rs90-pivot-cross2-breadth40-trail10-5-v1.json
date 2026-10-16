@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration5-a-share-rs90-pivot-cross2-trail10-5-v1.json",
+  "experiment": "vcp-iteration5-a-share-rs90-pivot-cross2-breadth40-trail10-5-v1",
+  "purpose": "iteration5_a_share_early_breadth_window",
+  "hypothesis": "Restricting rising MA20 market breadth from 30%-50% to 30%-40% should focus clean RS90 VCP entries on the early recovery window; development candidates in this band showed materially stronger fast-breakout and 20-day follow-through than the 40%-50% band.",
+  "backtest": {
+    "params": {
+      "market_breadth_ma20_max": 0.40
+    }
+  },
+  "trial_note": "Only the upper market-breadth entry bound changes relative to the clean-pivot trailing protocol. Individual-stock filters, exit rules, costs, ten slots, universe and development interval remain frozen."
+}

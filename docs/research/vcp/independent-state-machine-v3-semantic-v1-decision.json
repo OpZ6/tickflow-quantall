@@ -1,0 +1,43 @@
+{
+  "experiment": "independent-state-machine-v3-semantic-v1",
+  "decision": "stop",
+  "reason": "The independent state machine separated supported from unsupported trend breakouts, but it still admitted too many broad, discontinuous or reversal-like charts to define a faithful VCP candidate source.",
+  "blind_evidence": {
+    "cases": 32,
+    "labels_sha256": "025e4abbb17664a60e25520e643f35607f096bf583048ec2bb1aa12c7982b1c1",
+    "label_freeze_verified": true,
+    "identity_status_date_and_future_outcomes_hidden_until_label_freeze": true,
+    "supported": {
+      "cases": 16,
+      "classic": 1,
+      "partial": 9,
+      "nonclassic": 6,
+      "classic_or_partial_rate": 0.625,
+      "nonclassic_rate": 0.375
+    },
+    "unsupported": {
+      "cases": 16,
+      "classic": 1,
+      "partial": 4,
+      "nonclassic": 11,
+      "classic_or_partial_rate": 0.3125,
+      "nonclassic_rate": 0.6875
+    },
+    "supported_minus_unsupported_classic_or_partial": 0.3125
+  },
+  "gate_results": {
+    "supported_classic_or_partial_rate_at_least_0_75": false,
+    "supported_nonclassic_rate_at_most_0_25": false,
+    "supported_minus_unsupported_at_least_0_30": true
+  },
+  "post_unblind_diagnosis": "The six supported nonclassic cases were dominated by broad cycles, gap or vertical repricing, cup-like recovery and abrupt shelves. High-low reversal logic can confirm a trough and recovery on the same bar and can mistake short intrabar oscillations for persistent supply contraction.",
+  "stopped_variants": [
+    "lookback changes",
+    "threshold changes",
+    "wave-count changes",
+    "volume-rule changes",
+    "trend-context changes",
+    "historical portfolio backtest of this representation"
+  ],
+  "next_action": "Replace intrabar high-low wave confirmation with one close-confirmed, temporally ordered contraction-path hypothesis. Pre-register it and evaluate it on a new blind packet without reopening forward-v2 or tuning the failed state machine."
+}

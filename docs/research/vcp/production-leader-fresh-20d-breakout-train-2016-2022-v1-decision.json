@@ -1,0 +1,27 @@
+{
+  "experiment": "production-leader-fresh-20d-breakout-train-2016-2022-v1",
+  "run_id": "20260909T093218250638Z",
+  "decision": "freeze_actual_implementation_for_temporal_test",
+  "implementation_parity": {
+    "actual_trades": 117,
+    "legacy_funnel_production_trade_overlap": 115,
+    "actual_only": 2,
+    "legacy_funnel_only": 2,
+    "exact_match": false,
+    "interpretation": "The legacy funnel manually reconstructed signal gates and omitted exact production candidate filtering, so its selected_by_vcp label is diagnostic rather than an authoritative candidate ledger."
+  },
+  "protocol_deviation": "The preregistered exact-match target was invalid because it treated the diagnostic funnel label as production ground truth. The four-key discrepancy is retained; the actual strategy rule and ledger were frozen before temporal-test inspection.",
+  "training_result": {
+    "average_excess_return_held": 0.009419,
+    "average_40d_excess_return": 0.037719,
+    "positive_40d_alpha_years": 6,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 51,
+    "mfe_50pct_count": 9,
+    "mfe_100pct_count": 0,
+    "maximum_label_end_date": "2022-12-09"
+  },
+  "frozen_rule": "require_fresh_20d_breakout=true with every other production VCP default unchanged",
+  "next_action": "Run the rule once on temporal-test fills from 2023-03-08 through 2026-06-30; accept or reject without tuning.",
+  "evidence": "data/research/vcp/runs/20260909T093218250638Z/trade-path-analysis.json"
+}

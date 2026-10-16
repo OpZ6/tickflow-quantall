@@ -1,0 +1,11 @@
+{
+  "base_protocol": "five-year-cycle2-candidate-v2-investable-pool-v1.json",
+  "experiment": "vcp-five-year-cycle2-candidate-v2-cost-stress-v1",
+  "purpose": "candidate_v2_pre_holdout_cost_stress",
+  "hypothesis": "The frozen candidate remains profitable when round-trip friction is increased from 31 bp to 60 bp.",
+  "backtest": {
+    "commission_pct": 0.0005,
+    "stamp_tax_pct": 0.001,
+    "slippage_bps": 20.0
+  }
+}

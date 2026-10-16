@@ -1,0 +1,61 @@
+{
+  "experiment": "vcp-breakeven-after-5pct-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\vcp\\breakeven-after-5pct-v1.json",
+  "upper_half_train": 321,
+  "training_2016_2022": {
+    "baseline": {
+      "n_trades": 321,
+      "win_rate": 0.267913,
+      "profit_factor": 3.94,
+      "avg_pnl": 0.0124,
+      "avg_win": 0.150736,
+      "avg_loss": 0.038225
+    },
+    "variant": {
+      "n_trades": 321,
+      "win_rate": 0.267913,
+      "profit_factor": 4.04,
+      "avg_pnl": 0.012957,
+      "avg_win": 0.149747,
+      "avg_loss": 0.037102
+    },
+    "shortened": 12,
+    "blocked_kept_baseline": 6,
+    "delta": {
+      "avg_pnl": 0.000557,
+      "win_rate": 0.0,
+      "profit_factor": 0.1
+    },
+    "rule": "keep"
+  },
+  "rule": "keep",
+  "gaps": [],
+  "validation_2023_2026": {
+    "baseline": {
+      "n_trades": 258,
+      "win_rate": 0.271318,
+      "profit_factor": 3.68,
+      "avg_pnl": 0.011578,
+      "avg_win": 0.157703,
+      "avg_loss": 0.042831
+    },
+    "variant": {
+      "n_trades": 258,
+      "win_rate": 0.271318,
+      "profit_factor": 3.79,
+      "avg_pnl": 0.012327,
+      "avg_win": 0.155664,
+      "avg_loss": 0.041043
+    },
+    "shortened": 10,
+    "blocked_kept_baseline": 1,
+    "delta": {
+      "avg_pnl": 0.000749,
+      "win_rate": 0.0,
+      "profit_factor": 0.11
+    },
+    "rule": "keep",
+    "incomplete_excluded": 0
+  }
+}

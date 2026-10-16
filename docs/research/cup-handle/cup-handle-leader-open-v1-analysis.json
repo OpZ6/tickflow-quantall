@@ -1,0 +1,33 @@
+{
+  "experiment": "cup-handle-leader-open-v1",
+  "baseline_run": "20260909T133226351846Z",
+  "protocol": "D:\\tickflow-quantall\\docs\\research\\cup-handle\\cup-handle-leader-open-v1.json",
+  "kept": 3750,
+  "training_2016_2022": {
+    "skipped": 94739,
+    "baseline": {
+      "n_trades": 98489,
+      "win_rate": 0.282631,
+      "profit_factor": 1.87,
+      "avg_pnl": -0.007945,
+      "avg_win": 0.079472,
+      "avg_loss": 0.042386
+    },
+    "variant": {
+      "n_trades": 3750,
+      "win_rate": 0.334133,
+      "profit_factor": 2.01,
+      "avg_pnl": 0.000264,
+      "avg_win": 0.085052,
+      "avg_loss": 0.042283
+    },
+    "delta": {
+      "avg_pnl": 0.008209,
+      "win_rate": 0.051502,
+      "profit_factor": 0.14
+    },
+    "rule": "keep"
+  },
+  "rule": "keep",
+  "gaps": []
+}

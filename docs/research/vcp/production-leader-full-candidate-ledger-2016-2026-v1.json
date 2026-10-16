@@ -1,0 +1,26 @@
+{
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "production-leader-full-candidate-ledger-2016-2026-v1",
+  "purpose": "measure_selection_and_exit_quality_for_every_executable_vcp_signal",
+  "question": "Across the full Shanghai and Shenzhen candidate stream, which VCP signals develop into large winners and how much of each favorable path do the current exits retain?",
+  "single_change": "Execute every candidate independently instead of applying portfolio cash, slot or same-day ranking constraints.",
+  "universe_suffixes": [
+    ".SH",
+    ".SZ"
+  ],
+  "backtest": {
+    "mode": "full"
+  },
+  "analysis": {
+    "large_winner_mfe_thresholds": [
+      0.2,
+      0.5,
+      1.0
+    ],
+    "early_path_bars": [
+      5,
+      10,
+      20
+    ]
+  }
+}

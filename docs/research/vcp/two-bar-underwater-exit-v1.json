@@ -1,0 +1,14 @@
+{
+  "experiment": "two-bar-underwater-exit-v1",
+  "baseline_run": "20260909T030431101979Z",
+  "hypothesis": "Distinguish a failed breakout below entry price from a slow but intact launch: only exit no-demand trades whose second-session close is below entry price.",
+  "source": "AI hypothesis recorded in goal.md after full-candidate no-demand-v1 rejection; training outcomes already exposed",
+  "require_underwater": true,
+  "only_change": "On the 474 original independent fills, if entry-session and next-market-session highs both remain below entry_price*1.03 AND second-session close < entry_price, sell at third-session open strictly before original exit. Equal close keeps original exit. Missing close keeps original exit. Existing blocked-fill handling is unchanged.",
+  "training": "Entry 2016-2022 and original exit <= 2022-12-31; no testing-period bars",
+  "cost": "T+1; commission 0.0003; slippage 10bps; historical stamp tax; unchanged net_round_trip",
+  "gate": "Keep provisionally only if mean net return >= original baseline and positive. Report win rate, payoff, changed winners and losers, yearly deltas. No threshold or day-count search.",
+  "failure_action": "Reject this sell; do not tune the cost boundary or demand threshold. Keep full original baseline and use loss-path evidence to identify a different mechanism.",
+  "scope": "All completed independent training fills, not all raw signals. Training censored and unfilled candidates are not newly replayed here.",
+  "output": "data/research/vcp/two-bar-underwater-exit-v1"
+}

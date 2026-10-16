@@ -1,0 +1,31 @@
+{
+  "experiment": "supply-wave-v3-semantic-v1",
+  "registered_before_implementation": true,
+  "question": "Does requiring two completed contraction-and-recovery waves with declining downside supply identify classic or partial VCP structures more faithfully than broad VCP candidates?",
+  "scope": "Semantic representation only. The broad detector supplies the evaluation universe, but its selected legs, pivot, score, entry, exit and portfolio rules are not reused by the representation.",
+  "fixed_method": {
+    "causality": "All bars through the completed signal day may be used; any trade would occur no earlier than the next valid market open.",
+    "wave": "A completed wave is a confirmed high-low-high sequence. The recovery high must regain at least half of the decline without exceeding the first high by more than 4 percent.",
+    "chain": "Use the latest two adjacent completed waves sharing their middle high. The second wave must be shallower and its downside volume-weighted price pressure must be lower.",
+    "pivot_integrity": "After the second recovery high, completed closes may not exceed that pivot by more than one recent median daily range before the signal bar.",
+    "right_edge": "The last pre-signal close must be in the upper half of the final wave.",
+    "demand": "The completed signal bar must close above the recovered pivot, in the upper half of its own range, on volume above the median of the preceding 20 completed bars.",
+    "supported": "The wave chain, pivot integrity, right-edge and demand conditions all hold. No weighted score is used."
+  },
+  "fresh_blind_packet": {
+    "years": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    "per_year": {"supported": 2, "unsupported": 2},
+    "exclusions": "All cases from the two earlier semantic packets are excluded.",
+    "selection": "Ascending SHA-256 of symbol, signal date, scale, and sealed representation status; future outcomes are not part of selection.",
+    "hidden_until_labels_frozen": ["representation status", "symbol", "calendar date", "future return", "future excursion"],
+    "labels": ["classic", "partial", "nonclassic"]
+  },
+  "semantic_acceptance": {
+    "supported_classic_or_partial_rate_min": 0.75,
+    "supported_nonclassic_rate_max": 0.25,
+    "supported_minus_unsupported_classic_or_partial_min": 0.30
+  },
+  "stop_rule": "If any semantic gate fails, stop this representation. Do not vary swing span, recovery fraction, pivot tolerance, volume baseline or acceptance gates on the same or exposed packets.",
+  "next_if_pass": "Implement a separately named matrix-native v3 candidate and run one fixed time-split diagnostic against forward-v2.",
+  "next_if_fail": "Keep forward-v2 as the usable baseline and replace the representation concept rather than tuning this one."
+}

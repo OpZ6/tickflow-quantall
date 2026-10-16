@@ -1,0 +1,58 @@
+{
+  "decision": "adopt_a_share_historical_stamp_tax",
+  "scope": "2016-2026_a_share_research_execution",
+  "strategy_rules_changed": false,
+  "policy": {
+    "side": "sell_only",
+    "supported_from": "2008-09-19",
+    "before_2023-08-28": 0.001,
+    "from_2023-08-28": 0.0005,
+    "rate_date": "exit_date",
+    "official_sources": [
+      "https://www.mof.gov.cn/zhengwuxinxi/caizhengxinwen/200809/t20080919_76432.htm",
+      "https://www.mof.gov.cn/jrttts/202308/t20230828_3904235.htm"
+    ]
+  },
+  "execution_contract": {
+    "policy_name": "a_share_historical",
+    "missing_exit_date": "reject",
+    "fixed_policy_backward_compatible": true,
+    "applied_simulation_paths": [
+      "legacy",
+      "independent_matrix",
+      "independent_panel",
+      "portfolio_matrix",
+      "portfolio_panel"
+    ]
+  },
+  "baseline_comparison": {
+    "previous_run": "20260908T021955114526Z",
+    "historical_stamp_tax_run": "20260908T024521089151Z",
+    "candidates_before": 837,
+    "candidates_after": 837,
+    "trades_before": 290,
+    "trades_after": 290,
+    "structural_trade_sequence_identical": true,
+    "structural_trade_sha256": "39abbec16ec526b4ecafcc4538351c9f315876e4a217b9314e11b0aff84c9da9",
+    "pre_policy_change_exits": 183,
+    "post_policy_change_exits": 107,
+    "previous_total_return": 2.0969,
+    "historical_stamp_tax_total_return": 2.0201,
+    "previous_annual_return": 0.1184,
+    "historical_stamp_tax_annual_return": 0.1156,
+    "previous_max_drawdown": -0.232,
+    "historical_stamp_tax_max_drawdown": -0.2377,
+    "previous_sharpe": 0.74,
+    "historical_stamp_tax_sharpe": 0.72,
+    "trade_timing_violations": 0
+  },
+  "minimum_commission_sensitivity": {
+    "commission_rate": 0.0003,
+    "minimum_entry_gross": 194662.03,
+    "minimum_exit_gross": 192160.82,
+    "lowest_proportional_commission": 57.648246,
+    "orders_below_16666.67_gross": 0,
+    "conclusion": "Any per-order minimum commission at or below 57.64 yuan is non-binding for all 580 order legs in this baseline, so no engine change or rerun is required."
+  },
+  "interpretation": "The correction changes only historical sell costs and capital compounding. Candidate selection and the complete structural trade sequence are unchanged, so the lower return is accepted without retuning or reopening historical strategy variants."
+}

@@ -1,0 +1,11 @@
+{
+  "base_protocol": "iteration4-setup-dedup-control-v1.json",
+  "experiment": "vcp-iteration4-setup-dedup-v1",
+  "purpose": "iteration4_setup_identity_ablation",
+  "hypothesis": "Trading each symbol, pivot date and scale at most once prevents stale-base re-entry losses and improves payoff, drawdown and risk-adjusted return without narrowing the stock pool.",
+  "backtest": {
+    "params": {
+      "deduplicate_setups": true
+    }
+  }
+}

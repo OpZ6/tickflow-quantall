@@ -1,0 +1,13 @@
+{
+  "base_protocol": "iteration4-turnover-rank25-stop7-v1.json",
+  "experiment": "vcp-iteration4-turnover-rank25-stop7-trail10-5-v1",
+  "purpose": "iteration4_profit_protection",
+  "hypothesis": "After a VCP breakout has gained 10%, exiting on a 5% drawdown from its peak prevents demonstrated breakouts from round-tripping into full stop losses while preserving larger right-tail winners.",
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": 0.10,
+      "trailing_take_profit_drawdown": 0.05
+    }
+  },
+  "trial_note": "The 10% activation matches the frozen primary breakout label. The 5% peak drawdown is a single pre-declared profit-protection rule; no trailing grid is run."
+}

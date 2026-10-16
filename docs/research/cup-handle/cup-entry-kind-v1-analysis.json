@@ -1,0 +1,12 @@
+{
+  "source_run": "20260909T133226351846Z",
+  "n": 2034,
+  "status_counts": {
+    "executable": 2034
+  },
+  "stage_counts": {
+    "cup_lip_support_retest": 2032,
+    "right_rim_breakout_without_pullback": 2
+  },
+  "scope": "Signal-day detector reconstruction; no outcome-based category or return comparison"
+}

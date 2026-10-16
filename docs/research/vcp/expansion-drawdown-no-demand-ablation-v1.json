@@ -1,0 +1,14 @@
+{
+  "experiment": "expansion-drawdown-no-demand-ablation-v1",
+  "matched_run": "20260908T024521089151Z",
+  "full_run": "20260909T030431101979Z",
+  "source": "Earlier full-cohort no-demand failure and current composite now has 313 filled selections; exploratory ablation, all training outcomes exposed",
+  "remove_no_demand": true,
+  "comparison_output": "data/research/vcp/peak-close-drawdown-exit-v1",
+  "only_change": "Remove two-bar no-demand exit. Keep prior 5/20 volume expansion filter, original exits and added 8 percent close-peak drawdown exit. Recompute the peak stop up to original exit rather than stop at removed no-demand exit.",
+  "scope": "Identical 313 full independent completed training selections; report old 97 portfolio-fill subset for transparency, not as full-mode acceptance gate",
+  "gate": "Advance full independent composite baseline only if mean net return >= current full composite and positive. Report payoff, win rate, annual changes and matched subset disagreement.",
+  "cost_and_boundaries": "Exactly peak-close-drawdown-exit-v1. Training only through original exit <= 2022-12-31. No new threshold or window.",
+  "failure_action": "Retain current full composite. Stop this ablation; no altered no-demand threshold.",
+  "output": "data/research/vcp/expansion-drawdown-no-demand-ablation-v1"
+}

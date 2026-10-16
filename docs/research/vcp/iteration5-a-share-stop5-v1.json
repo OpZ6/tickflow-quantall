@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration4-early-recovery-turnover3-v1.json",
+  "experiment": "vcp-iteration5-a-share-stop5-v1",
+  "purpose": "iteration5_a_share_fast_failure_stop",
+  "hypothesis": "For faster A-share rotation, reducing the initial account stop from 7% to 5% should cut failed breakouts before correlated losses expand, while preserving aggregate monetary profit factor and enough 10%/7% follow-through winners.",
+  "backtest": {
+    "overrides": {
+      "stop_loss": -0.05
+    }
+  },
+  "trial_note": "Only the account stop changes. Entry filters, MA20 signal exit, 40-day maximum hold, costs, ten slots and the development interval remain frozen."
+}

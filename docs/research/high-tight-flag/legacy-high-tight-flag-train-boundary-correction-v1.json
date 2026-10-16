@@ -1,0 +1,19 @@
+{
+  "run_id": "20260909T101658309142Z",
+  "decision": "invalidate_strict_training_qualification_preserve_exploratory_evidence",
+  "supersedes_qualification_of": "legacy-high-tight-flag-full-candidate-train-2016-2022-v1-decision.json",
+  "training_boundary": "2022-12-31",
+  "last_actual_exit": "2022-12-20",
+  "exit_overlap_count": 0,
+  "label_overlap_count": 4,
+  "latest_label_end": "2023-02-17",
+  "overlaps": [
+    {"symbol": "002052.SZ", "entry_date": "2022-12-02", "label_end": "2023-02-06"},
+    {"symbol": "002335.SZ", "entry_date": "2022-12-05", "label_end": "2023-02-07"},
+    {"symbol": "002335.SZ", "entry_date": "2022-12-06", "label_end": "2023-02-08"},
+    {"symbol": "688428.SH", "entry_date": "2022-12-15", "label_end": "2023-02-17"}
+  ],
+  "cause": "The full-mode runner extends execution beyond the final signal date; the path analyzer independently reads future label bars. Setting backtest.end to year-end does not enforce a training data boundary.",
+  "interpretation": "The stored negative Alpha and right-tail counts remain exploratory observations. They do not establish a clean training gate or prove that the whole strategy family is ineffective. Future market-outcome buckets are retrospective attribution, not tradable regime tests.",
+  "next_action": "Enforce an explicit training data and label cutoff before another baseline. Preserve all old artifacts and record early-2023 exposure; do not relabel the exposed dates as untouched holdout."
+}

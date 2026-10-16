@@ -1,0 +1,34 @@
+{
+  "base_protocol": "../vcp/production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "high-tight-flag-full-candidate-train-2016-2022-v1",
+  "purpose": "establish_a_frozen_full_candidate_alpha_baseline_for_a_strategy_family_distinct_from_vcp",
+  "hypothesis": "A rapid repricing followed by a short shallow volume-contracting flag can retain market-relative expansion after a causal next-open entry.",
+  "selection_reason": "Uses available point-in-time daily OHLCV, has a distinct behavioral mechanism from the broad VCP detector, and explicitly targets large expansion leaders; selection did not use historical strategy returns.",
+  "backtest": {
+    "strategy_id": "high_tight_flag_breakout",
+    "start": "2016-01-04",
+    "end": "2022-12-30",
+    "mode": "full"
+  },
+  "universe_suffixes": [".SH", ".SZ"],
+  "analysis": {
+    "evaluation_horizon_bars": 40,
+    "early_path_bars": [5, 10, 20],
+    "large_winner_mfe_thresholds": [0.2, 0.5, 1.0]
+  },
+  "training_gate": {
+    "minimum_trades": 40,
+    "minimum_average_excess_return_held": 0.0,
+    "minimum_average_40d_excess_return": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "minimum_mfe_20pct_rate": 0.25,
+    "minimum_mfe_50pct_count": 10
+  },
+  "temporal_test_period": ["2023-01-03", "2026-06-30"],
+  "constraints": [
+    "Use builtin default pole, flag, volume, stop and exit rules without parameter overrides.",
+    "Execute every candidate independently with T+1 fills and the frozen cost model.",
+    "Do not inspect the temporal test unless every training gate passes.",
+    "A failed baseline stops this default representation without adjacent parameter searches."
+  ]
+}

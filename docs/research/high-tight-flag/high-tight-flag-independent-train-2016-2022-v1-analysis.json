@@ -1,0 +1,15 @@
+{
+  "experiment": "high-tight-flag-independent-train-2016-2022-v1",
+  "strategy_id": "quants_high_tight_flag_legacy_v1",
+  "baseline_run": "20260909T130617820559Z",
+  "n_all": 1245,
+  "training": {
+    "n_trades": 1245,
+    "win_rate": 0.258635,
+    "profit_factor": 2.34,
+    "avg_pnl": -0.010655,
+    "avg_win": 0.182955,
+    "avg_loss": 0.078199
+  },
+  "gaps": []
+}

@@ -1,0 +1,19 @@
+{
+  "experiment": "vcp-min-legs-3-v1",
+  "thought": "VCP 321 upper-half ∩ 5% breakeven book. One structure filter: causal detector primary at entry_signal_date has at least 3 contraction legs. Do not scan min_legs. Do not change frozen observer defaults.",
+  "hypothesis": "Requiring a third contraction drops noisy two-leg setups and lifts independent avg_pnl versus +1.30%.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close AND breakeven_after_5pct",
+    "n_train": 321,
+    "avg_pnl": 0.012957
+  },
+  "change": {
+    "id": "min_legs_ge_3",
+    "definition": "Reconstruct with shipped detect() and frozen-run defaults (min_legs still 2). Keep if len(primary.legs) >= 3 at entry_signal_date. Missing signal bar or invalid reconstruction is not kept. Keep the 5% breakeven pnl on survivors. Do not scan 3."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +1.30% (0.012957) baseline and remains positive. If keep, report 2023-2026 as exposure not clean OOS.",
+    "fail": "Drop. VCP main book stays 321 / +1.30%. Do not restack min_legs=4. Cup 2,034 stays put."
+  }
+}

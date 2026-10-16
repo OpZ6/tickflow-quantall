@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration4-early-recovery-turnover3-v1.json",
+  "experiment": "vcp-iteration4-early-recovery-turnover3-target10-v1",
+  "purpose": "iteration4_label_aligned_exit",
+  "hypothesis": "A fixed 10% profit target paired with the existing 7% stop converts the pre-declared true-breakout event into realized portfolio PnL and prevents target-reaching trades from round-tripping.",
+  "backtest": {
+    "overrides": {
+      "take_profit": 0.10
+    }
+  },
+  "trial_note": "The target and stop exactly match the frozen +10% before -7% candidate label. No target grid or post-result adjustment is permitted."
+}

@@ -1,0 +1,30 @@
+name: Upstream compatibility audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 2 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/shy3130/tick-stock-panel.git 2>/dev/null || git remote set-url upstream https://github.com/shy3130/tick-stock-panel.git
+          git fetch upstream main --tags
+      - name: Install backend environment
+        run: uv sync --project backend --frozen
+      - name: Validate architecture and data contracts
+        run: uv run --project backend python scripts/validate_project_contracts.py
+      - name: Report divergence
+        run: python scripts/upstream_status.py --target upstream/main
+      - name: Preview merge conflicts
+        run: python scripts/upgrade_check.py upstream/main

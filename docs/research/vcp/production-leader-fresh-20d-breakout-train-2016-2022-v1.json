@@ -1,0 +1,26 @@
+{
+  "base_protocol": "production-leader-full-candidate-ledger-2016-2026-v1.json",
+  "experiment": "production-leader-fresh-20d-breakout-train-2016-2022-v1",
+  "purpose": "freeze_and_verify_the_single_first_breakout_entry_event_selected_by_the_overlap_audit",
+  "hypothesis": "A production VCP is actionable only when it coincides with the first liquid close above the prior 20-session high after a 20-valid-bar cooldown.",
+  "single_change": "Set require_fresh_20d_breakout=true; retain every other production VCP default.",
+  "evidence_status": "The event rule was selected from already inspected 2016-2022 evidence. This training run verifies implementation parity and cannot independently validate it.",
+  "backtest": {
+    "end": "2022-11-04",
+    "params": {
+      "require_fresh_20d_breakout": true
+    }
+  },
+  "analysis": {
+    "evaluation_horizon_bars": 40,
+    "large_winner_mfe_thresholds": [0.2, 0.5, 1.0],
+    "early_path_bars": [5, 10, 20]
+  },
+  "implementation_acceptance": {
+    "expected_purged_candidates": 115,
+    "candidate_key": ["symbol", "entry_signal_date"],
+    "required_exact_match_to_overlap_audit": true,
+    "maximum_label_end_date": "2022-12-30"
+  },
+  "next_action": "After exact training-candidate parity, run the frozen rule once on temporal-test fills from 2023-03-08 through 2026-06-30."
+}

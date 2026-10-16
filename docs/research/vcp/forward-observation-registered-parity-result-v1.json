@@ -1,0 +1,28 @@
+{
+  "baseline_run": "20260906T085319157717Z",
+  "registered_strategy_run": "20260906T120627685310Z",
+  "stats_equal": {
+    "total_return": true,
+    "annual_return": true,
+    "max_drawdown": true,
+    "sharpe": true,
+    "win_rate": true,
+    "profit_factor": true,
+    "n_trades": true,
+    "avg_exposure": true,
+    "final_equity": true
+  },
+  "trade_count_equal": true,
+  "trade_fields_compared": [
+    "symbol",
+    "entry_date",
+    "exit_date",
+    "entry_price",
+    "exit_price",
+    "pnl_pct",
+    "exit_reason",
+    "entry_signal_id"
+  ],
+  "trade_differences": [],
+  "exact_trade_parity": true
+}

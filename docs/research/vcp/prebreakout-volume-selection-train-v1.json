@@ -1,0 +1,20 @@
+{
+  "experiment": "prebreakout-volume-selection-train-v1",
+  "family": "VCP signal-date cross-sectional supply contraction",
+  "source": "Previously retained volume_dry_ratio direction in production-vcp-continuous-dimension-audit-train-2016-2022-v1; user preference and goal.md authorize a new actual-selector experiment. The earlier diagnostic itself did not authorize automatic strategy promotion.",
+  "exposure": "Training 2016-2022 repeatedly exposed, including the prior generic-breakout annual-quintile study and the latest ten-session entry study. One fixed selector; no window, quantile or direction search. Historical family-wide significance is not established by local inference.",
+  "data_archive": "data/research/vcp/forward/archives/vcp-forward-v2-20260908-baseline.zip",
+  "baseline_run": "20260909T135940874097Z",
+  "signal_period": ["2016-01-04", "2022-10-11"],
+  "training_data_end": "2022-12-31",
+  "candidate_definition": "Recompute the frozen QuantsLegacyVcpStrategy and archived default params on the original historical-union symbols and immutable archive; use every breakout signal code 0 in the signal period. Exclude cheat by signal type, never by future fill/label. This is a reconstructed archive candidate stream, not a claim of byte-identical live-data candidates.",
+  "feature": "mean volume of last 10 observed asset bars before signal / mean volume of the preceding 30 observed asset bars; all 40 strictly pre-signal volumes must be finite and positive. Exactly the earlier retained 10/30 disjoint windows, not the separate 10/50 overlapping diagnostic.",
+  "selector": "Within each original signal date select ratios <= that date's median. Keep ties together; singletons/all-tied dates retain all and have zero selection difference. Report informative dates separately. Missing-feature opportunities remain reported but are unavailable to both comparison portfolios.",
+  "execution": "Identical next market-session open entries and s+11 open scheduled exits. Existing independent matcher and archived-name limit flags; unfilled stays cash, blocked terminal sale is censored with last observed close mark. No portfolio slots, stop, delayed entry or post-hoc exclusion.",
+  "benchmark": "Reuse the same immutable-archive gross SH/SZ daily equal-weight observed-price benchmark from intact-pivot-pullback-entry-train-v1/execution-r3; include the full common open-to-open window. Return differences, not CAR or risk-adjusted alpha.",
+  "statistics": {"calendar_block_sessions": 20, "replicates": 4000, "seed": 20260910, "local_family_size": 2},
+  "primary": "Signal-date equal-weight selected net return minus all feature-valid candidates' net return; include singleton dates. Secondary primary gate is selected minus broad benchmark. Report joint calendar-block bootstrap 95% and local Bonferroni 97.5% intervals; not whole-history search correction.",
+  "gates": {"minimum_selected": 1000, "minimum_informative_dates": 200, "minimum_paired_improvement": 0.0025, "minimum_positive_broad_years": 5, "minimum_positive_paired_years": 5, "positive_mean_daily_rank_ic": true, "both_adjusted_ci_lower_bounds_positive": true},
+  "diagnostics": "All selected/rejected/whole-pool returns, each year, daily Rank IC on nonconstant cross-sections, executed/cash/censored counts, missing-feature counts, selected-set replacement on consecutive signal dates (not account turnover), and censor zero-recovery sensitivity.",
+  "decision": "Failure stops this actual selector and adjacent volume windows/quantiles/direction reversals. Passing permits portfolio and exposure analysis only; no live qualification or clean holdout claim. No waiting for future sessions."
+}

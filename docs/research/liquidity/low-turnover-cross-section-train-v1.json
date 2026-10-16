@@ -1,0 +1,53 @@
+{
+  "experiment": "low-turnover-cross-section-train-v1",
+  "variant": "low_turnover",
+  "baseline_experiment": "high52-cross-section-train-v1",
+  "hypothesis": "Low persistent trading activity may carry a liquidity premium and less speculative overpricing, producing stronger subsequent cross-sectional returns.",
+  "research_basis": "https://www.sciencedirect.com/science/article/pii/S1386418197000049",
+  "scope": "A-share unrestricted-float turnover proxy; not an exact replication of the paper. One year averages persistent activity instead of individual bursts; 252 chosen before outcomes without window search.",
+  "unique_change": "Rank by minus arithmetic mean daily turnover over 252 market sessions through the signal date. Lower turnover ranks higher. No volatility, momentum or trend overlay.",
+  "lookback": 252,
+  "minimum_observations": 200,
+  "data_period": [
+    "2015-01-05",
+    "2022-10-31"
+  ],
+  "source_name": "quanti.stock_daily_basic_raw",
+  "source_contract": "Read-only dwd_daily_basic daily turnover_rate, percent points (5 means 5%); source restricted to SH/SZ and frozen market calendar. Preserve original source_name and updated_at in snapshot. No enriched turnover, contemporary share table or numeric rescaling heuristic.",
+  "unit_evidence": "https://tushare.pro/document/2?doc_id=32 ; local volume / historical float_share identity: 2015 shares / float_share_in_10000 / 100, repaired 2016+ lots / float_share_in_10000. Sample-date median absolute errors ~0.000025 percentage point; enriched/source ratio ~100 in 2015 and ~1 in 2016+.",
+  "availability": "Finite nonnegative daily observations only; missing stays missing, never forward-filled or zero-filled, zero is valid; at least 200 in fixed 252 market sessions. No last-252-observed compression. Stop with missing-score list rather than shrinking original opportunity pool.",
+  "point_in_time_limit": "Historical daily fields reconstructed in current database, not an archived contemporaneous feed; updated_at is collection/reconstruction time, not signal-time availability proof.",
+  "opportunities": "Exactly 191688 archived eligible events in 82 month-end cross-sections; preserve all 284837 broad-reference rows, frozen 40-market-session outcomes, entry/exit costs, unfilled cash and censoring. No new momentum, trend, industry or volatility-level filter; no rematching.",
+  "groups": "Ten average-rank percentile bands with ties kept together. Highest score group selected; ordinary volatility and original momentum evaluated under the same opportunity/outcome contract.",
+  "frozen_low_volatility_reference": "data/research/low-volatility/low-idiosyncratic-cross-section-train-v1/months.json",
+  "comparisons": "Original momentum is the unchanged gate baseline; also report paired difference from already-frozen low-idiosyncratic ranking without blending or selecting either after results.",
+  "training_gates": {
+    "minimum_months": 72,
+    "minimum_top_candidates": 1000,
+    "minimum_positive_years": 5,
+    "minimum_top_broad_excess": 0.0,
+    "minimum_top_matched_excess": 0.0,
+    "minimum_top_bottom_spread": 0.01,
+    "minimum_mean_rank_ic": 0.0,
+    "minimum_paired_improvement": 0.0,
+    "require_positive_broad_and_paired_ci_lower": true
+  },
+  "statistics": {
+    "weighting": "equal signal months, equal allocations within group",
+    "bootstrap_block_months": 3,
+    "replicates": 2000,
+    "seed": 20260910
+  },
+  "reports": [
+    "All ten groups and Rank IC",
+    "Annual broad/matched net excess",
+    "Unchanged outcomes and momentum control",
+    "Paired improvement versus momentum and frozen low-idiosyncratic ranking",
+    "Unfilled cash, censored and stale marks, zero-recovery sensitivity",
+    "Selected-set replacement (not account turnover)"
+  ],
+  "pass_action": "Retain only as training candidate; proceed to executable portfolio turnover/drawdown and costs before qualification. Reused training sample is not independent confirmation.",
+  "fail_action": "Stop this representation and window, percentile, holding-period and overlay neighbors. Do not reverse direction or choose a better group after results. Move to a distinct mechanism.",
+  "temporal_test_inspected": false,
+  "live_qualified": false
+}

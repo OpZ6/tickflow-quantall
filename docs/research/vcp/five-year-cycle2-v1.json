@@ -1,0 +1,9 @@
+{
+  "base_protocol": "five-year-v1.json",
+  "experiment": "vcp-five-year-cycle2-v1",
+  "purpose": "cycle2_development_baseline",
+  "development_note": "The original validation window is now part of development after candidate v1 failed its frozen gate. The 2025-09-05 through 2026-09-04 holdout remains unseen.",
+  "phases": {
+    "train": {"start": "2021-09-06", "end": "2025-09-04"}
+  }
+}

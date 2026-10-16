@@ -1,0 +1,45 @@
+{
+  "experiment": "classic-structure-representation-v1",
+  "decision": "stop",
+  "reason": "The single topology-first representation failed all pre-registered semantic gates on a fresh packet whose prediction, identity and outcomes were hidden during labeling. It improved naming fidelity only modestly and still admitted too many nonclassic charts.",
+  "blind_evidence": {
+    "cases": 32,
+    "labels_sha256": "42474be15706add177284dfed82b17336681d633431695139f30fd836433a936",
+    "supported": {
+      "cases": 16,
+      "classic": 3,
+      "partial": 8,
+      "nonclassic": 5,
+      "classic_or_partial_rate": 0.6875,
+      "nonclassic_rate": 0.3125
+    },
+    "unsupported": {
+      "cases": 16,
+      "classic": 1,
+      "partial": 7,
+      "nonclassic": 8,
+      "classic_or_partial_rate": 0.5,
+      "nonclassic_rate": 0.5
+    },
+    "supported_minus_unsupported_classic_or_partial": 0.1875
+  },
+  "gate_results": {
+    "supported_classic_or_partial_rate_at_least_0_75": false,
+    "supported_nonclassic_rate_at_most_0_25": false,
+    "supported_minus_unsupported_at_least_0_30": false
+  },
+  "post_unblind_descriptive_only": {
+    "supported_future_breakout_rate": 0.3125,
+    "unsupported_future_breakout_rate": 0.5625,
+    "interpretation": "This is not a reverse signal. Outcomes were not an acceptance gate for semantic fidelity and cannot be used to invert or retune the method."
+  },
+  "stopped_variants": [
+    "swing span changes",
+    "contraction ratio tolerances",
+    "right-edge position thresholds",
+    "volume comparison windows",
+    "weighted structure scores",
+    "inverting the failed representation from revealed outcomes"
+  ],
+  "next_action": "Keep the broad detector and forward baseline frozen. Stop price-only structure refinement on the exposed candidate pool and move one explanatory level outward: audit causal catalyst and sponsorship evidence available before the signal, without combining weak proxies or running portfolio optimization."
+}

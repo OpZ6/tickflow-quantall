@@ -1,0 +1,32 @@
+{
+  "protocol": "production-middle-expansion-train-2016-2022-v1.json",
+  "run_id": "20260909T034426222263Z",
+  "decision": "stop",
+  "temporal_test_allowed": false,
+  "incremental_signal_id": "signal_quants_vcp_middle_expansion",
+  "incremental_results": {
+    "executed_trades": 176,
+    "average_absolute_return": -0.003693733,
+    "average_equal_weight_excess_return_held": -0.003739932,
+    "positive_alpha_years": 3,
+    "years_evaluated": 7,
+    "mfe_at_least_20pct_count": 50,
+    "mfe_at_least_20pct_rate": 0.284090909,
+    "average_40_session_excess_return": -0.013056543,
+    "by_40_session_market_outcome": {
+      "down": {"trades": 52, "average_excess_return_held": 0.016978351, "average_40_session_excess_return": 0.03499188},
+      "sideways": {"trades": 60, "average_excess_return_held": -0.015887784, "average_40_session_excess_return": -0.052350144},
+      "up": {"trades": 64, "average_excess_return_held": -0.009184925, "average_40_session_excess_return": -0.015258137}
+    }
+  },
+  "gates": {
+    "minimum_incremental_candidates": {"required": 100, "actual": 176, "passed": true},
+    "minimum_incremental_average_excess_return_held": {"required": 0.0, "actual": -0.003739932, "passed": false},
+    "minimum_positive_alpha_years": {"required": 4, "actual": 3, "passed": false},
+    "minimum_incremental_mfe_20pct_rate": {"required": 0.2, "actual": 0.284090909, "passed": true}
+  },
+  "benchmark": "Daily rebalanced SH/SZ equal-weight adjusted return. Entry day uses cross-sectional open-to-close; later days use close-to-close. Excess returns are geometric and net strategy returns retain trading costs.",
+  "interpretation": "The structural relaxation increased large-winner recall, but the incremental cohort did not earn positive average alpha and was positive in only three training years. Its apparent payoff was concentrated in subsequently falling markets and did not persist in sideways or rising outcomes.",
+  "stop_rule_applied": "Do not run the registered 2023-2026 temporal test and do not tune breadth, momentum, scale, RS or structure thresholds around these exposed training trades.",
+  "evidence": "data/research/vcp/runs/20260909T034426222263Z/trade-path-analysis.json"
+}

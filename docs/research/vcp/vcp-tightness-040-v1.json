@@ -1,0 +1,19 @@
+{
+  "experiment": "vcp-tightness-040-v1",
+  "thought": "VCP 179 upper-half ∩ 5% breakeven ∩ ≥3-leg book. One structure-quality filter: causal detector primary.tightness ≥ 0.40 at entry_signal_date. Do not scan 0.40. Detect tightness_min stays 0.25.",
+  "hypothesis": "Requiring tighter successive contractions than the detector floor lifts independent avg_pnl versus +1.99%.",
+  "baseline": {
+    "run_id": "20260909T030431101979Z",
+    "selection": "upper-half close AND breakeven_after_5pct AND len(legs)>=3",
+    "n_train": 179,
+    "avg_pnl": 0.019889
+  },
+  "change": {
+    "id": "tightness_ge_0_40",
+    "definition": "Reconstruct with shipped detect() and frozen-run defaults (tightness_min still 0.25). Keep if primary.tightness >= 0.40 at entry_signal_date. Missing signal bar or missing tightness is not kept. Keep the 5% breakeven pnl on survivors. Do not scan 0.40."
+  },
+  "pass_fail": {
+    "pass": "avg_pnl not below +1.99% (0.019889) baseline and remains positive. If keep, report 2023-2026 as exposure not clean OOS.",
+    "fail": "Drop. VCP main book stays 179 / +1.99%. Do not restack tightness 0.50/0.55 or volume_ratio 1.60. Cup 2,034 stays put."
+  }
+}

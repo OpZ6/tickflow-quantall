@@ -1,0 +1,178 @@
+{
+  "n": 2034,
+  "entry_signal_below_ma20": 475,
+  "scope": "Original completed fills and causal entry MA20 state; path labels retrospective, no new rule tested",
+  "groups": [
+    {
+      "path": "失败突破",
+      "exit_reason": "stop_loss",
+      "entry_signal_below_ma20": false,
+      "n": 223,
+      "mean_net": -0.07480159641255607,
+      "median_duration": 2.0,
+      "held_close_above_ma20": 205
+    },
+    {
+      "path": "失败突破",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": false,
+      "n": 311,
+      "mean_net": -0.03533945980707395,
+      "median_duration": 3.0,
+      "held_close_above_ma20": 247
+    },
+    {
+      "path": "赢家",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": false,
+      "n": 380,
+      "mean_net": 0.07403737105263158,
+      "median_duration": 20.0,
+      "held_close_above_ma20": 374
+    },
+    {
+      "path": "失败突破",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": true,
+      "n": 193,
+      "mean_net": -0.01699958031088083,
+      "median_duration": 1.0,
+      "held_close_above_ma20": 8
+    },
+    {
+      "path": "磨掉",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": true,
+      "n": 41,
+      "mean_net": -0.012172414634146343,
+      "median_duration": 1.0,
+      "held_close_above_ma20": 19
+    },
+    {
+      "path": "给回",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": true,
+      "n": 23,
+      "mean_net": -0.014231347826086958,
+      "median_duration": 4.0,
+      "held_close_above_ma20": 16
+    },
+    {
+      "path": "赢家",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": true,
+      "n": 177,
+      "mean_net": 0.026264740112994348,
+      "median_duration": 1.0,
+      "held_close_above_ma20": 34
+    },
+    {
+      "path": "给回",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": false,
+      "n": 204,
+      "mean_net": -0.024127745098039215,
+      "median_duration": 12.0,
+      "held_close_above_ma20": 198
+    },
+    {
+      "path": "给回",
+      "exit_reason": "stop_loss",
+      "entry_signal_below_ma20": false,
+      "n": 123,
+      "mean_net": -0.08330037398373985,
+      "median_duration": 7.0,
+      "held_close_above_ma20": 123
+    },
+    {
+      "path": "赢家",
+      "exit_reason": "max_hold",
+      "entry_signal_below_ma20": false,
+      "n": 126,
+      "mean_net": 0.2721835079365079,
+      "median_duration": 30.0,
+      "held_close_above_ma20": 126
+    },
+    {
+      "path": "磨掉",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": false,
+      "n": 128,
+      "mean_net": -0.026436515625000004,
+      "median_duration": 7.0,
+      "held_close_above_ma20": 121
+    },
+    {
+      "path": "磨掉",
+      "exit_reason": "stop_loss",
+      "entry_signal_below_ma20": false,
+      "n": 53,
+      "mean_net": -0.07497467924528303,
+      "median_duration": 4.0,
+      "held_close_above_ma20": 52
+    },
+    {
+      "path": "incomplete",
+      "exit_reason": "max_hold",
+      "entry_signal_below_ma20": false,
+      "n": 2,
+      "mean_net": 0.23604200000000003,
+      "median_duration": 30.0,
+      "held_close_above_ma20": 2
+    },
+    {
+      "path": "incomplete",
+      "exit_reason": "signal",
+      "entry_signal_below_ma20": false,
+      "n": 7,
+      "mean_net": 0.04829028571428572,
+      "median_duration": 21.0,
+      "held_close_above_ma20": 7
+    },
+    {
+      "path": "失败突破",
+      "exit_reason": "stop_loss",
+      "entry_signal_below_ma20": true,
+      "n": 35,
+      "mean_net": -0.0765123142857143,
+      "median_duration": 1.0,
+      "held_close_above_ma20": 0
+    },
+    {
+      "path": "磨掉",
+      "exit_reason": "stop_loss",
+      "entry_signal_below_ma20": true,
+      "n": 2,
+      "mean_net": -0.073344,
+      "median_duration": 2.5,
+      "held_close_above_ma20": 1
+    },
+    {
+      "path": "赢家",
+      "exit_reason": "max_hold",
+      "entry_signal_below_ma20": true,
+      "n": 2,
+      "mean_net": 0.42607700000000004,
+      "median_duration": 30.0,
+      "held_close_above_ma20": 2
+    },
+    {
+      "path": "incomplete",
+      "exit_reason": "stop_loss",
+      "entry_signal_below_ma20": false,
+      "n": 2,
+      "mean_net": -0.17735099999999998,
+      "median_duration": 10.5,
+      "held_close_above_ma20": 2
+    },
+    {
+      "path": "给回",
+      "exit_reason": "stop_loss",
+      "entry_signal_below_ma20": true,
+      "n": 2,
+      "mean_net": -0.09825400000000001,
+      "median_duration": 10.5,
+      "held_close_above_ma20": 2
+    }
+  ]
+}

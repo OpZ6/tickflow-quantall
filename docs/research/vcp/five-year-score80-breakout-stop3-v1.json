@@ -1,0 +1,11 @@
+{
+  "base_protocol": "five-year-score80-breakout-v1.json",
+  "experiment": "vcp-five-year-score80-breakout-stop3-v1",
+  "purpose": "training_parameter_stability",
+  "hypothesis": "Align the account hard stop with the strategy's 3% planned stop and test whether earlier invalidation improves loss containment.",
+  "backtest": {
+    "overrides": {
+      "stop_loss": -0.03
+    }
+  }
+}

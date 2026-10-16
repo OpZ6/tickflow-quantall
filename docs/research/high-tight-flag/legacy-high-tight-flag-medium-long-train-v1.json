@@ -1,0 +1,21 @@
+{
+  "base_protocol": "legacy-high-tight-flag-full-candidate-train-2016-2022-v2.json",
+  "experiment": "legacy-high-tight-flag-medium-long-train-v1",
+  "purpose": "test_the_preregistered_primary_scale_restriction_with_frozen_default_exits",
+  "hypothesis": "Rejecting short primary flags removes the negative short-scale bulk while retaining most large-winner paths.",
+  "backtest": {"params": {"exclude_short_scale": true}},
+  "baseline_run_id": "20260909T130617820559Z",
+  "unique_change": "After the unchanged detector selects its primary candidate, reject executable short-scale primaries. Do not promote an alternate candidate.",
+  "training_gate": {"minimum_mfe50_baseline_path_retention": 0.5},
+  "retention_definition": "Strictly more than half of baseline MFE >= 0.5 paths must survive, matched by symbol, signal date and entry signal ID; equality is failure.",
+  "constraints": [
+    "Only exclude_short_scale changes. Preserve detector ranking, thresholds, exits, costs, universe and training boundary.",
+    "All inherited baseline training gates remain mandatory; the structural hypothesis does not relax them.",
+    "Require candidate/trade subset reconciliation against the archived baseline before interpreting results.",
+    "No parameter search, alternate-scale reselection, or exposed temporal-test access."
+  ],
+  "temporal_test_period": null,
+  "temporal_test_authorized": false,
+  "promotion": "Passing training gates only permits preregistering dependence-aware significance and overlap diagnostics; no live or holdout qualification.",
+  "failure_action": "Stop this primary-scale restriction and its adjacent scale/threshold variants."
+}

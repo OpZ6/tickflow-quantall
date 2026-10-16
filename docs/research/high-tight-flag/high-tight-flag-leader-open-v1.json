@@ -1,0 +1,7 @@
+{
+  "experiment": "high-tight-flag-leader-open-v1",
+  "thought": "High-tight-flag default stream. One universe: dual-regime open AND RS>=85.",
+  "baseline": {"run_id": "20260909T130617820559Z", "n_train": 1245, "avg_pnl": -0.010655},
+  "change": {"id": "dual_regime_open_and_rs85"},
+  "pass_fail": {"pass": "avg_pnl not below baseline and remains positive.", "fail": "Drop. HTF stays -1.07%."}
+}

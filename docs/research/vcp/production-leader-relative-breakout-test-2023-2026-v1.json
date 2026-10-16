@@ -1,0 +1,8 @@
+{
+  "base_protocol": "production-leader-relative-breakout-train-2016-2022-v1.json",
+  "experiment": "production-leader-relative-breakout-test-2023-2026-v1",
+  "purpose": "temporal_test_of_frozen_market_relative_breakout",
+  "backtest": {"start": "2023-01-03", "end": "2026-06-30"},
+  "evaluation_role": "temporal_test_not_unseen_holdout",
+  "stop_rule": "The test may reject the method but may not change its relative-return rule, RS treatment, exit contract or other gates."
+}

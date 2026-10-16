@@ -1,0 +1,6 @@
+{
+  "base_protocol": "five-year-score80-v1.json",
+  "experiment": "vcp-five-year-score82-v1",
+  "hypothesis": "A nearby higher quality threshold tests the tradeoff between signal quality and sample size without searching the validation or holdout period.",
+  "backtest": {"overrides": {"score_min": 82.0}}
+}

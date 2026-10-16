@@ -1,0 +1,71 @@
+{
+  "experiment": "production-trend-breakout-simple-control-2016-2026-v1",
+  "run_id": "20260908T061825556454Z",
+  "decision": "stop_default_strategy_keep_as_null_reference",
+  "reason": "The existing default trend breakout produced a dense repeated-signal stream with negative expectancy and depleted nearly all capital under the current causal execution and cost contract. It is not an economically viable strategy or portfolio candidate, and its defaults must not be repaired by parameter search on this exposed interval.",
+  "execution_contract": {
+    "universe_suffixes": [
+      ".SH",
+      ".SZ"
+    ],
+    "selected_symbols": 5246,
+    "matching": "open_t+1",
+    "stamp_tax_policy": "a_share_historical",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10.0,
+    "max_positions": 4,
+    "position_sizing": "equal",
+    "timing_violations": 0,
+    "data_day_coverage": 1.0
+  },
+  "results": {
+    "entry_candidates": 86226,
+    "trades": 744,
+    "stop_loss_count": 499,
+    "stop_loss_share": 0.670699,
+    "total_return": -0.9982,
+    "annual_return": -0.4638,
+    "max_drawdown": -0.9982,
+    "win_rate": 0.2097,
+    "average_trade_return": -0.0351,
+    "average_win": 0.1753,
+    "average_loss": 0.0909,
+    "average_win_loss_ratio": 1.93,
+    "monetary_profit_factor": 0.427788,
+    "best_trade": 0.8946,
+    "worst_trade": -0.6034,
+    "average_exposure": 0.5414,
+    "final_equity": 1840.92,
+    "first_below_half_initial_capital": "2016-08-01",
+    "first_below_ten_percent_initial_capital": "2018-08-15",
+    "first_below_one_percent_initial_capital": "2020-03-24"
+  },
+  "execution_rejections": {
+    "buy_suspended": 2960,
+    "buy_limit_up": 449,
+    "buy_no_slot": 21113,
+    "buy_lot_size": 3683,
+    "sell_suspended": 140,
+    "sell_limit_down": 21,
+    "pending_exit": 12
+  },
+  "interpretation": [
+    "A high average-win to average-loss ratio is insufficient when only 20.97 percent of trades win; the resulting average trade return is minus 3.51 percent and monetary profit factor is 0.428.",
+    "The 86,226 candidate events include repeated new-high signals, so this default implementation behaves as a dense momentum trigger rather than a deduplicated setup process.",
+    "The result supports keeping VCP's selective regime, leadership and setup pipeline as economically meaningful at the package level. It does not isolate the causal contribution of VCP structure because filters, ranking, stop and exits also differ."
+  ],
+  "stop_rule_applied": "Do not vary the 60-day window, MA, volume ratio, stop, exit, score, holding period or position count. Keep this exact result as the simple null reference.",
+  "next_action": "Complete one descriptive overlap audit against the frozen VCP leader run, then close the current simple-control branch without a combined portfolio test.",
+  "runtime": {
+    "total_seconds": 96.3269,
+    "data_load_seconds": 84.8256,
+    "strategy_signal_seconds": 3.8762,
+    "note": "This run was data-load dominated and required no data repair."
+  },
+  "evidence": [
+    "data/research/vcp/runs/20260908T061825556454Z/protocol.json",
+    "data/research/vcp/runs/20260908T061825556454Z/universe.json",
+    "data/research/vcp/runs/20260908T061825556454Z/result.json",
+    "data/research/vcp/runs/20260908T061825556454Z/trade-audit.json"
+  ]
+}

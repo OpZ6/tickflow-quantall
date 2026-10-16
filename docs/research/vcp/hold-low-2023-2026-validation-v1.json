@@ -1,0 +1,9 @@
+{
+  "experiment": "vcp-hold-low-2023-2026-validation-v1",
+  "purpose": "Expose the current VCP rule (original exits ∩ breakout low ≥ prior session low) on 2023-01-01 through the frozen ledger end. Not a clean holdout. Training 2016-2022 stays the development sample.",
+  "baseline_run": "20260909T030431101979Z",
+  "training": "entry 2016-01-01..2022-12-31 and original exit ≤ 2022-12-31",
+  "validation": "entry 2023-01-01..ledger end; completed exits in that window only; open or post-window exits listed, not mixed into the mean",
+  "metric": "independent win_rate, profit_factor, avg_pnl",
+  "suitable_if": "Validation avg_pnl stays positive and profit_factor does not collapse versus training. Does not by itself authorize live trading."
+}

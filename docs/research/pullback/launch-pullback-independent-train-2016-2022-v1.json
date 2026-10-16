@@ -1,0 +1,8 @@
+{
+  "experiment": "launch-pullback-independent-train-2016-2022-v1",
+  "purpose": "Open the 放量突破·缩量回踩 dialect as its own independent-trade baseline after pausing delayed VCP entries.",
+  "source_run": "20260909T053715693165Z",
+  "strategy_id": "launch_pullback_support",
+  "training": "entry 2016-01-01..2022-12-31 and original exit <= 2022-12-31",
+  "note": "All-market default stream; not leader-filtered. Independent avg_pnl is the starting book to iterate, not a live strategy."
+}

@@ -1,0 +1,10 @@
+{
+  "base_protocol": "iteration3-confirm2-v1.json",
+  "experiment": "vcp-iteration3-confirm2-stop7-v1",
+  "purpose": "iteration3_structural_development",
+  "hypothesis": "A conventional 7% VCP initial stop distinguishes normal retests from true pattern failure better than the current 3% stop.",
+  "backtest": {
+    "params": {"plan_stop_pct": 0.07},
+    "overrides": {"stop_loss": -0.07}
+  }
+}

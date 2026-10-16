@@ -1,0 +1,89 @@
+{
+  "manifest_id": "vcp-forward-v2-20260908",
+  "status": "frozen_reference_for_immutable_archive",
+  "recorded_at": "2026-09-08T22:36:53+08:00",
+  "strategy_id": "vcp_leader_breakout",
+  "strategy_version": "forward-v2",
+  "predecessor_decision": "docs/research/vcp/forward-v1-data-baseline-invalidation-20260908-v1-decision.json",
+  "strategy_contract": "docs/research/vcp/forward-observation-v2.json",
+  "code_reference": {
+    "behavior_reference_run": "20260908T143326722024Z",
+    "behavior_source_archive": "data/research/vcp/runs/20260908T143326722024Z/source.zip",
+    "behavior_source_archive_sha256": "5be37be833bf4ae82bc1fd68b0f9a8382ce173a95db48167cc0f9b59bc937520",
+    "behavior_parity": {
+      "compared_with_repaired_forward_v1_metadata_run": "20260908T142007914349Z",
+      "trades_equal": true,
+      "equity_curve_equal": true,
+      "benchmark_curve_equal": true,
+      "drawdown_curve_equal": true,
+      "per_symbol_stats_equal": true,
+      "trade_count": 303,
+      "differences": [
+        "strategy version metadata and captured source",
+        "runtime timing measurements",
+        "matrix cache status",
+        "run identifier"
+      ]
+    },
+    "archive_builder": {
+      "path": "scripts/archive_vcp_forward_baseline.py",
+      "sha256": "39deeb60317caef1cf6f0a46dab8f75f5251b66807de3390f8e68bb45dd9f3ce"
+    },
+    "forward_observer": {
+      "path": "scripts/observe_vcp_forward.py",
+      "sha256": "7b96f1b8a77ad273e045f8e1679cbd646066790a965a2ee31604b8c7d6f721d8"
+    }
+  },
+  "data_reference": {
+    "snapshot_id": "production-completed-daily-through-20260908-repaired",
+    "basis_run": "20260908T143326722024Z",
+    "immutable_snapshot": true,
+    "snapshot_selection": {
+      "completed_through": "2026-09-08",
+      "dated_datasets": [
+        "kline_daily",
+        "kline_daily_enriched",
+        "kline_index_daily"
+      ],
+      "aligned_date_datasets": [
+        "kline_daily",
+        "kline_daily_enriched",
+        "kline_index_daily"
+      ],
+      "minimum_rows_by_dataset": {
+        "kline_daily": 1000,
+        "kline_daily_enriched": 1000,
+        "kline_index_daily": 1
+      },
+      "files": [
+        {
+          "path": "data/financials/shares/part.parquet",
+          "size": 4025959,
+          "sha256": "bebc1965be2a59e2049638a746d62e296809c0eb8ac8b10aa5abb67b3aa02347"
+        },
+        {
+          "path": "data/trading_calendar/date=2026-09-07/part.parquet",
+          "size": 31025,
+          "sha256": "b58cff94fedf1907e2da0bc49e7728f5eac37c2c7ef707a4ca5bfd0615810693"
+        },
+        {
+          "path": "data/adj_factor/all.parquet",
+          "size": 277734,
+          "sha256": "875feb26f2c9f554f80f9f0c3a22dddc1db7adb6f253ee8af0cd39b8ad80e894"
+        },
+        {
+          "path": "data/instruments/instruments.parquet",
+          "size": 181801,
+          "sha256": "01ff7d725370a62d5ff36d62f7e91764e303cab0003697a5f4ec3b005aa2d843"
+        }
+      ]
+    },
+    "mutable_store_rule": "The immutable archive freezes the repaired byte baseline through 2026-09-08. Later completed days use separate append-only artifacts."
+  },
+  "known_limitations": [
+    "Historical ST/name state and effective listing-age filters are not yet consumed by the strategy path.",
+    "Intraday partial-suspension timing and real fill evidence remain incomplete.",
+    "The first eligible forward-v2 observation date is 2026-09-09."
+  ],
+  "qualification_use": "repaired_recoverable_baseline_only; does_not_complete_P0_or_P4_execution_evidence"
+}

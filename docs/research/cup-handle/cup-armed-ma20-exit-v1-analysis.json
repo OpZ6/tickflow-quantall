@@ -1,0 +1,154 @@
+{
+  "protocol": {
+    "experiment": "cup-armed-ma20-exit-v1",
+    "frozen_at": "2026-09-12",
+    "hypothesis_source": "AI after cup-exit-duties-v1 found 475 entry signals already below MA20; same exposed development data, no independent validation claim",
+    "baseline": "2034 original cup thin-book independent entries, mean net +0.5438%",
+    "change": "Stateful MA20 protection: armed at entry when signal-day close>=MA20; otherwise arm on first held daily close>=MA20. Once armed, close<MA20 produces next-market-open exit. The arming state never resets. No changed MA length, confirmation delay, price buffer or profit threshold.",
+    "execution": "Paired replay every original entry through the existing independent matcher, baseline close<MA20 vs armed exit. Preserve 7% hard stop, 30-bar maximum hold, T+1, commission 0.0003, slippage 10bps and historical stamp tax. Allow later exits and preserve blocked-sell rules. Use complete remaining training tail; incomplete positions explicitly reported.",
+    "training": "All data and completed exits <=2022-12-31; no clean OOS claim",
+    "gate": "Same completed-entry coverage, at least 100 changed exits, positive mean net strictly above baseline, signal-day equal-weight actual net no worse and no fewer positive years. Passing is research candidate only; require paired robustness before adoption.",
+    "failure": "Reject stateful MA20 arming and confirmation/MA-length/buffer neighbours. No baseline or product change."
+  },
+  "baseline": {
+    "n_trades": 2034,
+    "win_rate": 0.339725,
+    "profit_factor": 2.32,
+    "avg_pnl": 0.005438,
+    "avg_win": 0.09965,
+    "avg_loss": 0.043036,
+    "signal_days": 298,
+    "signal_day_equal_weight_net": 0.0036128729883041655,
+    "years": {
+      "2016": {
+        "n_trades": 99,
+        "win_rate": 0.191919,
+        "profit_factor": 1.38,
+        "avg_pnl": -0.02308,
+        "avg_win": 0.058787,
+        "avg_loss": 0.042524
+      },
+      "2017": {
+        "n_trades": 516,
+        "win_rate": 0.327519,
+        "profit_factor": 2.14,
+        "avg_pnl": 0.000836,
+        "avg_win": 0.063718,
+        "avg_loss": 0.02979
+      },
+      "2018": {
+        "n_trades": 327,
+        "win_rate": 0.259939,
+        "profit_factor": 1.2,
+        "avg_pnl": -0.019125,
+        "avg_win": 0.053508,
+        "avg_loss": 0.044637
+      },
+      "2019": {
+        "n_trades": 633,
+        "win_rate": 0.418641,
+        "profit_factor": 3.12,
+        "avg_pnl": 0.032881,
+        "avg_win": 0.141631,
+        "avg_loss": 0.045431
+      },
+      "2020": {
+        "n_trades": 250,
+        "win_rate": 0.316,
+        "profit_factor": 1.64,
+        "avg_pnl": -0.009475,
+        "avg_win": 0.093403,
+        "avg_loss": 0.057003
+      },
+      "2021": {
+        "n_trades": 109,
+        "win_rate": 0.394495,
+        "profit_factor": 1.63,
+        "avg_pnl": 0.00218,
+        "avg_win": 0.092019,
+        "avg_loss": 0.056351
+      },
+      "2022": {
+        "n_trades": 100,
+        "win_rate": 0.31,
+        "profit_factor": 2.58,
+        "avg_pnl": 0.004856,
+        "avg_win": 0.114738,
+        "avg_loss": 0.044511
+      }
+    }
+  },
+  "variant": {
+    "n_trades": 2034,
+    "win_rate": 0.333333,
+    "profit_factor": 2.35,
+    "avg_pnl": 0.005718,
+    "avg_win": 0.113875,
+    "avg_loss": 0.048361,
+    "signal_days": 298,
+    "signal_day_equal_weight_net": 0.0032129359787737024,
+    "years": {
+      "2016": {
+        "n_trades": 99,
+        "win_rate": 0.191919,
+        "profit_factor": 1.42,
+        "avg_pnl": -0.024554,
+        "avg_win": 0.065105,
+        "avg_loss": 0.045848
+      },
+      "2017": {
+        "n_trades": 516,
+        "win_rate": 0.331395,
+        "profit_factor": 2.18,
+        "avg_pnl": 0.001997,
+        "avg_win": 0.07919,
+        "avg_loss": 0.036263
+      },
+      "2018": {
+        "n_trades": 327,
+        "win_rate": 0.247706,
+        "profit_factor": 1.35,
+        "avg_pnl": -0.021479,
+        "avg_win": 0.069247,
+        "avg_loss": 0.051352
+      },
+      "2019": {
+        "n_trades": 633,
+        "win_rate": 0.404423,
+        "profit_factor": 3.14,
+        "avg_pnl": 0.033036,
+        "avg_win": 0.153624,
+        "avg_loss": 0.048849
+      },
+      "2020": {
+        "n_trades": 250,
+        "win_rate": 0.312,
+        "profit_factor": 2.01,
+        "avg_pnl": -0.003737,
+        "avg_win": 0.123909,
+        "avg_loss": 0.061622
+      },
+      "2021": {
+        "n_trades": 109,
+        "win_rate": 0.394495,
+        "profit_factor": 1.46,
+        "avg_pnl": -0.001784,
+        "avg_win": 0.093011,
+        "avg_loss": 0.063544
+      },
+      "2022": {
+        "n_trades": 100,
+        "win_rate": 0.3,
+        "profit_factor": 2.51,
+        "avg_pnl": 0.0027,
+        "avg_win": 0.127596,
+        "avg_loss": 0.050826
+      }
+    }
+  },
+  "changed": 357,
+  "uncompleted": 0,
+  "earlier": 0,
+  "later": 357,
+  "rule": "drop"
+}

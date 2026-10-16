@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration7-a-share-cycle-confirmed-retro-v1.json",
+  "experiment": "vcp-iteration7-a-share-cycle-confirmed-time20-retro-v1",
+  "purpose": "exit_ablation_using_a_share_shorter_holding_cycle_retro",
+  "backtest": {
+    "overrides": {
+      "trailing_take_profit_activate": null,
+      "trailing_take_profit_drawdown": null,
+      "max_hold_days": 20
+    }
+  }
+}

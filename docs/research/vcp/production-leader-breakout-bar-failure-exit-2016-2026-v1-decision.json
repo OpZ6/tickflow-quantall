@@ -1,0 +1,49 @@
+{
+  "experiment": "production-leader-breakout-bar-failure-exit-2016-2026-v1",
+  "baseline_run": "20260907T123519390606Z",
+  "experiment_run": "20260907T190051120978Z",
+  "decision": "stop",
+  "reason": "The breakout-bar low is a causal demand boundary, but it did not reduce average losses enough and lowered expectancy on common entries. Modest drawdown improvement does not justify replacing the frozen exit path.",
+  "comparison": {
+    "baseline": {
+      "trades": 298,
+      "average_loss": 0.0409,
+      "average_win": 0.1645,
+      "annual_return": 0.1377,
+      "max_drawdown": -0.2592
+    },
+    "experiment": {
+      "trades": 320,
+      "average_loss": 0.0384,
+      "average_win": 0.1712,
+      "annual_return": 0.1311,
+      "max_drawdown": -0.2446,
+      "breakout_bar_failure_exits": 48
+    }
+  },
+  "gate_results": {
+    "minimum_trades_250": "pass",
+    "maximum_timing_violations_0": "pass",
+    "minimum_average_loss_reduction_0_005": "fail",
+    "minimum_average_win_retention_ratio_0_90": "pass",
+    "minimum_matched_trade_mean_change_0": "fail",
+    "maximum_drawdown_deterioration_0_03": "pass"
+  },
+  "matched_trade_audit": {
+    "common_trades": 290,
+    "baseline_mean_return": 0.021477658620689656,
+    "experiment_mean_return": 0.020480562068965515,
+    "mean_return_change": -0.000997096551724138,
+    "baseline_winners": 87,
+    "winners_remaining_positive": 80,
+    "winner_retention_rate": 0.9195402298850575,
+    "winner_mean_return_change": -0.007435724137931035
+  },
+  "stopped_variants": [
+    "low-price buffers",
+    "ATR offsets",
+    "confirmation-day variants",
+    "intraday breach variants"
+  ],
+  "next_action": "Keep the frozen VCP entry, exit and four-position portfolio unchanged. The exposed-history mechanism queue is exhausted; continue append-only forward observation and resume only genuinely new causal evidence, not another proxy or price threshold."
+}

@@ -1,0 +1,32 @@
+{
+  "experiment": "watchlist-prior-bar-high-breakout-v1",
+  "layer": 3,
+  "prior": "docs/research/watchlist-inside-bar-breakout-v1-decision.md",
+  "hypothesis_source": "Inside-bar then break still lost to same-day untriggered leaders (10/20-day spread -0.34%/-0.53%). The compression step may be the same rest-then-pop as the 20-bar cooldown. Replacement: close above the prior session high, no inside-bar filter. Mechanism: take out yesterday, not take out a compressed bar.",
+  "distinct_from_failed_representations": "Not a 20-day high. Not VCP. Not all-market trend_breakout. Difference from inside-bar v1: drop the inside-bar requirement. Difference from 20d highs: the hurdle is one session, not a month range.",
+  "exposure": "Training 2016-01-01 through 2022-12-31.",
+  "watch_list": {"unchanged_from": "watchlist-20d-high-breakout-v1"},
+  "trigger": {
+    "id": "close_above_prior_bar_high",
+    "definition": "Causal close[t] > high[t-1] on the market calendar. Missing prior high does not trigger."
+  },
+  "selected": "Watch list AND close above prior session high.",
+  "control": "Same-day watch-list names whose close did not exceed the prior session high.",
+  "windows": {"diagnostic": 5, "primary": [10, 20]},
+  "cost": {
+    "matching": "open_t+1",
+    "commission_pct": 0.0003,
+    "slippage_bps": 10,
+    "stamp_tax_policy": "a_share_historical"
+  },
+  "pass_fail": {
+    "pass": "10-day and 20-day date-EW net of the trigger subset is not worse than same-day watch names without the trigger.",
+    "fail": "Stop taking-out-a-high as the layer-3 selector on this watch list. Next layer-3 event must not be another Donchian/high-takeout. Do not add VCP. Pullback may then be tested as the remaining trigger, because breakout-through-high has been the event under test and failed.",
+    "not_claimed": "No live qualification."
+  },
+  "outputs": [
+    "docs/research/watchlist-prior-bar-high-breakout-v1.json",
+    "docs/research/watchlist-prior-bar-high-breakout-v1-analysis.json",
+    "docs/research/watchlist-prior-bar-high-breakout-v1-decision.md"
+  ]
+}

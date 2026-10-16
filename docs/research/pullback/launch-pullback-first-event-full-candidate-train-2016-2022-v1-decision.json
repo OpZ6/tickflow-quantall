@@ -1,0 +1,45 @@
+{
+  "experiment": "launch-pullback-first-event-full-candidate-train-2016-2022-v1",
+  "decision": "stop_default_representation",
+  "run_id": "20260909T053715693165Z",
+  "semantic_result": {
+    "rule": "one_first_qualifying_pullback_per_launch",
+    "timing_violations": 0,
+    "duplicate_entries_for_same_launch": 0
+  },
+  "training_result": {
+    "trades": 32193,
+    "average_absolute_return": -0.009565,
+    "average_excess_return_held": -0.012781,
+    "average_40d_excess_return": -0.017653,
+    "positive_alpha_years": 0,
+    "years_evaluated": 7,
+    "mfe_20pct_count": 9969,
+    "mfe_20pct_rate": 0.309664,
+    "mfe_50pct_count": 2022,
+    "mfe_100pct_count": 314,
+    "stop_loss_share": 0.467866
+  },
+  "training_checks": {
+    "minimum_trades_500": true,
+    "nonnegative_average_excess_return_held": false,
+    "nonnegative_average_40d_excess_return": false,
+    "minimum_four_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_2": false
+  },
+  "market_outcome_attribution": {
+    "down_held_alpha": -0.010214,
+    "sideways_held_alpha": -0.012169,
+    "up_held_alpha": -0.016169
+  },
+  "interpretation": "The corrected event semantics remove duplicate entries but the default launch-pullback selector remains negative relative to the market in every training year and every future market-outcome bucket. The large absolute number of future winners comes from a very broad 32k-event pool and does not establish selection quality.",
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "launch lookback and gain",
+    "launch and pullback volume thresholds",
+    "support tolerance",
+    "failure buffer",
+    "holding-period variants"
+  ],
+  "evidence": "data/research/vcp/runs/20260909T053715693165Z/trade-path-analysis.json"
+}

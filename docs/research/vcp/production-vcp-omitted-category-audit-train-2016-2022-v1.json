@@ -1,0 +1,42 @@
+{
+  "experiment": "production-vcp-omitted-category-audit-train-2016-2022-v1",
+  "purpose": "find_a_missing_vcp_category_outside_the_current_detector",
+  "source": "data/research/vcp/gate-funnel/production-vcp-gate-funnel-train-2016-2022-v1/opportunities.parquet",
+  "training_period": ["2016-01-04", "2022-12-30"],
+  "scope": "Generic 20-session breakout opportunities not selected by the frozen VCP detector.",
+  "outcomes": {
+    "leader": "40-session MFE at least 50 percent; 100 percent paths are reported separately",
+    "failed_control": "40-session MFE below 10 percent and 40-session equal-weight Alpha no greater than zero"
+  },
+  "causal_applicability_regimes": {
+    "broad_bull": "Signal-day MA20 breadth at least 70 percent and trailing 63-session SH/SZ equal-weight return nonnegative.",
+    "weak_bear": "Signal-day MA20 breadth below 30 percent and trailing 63-session SH/SZ equal-weight return negative.",
+    "transition": "All other signal-time states."
+  },
+  "matching": "Compare leaders with all failed controls inside the same signal year and causal signal-time market regime. Future 40-session market outcomes are reported only for attribution and never define applicability. Control category shares use fixed Laplace smoothing of one count per registered category.",
+  "causal_categories": {
+    "contracting_shelf": "Prior 10-session range is smaller than the preceding 10-session range, its low is higher, and prior 10-session mean volume is below the preceding 30-session mean.",
+    "contraction_without_dry_up": "Range contracts and the low rises, but volume does not dry up.",
+    "volume_dry_base": "Volume dries up without both price-contraction conditions.",
+    "ascending_base": "The recent low rises without range contraction or volume dry-up.",
+    "range_compression_only": "Range contracts without a higher low or volume dry-up.",
+    "loose_breakout": "None of the registered contraction categories applies; report only and never promote."
+  },
+  "direction_gate": {
+    "minimum_opportunities": 500,
+    "minimum_50pct_leaders": 50,
+    "minimum_matched_leader_enrichment": 1.5,
+    "minimum_positive_enrichment_years": 4,
+    "minimum_positive_alpha_years": 4
+  },
+  "regime_specific_direction_gate": {
+    "minimum_opportunities": 300,
+    "minimum_50pct_leaders": 30,
+    "minimum_matched_leader_enrichment": 1.5,
+    "minimum_years_present": 4,
+    "minimum_positive_enrichment_years": 3,
+    "minimum_positive_alpha_years": 3
+  },
+  "success_semantics": "A category may pass across all market states or only inside one preregistered causal applicability regime. A regime-specific pass is a successful conditional strategy hypothesis, not a weaker failure label.",
+  "stop_rule": "At most one non-loose category may be selected. If none passes every gate, stop this representation. Do not change windows, market-state boundaries, leader/control labels or combine categories after reading results."
+}

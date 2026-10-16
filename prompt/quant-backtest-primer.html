@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08111f">
+  <meta name="description" content="面向交易新人的 A 股量化研究与回测实战入门：数据、因子、交易、验证、风险和上线。">
+  <title>量化回测入门 · 从交易想法到实盘验证</title>
+  <style>
+    :root{color-scheme:dark;--bg:#08111f;--panel:#101c2d;--panel2:#142237;--line:#25364d;--text:#edf3fb;--muted:#a8b7ca;--soft:#71839a;--red:#ff777a;--red2:#ffb4a2;--green:#50c49b;--amber:#ffc46b;--blue:#7cb7ff;--violet:#bd9cff;--max:1180px;--radius:20px;--shadow:0 22px 70px #0004}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:92px}body{margin:0;background:radial-gradient(900px 560px at 78% -10%,#183252 0%,transparent 64%),var(--bg);color:var(--text);font:16px/1.7 "Segoe UI","Microsoft YaHei",system-ui,sans-serif}a{color:#9bc7ff;text-decoration:none}a:hover{text-decoration:underline}button{font:inherit}.progress{position:fixed;inset:0 auto auto 0;height:3px;width:0;background:linear-gradient(90deg,var(--red),var(--amber),var(--blue));z-index:20}.top{position:sticky;top:0;z-index:10;background:#08111feF;border-bottom:1px solid #ffffff12;backdrop-filter:blur(16px)}.top-inner{max-width:var(--max);margin:auto;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{font-size:13px;font-weight:750;letter-spacing:.11em;color:#d7e7fb;white-space:nowrap}.brand b{color:var(--red)}.nav{display:flex;align-items:center;gap:16px;overflow:auto;scrollbar-width:none}.nav a{font-size:12px;color:#b2c0d1;white-space:nowrap}.nav a:hover{color:white}.top-action{border:1px solid #41536c;background:#122238;color:#e7f1ff;border-radius:999px;padding:7px 12px;font-size:12px;white-space:nowrap;cursor:pointer}.top-action:hover{border-color:#8eb7e9;background:#1b304b}.wrap{max-width:var(--max);margin:auto;padding:0 24px}.hero{padding:74px 0 45px;position:relative;overflow:hidden}.hero:after{content:"";position:absolute;width:380px;height:380px;right:3%;top:38px;border-radius:50%;background:radial-gradient(circle,#22486c9c 0%,#15304a55 42%,transparent 70%);pointer-events:none}.hero-grid{display:grid;grid-template-columns:1.3fr .7fr;align-items:center;gap:36px;position:relative;z-index:1}.eyebrow{display:inline-flex;gap:9px;align-items:center;color:#b7cbe3;text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700}.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 16px #ffc46b}.hero h1{font-size:clamp(38px,6vw,70px);line-height:1.09;letter-spacing:-.045em;margin:20px 0 18px;max-width:780px}.hero h1 span{color:var(--red2)}.hero p{max-width:680px;color:#bac9da;font-size:17px;margin:0}.hero-cta{display:flex;flex-wrap:wrap;gap:11px;margin-top:27px}.btn{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:11px 16px;font-weight:700;font-size:13px;border:1px solid var(--line);color:var(--text);background:#14243a;cursor:pointer}.btn.primary{background:var(--red);color:#201218;border-color:transparent}.btn:hover{filter:brightness(1.08);text-decoration:none}.hero-card{border:1px solid #435a77;background:linear-gradient(145deg,#14263d,#0d1928);padding:22px;border-radius:24px;box-shadow:var(--shadow);transform:rotate(1deg)}.hero-card .mini-label{font-size:11px;color:#9fb2c8;letter-spacing:.12em;text-transform:uppercase}.hero-card strong{font-size:27px;display:block;line-height:1.25;margin:9px 0 12px}.hero-card p{font-size:13px;color:#a9bacd}.pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}.pill{border:1px solid #3c5069;border-radius:999px;padding:5px 10px;font-size:11px;color:#c8d7e8;background:#16273b}.quickbar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:12px 0 58px}.quick{border:1px solid var(--line);background:#0f1b2b;border-radius:15px;padding:14px 16px}.quick b{display:block;font-size:13px;margin-bottom:3px}.quick span{font-size:12px;color:var(--muted)}
+    section{padding:62px 0;border-top:1px solid #ffffff10}.section-head{display:grid;grid-template-columns:90px 1fr;gap:18px;align-items:start;margin-bottom:28px}.num{font-size:12px;font-weight:800;letter-spacing:.15em;color:var(--amber);padding-top:11px}.section-head h2{font-size:clamp(25px,3vw,38px);line-height:1.2;margin:0 0 9px;letter-spacing:-.025em}.section-head p{color:var(--muted);margin:0;max-width:780px}.grid{display:grid;gap:14px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.card{background:linear-gradient(150deg,#132238,#0e1928);border:1px solid var(--line);border-radius:var(--radius);padding:20px;min-width:0}.card h3{font-size:16px;margin:0 0 8px}.card p{color:var(--muted);margin:0;font-size:14px}.card small{color:var(--soft)}.tag{display:inline-block;color:var(--blue);font-weight:750;font-size:11px;letter-spacing:.09em;text-transform:uppercase;margin-bottom:7px}.callout{border:1px solid #786445;background:#30271966;border-radius:16px;padding:16px 18px;color:#f3d8aa;margin-top:16px}.callout strong{color:#ffe6b8}.chain{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:stretch}.chain .node{position:relative;padding:16px 11px;border:1px solid var(--line);border-radius:15px;background:#111f31;text-align:center}.node b{display:block;font-size:13px}.node span{font-size:11px;color:var(--muted)}.node:not(:last-child):after{content:"›";position:absolute;right:-11px;top:34%;z-index:2;color:var(--amber);font-size:22px;font-weight:700}.node.hot{border-color:#74464e;background:#301e2a}.node.cool{border-color:#405f80;background:#17283b}.steps{counter-reset:steps;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.step{counter-increment:steps;border:1px solid var(--line);background:#101d2d;padding:16px;border-radius:16px;min-height:125px}.step:before{content:"0" counter(steps);display:block;color:var(--amber);font-weight:800;font-size:12px;letter-spacing:.12em;margin-bottom:8px}.step b{display:block;font-size:14px}.step span{display:block;color:var(--muted);font-size:12px;margin-top:5px}.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}.split .card{height:100%}.list{list-style:none;padding:0;margin:13px 0 0}.list li{padding:7px 0 7px 20px;position:relative;color:#c4d1df;font-size:13px;border-top:1px solid #ffffff0b}.list li:before{content:"";position:absolute;width:6px;height:6px;border-radius:50%;left:2px;top:17px;background:var(--blue)}
+    .timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;align-items:stretch}.timebox{padding:14px;border-radius:14px;border:1px solid var(--line);background:#101c2c;position:relative}.timebox b{display:block;font-size:13px}.timebox span{display:block;font-size:11px;color:var(--muted);margin-top:5px}.timebox.train{border-top:3px solid var(--blue)}.timebox.test{border-top:3px solid var(--amber)}.timebox.future{border-top:3px solid var(--red)}.timeline-note{margin-top:10px;font-size:12px;color:var(--muted)}.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metric{border-radius:17px;border:1px solid var(--line);background:#101d2c;padding:16px}.metric .symbol{font-size:11px;color:var(--amber);font-weight:800;letter-spacing:.12em}.metric h3{font-size:15px;margin:6px 0}.metric p{font-size:12px;color:var(--muted);margin:0}.metric .formula{font-family:ui-monospace,Consolas,monospace;color:#e4edf8;background:#0a1421;border:1px solid #26364a;border-radius:8px;padding:7px 9px;margin-top:10px;font-size:11px;display:block}.chart-frame{border:1px solid var(--line);background:#0d1928;border-radius:19px;padding:18px;overflow:hidden}.chart-frame h3{margin:0 0 12px;font-size:14px}.chart-frame svg{width:100%;height:auto;display:block}.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:11px;margin-top:8px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}.up{color:var(--red)}.down{color:var(--green)}.amber{color:var(--amber)}.blue{color:var(--blue)}.redline{stroke:var(--red)}.greenline{stroke:var(--green)}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px}.table{border-collapse:collapse;width:100%;min-width:650px;font-size:13px;background:#0f1b2a}.table th,.table td{text-align:left;padding:12px 14px;border-bottom:1px solid #ffffff12;vertical-align:top}.table th{background:#17263a;color:#dbe8f7;font-size:12px}.table td{color:#c0ccda}.table tr:last-child td{border:0}.table td:first-child{font-weight:700;color:#e7eef7}.quiz{border:1px solid #526a86;background:linear-gradient(135deg,#16283e,#101a29);border-radius:20px;padding:20px}.quiz h3{margin:0 0 8px}.quiz p{color:var(--muted);margin:0}.quiz button{margin-top:14px}.answer{display:none;margin-top:15px;border-left:3px solid var(--green);padding:10px 13px;color:#d0e9df;background:#12271f;border-radius:0 10px 10px 0}.answer.open{display:block}.template{font-family:ui-monospace,Consolas,monospace;white-space:pre-wrap;color:#cfdeee;background:#09131f;border:1px solid var(--line);border-radius:15px;padding:17px;font-size:12px}.checklist{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.check{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--line);background:#101c2c;padding:12px;border-radius:12px;color:#c8d4e2;font-size:13px}.check input{accent-color:var(--green);margin-top:5px;width:16px;height:16px}.footer{padding:38px 0 54px;color:var(--soft);border-top:1px solid #ffffff12;font-size:12px}.footer-grid{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}.small-links{display:flex;gap:14px;flex-wrap:wrap}.skip{position:absolute;left:-999px;top:6px;background:white;color:#111;padding:9px;z-index:30}.skip:focus{left:10px}.focusable:focus-visible,.btn:focus-visible,.top-action:focus-visible,button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--amber);outline-offset:3px}
+    @media(max-width:900px){.nav{display:none}.hero-grid{grid-template-columns:1fr}.hero-card{max-width:480px;transform:none}.chain{grid-template-columns:repeat(4,1fr)}.node:nth-child(4):after{display:none}.steps{grid-template-columns:repeat(2,1fr)}.grid.four{grid-template-columns:repeat(2,1fr)}.metric-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:600px){.wrap{padding:0 17px}.top-inner{padding:10px 17px}.hero{padding:48px 0 30px}.hero h1{font-size:42px}.hero p{font-size:15px}.hero-card strong{font-size:23px}.quickbar{grid-template-columns:repeat(2,1fr);margin-bottom:30px}.quick{padding:12px}.section-head{grid-template-columns:45px 1fr;gap:8px}.num{font-size:10px}.grid.two,.grid.three,.grid.four,.split{grid-template-columns:1fr}.chain{grid-template-columns:repeat(2,1fr)}.node:nth-child(2n):after{display:none}.node:nth-child(4):after{display:none}.steps{grid-template-columns:1fr 1fr}.step{min-height:0;padding:13px}.timeline{grid-template-columns:1fr 1fr}.metric-grid{grid-template-columns:1fr 1fr}.metric{padding:13px}.table{min-width:600px}.checklist{grid-template-columns:1fr}.hero:after{right:-170px;top:160px}.footer-grid{display:block}.footer-grid>div+div{margin-top:12px}}
+    @media(max-width:390px){.hero h1{font-size:36px}.steps{grid-template-columns:1fr}.metric-grid{grid-template-columns:1fr 1fr}.top-action{font-size:11px;padding:6px 8px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+    @media print{ :root{color-scheme:light;--text:#152235;--muted:#45566a;--line:#d8e0e9}body{background:#fff;color:#172435;font-size:11pt}.top,.progress,.hero-cta,.quiz button{display:none!important}.wrap{max-width:none;padding:0 12mm}.hero{padding:12mm 0}.hero-card,.card,.step,.metric,.timebox,.quick,.chart-frame,.quiz,.check{background:#fff!important;box-shadow:none;color:#172435;break-inside:avoid}.hero p,.card p,.section-head p,.metric p,.timebox span,.step span,.list li,.table td,.timeline-note,.footer{color:#394b60}.hero h1{font-size:34pt}.hero h1 span{color:#a33d43}section{padding:10mm 0;break-inside:auto}.section-head{break-after:avoid}.grid,.steps,.metric-grid,.chain,.timeline,.split{break-inside:avoid}.table-wrap{overflow:visible}.table{min-width:0}.table th,.table td{color:#172435}.footer{padding-bottom:0}.answer{display:block!important}.quiz{break-inside:avoid}a{color:#1b4c7d;text-decoration:underline}}
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+  <a class="skip" href="#main">跳到主要内容</a>
+  <header class="top">
+    <div class="top-inner">
+      <a class="brand" href="#top" aria-label="回到页面顶部"><b>Q</b>UANT STARTER / A-SHARES</a>
+      <nav class="nav" aria-label="章节导航">
+        <a href="#map">研究地图</a><a href="#data">数据</a><a href="#trade">交易</a><a href="#metrics">指标</a><a href="#validate">验证</a><a href="#live">实盘</a>
+      </nav>
+      <button class="top-action" onclick="window.print()">打印 / 存为 PDF</button>
+    </div>
+  </header>
+  <main id="main">
+    <div class="wrap" id="top">
+      <section class="hero" style="border:0">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow"><i></i> A-SHARE QUANT FIELD GUIDE · 新手版</div>
+            <h1>从交易想法，<br><span>走到可信回测。</span></h1>
+            <p>不需要先会复杂数学。先学会把交易判断写成明确规则，确认历史数据当时可得、交易当时能成交，再判断结果是否稳健。这份手册带你走完整条链。</p>
+            <div class="hero-cta"><a class="btn primary" href="#map">开始 10 分钟导读 <span aria-hidden="true">↓</span></a><a class="btn" href="quant-backtest-primer.md">打开完整文字版 ↗</a></div>
+          </div>
+          <aside class="hero-card" aria-label="学习目标摘要">
+            <div class="mini-label">最后你应该能回答</div>
+            <strong>这条策略赚的是什么钱？</strong>
+            <p>它当时能知道吗？能成交吗？成本后还剩多少？是不是挑出来的？亏起来是什么样？</p>
+            <div class="pill-row"><span class="pill">数据</span><span class="pill">信号</span><span class="pill">成交</span><span class="pill">验证</span><span class="pill">风险</span></div>
+          </aside>
+        </div>
+      </section>
+      <div class="quickbar" aria-label="核心观念速览">
+        <div class="quick"><b>因子 ≠ 策略</b><span>排序有效，不代表能赚钱</span></div>
+        <div class="quick"><b>回测 ≠ 实盘</b><span>可成交和成本必须还原</span></div>
+        <div class="quick"><b>最高收益 ≠ 最优规则</b><span>搜索越多，偶然冠军越多</span></div>
+        <div class="quick"><b>先机制，后参数</b><span>先验证为什么，再看怎么调</span></div>
+      </div>
+      <div class="card" style="margin:-32px 0 36px"><span class="tag">你最初列出的概念 · 全部覆盖</span><p style="font-size:13px;color:var(--muted)"><a href="#factor">因子 / IC / 解耦 / 残差</a>　·　<a href="#controls">控制变量 / 归因 / 可解释</a>　·　<a href="#validate">IS / OOS / WF / 网格 / PBO</a>　·　<a href="#metrics">MDD / Sharpe / 统计不确定性</a>　·　<a href="#timing">因子择时 / 市场状态</a>　·　<a href="#refs">EP006 / WorkBuddy 研究资料</a></p></div>
+
+      <section id="map">
+        <div class="section-head"><div class="num">01 / MAP</div><div><h2>先看懂量化研究的整条链</h2><p>量化不是把主观判断塞进代码，而是让每个判断可复算、可反驳、可执行。</p></div></div>
+        <div class="chain" aria-label="特征到组合流程图">
+          <div class="node"><b>数据</b><span>价格、成交、公告</span></div><div class="node"><b>特征</b><span>20 日涨幅、换手</span></div><div class="node cool"><b>因子</b><span>排序或度量</span></div><div class="node hot"><b>信号</b><span>何时触发</span></div><div class="node"><b>成交</b><span>能否买到</span></div><div class="node"><b>策略</b><span>持有、退出、仓位</span></div><div class="node"><b>组合</b><span>净值与回撤</span></div>
+        </div>
+        <div class="callout"><strong>重要：</strong>一项因子有排序能力，只说明“分数高的股票之后更强一些”。它还没有证明具体买点、退出方式、交易成本和组合结果有效。</div>
+        <div class="grid three" style="margin-top:16px">
+          <article class="card"><span class="tag">FEATURE</span><h3>特征：股票有什么样子？</h3><p>如成交额、波动、20 日收益、距前高距离。</p></article>
+          <article class="card"><span class="tag">FACTOR</span><h3>因子：怎么量化这个特征？</h3><p>如动量、低波动、活跃度。可用于排序，也可能只是研究变量。</p></article>
+          <article class="card"><span class="tag">STRATEGY</span><h3>策略：何时买卖、投入多少？</h3><p>把选股、触发、执行、持仓、退出、现金和成本连成规则。</p></article>
+        </div>
+        <div class="split" style="margin-top:14px">
+          <article class="card"><span class="tag">EVENT / 事件</span><h3>“刚刚发生了一次”</h3><p>例如今天第一次上穿某个水平。适合表达触发时刻。</p><ul class="list"><li>通常关心首次触发和重复信号去重。</li><li>错把状态当事件，会每天重复买入。</li></ul></article>
+          <article class="card"><span class="tag">STATE / 状态</span><h3>“现在处于条件成立阶段”</h3><p>例如价格持续在均线上方。它描述当前状态，不一定是买点。</p><ul class="list"><li>状态恢复时入场，可能属于追确认。</li><li>别把持续状态的每一天都计作独立信号。</li></ul></article>
+        </div>
+      </section>
+
+      <section id="workflow">
+        <div class="section-head"><div class="num">02 / METHOD</div><div><h2>一轮研究怎么走？</h2><p>每个实验只解决一个问题。先写规则和失败条件，再运行回测。</p></div></div>
+        <div class="steps">
+          <div class="step"><b>写出机制</b><span>为什么可能有效？最可能怎么失效？</span></div>
+          <div class="step"><b>冻结口径</b><span>数据、股票池、时点、基准、成交、成本。</span></div>
+          <div class="step"><b>拆成模块</b><span>候选、选股、买点、卖点、仓位分开测。</span></div>
+          <div class="step"><b>先跑基线</b><span>记录所有机会和交易，别只留成功案例。</span></div>
+          <div class="step"><b>只改一件事</b><span>让对照组和实验组只有一个关键差异。</span></div>
+          <div class="step"><b>检查结果</b><span>超额、回撤、逐年、成本、交易数和集中度。</span></div>
+          <div class="step"><b>验证冻结规则</b><span>时间滚动和未见数据只用于判定。</span></div>
+          <div class="step"><b>影子运行</b><span>先核实线上信号和成交，再考虑实盘。</span></div>
+        </div>
+        <div class="callout"><strong>研究问题示例：</strong>在同一批 VCP 观察股票中，“首次放量突破确认”能否改善未来 10/20 个交易日的基准调整收益？如果扣费后不改善，或只靠某一年，就应接受失败结论。</div>
+      </section>
+
+      <section id="data">
+        <div class="section-head"><div class="num">03 / DATA</div><div><h2>回测最容易错的地方：数据时点</h2><p>金融数据错了，程序经常仍能正常运行，只会给出看似合理的错误答案。</p></div></div>
+        <div class="grid three">
+          <article class="card"><span class="tag">LOOK-AHEAD</span><h3>未来函数</h3><p>信号用了当时还不知道的信息。收盘信号通常从下一交易日开始成交；公告值从公告可得日之后生效。</p></article>
+          <article class="card"><span class="tag">SURVIVORSHIP</span><h3>幸存者偏差</h3><p>只回测今天还活着的股票，漏掉退市和失败公司，会虚增历史表现。</p></article>
+          <article class="card"><span class="tag">POINT-IN-TIME</span><h3>历史可见性</h3><p>财务报告期不等于公告时点；历史行业、成分、ST 状态也要按当时版本。</p></article>
+          <article class="card"><span class="tag">UNITS</span><h3>单位断点</h3><p>金额元/万元、换手率小数/百分数的变化会让整段因子失真。按月/年查量级。</p></article>
+          <article class="card"><span class="tag">PRICE BASIS</span><h3>复权口径</h3><p>信号序列和成交、涨跌停判定用价要分清。不要把复权价和原始价混进同一规则。</p></article>
+          <article class="card"><span class="tag">CALENDAR</span><h3>交易日对齐</h3><p>停牌/缺行不能把下一条个股记录冒充下一市场交易日；所有窗口按交易日定义。</p></article>
+        </div>
+        <div class="callout"><strong>项目中的实际教训：</strong>本地日线增强表曾在 2016 年底附近出现成交额与换手率量级断点。遇到“某指标早期突然全为零/巨大”时，先查单位和来源变更，再讨论算法。</div>
+        <div class="card" style="margin-top:14px"><span class="tag">EXTERNAL DATA CHECK</span><h3>第三方指标不等于原版真值</h3><p>先查物理边界，再核来源、单位、覆盖日期和推断/回填迹象；跨源逐日配对。要判断固定乘数能否校准，看比值 CV 与逐年极差；偏差随数值水位改变，可能是饱和或非线性。</p></div>
+      </section>
+
+      <section id="trade">
+        <div class="section-head"><div class="num">04 / EXECUTE</div><div><h2>把信号变成真实能做的交易</h2><p>回测是成交模拟。能在图上看见信号，不代表当时能按理想价格买到或卖掉。</p></div></div>
+        <div class="grid four">
+          <article class="card"><span class="tag">T+1</span><h3>买入后不能当天卖</h3><p>普通 A 股买入仓位受 T+1 约束；不能拿日内高低点做不可能的往返。</p></article>
+          <article class="card"><span class="tag">LIMIT</span><h3>涨跌停不保证成交</h3><p>触板不代表能排上队。日线不能还原全部盘口，需保守处理并披露局限。</p></article>
+          <article class="card"><span class="tag">COST</span><h3>费用与滑点</h3><p>佣金、税费、滑点随规则和日期变化；还要测成本上升后的表现。</p></article>
+          <article class="card"><span class="tag">CAPACITY</span><h3>资金规模</h3><p>资金越大，越可能改变成交价。小资金回测不等于大资金可复制。</p></article>
+        </div>
+        <div class="split" style="margin-top:14px">
+          <div class="card"><h3>每次回测写清“五件套”</h3><ul class="list"><li>什么数据生成信号？</li><li>实际买卖的标的是什么？</li><li>几点、按什么价格成交？买不到怎么办？</li><li>空仓收益如何计算？</li><li>成本包含哪些，历史费率是否变化？</li></ul></div>
+          <div class="card"><h3>按模块拆贡献</h3><ul class="list"><li>选股：同一天选中的股票更好吗？</li><li>入场：固定候选后，触发时点更好吗？</li><li>退出：固定入场后，是否更好兑现？</li><li>仓位：是否优于同平均仓位的固定方案？</li><li>组合：资金约束、重叠持仓和回撤如何？</li></ul></div>
+        </div>
+      </section>
+
+      <section id="metrics">
+        <div class="section-head"><div class="num">05 / METRICS</div><div><h2>指标不是排行榜，要组合着读</h2><p>收益回答“赚多少”，风险和路径回答“怎么赚、怎么亏、能否坚持”。</p></div></div>
+        <div class="split">
+          <div class="chart-frame">
+            <h3>净值与回撤：终点相同，路可能完全不同</h3>
+            <svg viewBox="0 0 620 265" role="img" aria-label="策略净值先涨后跌再恢复的示意图，展示峰值到谷值最大回撤">
+              <defs><linearGradient id="navfill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ff777a" stop-opacity=".3"/><stop offset="1" stop-color="#ff777a" stop-opacity="0"/></linearGradient></defs>
+              <g stroke="#26374c" stroke-width="1"><path d="M50 38H590M50 88H590M50 138H590M50 188H590"/><path d="M50 25V210M185 25V210M320 25V210M455 25V210M590 25V210"/></g>
+              <path d="M50 175 C90 160 112 130 145 126 S205 92 240 105 S300 68 337 75 S390 47 423 62 L468 120 L505 151 L545 106 L590 78 L590 205 L50 205Z" fill="url(#navfill)"/>
+              <path d="M50 175 C90 160 112 130 145 126 S205 92 240 105 S300 68 337 75 S390 47 423 62 L468 120 L505 151 L545 106 L590 78" fill="none" stroke="#ff777a" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="423" cy="62" r="5" fill="#ffc46b"/><circle cx="505" cy="151" r="5" fill="#50c49b"/>
+              <path d="M433 69 Q465 103 495 143" fill="none" stroke="#ffc46b" stroke-width="2" stroke-dasharray="5 5"/>
+              <text x="432" y="94" fill="#ffc46b" font-size="12">峰值</text><text x="509" y="166" fill="#50c49b" font-size="12">谷值</text>
+              <text x="12" y="42" fill="#8ea0b7" font-size="11">净值</text><text x="15" y="232" fill="#8ea0b7" font-size="11">时间 →</text>
+            </svg>
+            <div class="legend"><span><i style="background:var(--red)"></i>净值（A 股红涨）</span><span><i style="background:var(--amber)"></i>高点至低点 = MDD</span><span><i style="background:var(--green)"></i>回撤谷值（A 股绿跌）</span></div>
+          </div>
+          <div class="card"><span class="tag">READ TOGETHER</span><h3>不要只盯一个漂亮数字</h3><ul class="list"><li><b>CAGR</b>：年化复利，不说明过程是否难熬。</li><li><b>超额</b>：相对同期基准；先讲清计算公式。</li><li><b>胜率 × 盈亏比</b>：理解赚钱靠高命中还是少数大赢家。</li><li><b>MDD + 水下时间</b>：最大回撤和多久没回到前高。</li><li><b>交易数 + 换手 + 成本</b>：结果是否有足够样本、是否可执行。</li><li><b>逐年/逐段 + 集中度</b>：结果是否只靠一只股、一个年份或一次行情。</li></ul></div>
+        </div>
+        <div class="metric-grid" style="margin-top:14px">
+          <article class="metric"><span class="symbol">RETURN</span><h3>收益与超额</h3><p>策略净值与可投资基准比较。年化差值、累计财富比等定义不同，要写明。</p><span class="formula">累计收益 = 期末净值 / 期初净值 − 1</span></article>
+          <article class="metric"><span class="symbol">RISK</span><h3>最大回撤 MDD</h3><p>净值历史高点到之后低点的最大跌幅。越深、恢复越久，持有体验越差。</p><span class="formula">DD(t) = NAV(t) / 历史峰值(t) − 1</span></article>
+          <article class="metric"><span class="symbol">EXPECTANCY</span><h3>单笔期望</h3><p>胜率和输赢大小一起看；要按真实费用与成交计算。</p><span class="formula">胜率×平均赢 − 败率×平均亏</span></article>
+          <article class="metric"><span class="symbol">SHARPE</span><h3>夏普</h3><p>单位波动对应多少超额收益。收益相关、厚尾时，机械年化会误导。</p><span class="formula">平均超额收益 / 收益波动</span></article>
+          <article class="metric"><span class="symbol">PATH</span><h3>MFE / MAE</h3><p>持仓过程最大有利/不利波动。用来研究路径，不保证可按极值成交。</p><span class="formula">MFE = 最佳浮盈路径 · MAE = 最大浮亏</span></article>
+          <article class="metric"><span class="symbol">COST</span><h3>换手与容量</h3><p>换手高会增加费用；资金变大还会增加冲击成本和成交约束。</p><span class="formula">净收益 = 毛收益 − 费用 − 滑点</span></article>
+        </div>
+        <div class="callout"><strong>统计提醒：</strong>p 值小不等于策略可赚钱；置信区间宽说明估计不精确；交易少或只覆盖一种行情时，漂亮均值也可能不稳定。重叠交易不能假装成独立样本。</div>
+      </section>
+
+      <section id="factor">
+        <div class="section-head"><div class="num">06 / FACTOR</div><div><h2>IC：因子能否把股票排对顺序？</h2><p>这是“选股排序能力”的检查，不是完整交易策略的成绩单。</p></div></div>
+        <div class="split">
+          <div class="chart-frame">
+            <h3>同一天：因子排名 vs 后续收益排名（示意）</h3>
+            <svg viewBox="0 0 560 300" role="img" aria-label="散点图示意因子越高后续收益排名整体越高，但有离散点">
+              <g stroke="#26374c" stroke-width="1"><path d="M55 45H520M55 95H520M55 145H520M55 195H520M55 245H520"/><path d="M55 35V255M155 35V255M255 35V255M355 35V255M455 35V255M520 35V255"/></g>
+              <path d="M75 230 L500 55" stroke="#ffc46b" stroke-width="2" stroke-dasharray="6 5"/>
+              <g fill="#7cb7ff" opacity=".88"><circle cx="92" cy="218" r="6"/><circle cx="125" cy="201" r="6"/><circle cx="150" cy="220" r="6"/><circle cx="190" cy="177" r="6"/><circle cx="220" cy="196" r="6"/><circle cx="240" cy="149" r="6"/><circle cx="275" cy="170" r="6"/><circle cx="300" cy="128" r="6"/><circle cx="335" cy="144" r="6"/><circle cx="360" cy="111" r="6"/><circle cx="390" cy="130" r="6"/><circle cx="420" cy="84" r="6"/><circle cx="455" cy="105" r="6"/><circle cx="490" cy="61" r="6"/></g>
+              <text x="205" y="286" fill="#a8b7ca" font-size="12">当日因子排名 →</text><text x="9" y="25" fill="#a8b7ca" font-size="12">未来收益排名</text>
+              <text x="440" y="48" fill="#ffc46b" font-size="11">整体正相关趋势</text>
+            </svg>
+          </div>
+          <div class="card"><span class="tag">RANK IC</span><h3>把截面排序变成数字</h3><p>每个交易日，把股票按因子值排序，再与未来固定窗口收益排名做 Spearman 相关；每天算一次，再看这串 IC 的均值、波动、正值比例和逐年稳定性。</p><ul class="list"><li>IC 均值为正：高分股票倾向于表现更好。</li><li>ICIR：常用 IC 均值 / IC 标准差；年化口径要说明。</li><li>分组收益：分数越高，收益是否大致递增？</li><li>收益衰减：优势能维持 1/5/10/20 天吗？</li><li>成本和换手：排序优势能否覆盖频繁换仓费用？</li></ul></div>
+        </div>
+        <div class="callout"><strong>一句话：</strong>IC 回答“排名有没有信息”，回测回答“按交易规则能不能赚钱”。高低组差异通常是排序诊断，不要把理论做空收益说成 A 股可执行收益。</div>
+        <div class="grid three" style="margin-top:14px">
+          <article class="card"><span class="tag">DECOUPLE / 解耦</span><h3>先看方法族是否同质</h3><p>跨轴 Spearman：比较不同入场规则在一组退出规则下的表现排序。排序相似，可能只需选族；差异大，需逐项比较。</p></article>
+          <article class="card"><span class="tag">INTERACTION / 交互</span><h3>别只盯组合冠军</h3><p>用整体均值 + 入场主效应 + 出场主效应估计组合结果。实际值偏离预测的交互残差过大，最高格可能靠偶然搭配。</p></article>
+          <article class="card"><span class="tag">RESIDUAL / 残差</span><h3>扣掉共同暴露后还剩什么？</h3><p>可从收益或因子中回归剔除市场、行业、规模等共同部分。残差依赖模型和时点，不自动等于 Alpha。</p></article>
+        </div>
+      </section>
+
+      <section id="validate">
+        <div class="section-head"><div class="num">07 / VALIDATE</div><div><h2>IS、OOS、WF：防止“记住历史答案”</h2><p>同一段历史既用来选规则又用来证明规则，会高估未来表现。</p></div></div>
+        <div class="timeline" aria-label="样本切分时间轴">
+          <div class="timebox train"><b>过去训练</b><span>形成机制、估参数、筛候选</span></div><div class="timebox train"><b>内层验证</b><span>只在训练窗内比较候选</span></div><div class="timebox test"><b>外层测试</b><span>冻结规则后评估一次</span></div><div class="timebox future"><b>未见未来</b><span>真正前向/影子验证</span></div><div class="timebox"><b>记录暴露</b><span>测试看过后，不再叫独立 OOS</span></div>
+        </div>
+        <p class="timeline-note">示意图不是建议固定比例。时间窗按策略周期、样本长度和标签重叠预先设计。Walk-forward 按时间滚动；purge/embargo 用来避免训练标签与测试期重叠泄漏。</p>
+        <div class="grid three" style="margin-top:15px">
+          <article class="card"><span class="tag">IS / OOS</span><h3>训练和测试分开</h3><p>样本内找规则；样本外检验已经冻结的规则。测试结果参与修改后，就成了开发数据。</p></article>
+          <article class="card"><span class="tag">WALK-FORWARD</span><h3>过去训练，未来测试</h3><p>滚动时间窗检验能否跨行情延续。不能随机打乱交易日做普通交叉验证。</p></article>
+          <article class="card"><span class="tag">MULTIPLE TESTS</span><h3>记录试过多少次</h3><p>测试越多，偶然胜出的冠军越常见。留存失败实验，控制搜索范围与多重检验。</p></article>
+        </div>
+        <div class="split" style="margin-top:14px">
+          <article class="card"><h3>网格分析：看平台，不追尖峰</h3><p>参数附近都差不多，通常比“只有一个数最好”更可信。但平台仍可能只靠一个年份。</p><ul class="list"><li>先比较规则族的边际表现，再看参数点。</li><li>检查参数曲线平滑度和逐年/逐段贡献。</li><li>网格用于查脆弱性，不用于反复挑最高收益。</li></ul></article>
+          <article class="card"><h3>稳健性检查：多把尺子</h3><p>没有单个检验可以宣布“去过拟合”。组合证据一起看。</p><ul class="list"><li>延长样本后结论是否翻转？</li><li>提高滑点和手续费后还剩什么？</li><li>收益是否集中在少数股、年份、单次行情？</li><li>置换/区块重采样是否保留时间结构？</li></ul></article>
+        </div>
+        <div class="grid two" style="margin-top:14px">
+          <article class="card"><span class="tag">PBO / 多重检验</span><h3>搜索越多，赢家越可能是偶然</h3><p>回测过拟合概率（PBO）估计许多候选里，样本内赢家在样本外表现落到中位数以下的风险。CSCV 是常见计算框架；它不能替代时间顺序 OOS，也修不好数据泄漏。</p></article>
+          <article class="card"><span class="tag">BOOTSTRAP / 重采样</span><h3>不确定性要保留时间结构</h3><p>重叠交易、同日信号相关时，不应把每笔记录都当独立样本。按交易、日期区块或聚类选择重采样单位；结果描述不确定性，不会创造新行情。</p></article>
+        </div>
+        <div class="callout"><strong>项目边界：</strong>当前右侧波段研究规范中，2023 年之后的相关历史数据已暴露，不能重新包装成未看过的测试段。冻结规则之后的新交易日，才可提供真正的前向验证。</div>
+      </section>
+
+      <section id="controls">
+        <div class="section-head"><div class="num">08 / CONTROL</div><div><h2>控制变量与归因：到底是谁在贡献？</h2><p>对照组要回答一个清楚的问题，不能事后挑最容易赢的基准。</p></div></div>
+        <div class="table-wrap"><table class="table"><thead><tr><th>比较方式</th><th>回答的问题</th><th>怎么读</th></tr></thead><tbody>
+          <tr><td>同期可投资市场基准</td><td>是否只是跟着牛市涨？</td><td>正收益但跑输基准，不等于选股有效。</td></tr>
+          <tr><td>同日 / 同类机会集</td><td>候选筛选是否增加信息？</td><td>匹配时只用决策时可见变量。</td></tr>
+          <tr><td>固定候选，换入场</td><td>进场触发时点是否有增量？</td><td>其余条件保持一致，比较触发与未触发机会。</td></tr>
+          <tr><td>固定入场，换退出</td><td>退出是否改善兑现？</td><td>候选和买点不变，隔离卖出规则贡献。</td></tr>
+          <tr><td>同平均仓位固定方案</td><td>择时是否优于简单减仓？</td><td>减仓会机械降低回撤，需同平均暴露比较。</td></tr>
+          <tr><td>保留组 / 跳过组</td><td>过滤器在避亏，还是错过赚钱交易？</td><td>被过滤掉的交易仍赚钱，过滤器可能只是少做。</td></tr>
+          <tr><td>消融 / 残差</td><td>模块或共同暴露贡献多少？</td><td>残差依赖模型；去掉一项也要看新增和删除样本。</td></tr>
+        </tbody></table></div>
+        <div class="callout"><strong>六种收益来源：</strong>市场 Beta、选股、入场时点、退出兑现、仓位管理、行业/风格暴露。研究要把它们拆开，避免把牛市的市场收益误认成策略 Alpha。</div>
+        <div class="card" style="margin-top:14px"><span class="tag">EXPLAINABILITY / 可解释</span><h3>讲出机制，再用实验验证它</h3><p>说明策略为何可能有效、何时有效、最可能如何失败；用消融和对照确认收益来自规则本身。代码规则看得懂，不代表统计证据可靠；复杂模型的解释图也不能代替样本外检验。</p></div>
+      </section>
+
+      <section id="timing">
+        <div class="section-head"><div class="num">09 / REGIME</div><div><h2>市场状态与因子择时：先证明有必要切换</h2><p>“牛市用 A、熊市用 B”可能增加判断，也可能只是把收益从一个阶段搬到另一个阶段。</p></div></div>
+        <div class="grid four">
+          <article class="card"><span class="tag">1 · 定义</span><h3>只看当时可得值</h3><p>用过去数据定义互斥、可重复的状态，不能用未来涨跌贴标签。</p></article>
+          <article class="card"><span class="tag">2 · 先确认代价</span><h3>状态是否真影响策略？</h3><p>如果原规则在所谓“问题状态”并没有明显代价，就不必加过滤开关。</p></article>
+          <article class="card"><span class="tag">3 · 反向对照</span><h3>状态有方向信息吗？</h3><p>比较正向、反向、固定规则和更简单的全程替代。</p></article>
+          <article class="card"><span class="tag">4 · 报全样本</span><h3>分开看收益搬家</h3><p>同时报状态内、状态外和全样本净变化、仓位、MDD、换手。</p></article>
+        </div>
+        <div class="callout"><strong>规则切换 ≠ 仓位调整：</strong>前者改变方向/进出场，后者改变下注大小。择时只让回撤变小，未必创造收益；仓位方案要和相同平均仓位的固定仓位比较。</div>
+      </section>
+
+      <section id="live">
+        <div class="section-head"><div class="num">10 / LIVE</div><div><h2>回测过关，距离实盘还有一道门</h2><p>研究代码、线上信号和真实成交必须处于同一口径。</p></div></div>
+        <div class="checklist">
+          <label class="check"><input type="checkbox"><span>规则冻结；训练、测试和失败动作已提前写下。</span></label>
+          <label class="check"><input type="checkbox"><span>数据时点、股票池、复权、单位和交易日历已核对。</span></label>
+          <label class="check"><input type="checkbox"><span>信号后成交、T+1、涨跌停、停牌、成本有明确定义。</span></label>
+          <label class="check"><input type="checkbox"><span>逐年、逐段、状态、交易数、集中度和 MDD 已查看。</span></label>
+          <label class="check"><input type="checkbox"><span>回测信号与线上函数逐日重放一致，历史列已重新计算。</span></label>
+          <label class="check"><input type="checkbox"><span>先影子运行；记录信号、可成交性、滑点、提醒频率。</span></label>
+          <label class="check"><input type="checkbox"><span>数据快照、策略版本、配置、日志和回滚办法已留档。</span></label>
+          <label class="check"><input type="checkbox"><span>明确系统是否仅日线、是否自动交易、资金约束是否模拟。</span></label>
+        </div>
+        <div class="split" style="margin-top:16px">
+          <div class="quiz"><span class="tag">SELF CHECK · 1</span><h3>某过滤器让 CAGR 上升了。还要查什么？</h3><p>点开答案，看看能否讲出完整理由。</p><button class="btn" data-answer="a1" aria-expanded="false">显示答案</button><div class="answer" id="a1">检查被过滤掉的交易是否仍有正收益；比较相同机会集、成本和市场状态；确认增量不是由单一年份造成；再验证冻结规则的未来表现。</div></div>
+          <div class="quiz"><span class="tag">SELF CHECK · 2</span><h3>Rank IC 为正，就能直接实盘吗？</h3><p>区分“排序信息”和“可交易策略”。</p><button class="btn" data-answer="a2" aria-expanded="false">显示答案</button><div class="answer" id="a2">不能。还要定义选股与成交、处理成本与 A 股约束、构建持仓组合，并验证样本外收益和回撤。IC 是因子排序诊断，不是成交记录。</div></div>
+        </div>
+      </section>
+
+      <section id="template">
+        <div class="section-head"><div class="num">11 / NOTE</div><div><h2>每轮实验，先填这张卡</h2><p>写下来，避免结果出来后忘记自己试过什么、为什么改规则。</p></div></div>
+        <div class="split">
+          <div class="template" id="studyTemplate">研究问题：
+机制假设 / 最可能的失败方式：
+策略身份 / 目标持有周期：
+唯一规则变化：
+数据版本 / 股票池 / 时点字段：
+训练 / 验证 / 未暴露测试区间：
+信号时点 / 成交时间 / 未成交规则：
+基准与超额公式：
+成本与压力测试：
+主指标 / 交易数门槛 / 成功失败标准：
+尝试过的参数和规则数量：
+新增、删除候选的表现：
+结果：保留 / 淘汰 / 观察 / 前向测试</div>
+          <div class="card"><span class="tag">LEARNING ORDER</span><h3>新手建议按这个顺序学</h3><ol class="list"><li>回测口径与 A 股交易执行。</li><li>数据时点、未来函数、幸存者偏差。</li><li>拆解选股、入场、退出、组合。</li><li>收益、基准、回撤、成本和样本量。</li><li>IS/OOS、WF、参数敏感和多重检验。</li><li>Rank IC、分组、因子相关和残差分析。</li><li>最后研究 regime、因子择时和生产监控。</li></ol><button class="btn" id="copyTemplate" style="margin-top:16px">复制实验卡</button><p id="copyStatus" aria-live="polite" style="margin-top:8px;font-size:12px"></p></div>
+        </div>
+      </section>
+
+      <section id="refs">
+        <div class="section-head"><div class="num">12 / NEXT</div><div><h2>下一步看什么</h2><p>先用项目规范做研究，再用论文理解统计陷阱；复杂模型不是入门前提。</p></div></div>
+        <div class="grid three">
+          <article class="card"><span class="tag">IN THIS PROJECT</span><h3>先看现行研究规范</h3><p><a href="../docs/research/strategy-development-methodology.md">策略研究方法论</a> · <a href="../docs/mining.md">因子与策略挖掘</a> · <a href="../docs/strategy-iteration.md">策略迭代指南</a></p></article>
+          <article class="card"><span class="tag">WORKBUDDY SKILL</span><h3>因子择时实战清单</h3><p>`factor-timing-research` 总结了 0AMV 实验中的族级网格、解耦、regime 对照、成本压力和生产核对。阈值属于案例约定。</p></article>
+          <article class="card"><span class="tag">PAPERS</span><h3>统计与过拟合</h3><p><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2326253">回测过拟合概率</a> · <a href="https://www.nber.org/papers/w20592">多重因子检验</a> · <a href="https://alo.mit.edu/research-page/the-statistics-of-sharpe-ratios/">夏普比率统计性质</a><br><small>PBO/CSCV 是多重搜索诊断工具，不能替代时间顺序测试。</small></p></article>
+        </div>
+        <div class="card" style="margin-top:14px"><span class="tag">EP006 · HOW TO USE</span><h3>把资源清单当作入口，不当成课程</h3><p>Quantocracy、Alpha Architect 用于发现研究主题和论文解读；arXiv q-fin、AQR/Robeco 用于追研究；Qlib、RD-Agent 用于看研究工程流程。AI 工具适合搜读、翻译、写实验代码；观点不能代替重算和验证。</p></div>
+        <div class="callout"><strong>关于这份报告：</strong>它教你如何检验交易规则，不提供买卖建议，也不承诺历史收益能在未来复现。项目当前主线是 A 股中短线右侧突破与回踩；IC 可帮助诊断排序，但最终仍看固定机会集的前向收益、真实成交和组合结果。</div>
+      </section>
+      <footer class="footer"><div class="footer-grid"><div>QUANT STARTER · TickFlow / QuantX 研究入门</div><div class="small-links"><a href="quant-backtest-primer.md">文字版</a><a href="#top">回到顶部 ↑</a><span>单文件 · 离线可读 · 可打印</span></div></div></footer>
+    </div>
+  </main>
+  <script>
+    (()=>{
+      const progress=document.getElementById('progress');
+      const update=()=>{const d=document.documentElement;const max=d.scrollHeight-d.clientHeight;progress.style.width=(max>0?d.scrollTop/max*100:0)+'%'};
+      document.addEventListener('scroll',update,{passive:true});window.addEventListener('resize',update);update();
+      document.querySelectorAll('[data-answer]').forEach(btn=>btn.addEventListener('click',()=>{const answer=document.getElementById(btn.dataset.answer);const open=answer.classList.toggle('open');btn.setAttribute('aria-expanded',String(open));btn.textContent=open?'收起答案':'显示答案'}));
+      document.getElementById('copyTemplate').addEventListener('click',async()=>{const status=document.getElementById('copyStatus');try{await navigator.clipboard.writeText(document.getElementById('studyTemplate').innerText);status.textContent='已复制实验记录卡。'}catch{status.textContent='浏览器未开放剪贴板权限：可选中文本后手动复制。'}});
+    })();
+  </script>
+</body>
+</html>

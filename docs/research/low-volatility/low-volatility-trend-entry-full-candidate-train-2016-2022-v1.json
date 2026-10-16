@@ -1,0 +1,33 @@
+{
+  "base_protocol": "../vcp/production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "low-volatility-trend-entry-full-candidate-train-2016-2022-v1",
+  "purpose": "establish_a_causal_full_candidate_alpha_baseline_for_low_volatility_trend_continuation",
+  "hypothesis": "The first transition into positive momentum, low realized volatility and an above-MA20 state may identify persistent trends with favorable market-relative paths.",
+  "semantic_fix": "Retain the compatible strategy id but emit one strategy-specific entry only when the complete qualifying state changes from false to true; remove the unsupported leader label.",
+  "backtest": {
+    "strategy_id": "low_volatility_leader",
+    "start": "2016-01-04",
+    "end": "2022-12-30",
+    "mode": "full"
+  },
+  "universe_suffixes": [".SH", ".SZ"],
+  "analysis": {
+    "evaluation_horizon_bars": 40,
+    "early_path_bars": [5, 10, 20],
+    "large_winner_mfe_thresholds": [0.2, 0.5, 1.0]
+  },
+  "training_gate": {
+    "minimum_trades": 500,
+    "minimum_average_excess_return_held": 0.0,
+    "minimum_average_40d_excess_return": 0.0,
+    "minimum_positive_alpha_years": 4,
+    "minimum_mfe_20pct_rate": 0.2
+  },
+  "temporal_test_period": ["2023-01-03", "2026-06-30"],
+  "constraints": [
+    "Use builtin default 20-day momentum, 30 percent annual volatility and MA20 state definitions.",
+    "Execute each state-entry event independently with T+1 fills and frozen costs.",
+    "Do not inspect the temporal test unless every training gate passes.",
+    "A failed baseline stops the default representation without volatility or moving-average threshold searches."
+  ]
+}

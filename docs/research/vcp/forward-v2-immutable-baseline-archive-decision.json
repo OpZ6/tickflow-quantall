@@ -1,0 +1,40 @@
+{
+  "decision_id": "forward-v2-immutable-baseline-archive-decision",
+  "decided_at": "2026-09-08T22:39:00+08:00",
+  "strategy_id": "vcp_leader_breakout",
+  "strategy_version": "forward-v2",
+  "version_manifest": "docs/research/vcp/forward-v2-version-manifest.json",
+  "version_manifest_sha256": "42a32c9cc5985794b3ed1bf5c068dee0702a7c70b85ddc350c39977c994794a4",
+  "archive": "data/research/vcp/forward/archives/vcp-forward-v2-20260908-baseline.zip",
+  "archive_sha256": "fc051f0fecfd29437af97e5520c7ab0a39474aded807416c07357f250633a320",
+  "archive_bytes": 928677316,
+  "archive_manifest": "data/research/vcp/forward/archives/vcp-forward-v2-20260908-baseline.manifest.json",
+  "archive_manifest_sha256": "a1f3308d1a1f1f737512ca267305981bf1a41ab9ff1dfa2202388f25563f80e1",
+  "member_count": 8527,
+  "completed_daily_through": "2026-09-08",
+  "partition_guard": {
+    "kline_daily_minimum_rows": 1000,
+    "kline_daily_enriched_minimum_rows": 1000,
+    "kline_index_daily_minimum_rows": 1,
+    "undersized_enriched_partitions": 0
+  },
+  "validation": {
+    "zip_crc_all_members": "passed",
+    "duplicate_members": 0,
+    "archive_sha256_matches_sidecar": true,
+    "source_manifest_sha256_matches_sidecar": true
+  },
+  "behavior_parity": {
+    "repaired_reference_run": "20260908T142007914349Z",
+    "forward_v2_run": "20260908T143326722024Z",
+    "trade_count": 303,
+    "trades_equal": true,
+    "equity_curve_equal": true,
+    "benchmark_curve_equal": true,
+    "drawdown_curve_equal": true,
+    "per_symbol_stats_equal": true
+  },
+  "decision": "accept_forward_v2_as_recoverable_repaired_data_baseline",
+  "first_eligible_observation_date": "2026-09-09",
+  "strategy_rules_changed": false
+}

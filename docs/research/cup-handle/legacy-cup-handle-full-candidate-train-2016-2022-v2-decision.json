@@ -1,0 +1,46 @@
+{
+  "experiment": "legacy-cup-handle-full-candidate-train-2016-2022-v2",
+  "decision": "retain_candidate_pool_stop_default_executable_representation",
+  "run_id": "20260909T133226351846Z",
+  "strategy_id": "quants_cup_handle_legacy_v1",
+  "training_result": {
+    "trades": 98489,
+    "average_excess_return_held": -0.010527,
+    "average_40d_excess_return": -0.001909,
+    "positive_40d_alpha_years": 3,
+    "years_evaluated": 7,
+    "positive_40d_alpha_year_list": [2017, 2019, 2020],
+    "mfe_20pct_count": 27275,
+    "mfe_20pct_rate": 0.276934,
+    "mfe_50pct_count": 4829,
+    "mfe_100pct_count": 700,
+    "stop_loss_share": 0.229376
+  },
+  "training_checks": {
+    "minimum_trades_100": true,
+    "nonnegative_average_excess_return_held": false,
+    "nonnegative_average_40d_alpha": false,
+    "minimum_four_positive_alpha_years": false,
+    "minimum_mfe_20pct_rate_0_20": true,
+    "minimum_mfe_50pct_count_10": true
+  },
+  "market_outcome_40d_alpha": {
+    "down": 0.013109,
+    "sideways": -0.00333,
+    "up": -0.015188
+  },
+  "interpretation": [
+    "The clean v2 baseline enforces the training boundary and restores the original detector; it is the first valid gate evaluation for this pool. The prior v1 boundary-exposed ledger is superseded.",
+    "The default executable representation fails the pre-registered gate: realized held excess is negative, fixed-40-day Alpha is slightly negative, and only three of seven training years have positive fixed-horizon Alpha.",
+    "The pool has a defensive relative-strength profile: fixed-40-day excess is positive in down markets (+1.31 percent) and negative in up markets (-1.52 percent), with overall Alpha close to zero (-0.19 percent).",
+    "The right tail is material in absolute terms (4,829 paths above 50 percent MFE and 700 above 100 percent), but the default exits realize little of it: the median exit capture of a 50-percent-MFE path is 3.66 percent. This suggests the failure is partly exit realization, not pure selection."
+  ],
+  "temporal_test_run": null,
+  "stopped_variants": [
+    "cup depth thresholds",
+    "breakout chase and stop thresholds",
+    "any parameter search on this result"
+  ],
+  "next_action": "Retain as a candidate pool only; do not promote the default executable representation. Before any structural change, reuse this frozen ledger to separate selection quality from exit realization, then pre-register one structural exit or entry hypothesis.",
+  "evidence": "data/research/vcp/runs/20260909T133226351846Z/trade-path-analysis.json"
+}

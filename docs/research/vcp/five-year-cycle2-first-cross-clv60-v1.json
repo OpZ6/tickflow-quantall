@@ -1,0 +1,7 @@
+{
+  "base_protocol": "five-year-cycle2-breadth-first-cross-v1.json",
+  "experiment": "vcp-five-year-cycle2-first-cross-clv60-v1",
+  "purpose": "cycle2_mechanism_test",
+  "hypothesis": "Require the breakout close to finish in the upper 40% of its daily range to reject upper-wick failures.",
+  "backtest": {"params": {"breakout_close_location_min": 0.60}}
+}

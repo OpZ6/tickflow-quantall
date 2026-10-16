@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>0AMV 还原与 1AMV 演进｜研究取舍报告</title>
+<style>
+:root{--bg:#f4f5f7;--paper:#fff;--ink:#182332;--muted:#536174;--line:#dce2e9;--accent:#2059a2;--soft:#edf3fb;--good:#176646;--goodbg:#eaf5ee;--warn:#805018;--warnbg:#fff3df;--bad:#a43138;--badbg:#fceff0;--code:#f1f4f8;--shadow:0 8px 30px #172b4510}
+html[data-theme=dark]{--bg:#10151d;--paper:#18212c;--ink:#e7edf6;--muted:#b0bdce;--line:#354456;--accent:#8ab8f5;--soft:#23354b;--good:#90d8b5;--goodbg:#213a30;--warn:#f0c789;--warnbg:#3d3020;--bad:#ffadb4;--badbg:#3e272e;--code:#111b27;--shadow:none}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:88px}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;font-size:15px;line-height:1.75}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}button,a,summary{touch-action:manipulation}button{font:inherit;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:4px}p{margin:9px 0}strong{font-weight:650}header,main,footer{max-width:1200px;margin:auto;padding:0 32px}header{padding-top:52px;padding-bottom:27px}.eyebrow{font-size:12px;font-weight:700;letter-spacing:2px;color:var(--muted)}h1{font-size:clamp(28px,4vw,44px);line-height:1.25;letter-spacing:-1px;margin:15px 0}h2{font-size:25px;line-height:1.35;margin:0 0 8px}h3{font-size:18px;line-height:1.45;margin:0 0 9px}h4{font-size:15px;margin:14px 0 5px}.intro{max-width:870px;color:var(--muted);font-size:17px}.meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:19px;color:var(--muted);font-size:12px}.toolbar{display:flex;gap:8px;margin-top:20px}.button{border:1px solid var(--line);border-radius:7px;padding:7px 14px;background:var(--paper);color:var(--ink)}.button:hover{background:var(--soft)}.navwrap{position:sticky;top:0;z-index:20;background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}nav{max-width:1200px;padding:12px 32px;margin:auto;display:flex;flex-wrap:wrap;gap:5px 22px}nav a{font-size:13px;color:var(--muted)}nav a.active{color:var(--accent);font-weight:700}main{padding-top:28px}section{margin-bottom:28px;padding:27px;background:var(--paper);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow)}.sectionhead{display:flex;gap:14px;align-items:flex-start;margin-bottom:19px}.num{color:var(--accent);font-size:13px;font-weight:700;padding-top:6px}.subtitle,.muted{color:var(--muted)}.subtitle{margin:0}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.card{border:1px solid var(--line);border-radius:9px;padding:20px;min-width:0}.card p{font-size:14px}.card .label{font-size:11px;letter-spacing:1px;color:var(--accent);font-weight:700;margin-bottom:7px}.note{padding:13px 17px;background:var(--soft);border-left:3px solid var(--accent);border-radius:3px;margin:17px 0;font-size:14px}.note.good{background:var(--goodbg);border-color:var(--good)}.note.warn{background:var(--warnbg);border-color:var(--warn)}.note.bad{background:var(--badbg);border-color:var(--bad)}.badge{display:inline-block;font-size:12px;line-height:1.4;border-radius:5px;padding:4px 7px;background:var(--soft);color:var(--accent);font-weight:650;white-space:nowrap}.keep{background:var(--goodbg);color:var(--good)}.drop{background:var(--badbg);color:var(--bad)}.archive{background:var(--warnbg);color:var(--warn)}.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;max-width:100%}table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}th{font-size:12px;background:var(--code);color:var(--muted);font-weight:650}th,td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}td:first-child{font-weight:600}td p{margin:3px 0}table .small{font-weight:400;color:var(--muted);font-size:12px}.filters{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}.filters button{font-size:13px;border:1px solid var(--line);background:var(--paper);color:var(--muted);border-radius:6px;padding:5px 11px}.filters button[aria-pressed=true]{background:var(--soft);color:var(--accent);border-color:var(--accent)}.formula,pre{background:var(--code);border-radius:6px;padding:12px 14px;font-family:Consolas,"Microsoft YaHei",monospace;font-size:13px;line-height:1.8;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}.formula{margin:11px 0}code{font-family:Consolas,monospace;font-size:.92em}details{border-top:1px solid var(--line);padding-top:11px;margin-top:14px}summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600}.compact{padding-left:19px;margin:10px 0;font-size:14px}.compact li{margin:6px 0}.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:19px 0}.flowitem{padding:17px;background:var(--code);border-radius:8px;position:relative}.flowitem .step{font-size:11px;color:var(--accent);font-weight:700}.flowitem b{display:block;font-size:15px;margin:5px 0}.flowitem span{font-size:12px;color:var(--muted)}.flowitem:not(:last-child)::after{content:'→';position:absolute;right:-12px;top:34px;color:var(--muted);z-index:1}.focus{border-color:var(--accent)}.sources{font-size:12px;color:var(--muted)}.sources li{margin:7px 0;overflow-wrap:anywhere}.decision{font-size:19px;line-height:1.6;margin:10px 0 20px;max-width:900px}.path{display:flex;flex-direction:column;gap:15px}.pathrow{display:grid;grid-template-columns:45px 1fr;gap:12px}.stepcircle{height:34px;width:34px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;color:var(--accent);font-weight:700;font-size:13px}.pathrow h3{font-size:17px}.pathrow p{font-size:14px}.divider{border-top:1px solid var(--line);margin:22px 0}.mini{font-size:12px;color:var(--muted)}footer{padding-top:6px;padding-bottom:40px;font-size:12px;color:var(--muted)}.skip{position:absolute;top:-100px;left:12px;padding:10px;background:var(--paper);z-index:100}.skip:focus{top:12px}.chart{width:100%;height:auto;display:block}.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;margin:10px 0;color:var(--muted)}.legend span::before{content:'';display:inline-block;width:16px;height:3px;background:var(--swatch);vertical-align:middle;margin-right:6px}.scenarioResult{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}.scenarioResult div{padding:11px 13px;background:var(--code);border-radius:6px;font-size:12px}.scenarioResult b{display:block;font-size:19px;margin-top:2px}svg text{font-family:"Segoe UI","Microsoft YaHei",sans-serif}[hidden]{display:none!important}
+@media(max-width:850px){.grid{grid-template-columns:1fr}.two{grid-template-columns:1fr}.flow{grid-template-columns:repeat(2,minmax(0,1fr))}.flowitem:nth-child(2)::after{display:none}header,main,footer{padding-left:20px;padding-right:20px}nav{padding:10px 20px;gap:5px 14px}section{padding:22px}.intro{font-size:15px}.scenarioResult{grid-template-columns:1fr}}
+@media(max-width:480px){header{padding-top:30px}header,main,footer{padding-left:12px;padding-right:12px}section{padding:18px 15px}h2{font-size:21px}.flow{grid-template-columns:1fr}.flowitem::after{display:none}nav{padding:10px 12px}th,td{padding:10px;min-width:100px}.decision{font-size:17px}.card{padding:16px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+@media print{html{color-scheme:light}body{background:#fff;font-size:11px;color:#182332}.navwrap,.toolbar,.filters,.skip{display:none}header{padding-top:0}header,main,footer{max-width:none;padding-left:0;padding-right:0}section{box-shadow:none;border-radius:0;padding:18px 0;break-inside:auto}.card,.pathrow,.note,tr{break-inside:avoid}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.two{grid-template-columns:repeat(2,minmax(0,1fr))}details{display:block}.tablewrap{overflow:visible}.flow{grid-template-columns:repeat(4,minmax(0,1fr))}a{color:#2059a2}.chart{max-height:230px}footer{padding-bottom:0}}
+</style>
+</head>
+<body>
+<div class="note" style="max-width:1136px;margin:24px auto;padding:16px"><strong>早期研究归档。</strong>本报告保留初始资料清理和候选分类；后续1AMV数学与参数结论请见<a href="1amv-independent-audit-20260930.html">独立核验报告</a>。项目当前默认 H=8、γ=1、KF=1.15，实际使用说明见 <a href="../../frontend/public/amv-guide.html">1AMV指南</a>。</div>
+<a class="skip" href="#conclusion">跳到报告正文</a>
+<header>
+<div class="eyebrow">ALGORITHM RECONSTRUCTION · RESEARCH DECISIONS</div>
+<h1>先还原 0AMV，再演进 1AMV</h1>
+<p class="intro">把杂乱的复刻资料收束成一条可验证的路线。只讨论原版还原、个股扩展和板块汇总；每个保留项都有明确身份、计算对象与用途。</p>
+<div class="meta"><span>研究日期：2026.09.30</span><span>依据：收集文本、本地公式、此前核查的 GitHub 源码</span><span>状态：研究方案，尚未完成原版数值还原</span></div>
+<div class="toolbar"><button class="button" id="theme" type="button" aria-pressed="false">深色阅读</button><button class="button" id="print" type="button">打印 / 保存 PDF</button></div>
+</header>
+<div class="navwrap"><nav aria-label="报告目录"><a href="#conclusion">01 结论</a><a href="#prune">02 删与留</a><a href="#catalog">03 指标身份</a><a href="#models">04 三组候选</a><a href="#extend">05 1AMV 演进</a><a href="#use">06 怎么看</a><a href="#plan">07 执行路线</a></nav></div>
+<main>
+<section id="conclusion">
+<div class="sectionhead"><span class="num">01</span><div><h2>研究主线只留三组候选</h2><p class="subtitle">最终上线一个内核。候选模型用于比较，不是三个都变成新指数。</p></div></div>
+<p class="decision"><strong>先拿指南针原版连续数值做对照，选出最接近的 0AMV 算法；再确定个股与板块能否沿用同一内核。现在不用在几十条指标里挑选，也不用继续堆叠“成本、主力、死筹”标签。</strong></p>
+<div class="grid">
+<article class="card"><div class="label">A · 简单基准</div><h3>平滑成交额</h3><p>计算市场成交规模的持续变化。知乎、新浪和部分 GitHub 实现归为同一组。</p><span class="badge keep">保留一份实现</span></article>
+<article class="card"><div class="label">B · 形态拟合候选</div><h3>成交额 × 价格位置</h3><p>在成交额上加入价格相对位置。B站版本属于这一组，固定参数需要重新验证。</p><span class="badge keep">保留参数框架</span></article>
+<article class="card focus"><div class="label">C · 结构优先候选</div><h3>活跃状态 × 市值</h3><p>每只股票先计算活跃状态，再汇总。最方便延伸到个股、板块，但尚未证明最接近原版。</p><span class="badge keep">优先做结构核验</span></article>
+</div>
+<div class="note"><strong>当前缺口：</strong>此次提供的资料没有包含已核验来源、可直接用于拟合的连续指南针原版数值。网页截图和别人代码中的“official”标签都不能自动成为真值。在这个缺口补齐前，可以整理、实现候选，不能宣布谁胜出。</div>
+<p class="mini">这里的“结构优先”指符合你希望从个股汇总到板块、全市场的目标，不代表已验证的拟合优胜。</p>
+</section>
+
+<section id="prune">
+<div class="sectionhead"><span class="num">02</span><div><h2>哪些可以直接删，哪些留下</h2><p class="subtitle">“删”指从本轮研究、指标展示和后续实现中移除。来源原文保留一份归档即可。</p></div></div>
+<div class="filters" id="pruneFilters" aria-label="筛选取舍"><button type="button" data-filter="all" aria-pressed="true">全部</button><button type="button" data-filter="keep" aria-pressed="false">只看保留</button><button type="button" data-filter="drop" aria-pressed="false">直接淘汰</button><button type="button" data-filter="archive" aria-pressed="false">合并 / 移出本轮</button></div>
+<div class="tablewrap"><table id="pruneTable"><thead><tr><th style="width:15%">处置</th><th style="width:30%">资料 / 指标</th><th>剩下什么，为什么</th></tr></thead><tbody>
+<tr data-kind="drop"><td><span class="badge drop">直接淘汰</span></td><td>个股 0DMV<div class="small">CLOSE − 平滑成交量</div></td><td>价格与数量相减，单位不成立；没有得到死筹市值，也不满足活筹与死筹的关系。</td></tr>
+<tr data-kind="drop"><td><span class="badge drop">原样淘汰</span></td><td>错误的 CYC2 无穷线</td><td>按通达信现行单位，换手权重约小了一万倍。即使修正，也不属于本轮0AMV核心。</td></tr>
+<tr data-kind="drop"><td><span class="badge drop">移除</span></td><td>JBCYS、原样 CYF</td><td>前者含价格平方量纲；后者换手比例重复放大，迅速饱和。均不是还原0AMV所需。</td></tr>
+<tr data-kind="archive"><td><span class="badge archive">合并</span></td><td>知乎活筹、新浪活筹、WdBlink 默认成交额版</td><td>主体都是递推平滑成交额。合成候选A，缩放单位作为展示参数，不保留三套代码。</td></tr>
+<tr data-kind="archive"><td><span class="badge archive">合并</span></td><td>lpeiyi 的 SMA(10,2)</td><td>只是候选A的不同平滑系数。3%进入、7%回撤退出及历史区间合并规则，移出算法还原阶段。</td></tr>
+<tr data-kind="archive"><td><span class="badge archive">后置</span></td><td>C5 / C13 / C34 / ∞、生命线</td><td>都是主体曲线的附加平滑。先还原收盘序列，再单独还原原版均线；先不把它们当独立信号。</td></tr>
+<tr data-kind="archive"><td><span class="badge archive">移出本轮</span></td><td>BB BAND、CYB、CYE、RPY / RPY2、MYP、CYOBV</td><td>它们计算波动、价格趋势、价位或方向化成交量。可归档到常规指标资料，与0AMV内核无关。</td></tr>
+<tr data-kind="archive"><td><span class="badge archive">移出本轮</span></td><td>CYC / CYC2、CYS / CYS2、CBXQD、CYR、CMACD、DKBL</td><td>属于成交均价、均价变化与偏离。研究原版0AMV主体时不需要；以后如还原原版CYC，另立小任务。</td></tr>
+<tr data-kind="archive"><td><span class="badge archive">移出本轮</span></td><td>CBW、CKD、CYD / CYD2、CYDD、CYQKL、PAS1、P-CBY、SDR、博弈K线 / 柱线</td><td>依赖COST / WINNER筹码模型，带来另一套未知算法。不能帮助证明0AMV原版被还原。</td></tr>
+<tr data-kind="archive"><td><span class="badge archive">移出本轮</span></td><td>CYW、CYW-YJJ 与“主力控盘”解读</td><td>实际是日内收盘位置加权成交量、RSI类动量；没有账户持仓信息。</td></tr>
+<tr data-kind="keep"><td><span class="badge keep">保留</span></td><td>B站价量公式、WdBlink 价格调整变体</td><td>归为候选B。保留公式结构，10971.22、0.79和均线参数作为待核验拟合参数，不照搬涨幅阈值。</td></tr>
+<tr data-kind="keep"><td><span class="badge keep">保留</span></td><td>amv-site 递推模型、本地1AMV内核</td><td>归为候选C的两个实现分别对照。不能混合参数；不能把网站校准后的曲线当未校准结果。</td></tr>
+<tr data-kind="keep"><td><span class="badge keep">保留输出</span></td><td>本地 AMVCHG / AMVPCT / AMVBK</td><td>保留“变化、历史位置、板块汇总”的用途。以后全部从选定内核派生，不作为三种新算法。</td></tr>
+<tr data-kind="keep"><td><span class="badge keep">优先核验</span></td><td>指南针连续导出数据、原版使用说明</td><td>前者是还原对照，后者帮助理解定义。GitHub中的官方CSV可作为线索，须核实来源、单位、日期和加工记录。</td></tr>
+</tbody></table></div>
+<p id="filterCount" class="mini" aria-live="polite">显示全部14项。</p>
+<div class="note good"><strong>清理后的资料结构：</strong>原版对照数据 + A/B/C三组候选 + 1AMV派生输出。其他指标归档，不再进入这条研究主线。三个GitHub的网页、抓取、选股和区间工具无需整包接入。</div>
+</section>
+
+<section id="catalog">
+<div class="sectionhead"><span class="num">03</span><div><h2>最后到底保留哪些“指数”</h2><p class="subtitle">原版、还原结果、扩展指标分别命名；活跃占比与历史分位只是辅助读数。</p></div></div>
+<div class="tablewrap"><table><thead><tr><th>名称</th><th>是什么</th><th>算的是什么 / 单位</th><th>用途与身份</th></tr></thead><tbody>
+<tr><td>指南针 0AMV 原版</td><td>还原目标</td><td>指南针发布的活跃市值指数；单位和样本范围以真实导出确认</td><td>对照真值，不用其他复刻替换它的身份</td></tr>
+<tr><td>0AMV-R</td><td>我们的还原结果<div class="small">R = reconstruction，研究名称</div></td><td>A/B/C中胜出的算法，拟合指南针的全市场收盘序列</td><td>比较误差、变化方向与拐点；通过独立验证后才能用于观察</td></tr>
+<tr><td>1AMV · 个股</td><td>个股扩展</td><td>优先沿用胜出内核。若为状态模型：个股市值 × 模型活跃占比，亿元</td><td>观察单股活跃规模及扩张、收缩；金额不是净流入</td></tr>
+<tr><td>1AMV · 板块</td><td>同口径成员汇总</td><td>同日成员1AMV之和，亿元；占比按市值加权</td><td>观察行业 / 概念活跃规模、变化与成员集中程度</td></tr>
+<tr><td>活跃占比 / 变化 / 分位</td><td>辅助读数</td><td>占比%、占比变化百分点、金额亿元、日变化%、历史分位0—100</td><td>帮助解释1AMV；它们不增加新的独立信息源</td></tr>
+</tbody></table></div>
+<div class="note warn"><strong>命名条件：</strong>如果胜出的是纯成交额或价量拟合模型，个股输出只能叫“成交额代理 / 价量代理”。额外建立活跃占比模型时，必须注明它是独立演进分支，不能声称与原版同核。通达信880007的名称也不自动证明它等同于指南针0AMV。</div>
+</section>
+
+<section id="models">
+<div class="sectionhead"><span class="num">04</span><div><h2>三组候选，分别算什么</h2><p class="subtitle">Q=成交额；P=价格或指定价格指数；F=股本；M=P×F；S=平滑状态。所有窗口按交易日。</p></div></div>
+<div class="grid">
+<article class="card"><div class="label">候选 A</div><h3>平滑成交额</h3><div class="formula">Sₜ = αQₜ + (1−α)Sₜ₋₁<br>Rₜ = Sₜ / 显示单位</div><p><strong>算什么：</strong>近期交易规模的持续变化。</p><p><strong>输入：</strong>口径一致的全市场成交额。</p><p><strong>参数：</strong>α=0.1是SMA(10,1)；α=0.2是SMA(10,2)。同组比较，不另外创造指数。</p><p><strong>用法：</strong>看规模相对此前水平扩张 / 收缩；不能判断资金净流入。</p><details><summary>实现与边界</summary><p>首值与预热区间明确固定。MA10不是SMA(10,1)。单位缩放不改变涨跌方向或百分比。成员和日期一致、初值一致时，平滑后求和与先求和再平滑可一致；实际缺日或新股会破坏这种条件。</p></details></article>
+<article class="card"><div class="label">候选 B</div><h3>价量拟合</h3><div class="formula">Tₜ = SMA(Q,N,m)<br>Xₜ = Tₜ × Pₜ / MA(Pₜ₋₁,L)<br>Rₜ = b + kXₜ</div><p><strong>算什么：</strong>成交规模与价格相对位置的组合。</p><p><strong>输入：</strong>全市场成交额及明确的价格基准。</p><p><strong>参数：</strong>N、m、L及尺度k；b作为是否需要固定基数的独立对照。</p><p><strong>用法：</strong>对照原版形态。b会改变涨幅和相对回撤，不能跨版本搬阈值。</p><details><summary>实现与边界</summary><p>必须先确认P来自哪个指数，不能把当前个股或880007默认当作正确价格基准。只在拟合段估计b、k，之后冻结验证。先还原收盘；用全天成交额乘OPEN得到的“开盘”是事后构造值。</p></details></article>
+<article class="card focus"><div class="label">候选 C</div><h3>逐股活跃状态</h3><div class="formula">qᵢ,ₜ = Qᵢ,ₜ / Mᵢ,ₜ<br>Aᵢ,ₜ = 激活与衰减递推<br>Vᵢ,ₜ = Mᵢ,ₜ × g(Aᵢ,ₜ)<br>Rₜ = Σᵢ Vᵢ,ₜ</div><p><strong>算什么：</strong>近期交易激活的模型状态，折算为市值。</p><p><strong>输入：</strong>逐股成交、原始价格、历史股本与市场样本。</p><p><strong>参数：</strong>激活函数、衰减速度、占比变换。流通与自由流通口径分别对照。</p><p><strong>用法：</strong>既对照原版市场曲线，又天然支持个股和板块。</p><details><summary>两个保留实现的区别</summary><div class="formula">网站型：a=min(h/1.1,1)<br>Aₜ=dAₜ₋₁+a(1−Aₜ₋₁)<br>V=M×A；代码d=2^(−1.25/10)<br><br>本地型：u=1−exp(−q)<br>Aₜ=u+d(1−u)Aₜ₋₁<br>V=M×A^1.15；d=2^(−1/10)</div><p>h是同股本口径的股数换手率；q是成交额 / 市值，两者不能静默混用。网站模型与本地模型的衰减、激活和幂参数不一样。这是两份完整候选，不能从各处挑数字拼接。</p></details></article>
+</div>
+<div class="divider"></div>
+<h3>一次最简单的演示：放量不等于看涨</h3>
+<p class="muted">下图只演示候选A与现有本地状态模型的行为，不是指南针数据，也没有拟合结果。第31日起改变成交强度和价格，所有线以第30日归一为100。</p>
+<div class="filters" id="scenarios" aria-label="选择合成情景"><button type="button" data-scenario="up" aria-pressed="true">放量上涨</button><button type="button" data-scenario="down" aria-pressed="false">放量下跌</button><button type="button" data-scenario="quiet" aria-pressed="false">缩量横盘</button></div>
+<div class="legend"><span style="--swatch:#3b73bc">平滑成交额 A</span><span style="--swatch:#9d5a21">本地型活跃市值</span><span style="--swatch:#77889a">原始价格</span></div>
+<svg class="chart" id="chart" viewBox="0 0 960 260" role="img" aria-labelledby="chartTitle chartDesc"><title id="chartTitle">合成情景下的模型变化</title><desc id="chartDesc">全部线以情景开始前归一为100；价格方向与活跃变化需要分开看。</desc></svg>
+<div class="scenarioResult" id="scenarioResult" aria-live="polite"></div>
+<p id="scenarioNote" class="note"></p>
+<div class="note"><strong>不急着还原K线：</strong>第一阶段只比较原版每日收盘。逐股日内最高值不能直接相加当作全市场最高值，因为各股最高点不一定同时发生。严格还原市场OHLC需要统一日内时间及状态口径。</div>
+</section>
+
+<section id="extend">
+<div class="sectionhead"><span class="num">05</span><div><h2>怎样从 0AMV 演进出 1AMV</h2><p class="subtitle">先固定算法，再增加观察层。不要因为想扩展，就提前把原版定义改掉。</p></div></div>
+<div class="flow"><div class="flowitem"><div class="step">STEP 1</div><b>原版连续数据</b><span>确定样本、单位、日期与价格身份</span></div><div class="flowitem"><div class="step">STEP 2</div><b>A/B/C统一对照</b><span>拟合段选参数，独立验证段检验</span></div><div class="flowitem"><div class="step">STEP 3</div><b>冻结0AMV-R</b><span>固定输入、公式、初值和算法版本</span></div><div class="flowitem"><div class="step">STEP 4</div><b>扩展1AMV</b><span>同内核个股输出，按成员汇总板块</span></div></div>
+<div class="grid two">
+<article class="card"><h3>若候选C胜出：完整沿用同一内核</h3><p>每只股票同样的激活函数、衰减和参数；个股输出V，板块输出ΣV，全市场输出ΣV。</p><div class="formula">板块活跃市值 = Σ Vᵢ<br>板块活跃占比 = ΣVᵢ / ΣMᵢ<br>可比净增 = Σ(Vᵢ,ₜ−Vᵢ,ₜ₋₁)<br>净增幅 = 可比净增 / ΣVᵢ,ₜ₋₁</div><p>增减及其分母必须来自同一可比成员集合。存量总值可另用当天全部有效成员，但不能把两种集合混在一个变化率里。</p><p><strong>1AMV新增的是：</strong>个股视角、板块视角、活跃占比、历史分位、成员广度和集中度。</p></article>
+<article class="card"><h3>若候选A/B胜出：明确两条分支</h3><p><strong>同思路扩展：</strong>把成交额或价量公式用于个股，准确称为代理指标；板块按明确的聚合方法计算。</p><p><strong>活跃占比演进：</strong>本地状态模型可继续研究，但需要独立验证。它不是“直接还原出来的个股原版”。</p><p>B含固定基数b时，不能给每只股票都加一次市场基数后再相加。市场整体公式与逐股求和也不一定等价。</p><p>不应为了让扩展方便，反过来强行宣布候选C还原成功。</p></article>
+</div>
+<div class="note good"><strong>推荐的最终架构：</strong>一个版本化计算内核 + 个股、板块、全市场三种汇总范围 + 少量派生读数。AMVSTK是内核视图，AMVCHG / AMVPCT / AMVBK是输出视图，避免四套算法并行维护。</div>
+</section>
+
+<section id="use">
+<div class="sectionhead"><span class="num">06</span><div><h2>留下的指标该怎么用</h2><p class="subtitle">用途以观察为主。原版还原质量和风险提示有效性分别验证。</p></div></div>
+<div class="tablewrap"><table><thead><tr><th>观察项</th><th>它回答什么</th><th>个股怎么用</th><th>板块怎么用</th></tr></thead><tbody>
+<tr><td>活跃市值 · 亿元</td><td>模型活跃规模有多大</td><td>看自己的趋势；跨股金额排名偏向大盘股</td><td>看板块规模；不能把重叠概念直接加成市场</td></tr>
+<tr><td>活跃占比 · %</td><td>相对盘子有多活跃</td><td>比绝对金额更适合比较规模不同的股票</td><td>市值加权，需同时看成员参与比例</td></tr>
+<tr><td>占比变化 · 百分点</td><td>模型状态在扩张还是收缩</td><td>与股价方向分开看；当前高位仍可能降温</td><td>按固定可比样本看变化，识别整体或局部升温</td></tr>
+<tr><td>活跃日变化 · % / 亿元</td><td>规模变化的幅度与金额</td><td>包含价格、股本和占比影响；小基数会放大百分比</td><td>同时提供可比成员数与市值覆盖率</td></tr>
+<tr><td>占比历史分位 · 0—100</td><td>相对于自己的过去是否异常</td><td>默认250个有效交易日，含当天，并列值半计数</td><td>在冻结口径和成员处理规则后，计算板块自己的历史分位</td></tr>
+<tr><td>参与广度 / 集中度</td><td>多数成员参与，还是少数权重推动</td><td>用于理解所属板块环境</td><td>占比上升家数比例、前几只成员的增量集中程度；正负增量分开统计</td></tr>
+</tbody></table></div>
+<div class="grid two" style="margin-top:17px">
+<div class="card"><h3>价格 × 活跃，组合描述</h3><ul class="compact"><li>上涨 + 活跃扩张：上涨伴随参与增加。</li><li>上涨 + 活跃收缩：参与支持减弱，也可能是惜售。</li><li>下跌 + 活跃扩张：换手、分歧或恐慌加剧。</li><li>下跌 + 活跃收缩：交易冷却，需看趋势是否破坏。</li></ul></div>
+<div class="card"><h3>颜色与提示</h3><p>金额、价格和指标自身增减遵循A股红增绿减；“风险状态”单独用文字和色标，避免把红柱直接读成风险或看涨。</p><p>分位高不是自动风险，分位低不是自动机会。不要搬用网上固定涨幅、分位阈值；后续以验证结果定义风险条件。</p></div>
+</div>
+<p class="mini">进入QuantX时适合补充“量能与承接”中的活跃证据。先证明相比现有成交额、换手率、价格趋势的增量作用，再决定是否计入整体状态。</p>
+</section>
+
+<section id="plan">
+<div class="sectionhead"><span class="num">07</span><div><h2>怎么真正实现你的目的</h2><p class="subtitle">按以下顺序推进，每一步都有一个可检查的产物。</p></div></div>
+<div class="path">
+<div class="pathrow"><div class="stepcircle">1</div><div><h3>建立可信的原版对照表</h3><p>优先获取指南针0AMV连续日线导出；记录交易日期、收盘、单位、来源与导出时间。建议覆盖不同涨跌和成交环境，并保留后续独立时段。同步核验指南针0号市值序列及对应市场范围；目前资料只提供线索。</p><p><strong>产物：</strong>原版数据包 + 口径说明 + 缺失列表。截图只做形态辅助，不能当完整数值真值。</p></div></div>
+<div class="pathrow"><div class="stepcircle">2</div><div><h3>准备共同输入，先解决数据差异</h3><p>A/B需要同市场成交额及明确价格基准；C需要逐股原始日线、成交额 / 股数、当日可得股本、上市退市范围和成员日期。一般流通、自由流通分别标注；缺少历史股本时只能作为当前股本回看的代理实验。</p><p><strong>产物：</strong>可重复读取的标准输入。不得用当前股票池冒充历史全市场，不把估算成交额混成真实成交额。</p></div></div>
+<div class="pathrow"><div class="stepcircle">3</div><div><h3>三组候选同窗比较，按时间隔离拟合</h3><p>先固定数据口径，只在前段拟合参数；用后段比较每日水平误差、日变化误差、方向一致率、拐点时差及不同阶段稳定性。相关系数仅为辅助。缩放参数在拟合段固定，不使用验证期或最后一天原版值重新校准。</p><p><strong>产物：</strong>模型比较表 + 原版 / 候选叠图 + 独立验证结果。若三组均明显不符，结论就是仍未还原，需要继续追查定义，而不是选一个“看起来最像”的上线。</p></div></div>
+<div class="pathrow"><div class="stepcircle">4</div><div><h3>冻结0AMV-R，再输出1AMV与板块</h3><p>固定算法、参数、初值、预热、数据版本和缺失规则。用同口径汇总验证“个股 → 板块 → 市场”。行业与概念分别看；板块变化使用同日可比成员，历史分位不使用未来成员或未来观测。</p><p><strong>产物：</strong>0AMV-R对照结果 + 个股和板块1AMV样例 + 数据覆盖说明。随后再验证它是否比简单量能指标更能提示风险。</p></div></div>
+</div>
+<div class="divider"></div>
+<h3>实现契约：只需要一个计算层</h3>
+<pre>标准行情 / 历史股本 / 原版对照 / 日期与成员事实
+  → AMV纯计算函数（明确算法版本、参数、初值、有效性）
+  → 个股序列 → 板块与市场聚合 → 变化与历史分位
+  → 对照报告 / 图表 / QuantX观察证据
+
+个股最小输出：date, symbol, market_value, active_state,
+              active_share, amv_value, amv_change, quality
+聚合额外输出：member_count, comparable_count,
+              market_value_coverage, membership_basis</pre>
+<p class="mini">这是拟议契约，不是项目已有API。数据按现有Provider / Market Facts分类接入，页面只消费计算结果。复现、汇总、分位和提示全部可用脚本实现，不需要LLM参与。</p>
+<div class="note good"><strong>最后的取舍：</strong>保留A作为简单基准，B作为价量拟合候选，C作为同内核扩展的结构候选。优先补原版数值和股本口径；当前本地1AMV保留为C组试验实现，不提前把它定为指南针原版。</div>
+</section>
+
+<section id="sources">
+<div class="sectionhead"><span class="num">附</span><div><h2>证据与判断边界</h2><p class="subtitle">已读公式和源码，已做合成数值复算；尚未完成原版序列对照，也未重跑第三方完整回测。</p></div></div>
+<ul class="sources">
+<li><a href="../../prompt/0AMV.md">本地收集文本：prompt/0AMV.md</a>。知乎、B站、新浪公式以此文本为准。</li>
+<li>本地1AMV依据：通达信活跃市值套件中的AMVSTK、AMVCHG、AMVPCT、AMVBK及2026-09-21说明；本报告没有修改或删除原始文件。</li>
+<li><a href="https://app.compass.cn/article/news.php?newsid=33822170&amp;style=0" target="_blank" rel="noopener noreferrer">指南针官方：如何利用0AMV看市场</a>。支持用途定义，没有在该文给出完整计算公式。</li>
+<li><a href="https://help.tdx.com.cn/gspt/docs/markdown/redword/functionlist.html" target="_blank" rel="noopener noreferrer">通达信官方函数列表</a>。用于核对SMA / DMA与股数、金额单位。</li>
+<li><a href="https://github.com/lpeiyi/0AMV/blob/master/v1_trail7_merge10/band_engine.py" target="_blank" rel="noopener noreferrer">lpeiyi核心源码</a>：默认SMA(10,2)与区间规则。区间展示不等于可成交策略回测。</li>
+<li><a href="https://github.com/WdBlink/compass-0amv-imitate/blob/main/README.md" target="_blank" rel="noopener noreferrer">WdBlink当前README</a>与<a href="https://github.com/WdBlink/compass-0amv-imitate/blob/main/zero_amv.py" target="_blank" rel="noopener noreferrer">计算源码</a>：当前默认成交额代理；README报告事件F1为56.0%，不是原版还原率，亦非本次独立复算结果。</li>
+<li><a href="https://github.com/pulsiferkelley87-a11y/amv-site/blob/main/scripts/update_cloud.py" target="_blank" rel="noopener noreferrer">amv-site计算源码</a>：导入序列与自算模型并存，包含尺度校准；注释声称相关0.9983，本次未独立验证，不能当准确率。</li>
+</ul>
+<p class="mini">网页和分支内容会更新。以上GitHub判断依据此前本次会话于2026-09-30读取的源码，不代表固定提交版本。最终复现研究须记录所用提交与数据快照。</p>
+</section>
+</main>
+<footer>0AMV还原与1AMV演进 · 单文件离线报告 · 所有交互均在本地运行；没有自动抓取、模型调用或真实行情模拟。</footer>
+<script>
+const themeButton=document.getElementById('theme');
+themeButton.addEventListener('click',()=>{const dark=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=dark?'dark':'light';themeButton.textContent=dark?'浅色阅读':'深色阅读';themeButton.setAttribute('aria-pressed',String(dark));drawScenario(currentScenario)});
+document.getElementById('print').addEventListener('click',()=>window.print());
+let printSnapshot=null;
+window.addEventListener('beforeprint',()=>{printSnapshot={theme:document.documentElement.dataset.theme,details:[...document.querySelectorAll('details')].map(x=>x.open),hidden:[...document.querySelectorAll('#pruneTable tbody tr')].map(x=>x.hidden)};document.documentElement.dataset.theme='light';document.querySelectorAll('details').forEach(x=>x.open=true);document.querySelectorAll('#pruneTable tbody tr').forEach(x=>x.hidden=false);drawScenario(currentScenario);});
+window.addEventListener('afterprint',()=>{if(!printSnapshot)return;document.documentElement.dataset.theme=printSnapshot.theme||'light';document.querySelectorAll('details').forEach((x,i)=>x.open=printSnapshot.details[i]);document.querySelectorAll('#pruneTable tbody tr').forEach((x,i)=>x.hidden=printSnapshot.hidden[i]);printSnapshot=null;drawScenario(currentScenario);});
+document.querySelectorAll('#pruneFilters button').forEach(button=>button.addEventListener('click',()=>{const filter=button.dataset.filter;let count=0;document.querySelectorAll('#pruneFilters button').forEach(x=>x.setAttribute('aria-pressed',String(x===button)));document.querySelectorAll('#pruneTable tbody tr').forEach(row=>{row.hidden=filter!=='all'&&row.dataset.kind!==filter;if(!row.hidden)count++});document.getElementById('filterCount').textContent=`显示 ${count} / 14 项。`;}));
+let currentScenario='up';
+function drawScenario(kind){
+ const p=[],a=[],v=[];let price=10,sm=2,state=0;const d=Math.pow(2,-.1);
+ for(let t=0;t<60;t++){const late=t>=30;const q=late?(kind==='quiet'?.005:.08):.02;if(late&&kind!=='quiet')price*=kind==='up'?1.005:.995;const mv=price*10,amount=mv*q,u=1-Math.exp(-q);sm=t===0?amount:.1*amount+.9*sm;state=t===0?u:u+d*(1-u)*state;p.push(price);a.push(sm);v.push(mv*Math.pow(state,1.15));}
+ const series=[a,v,p].map(x=>x.map(z=>z/x[29]*100));const lo=Math.floor(Math.min(...series.flat())/20)*20,hi=Math.ceil(Math.max(...series.flat())/20)*20;const x=i=>52+i/59*880,y=z=>221-(z-lo)/(hi-lo)*190;const dark=document.documentElement.dataset.theme==='dark',grid=dark?'#354456':'#dce2e9',text=dark?'#b0bdce':'#536174';
+ let s='<title>合成情景下的模型变化</title><desc>模拟60个交易周期，第31日改变情景，三条线以第30日归一为100。</desc>';
+ for(let j=0;j<=4;j++){const n=lo+(hi-lo)*j/4;s+=`<line x1="52" y1="${y(n)}" x2="932" y2="${y(n)}" stroke="${grid}"/><text x="43" y="${y(n)+4}" text-anchor="end" fill="${text}" font-size="11">${n.toFixed(0)}</text>`;}
+ s+=`<line x1="${x(29)}" y1="20" x2="${x(29)}" y2="221" stroke="${text}" stroke-dasharray="4 5"/><text x="${x(29)+8}" y="18" fill="${text}" font-size="11">情景开始</text>`;
+ const colors=['#3b73bc','#9d5a21','#77889a'];series.forEach((ss,i)=>{s+=`<polyline points="${ss.map((z,k)=>`${x(k)},${y(z)}`).join(' ')}" fill="none" stroke="${colors[i]}" stroke-width="${i===2?2:3}" ${i===2?'stroke-dasharray="5 4"':''}/>`;});[0,29,59].forEach(i=>s+=`<text x="${x(i)}" y="245" fill="${text}" font-size="11" text-anchor="middle">第${i+1}日</text>`);document.getElementById('chart').innerHTML=s;
+ const labels=['平滑成交额变化','模型活跃市值变化','原始价格变化'];document.getElementById('scenarioResult').innerHTML=series.map((ss,i)=>{const pct=ss[59]-100;return `<div>${labels[i]}<b>${pct>0?'+':''}${pct.toFixed(1)}%</b></div>`;}).join('');
+ document.getElementById('scenarioNote').textContent=kind==='up'?'这个情景同时出现价格上涨和交易活跃扩张，但它只是模型行为演示，不说明原版被还原，也不证明后续收益。':kind==='down'?'放量下跌时，成交额代理和模型活跃市值仍可能增加。活跃增加只表示参与和换手变化，不能直接翻译为看涨或资金流入。':'价格横盘但交易减少时，两种模型都逐渐回落；衰减形态和速度不同。相似趋势不足以证明两者是同一个算法。';
+}
+document.querySelectorAll('#scenarios button').forEach(button=>button.addEventListener('click',()=>{currentScenario=button.dataset.scenario;document.querySelectorAll('#scenarios button').forEach(x=>x.setAttribute('aria-pressed',String(x===button)));drawScenario(currentScenario);}));
+drawScenario(currentScenario);
+const navLinks=[...document.querySelectorAll('nav a')];if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){navLinks.forEach(a=>{const active=a.hash==='#'+entry.target.id;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','location');else a.removeAttribute('aria-current');});}});},{rootMargin:'-15% 0px -65% 0px'});document.querySelectorAll('main section[id]').forEach(section=>observer.observe(section));}
+</script>
+</body>
+</html>

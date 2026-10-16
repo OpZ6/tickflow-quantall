@@ -1,0 +1,18 @@
+{
+  "experiment": "launch-pullback-long-baseline-2016-2026-v1",
+  "run_id": "20260907T131627607269Z",
+  "decision": "not_comparable_do_not_tune",
+  "reason": "The registered strategy is a generic launch-day midpoint pullback. It does not preserve the frozen VCP setup, pivot lineage, relative strength, or market-stage context, so it cannot answer whether waiting for acceptance improves VCP entry.",
+  "observed_result": {
+    "entry_candidates": 149060,
+    "trades": 1305,
+    "stop_loss_trades": 755,
+    "stop_loss_share": 0.5785,
+    "total_return": -0.9970,
+    "annual_return": -0.4369,
+    "max_drawdown": -0.9974,
+    "sharpe": -1.45
+  },
+  "interpretation": "This rejects the generic standalone launch-pullback implementation as a VCP comparison, not the economic idea of post-breakout support or retrigger entry.",
+  "next_action": "Test one causal failed-breakout retrigger method on the same frozen VCP candidate stream and pivot. Do not tune the generic pullback thresholds."
+}

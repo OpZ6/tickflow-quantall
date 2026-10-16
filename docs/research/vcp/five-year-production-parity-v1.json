@@ -1,0 +1,41 @@
+{
+  "experiment": "vcp-recovery-breakout-production-parity-v1",
+  "purpose": "production_definition_development_parity",
+  "hypothesis": "The real-name production definition reproduces the frozen legacy-backed candidate on the development range using only its own defaults.",
+  "universe_date": "2021-09-03",
+  "sample_size": 0,
+  "backtest": {
+    "strategy_id": "vcp_recovery_breakout",
+    "symbols": null,
+    "start": "2021-09-06",
+    "end": "2025-09-04",
+    "params": null,
+    "overrides": {},
+    "matching": "open_t+1",
+    "entry_fill": "open_t+1",
+    "exit_fill": "open_t+1",
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.0005,
+    "slippage_bps": 10.0,
+    "max_positions": 10,
+    "max_exposure_pct": 1.0,
+    "initial_capital": 1000000.0,
+    "position_sizing": "equal",
+    "mode": "position",
+    "asset_type": "stock",
+    "minute_fill": false,
+    "regime_filter": null
+  },
+  "data_directory": "research/vcp/datasets/five-year-20260904-v1",
+  "universe_mode": "historical_union",
+  "data_start": "2020-01-01",
+  "evaluation_start": "2021-09-06",
+  "evaluation_end": "2025-09-04",
+  "phases": {
+    "train": {
+      "start": "2021-09-06",
+      "end": "2025-09-04"
+    }
+  },
+  "pool_note": "The 20 million yuan floor is derived once from a 100,000 yuan target slot divided by a 0.5% participation cap. Price and amount are evaluated point-in-time. Current names, current shares and current ST labels are not used."
+}

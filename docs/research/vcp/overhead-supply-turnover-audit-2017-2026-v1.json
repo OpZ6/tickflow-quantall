@@ -1,0 +1,31 @@
+{
+  "experiment": "overhead-supply-turnover-audit-2017-2026-v1",
+  "type": "causal_mechanism_audit",
+  "registered_before_analysis": true,
+  "question": "Does more of the floating share base changing hands between the final VCP supply peak and breakout indicate that overhead supply was absorbed?",
+  "candidate_inputs": [
+    "data/research/vcp/candidate-labels/source-vcp-2017-2020-v1/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-v4/discovery-candidates.parquet",
+    "data/research/vcp/candidate-labels/source-vcp-2024-2026-v1/discovery-candidates.parquet"
+  ],
+  "causal_input": {
+    "daily": "data/kline_daily_enriched/date=*/part.parquet",
+    "share_history": "data/financials/shares/part.parquet",
+    "availability": "The latest positive float_shares record with effective_date not later than each market date; no latest-instrument fallback when history exists.",
+    "units": "Daily volume is round lots and float_shares is shares, so volume * 100 / float_shares is the fraction of the float traded that day."
+  },
+  "feature": {
+    "cumulative_float_turnover": "Sum daily traded-share fraction from the recorded final pivot date through the completed trading day before the breakout signal. The breakout bar and all future bars are excluded."
+  },
+  "future_labels_only": ["true_breakout_10_7_20", "return_40d"],
+  "method": "Compare the continuous feature overall, by candidate year, and in annual-within-year quintiles. No cutoff, alternate window, score, strategy rule or portfolio backtest is evaluated.",
+  "acceptance": {
+    "overall_pairwise_probability_greater_than": 0.5,
+    "years_with_positive_direction_min": 7,
+    "top_minus_bottom_quintile_breakout_rate_min": 0.05,
+    "spearman_return_40d_greater_than": 0.0
+  },
+  "stop_rule": "All four gates must pass. Otherwise stop cumulative-turnover filtering and ranking without trying per-day turnover, alternate pivot windows, absolute turnover cutoffs or weighted combinations.",
+  "next_if_pass": "Freeze descending cumulative-turnover ranking as the only new v3 intervention and run one fixed time-split diagnostic against forward-v2.",
+  "next_if_fail": "Keep turnover as descriptive evidence only and move to a different VCP mechanism."
+}

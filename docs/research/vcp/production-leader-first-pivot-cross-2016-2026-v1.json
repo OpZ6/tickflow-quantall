@@ -1,0 +1,19 @@
+{
+  "base_protocol": "production-leader-long-baseline-2016-2026-v1.json",
+  "experiment": "production-leader-first-pivot-cross-2016-2026-v1",
+  "purpose": "single_factor_structure_entry_diagnostic",
+  "hypothesis": "Requiring the first close across the VCP pivot reduces stale or repeated breakout entries and lowers the stop-loss share without materially increasing drawdown.",
+  "single_change": "require_pivot_cross: false -> true",
+  "decision_rule": {
+    "minimum_trades": 150,
+    "minimum_stop_loss_share_reduction": 0.05,
+    "maximum_drawdown_deterioration": 0.03,
+    "note": "Total return is secondary; this exposed interval cannot promote the rule directly to validation or live use."
+  },
+  "backtest": {
+    "params": {
+      "require_pivot_cross": true
+    }
+  },
+  "development_note": "Single-factor comparison against run 20260907T123519390606Z on the same fully exposed 2016-2026 interval."
+}

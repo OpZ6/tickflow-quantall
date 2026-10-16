@@ -1,0 +1,45 @@
+{
+  "decision_id": "forward-v1-immutable-baseline-archive-r2-decision",
+  "decided_at": "2026-09-08T17:58:44+08:00",
+  "strategy_id": "vcp_leader_breakout",
+  "strategy_version": "forward-v1",
+  "version_manifest": "docs/research/vcp/forward-v1-version-manifest-r2.json",
+  "version_manifest_sha256": "268e176f0f3a68ecf31475393175e826226758cd27b10ff6acc742878288867a",
+  "archive": "data/research/vcp/forward/archives/vcp-forward-v1-20260908-r2-baseline.zip",
+  "archive_sha256": "0da9a74fcddea9c504c78658727f3a02dae29456ec3adb37b9b4d537766fa613",
+  "archive_bytes": 911956844,
+  "archive_manifest": "data/research/vcp/forward/archives/vcp-forward-v1-20260908-r2-baseline.manifest.json",
+  "archive_manifest_sha256": "51c86a4e1d10d53373702253a55a1b68ac733228e3aae192f9ed58cf5d190958",
+  "member_count": 8530,
+  "completed_daily_through": "2026-09-08",
+  "validation": {
+    "zip_crc_all_members": "passed",
+    "archive_sha256_matches_sidecar": true,
+    "source_manifest_sha256_matches_sidecar": true,
+    "forward_snapshot_manifest_reference_matches": true,
+    "duplicate_members": 0,
+    "sidecar_member_sizes_match": true
+  },
+  "behavior_parity": {
+    "old_run": "20260908T024521089151Z",
+    "current_run": "20260908T093944103019Z",
+    "trade_count": 290,
+    "trades_equal": true,
+    "equity_curve_equal": true,
+    "benchmark_curve_equal": true,
+    "drawdown_curve_equal": true,
+    "per_symbol_stats_equal": true,
+    "non_behavioral_differences": [
+      "runtime timing measurements",
+      "run identifier",
+      "empty universe suffixes serialized as [] instead of omitted"
+    ]
+  },
+  "superseded_draft": "The invalid-pre-finalization draft archive and sidecar were moved to the Windows Recycle Bin after the final archive passed validation.",
+  "decision": "accept_r2_as_recoverable_forward_baseline",
+  "remaining_limitations": [
+    "Historical ST/name and listing-age facts are not yet connected to both backtest paths.",
+    "Intraday partial-suspension timing and real fill evidence remain incomplete.",
+    "Future completed days require separate append-only archives."
+  ]
+}

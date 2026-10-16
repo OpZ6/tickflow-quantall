@@ -1,0 +1,11 @@
+{
+  "experiment": "cup-ordered-retest-v1",
+  "frozen_at": "2026-09-12",
+  "source": "AI after causal reconstruction found 2032/2034 support labels; code tests unordered extrema rather than an actual current-day retest. No subgroup returns read before rule freeze.",
+  "change": "Within the frozen detector's selected scale, require a post-right-rim high at or above its existing pivot on a market date strictly before the signal day; require today's low <= existing left-rim*1.01 and today's close >= left rim. This replaces the historical-anywhere support label with a current-day retest after an earlier breakout. Existing tolerances unchanged; no prior-close/pivot-cross condition.",
+  "scope": "Strict subset of original executable events; no delayed or newly generated signals. Evaluate every original thin-book fill, retain original independent T+1 execution and exits. Excluded signals cannot affect other fills because there are no position constraints.",
+  "baseline": "2034 cup thin-book fills, +0.5438% mean net",
+  "training": "2016-2022 only, causal detection ending on each signal date",
+  "initial_gate": "At least 100 kept fills, positive mean net strictly above baseline, signal-day equal-weight actual net not worse and at least baseline count of positive years. Passing is research candidate only; further validation needed.",
+  "failure": "Stop this current-day ordered-retest representation and its tolerance/window neighbours. Do not change VCP or product."
+}

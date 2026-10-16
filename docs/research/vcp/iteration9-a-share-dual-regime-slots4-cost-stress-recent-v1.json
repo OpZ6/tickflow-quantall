@@ -1,0 +1,12 @@
+{
+  "base_protocol": "iteration9-a-share-dual-regime-slots4-cost-stress-v1.json",
+  "experiment": "vcp-iteration9-a-share-dual-regime-slots4-cost-stress-recent-v1",
+  "purpose": "recent_cost_stress_diagnostic_for_the_four_slot_candidate",
+  "phases": {
+    "train": {
+      "start": "2024-01-02",
+      "end": "2026-06-30"
+    }
+  },
+  "development_note": "The recent interval is already exposed; this run checks cost resilience only."
+}

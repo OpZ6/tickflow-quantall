@@ -1,0 +1,25 @@
+{
+  "experiment": "peak-close-drawdown-474-v1",
+  "thought": "VCP leader breakout. Same 474 full-independent original entries/exits. One added sell: 8% retrace from post-entry peak close.",
+  "hypothesis": "Selling the next market open after a completed close <= 92% of the highest close since entry cuts give-back without scanning the 8%. Should not lower independent avg_pnl versus original exits.",
+  "baseline": {
+    "strategy_id": "vcp_leader_breakout",
+    "run_id": "20260909T030431101979Z",
+    "kind": "full independent candidate_execution",
+    "n": 474,
+    "exits": "original plan stop / MA20 / profit lock / stop-loss only",
+    "not_included": ["two-bar no-demand", "hold-low filter", "prebreakout volume", "four-slot 171"]
+  },
+  "change": {
+    "id": "peak_close_drawdown_8pct",
+    "definition": "From entry-day close, track the max close on market sessions strictly before original exit. First close <= 0.92 * that peak exits at the next market open if that open is strictly before the original exit. Peak uses close only, not high. A hole, nonpositive volume, or one-price limit-down on the fill session does not roll; keep the original exit. Do not read bars after 2022-12-31 for training."
+  },
+  "metric": {
+    "primary": "independent win_rate, profit_factor, avg_pnl vs the same 474 original-exit pnls",
+    "validation_if_keep": "same overlay on 2023-2026 completed fills, labeled exposure"
+  },
+  "pass_fail": {
+    "pass": "training avg_pnl not below baseline and remains positive",
+    "fail": "Drop this sell. Baseline stays 474 original exits. Next VCP edit still one mechanism."
+  }
+}

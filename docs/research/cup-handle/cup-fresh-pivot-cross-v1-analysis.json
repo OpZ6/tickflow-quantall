@@ -1,0 +1,379 @@
+{
+  "experiment": "cup-fresh-pivot-cross-v1",
+  "protocol": {
+    "experiment": "cup-fresh-pivot-cross-v1",
+    "frozen_at": "2026-09-12",
+    "hypothesis_source": "AI reading the causal detector and the existing failed-breakout autopsy; development data, not independent discovery",
+    "baseline_run": "20260909T133226351846Z",
+    "baseline": "2034 independent cup fills: dual regime AND RS>=85 AND upper-half signal close; mean net +0.54%",
+    "attacked_path": "762 failed breakouts, average net -4.41%",
+    "change": "Keep only previous market-session close <= signal-day reconstructed cup pivot < signal-day close. This is a crossing event, with no parameter search or change of pivot offset.",
+    "execution": "Subset of the complete frozen independent fills, same next-market-open entry, original exit, T+1 and original historical costs. No new or delayed entries. Missing previous market bar or pivot fails closed and is reported.",
+    "training": "2016-2022, original exit within 2022; load no bars after 2022",
+    "exposure": "Earlier experiments and 2023+ exposed; source run contains no validation trades. No clean OOS claim.",
+    "initial_gate": "At least 100 trades, positive mean net strictly better than baseline, signal-day equal-weight actual net not worse than baseline. Otherwise drop this representation and its crossing-buffer neighbours.",
+    "passing_action": "Research candidate only: verify complete opportunity execution and fixed-window comparisons before any promotion or product change.",
+    "artifacts": "analysis JSON, decision Markdown; per-trade selection ledger under data/research/cup-handle/",
+    "constraints": [
+      "VCP remains frozen",
+      "one buy-kind change",
+      "no stop change",
+      "no threshold tuning",
+      "no product change"
+    ]
+  },
+  "baseline": {
+    "n_trades": 2034,
+    "win_rate": 0.339725,
+    "profit_factor": 2.32,
+    "avg_pnl": 0.005438,
+    "avg_win": 0.09965,
+    "avg_loss": 0.043036,
+    "signal_days": 298,
+    "signal_day_equal_weight_net": 0.0036128729883041655,
+    "years": {
+      "2016": {
+        "n_trades": 99,
+        "win_rate": 0.191919,
+        "profit_factor": 1.38,
+        "avg_pnl": -0.02308,
+        "avg_win": 0.058787,
+        "avg_loss": 0.042524
+      },
+      "2017": {
+        "n_trades": 516,
+        "win_rate": 0.327519,
+        "profit_factor": 2.14,
+        "avg_pnl": 0.000836,
+        "avg_win": 0.063718,
+        "avg_loss": 0.02979
+      },
+      "2018": {
+        "n_trades": 327,
+        "win_rate": 0.259939,
+        "profit_factor": 1.2,
+        "avg_pnl": -0.019125,
+        "avg_win": 0.053508,
+        "avg_loss": 0.044637
+      },
+      "2019": {
+        "n_trades": 633,
+        "win_rate": 0.418641,
+        "profit_factor": 3.12,
+        "avg_pnl": 0.032881,
+        "avg_win": 0.141631,
+        "avg_loss": 0.045431
+      },
+      "2020": {
+        "n_trades": 250,
+        "win_rate": 0.316,
+        "profit_factor": 1.64,
+        "avg_pnl": -0.009475,
+        "avg_win": 0.093403,
+        "avg_loss": 0.057003
+      },
+      "2021": {
+        "n_trades": 109,
+        "win_rate": 0.394495,
+        "profit_factor": 1.63,
+        "avg_pnl": 0.00218,
+        "avg_win": 0.092019,
+        "avg_loss": 0.056351
+      },
+      "2022": {
+        "n_trades": 100,
+        "win_rate": 0.31,
+        "profit_factor": 2.58,
+        "avg_pnl": 0.004856,
+        "avg_win": 0.114738,
+        "avg_loss": 0.044511
+      }
+    }
+  },
+  "variant": {
+    "n_trades": 1029,
+    "win_rate": 0.353741,
+    "profit_factor": 2.22,
+    "avg_pnl": 0.006642,
+    "avg_win": 0.105119,
+    "avg_loss": 0.047261,
+    "signal_days": 261,
+    "signal_day_equal_weight_net": 0.002151546640349418,
+    "years": {
+      "2016": {
+        "n_trades": 46,
+        "win_rate": 0.217391,
+        "profit_factor": 1.67,
+        "avg_pnl": -0.020401,
+        "avg_win": 0.08111,
+        "avg_loss": 0.048599
+      },
+      "2017": {
+        "n_trades": 237,
+        "win_rate": 0.324895,
+        "profit_factor": 2.07,
+        "avg_pnl": -0.000126,
+        "avg_win": 0.070823,
+        "avg_loss": 0.03427
+      },
+      "2018": {
+        "n_trades": 159,
+        "win_rate": 0.283019,
+        "profit_factor": 1.37,
+        "avg_pnl": -0.015359,
+        "avg_win": 0.064218,
+        "avg_loss": 0.046771
+      },
+      "2019": {
+        "n_trades": 329,
+        "win_rate": 0.431611,
+        "profit_factor": 2.75,
+        "avg_pnl": 0.031813,
+        "avg_win": 0.141241,
+        "avg_loss": 0.051281
+      },
+      "2020": {
+        "n_trades": 144,
+        "win_rate": 0.326389,
+        "profit_factor": 1.55,
+        "avg_pnl": -0.009499,
+        "avg_win": 0.087598,
+        "avg_loss": 0.056546
+      },
+      "2021": {
+        "n_trades": 58,
+        "win_rate": 0.413793,
+        "profit_factor": 1.58,
+        "avg_pnl": 0.003987,
+        "avg_win": 0.091311,
+        "avg_loss": 0.057654
+      },
+      "2022": {
+        "n_trades": 56,
+        "win_rate": 0.339286,
+        "profit_factor": 2.92,
+        "avg_pnl": 0.016342,
+        "avg_win": 0.144434,
+        "avg_loss": 0.049434
+      }
+    }
+  },
+  "removed": {
+    "n_trades": 1004,
+    "win_rate": 0.325697,
+    "profit_factor": 2.41,
+    "avg_pnl": 0.004284,
+    "avg_win": 0.093562,
+    "avg_loss": 0.038838,
+    "signal_days": 263,
+    "signal_day_equal_weight_net": 0.002174950703584543,
+    "years": {
+      "2016": {
+        "n_trades": 53,
+        "win_rate": 0.169811,
+        "profit_factor": 0.9,
+        "avg_pnl": -0.025406,
+        "avg_win": 0.033983,
+        "avg_loss": 0.037553
+      },
+      "2017": {
+        "n_trades": 279,
+        "win_rate": 0.329749,
+        "profit_factor": 2.23,
+        "avg_pnl": 0.001653,
+        "avg_win": 0.057772,
+        "avg_loss": 0.025956
+      },
+      "2018": {
+        "n_trades": 167,
+        "win_rate": 0.239521,
+        "profit_factor": 0.98,
+        "avg_pnl": -0.022373,
+        "avg_win": 0.041459,
+        "avg_loss": 0.042478
+      },
+      "2019": {
+        "n_trades": 304,
+        "win_rate": 0.404605,
+        "profit_factor": 3.61,
+        "avg_pnl": 0.034036,
+        "avg_win": 0.142081,
+        "avg_loss": 0.039387
+      },
+      "2020": {
+        "n_trades": 106,
+        "win_rate": 0.301887,
+        "profit_factor": 1.77,
+        "avg_pnl": -0.009443,
+        "avg_win": 0.101929,
+        "avg_loss": 0.057603
+      },
+      "2021": {
+        "n_trades": 51,
+        "win_rate": 0.372549,
+        "profit_factor": 1.69,
+        "avg_pnl": 0.000126,
+        "avg_win": 0.092913,
+        "avg_loss": 0.054967
+      },
+      "2022": {
+        "n_trades": 44,
+        "win_rate": 0.272727,
+        "profit_factor": 1.74,
+        "avg_pnl": -0.009762,
+        "avg_win": 0.06772,
+        "avg_loss": 0.038818
+      }
+    }
+  },
+  "missing": 1,
+  "baseline_upper_missing": 4,
+  "paths": {
+    "baseline": {
+      "book_n": 2023,
+      "loser_n": 1338,
+      "incomplete": 11,
+      "paths": {
+        "赢家": {
+          "n": 685,
+          "share_of_book": 0.338606,
+          "share_of_losers": null,
+          "avg_pnl": 0.099168,
+          "avg_mfe": 0.199898,
+          "median_holding_bars": 21.0
+        },
+        "给回": {
+          "n": 352,
+          "share_of_book": 0.173999,
+          "share_of_losers": 0.263079,
+          "avg_pnl": -0.044579,
+          "avg_mfe": 0.092627,
+          "median_holding_bars": 11.0
+        },
+        "失败突破": {
+          "n": 762,
+          "share_of_book": 0.376668,
+          "share_of_losers": 0.569507,
+          "avg_pnl": -0.044134,
+          "avg_mfe": 0.011704,
+          "median_holding_bars": 3.0
+        },
+        "磨掉": {
+          "n": 224,
+          "share_of_book": 0.110727,
+          "share_of_losers": 0.167414,
+          "avg_pnl": -0.035729,
+          "avg_mfe": 0.039644,
+          "median_holding_bars": 6.0
+        }
+      },
+      "attacked_path": "失败突破",
+      "stats": {
+        "n_trades": 2034,
+        "win_rate": 0.339725,
+        "profit_factor": 2.32,
+        "avg_pnl": 0.005438,
+        "avg_win": 0.09965,
+        "avg_loss": 0.043036
+      }
+    },
+    "variant": {
+      "book_n": 1022,
+      "loser_n": 661,
+      "incomplete": 7,
+      "paths": {
+        "赢家": {
+          "n": 361,
+          "share_of_book": 0.353229,
+          "share_of_losers": null,
+          "avg_pnl": 0.104098,
+          "avg_mfe": 0.212017,
+          "median_holding_bars": 22.0
+        },
+        "给回": {
+          "n": 213,
+          "share_of_book": 0.208415,
+          "share_of_losers": 0.322239,
+          "avg_pnl": -0.045443,
+          "avg_mfe": 0.093596,
+          "median_holding_bars": 11.0
+        },
+        "失败突破": {
+          "n": 339,
+          "share_of_book": 0.331703,
+          "share_of_losers": 0.512859,
+          "avg_pnl": -0.049965,
+          "avg_mfe": 0.011554,
+          "median_holding_bars": 3.0
+        },
+        "磨掉": {
+          "n": 109,
+          "share_of_book": 0.106654,
+          "share_of_losers": 0.164902,
+          "avg_pnl": -0.040439,
+          "avg_mfe": 0.039963,
+          "median_holding_bars": 6.0
+        }
+      },
+      "attacked_path": "失败突破",
+      "stats": {
+        "n_trades": 1029,
+        "win_rate": 0.353741,
+        "profit_factor": 2.22,
+        "avg_pnl": 0.006642,
+        "avg_win": 0.105119,
+        "avg_loss": 0.047261
+      }
+    },
+    "removed": {
+      "book_n": 1000,
+      "loser_n": 676,
+      "incomplete": 4,
+      "paths": {
+        "赢家": {
+          "n": 324,
+          "share_of_book": 0.324,
+          "share_of_losers": null,
+          "avg_pnl": 0.093675,
+          "avg_mfe": 0.186394,
+          "median_holding_bars": 19.0
+        },
+        "给回": {
+          "n": 139,
+          "share_of_book": 0.139,
+          "share_of_losers": 0.205621,
+          "avg_pnl": -0.043256,
+          "avg_mfe": 0.091143,
+          "median_holding_bars": 10.0
+        },
+        "失败突破": {
+          "n": 422,
+          "share_of_book": 0.422,
+          "share_of_losers": 0.62426,
+          "avg_pnl": -0.039376,
+          "avg_mfe": 0.011821,
+          "median_holding_bars": 2.0
+        },
+        "磨掉": {
+          "n": 115,
+          "share_of_book": 0.115,
+          "share_of_losers": 0.170118,
+          "avg_pnl": -0.031264,
+          "avg_mfe": 0.039341,
+          "median_holding_bars": 7.0
+        }
+      },
+      "attacked_path": "失败突破",
+      "stats": {
+        "n_trades": 1004,
+        "win_rate": 0.325697,
+        "profit_factor": 2.41,
+        "avg_pnl": 0.004284,
+        "avg_win": 0.093562,
+        "avg_loss": 0.038838
+      }
+    }
+  },
+  "rule": "drop",
+  "validation": "No validation fills in frozen run; not clean OOS"
+}

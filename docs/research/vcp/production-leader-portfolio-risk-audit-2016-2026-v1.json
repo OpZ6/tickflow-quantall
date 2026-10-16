@@ -1,0 +1,37 @@
+{
+  "study": "production-leader-portfolio-risk-audit-2016-2026-v1",
+  "baseline_run": "20260907T123519390606Z",
+  "analysis_output": "data/research/vcp/runs/20260907T123519390606Z/portfolio-risk-analysis.json",
+  "generator": "scripts/analyze_vcp_portfolio_risk.py",
+  "question": "Is the frozen baseline drawdown primarily caused by same-day candidate crowding or a few exceptional losses, such that a slot-count or reactive exposure rule is justified?",
+  "method": "Descriptive drawdown, entry-cohort, loss-streak, and contribution analysis only. No slot count, exposure target, or loss-streak rule is selected.",
+  "results": {
+    "trades": 298,
+    "max_drawdown": -0.25916258150441773,
+    "drawdown_peak_date": "2016-10-28",
+    "drawdown_trough_date": "2019-02-15",
+    "drawdown_recovery_date": "2019-09-24",
+    "trades_overlapping_drawdown": 63,
+    "entry_cohorts": 203,
+    "multi_trade_cohorts": 66,
+    "trades_in_multi_trade_cohorts": 161,
+    "max_same_day_entries": 4,
+    "negative_pnl_from_multi_trade_cohorts_share": 0.4398959707408685,
+    "max_consecutive_nonwinning_exits": 14,
+    "top_5_winner_gross_profit_share": 0.32635554862191224,
+    "worst_5_trade_gross_loss_share": 0.08064199643764451
+  },
+  "interpretation": [
+    "The maximum drawdown is a multi-year regime path, not an isolated crowded entry cohort.",
+    "Same-day multi-position entries contain 54.0 percent of trades but only 44.0 percent of negative cohort PnL, so crowding is not disproportionately responsible for losses in this sample.",
+    "Losses are diffuse: the worst five trades contribute only 8.1 percent of gross loss, while the right tail remains material with the top five winners contributing 32.6 percent of gross profit.",
+    "A reactive loss-streak rule would be selected from an exposed path and could reduce participation in the recovery that follows a prolonged weak regime."
+  ],
+  "decision": "freeze_equal_four_slot_portfolio_for_forward_observation",
+  "rejected_followups": [
+    "max_positions neighborhood sweep",
+    "same-day cohort cap based on this historical result",
+    "loss-streak exposure ladder fitted to the exposed drawdown"
+  ],
+  "next_direction": "Start append-only forward observation of the already registered vcp_leader_breakout version. Record daily candidates, rejections, simulated orders, fills, positions, exits, and data-quality state without changing the frozen rule."
+}
