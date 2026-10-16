@@ -142,6 +142,43 @@ export const QK = {
   sectorRotationIndexDaily:  (symbol: string) => ['sector-rotation-index-daily', symbol] as const,
   // 扩展表 schema 清单 (板块切换的资金流列选择器等)
   extSchemaAll:         ['ext-schema-all'] as const,
+
+
+  // ===== 自定义模块 query keys (二开扩展, 与核心键无重名) =====
+  amv: (date: string, symbols: string, sector = '', dimension = 'concept', profile = 'research') => ['amv', 'float-state-v2', date, sector ? '' : symbols, sector, dimension, profile] as const,
+  amvSectors: (dimension: string, date?: string, profile = 'research') => ['amv', 'sectors', dimension, date ?? 'latest', profile] as const,
+  chanlunAnalysis: (symbol: string, start: string, end: string) => ['chanlun', 'analysis', symbol, start, end] as const,
+  chanlunStatus:  ['chanlun', 'status'] as const,
+  dataFoundation: ['data-foundation'] as const,
+  indexList:      ['index-list'] as const,
+  klineChart:           (symbol: string, assetType: string, interval: string, adjustment: string, range: string, start: string, end: string, layers = '', strategies = '', sourceRunId = '', paramsFingerprint = '', warmupBars = 160, indicatorWarmups = '', indicatorParams = '') =>
+                           ['kline-chart', symbol, assetType, interval, adjustment, range, start, end, layers, strategies, sourceRunId, paramsFingerprint, warmupBars, indicatorWarmups, indicatorParams] as const,
+  marketLabEtf:     ['market-lab', 'etf-momentum'] as const,
+  marketLabEtfScope: (symbols: string) => ['market-lab', 'etf-momentum', symbols] as const,
+  marketLabMacro:   ['market-lab', 'macro-dispersion'] as const,
+  marketLabMembers: (dimension: string, sector: string, asOf?: string) => ['market-lab', 'sector-members', dimension, sector, asOf ?? 'latest'] as const,
+  marketLabOverlap: (sector: string) => ['market-lab', 'concept-overlap', sector] as const,
+  marketLabRadar:   (dimension: string, asOf?: string, taxonomy = 'ths') => ['market-lab', 'sector-radar', dimension, asOf ?? 'latest', taxonomy] as const,
+  marketLabResearch: (dimension: string, horizon: number, date?: string) => ['market-lab', 'sector-research', dimension, horizon, date ?? 'latest'] as const,
+  marketLabSector:  (dimension: string, taxonomy = 'ths') => ['market-lab', 'sector-flow', dimension, taxonomy] as const,
+  quantxAdvanced:   (date: string) => ['quantx-advanced', date] as const,
+  quantxCatalog:    ['quantx-catalog'] as const,
+  quantxMultiday:   (date: string) => ['quantx-multiday', date] as const,
+  quantxNewHighMembers: (date: string, dimension: string, window: number, name: string) => ['quantx-new-high-members', date, dimension, window, name] as const,
+  quantxObservability: (date: string) => ['quantx-observability', date] as const,
+  quantxReview:     (date: string) => ['quantx-review', date] as const,
+  quantxTables:     (date: string) => ['quantx-tables', date] as const,
+  stockPoolCandidates: (date: string) => ['stock-pools', 'candidates', date] as const,
+  stockPoolCatalog:    ['stock-pools', 'catalog'] as const,
+  stockPoolDetail:     (date: string, symbol: string, snapshot: 'current' | 'first' = 'current') => ['stock-pools', 'detail', date, symbol, snapshot] as const,
+  stockPoolEvolution:  (date: string, mode: string, topic: string, window: number) => ['stock-pools', 'evolution', date, mode, topic, window] as const,
+  stockPoolHistory:    (date: string, symbol: string, window: number) => ['stock-pools', 'history', date, symbol, window] as const,
+  stockPoolReview:     (date: string, window: number, horizon: number, costBps: number) => ['stock-pools', 'review', date, window, horizon, costBps] as const,
+  stockPoolSummary:    (date: string) => ['stock-pools', 'summary', date] as const,
+  strategyChartPreview: (symbol: string, assetType: string, timeframe: string, start: string, end: string, strategyIds: string, inputFingerprint: string) =>
+                           ['strategy-chart-preview', symbol, assetType, timeframe, start, end, strategyIds, inputFingerprint] as const,
+  strategyChartPreviewCatalog: (assetType: string, timeframe: string) =>
+                          ['strategy-chart-preview-catalog', assetType, timeframe] as const,
 } as const
 
 // ===== SSE 应该 invalidate 的 key 前缀列表 =====

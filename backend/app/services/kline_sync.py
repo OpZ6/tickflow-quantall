@@ -286,6 +286,50 @@ def sync_daily_batch(symbols: list[str],
     return pl.concat(out, how="diagonal_relaxed")
 
 
+def fetch_daily_selected(
+    symbols: list[str],
+    *,
+    count: int | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    on_chunk_done: Callable[[int, int], None] | None = None,
+) -> pl.DataFrame:
+    """Fetch daily bars from the provider selected in preferences without persisting.
+
+    A configured third-party provider is fail-closed: an empty/error result is
+    returned as empty and is not silently replaced by TickFlow data. This keeps
+    source provenance observable for analysis-only requests such as Chan charts.
+    """
+    if not symbols:
+        return pl.DataFrame()
+    from app.data_providers import custom as custom_sources
+    from app.data_providers import routing
+
+    end = end_time or datetime.now()
+    start = start_time or (end - timedelta(days=count or 365))
+
+    def fetch(provider_name: str) -> pl.DataFrame:
+        if provider_name == "tickflow":
+            return sync_daily_batch(
+                symbols, count=count, start_time=start_time, end_time=end_time,
+                on_chunk_done=on_chunk_done,
+            )
+        if not custom_sources.provider_has_dataset(provider_name, "daily"):
+            raise RuntimeError("provider does not declare daily")
+        return custom_sources.get_provider(provider_name).get_daily(
+            symbols, start_time=start, end_time=end, on_chunk_done=on_chunk_done,
+        )
+
+    try:
+        df, _provider = routing.run_with_failover(
+            "daily", fetch, is_success=lambda _value: True,
+        )
+        return df
+    except routing.ProviderChainExhaustedError as exc:
+        logger.warning("daily provider chain failed: %s", exc)
+        return pl.DataFrame()
+
+
 def sync_and_persist_daily_batch(
     symbols: list[str],
     repo: KlineRepository,

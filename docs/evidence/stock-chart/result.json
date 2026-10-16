@@ -1,0 +1,21 @@
+{
+  "single_chart_instance": true,
+  "single_indicator_center": true,
+  "toolbar_rows": 1,
+  "indicator_tabs": 7,
+  "template_persisted": true,
+  "template_payload_complete": true,
+  "three_year_request": true,
+  "three_year_full_initial_view": true,
+  "three_year_coverage_complete": true,
+  "parameterized_warmup": true,
+  "per_indicator_readiness": true,
+  "style_change_without_market_refetch": true,
+  "keyboard_indicator_reorder": true,
+  "strategy_deep_link": true,
+  "chart_requests": 8,
+  "failed_chart_responses": [],
+  "console_errors": [],
+  "failed_requests": [],
+  "document_overflow_mobile": false
+}

@@ -1,3 +1,4 @@
+import { customApi } from '@/custom/api'
 // 后端 API 客户端 — 全项目统一入口
 //
 // Dev: Vite 按启动脚本解析出的 BACKEND_HOST/BACKEND_PORT 代理 /api
@@ -40,13 +41,13 @@ export function friendlyStreamError(message: string | undefined | null): string 
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 /** 同步计算型接口 (回测/筛选等) 的放宽超时: 合法耗时可能远超轮询类接口。 */
-const COMPUTE_REQUEST_TIMEOUT_MS = 300_000
+export const COMPUTE_REQUEST_TIMEOUT_MS = 300_000
 /** 扩展数据拉取类长请求: 跟随后端配置的单次超时 (timeoutSeconds, 默认 30s) + 10s 解析/写盘缓冲。
  *  浏览器端 fetch 默认 30s abort 会先于后端超时触发, 大响应接口 (如全量集合竞价
  *  /day, 后端超时 120s) 必须把这层同步放宽。 */
 const extPullTimeoutMs = (timeoutSeconds?: number) => (timeoutSeconds ?? 30) * 1000 + 10_000
 
-async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+export async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   const { quiet, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...fetchInit } = init ?? {}
   const isFormData = fetchInit.body instanceof FormData
   const headers: Record<string, string> = {}
@@ -4196,6 +4197,9 @@ export const api = {
       timeoutMs: null,
       body: JSON.stringify(payload),
     }),
+
+  // ===== 自定义模块客户端 (二开扩展, 由 @/custom/api 汇总注入) =====
+  ...customApi,
 }
 
 // ===== Pipeline =====

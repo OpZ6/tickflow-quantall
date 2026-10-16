@@ -465,6 +465,14 @@ META = {{...}}，{entrypoint_requirement}。只输出完整 Python 代码。
         "app.backtest.matrix",
         "app.strategy.research.factor_rank_research",
         "app.strategy.market_data",   # 新增: 策略可读取指数/ETF 日K
+        # 自研策略共享依赖: research/_*.py, 引擎加载时按同目录 glob 自动注入为
+        # 依赖模块 (见 engine._load_file)。此处一并放行, 使这些文件脱离引擎
+        # 单独过安全校验时也能解析自身的 from _xxx import。模块本身随仓库分发
+        # 且同样过校验, 不在用户可写目录, 不构成提权面。
+        "_price_structure",
+        "_quants_vcp",
+        "_quants_legacy_patterns",
+        "_quants_high_tight_flag",
         "datetime",
         "__future__",
     })

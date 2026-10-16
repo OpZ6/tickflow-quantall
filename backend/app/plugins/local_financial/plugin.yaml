@@ -1,0 +1,8 @@
+name: local_financial
+display_name: "本地财务（AkShare + Tushare）"
+runtime: python
+entry: app.plugins.local_financial.provider:LocalFinancialProvider
+check: app.plugins.local_financial.bridge:availability
+datasets: [financial]
+description: "AkShare 全市场业绩概览 + Tushare 单股标准财报；无 TickFlow Expert 依赖。"
+install_hint: "uv sync；详细财报需通过 TUSHARE_TOKEN 环境变量配置 Token"
