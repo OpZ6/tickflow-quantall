@@ -25,6 +25,33 @@
    其中包含 `strategy/engine.py`(+204)、`api/strategy.py`(+197)、
    `tickflow/repository.py`(+269)、`api/kline.py`(+175)、`backtest/engine.py`(+185)
    等，直接影响 ②③ 的底层。
+4. **981 个本地新增资产被整份漏掉**（第二轮才发现）：136 个后端测试、153 个
+   研究脚本、603 篇研究文档、`docs/` 根目录 13 篇（含契约校验器强制要求的
+   `README.md`/`architecture.md`/`data-foundation.md`/`analysis-development.md`/
+   `upstream-sync.md`）、`screenshots/`、`frontend/e2e/`、`backend/scripts/`。
+   原因：第一轮只按 `backend/app`、`frontend/src` 等"代码目录"做覆盖检查，
+   **漏了 `docs/` 根层级与 `prompt/`**。现已 100% 补回（见第一节）。
+5. **策略从 `builtin/` 迁到 `research/` 后，36 个 scripts/tests 仍在 import
+   `app.strategy.builtin`** → 批量改为 `app.strategy.research`；测试里的
+   `Path(...) / "app" / "strategy" / "builtin"` 分段写法也被漏过一轮，
+   需单独改成 `[seeds, research]`（上游内置策略现位于 `seeds/`）。
+
+---
+
+## 零之二、上游 v0.3.7 引入的行为变更（不是合并错误，但会影响判读）
+
+以下 3 处**本地 main 与合并版行为不同**，经核对均源自上游演进（非本轮丢失），
+按"以上游为主"予以保留，但会影响回测结果判读，需知悉：
+
+| 变更 | 旧行为（v0.3.0 / 本地 main） | 新行为（v0.3.7） | 影响 |
+|---|---|---|---|
+| **去内置化** | 内置策略在 `app/strategy/builtin/`，引擎直接扫描 | 25 个内置迁至 `seeds/`，启动时播种到 `data/strategies/custom/`；引擎不再扫 `builtin/` | 自研策略改放 `research/`（research_only 口径，默认不在公开目录，但引擎可加载） |
+| **期末强制平仓** | 尾部被封板/停牌卡住的持仓静默丢弃（`censored`） | 期末无未来数据可等时，按末日价**强制落账**（`sold`），`blocked_exit_days` 保留"曾受阻" | 尾部持仓收益会**多计一次卖出佣金**（例：0.2987 → 0.2974） |
+| **策略 source 口径** | `/builtin/` → `source="builtin"`，且强制声明 `asset_types` | 无 builtin 分支，`research/` 按 `custom` 口径 | 测试断言 `source == "builtin"` 需改为 `"custom"` |
+
+另有一处为**本地增强被保留到上游 seeds 文件**（上游只搬位置、未改内容，故本地改动全部保留）：
+- `low_volatility_leader`：改名为"低波动趋势延续"，入场改为"首次进入状态"判定（`signal_low_volatility_trend_entry`）
+- `oversold_reversal`：入场确认逻辑增强
 
 ---
 
@@ -32,9 +59,10 @@
 
 | 项 | 数量 |
 |---|---|
-| 新增文件（上游没有 → 永久零冲突） | **240** |
-| 修改的上游既有文件（唯一同步面） | **118**（+5755 / -594 行） |
+| 新增文件（上游没有 → 永久零冲突） | **1221** |
+| 修改的上游既有文件（唯一同步面） | **121**（+5755 / -594 行） |
 | 删除 / 改名上游文件 | **0** |
+| 本地新增资产覆盖度（相对真实同步点 `4fa83aea`） | **1166 / 1166 = 100%**（其中 23 个 `builtin/` 策略为有意迁移至 `research/`） |
 
 > **为什么从 9 变成 118**：第一版只碰了 9 个上游文件，看似干净，但那是把
 > "本地相对**真实同步点** `4fa83aea` 的自研改动"误判成"上游更新"而整份取上游了。
