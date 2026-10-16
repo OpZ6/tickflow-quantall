@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { Sparkles, LineChart, History as HistoryIcon, Loader2, ExternalLink, Bell, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StockFinancialSearch } from '@/components/financials/StockFinancialSearch'
 import { StockPreviewDialog } from '@/components/StockPreviewDialog'
 import { LastStockChip } from '@/components/LastStockChip'
-import { AnalysisKChart, type PriceLevel, type LevelType } from '@/components/stock-analysis/AnalysisKChart'
+import { UnifiedStockChart, type StrategyChartContext } from '@/features/stock-chart/UnifiedStockChart'
 import { PriceAlertDialog } from '@/components/stock-analysis/PriceAlertDialog'
 import { api } from '@/lib/api'
 import { useLastStock } from '@/lib/useLastStock'
-import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
 import {
   startAnalysis, findTodayReport, useHistoryReports,
@@ -28,8 +28,24 @@ import { IconStockFocus } from '@/components/BrandIcons'
  *  - 报告胶囊用蓝色系,与财务分析(紫色)并存
  */
 export function StockAnalysis() {
-  const [symbol, setSymbol] = useState<string>('')
-  const [name, setName] = useState<string>('')
+  const [searchParams] = useSearchParams()
+  const [symbol, setSymbol] = useState<string>(() => searchParams.get('symbol') ?? '')
+  const [name, setName] = useState<string>(() => searchParams.get('name') ?? '')
+  // 策略图表预览等外部入口经 URL 传入策略上下文, 透传给统一 K 线工作台叠加策略图层。
+  const strategyContext: StrategyChartContext | undefined = useMemo(() => {
+    const strategyId = searchParams.get('strategyId') ?? undefined
+    const strategyIds = (searchParams.get('strategyIds') ?? '').split(',').map(v => v.trim()).filter(Boolean)
+    if (!strategyId && strategyIds.length === 0) return undefined
+    return {
+      strategyId,
+      strategyIds,
+      asOf: searchParams.get('asOf') ?? undefined,
+      sourceRunId: searchParams.get('sourceRunId') ?? undefined,
+      paramsFingerprint: searchParams.get('paramsFingerprint') ?? undefined,
+      signalDate: searchParams.get('signalDate') ?? searchParams.get('asOf') ?? undefined,
+      returnTo: searchParams.get('returnTo') ?? undefined,
+    }
+  }, [searchParams])
   const [checking, setChecking] = useState(false)
   const [confirmReport, setConfirmReport] = useState<{ id: string; created_at: string; focus: string } | null>(null)
   const [previewSymbol, setPreviewSymbol] = useState<string | null>(null)
@@ -138,7 +154,7 @@ export function StockAnalysis() {
                 hint="搜索代码或名称,查看日 K 与关键价位,并可让 AI 进行技术面 / 基本面 / 财务面 / 消息面四维综合分析。"
               />
             ) : (
-              <StockAnalysisBoard symbol={symbol} />
+              <StockAnalysisBoard symbol={symbol} strategyContext={strategyContext} />
             )}
           </div>
           <HistorySidebar />
@@ -176,17 +192,19 @@ export function StockAnalysis() {
 }
 
 // ===== 分析看板:日 K + 关键价位 =====
-function StockAnalysisBoard({ symbol }: { symbol: string }) {
+function StockAnalysisBoard({ symbol, strategyContext }: { symbol: string; strategyContext?: StrategyChartContext }) {
+  // 图表高度自适应视口: 撑满首屏(减去页头/搜索栏等固定开销), 最小不低于 560
+  const [vh, setVh] = useState(() => window.innerHeight)
+  useEffect(() => {
+    const onResize = () => setVh(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const chartHeight = Math.max(560, vh - 340)
+
   const kline = useQuery({
     queryKey: ['kline', symbol, ''],
     queryFn: () => api.klineDaily(symbol, 250),
-    enabled: !!symbol,
-    staleTime: 60_000,
-  })
-
-  const levelsQ = useQuery({
-    queryKey: QK.stockLevels(symbol),
-    queryFn: () => api.stockAnalysisLevels(symbol, 250),
     enabled: !!symbol,
     staleTime: 60_000,
   })
@@ -210,12 +228,10 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
     return <EmptyState icon={LineChart} title="暂无日 K 数据" hint="该标的尚未同步日 K,请先在数据页或自选页同步。" />
   }
 
-  const levels = (levelsQ.data?.levels ?? {}) as Record<LevelType, PriceLevel[]>
-
   // 涨跌色:最后一根 K 线收 vs 前一根收(无前日则按开收判断)
   const last = rows[rows.length - 1]
   const prev = rows[rows.length - 2]
-  const curClose = levelsQ.data?.close
+  const curClose = last.close
   const isUp = prev ? (last.close >= prev.close) : (last.close >= last.open)
 
   return (
@@ -224,7 +240,8 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <LineChart className="h-4 w-4 text-sky-400 shrink-0" />
-            <span className="text-sm font-medium text-foreground">关键价位分析</span>
+            <span className="text-sm font-medium text-foreground">K 线图</span>
+            <span className="ml-2 rounded border border-sky-400/20 bg-sky-400/[0.06] px-2 py-1 text-[10px] text-sky-300">唯一实例 · 全指标 · 价位 · 缠论</span>
           </div>
           <div className="flex items-baseline gap-2 shrink-0">
             <span className="text-[10px] text-muted">{rows.length} 个交易日</span>
@@ -236,16 +253,7 @@ function StockAnalysisBoard({ symbol }: { symbol: string }) {
           </div>
         </div>
       </div>
-      <div className="p-3">
-        <AnalysisKChart
-          rows={rows}
-          levels={levels}
-          series={levelsQ.data?.series}
-          seriesDates={levelsQ.data?.dates}
-          defaultLevelTypes={['sr', 'pivot', 'keltner_s']}
-          height={480}
-        />
-      </div>
+      <UnifiedStockChart symbol={symbol} height={chartHeight} strategyContext={strategyContext} />
     </div>
   )
 }

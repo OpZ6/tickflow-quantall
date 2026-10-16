@@ -53,6 +53,8 @@ import { AdjFactorSyncConfig } from '@/components/data/AdjFactorSyncConfig'
 import { RegimeConfigCard } from '@/components/data/RegimeConfigCard'
 import { PipelineScopeConfig } from '@/components/data/PipelineScopeConfig'
 import { PageSettingsModal, getCardVisibility, getCardOrder, type CardKey } from '@/components/data/PageSettingsModal'
+import { DataSourceFoundationPanel } from '@/components/data/DataSourceFoundationPanel'
+import { QuantXObservabilityPanel } from '@/components/data/QuantXObservabilityPanel'
 import { QuoteConfigCard } from '@/components/data/QuoteConfigCard'
 import { EnrichedSchemaModal } from '@/components/data/SchemaModal'
 import { Skeleton } from '@/components/data/Skeleton'
@@ -933,6 +935,9 @@ export function Data() {
             </div>
           </div>
         </div>
+
+        <DataSourceFoundationPanel />
+        <QuantXObservabilityPanel pipelineJobId={history.data?.jobs?.[0]?.id ?? null} />
 
         {/* 数据画像 */}
         <div>

@@ -11,10 +11,8 @@ import { QuantXDashboard } from '@/pages/QuantXDashboard'
 const extension: FrontendExtension = {
   id: 'tickflow.quantx',
   apiVersion: 1,
-  routes: [
-    { id: 'quantx', path: '/quantx', component: QuantXDashboard },
-    { id: 'quantx-date', path: '/quantx/:date', component: QuantXDashboard },
-  ],
+  // 扩展注册表只接受静态路径, 交易日经 ?date=YYYYMMDD 传递 (原 /quantx/:date 动态路由不受支持)。
+  routes: [{ id: 'quantx', path: '/quantx', component: QuantXDashboard }],
   navigation: [
     { id: 'quantx', routeId: 'quantx', label: 'QuantX 复盘', icon: Zap, order: 180, badge: 'beta' },
   ],

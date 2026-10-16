@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Activity,
   CalendarDays,
@@ -517,7 +517,8 @@ function DeepSection({ tab, review, multiday, tables, quality, breadth, breadthL
 }
 
 export function QuantXDashboard() {
-  const { date: routeDate } = useParams()
+  const [searchParams] = useSearchParams()
+  const routeDate = searchParams.get('date') || undefined
   const navigate = useNavigate()
   const pipelineRefresh = usePipelineRefresh()
   const [windowSize, setWindowSize] = useState<WindowSize>(20)
@@ -533,7 +534,7 @@ export function QuantXDashboard() {
   const date = routeDate || latest
 
   useEffect(() => {
-    if (!routeDate && latest) navigate(`/quantx/${latest}`, { replace: true })
+    if (!routeDate && latest) navigate(`/quantx?date=${latest}`, { replace: true })
   }, [latest, navigate, routeDate])
 
   const reviewQuery = useQuery({ queryKey: QK.quantxReview(date), queryFn: () => quantxApi.getReviewData(date), enabled: Boolean(date), retry: false, staleTime: 0 })
@@ -544,11 +545,11 @@ export function QuantXDashboard() {
   useEffect(() => {
     const refreshedDate = pipelineRefresh.job?.result?.quantx?.trade_date
     if (pipelineRefresh.job?.status === 'succeeded' && refreshedDate && refreshedDate !== date) {
-      navigate(`/quantx/${refreshedDate}`, { replace: true })
+      navigate(`/quantx?date=${refreshedDate}`, { replace: true })
     }
   }, [date, navigate, pipelineRefresh.job])
 
-  const goDate = (target: string) => navigate(`/quantx/${target}`)
+  const goDate = (target: string) => navigate(`/quantx?date=${target}`)
   const exportReport = async () => {
     const root = document.querySelector<HTMLElement>('[data-testid="quantx-unified-dashboard"]')
     if (!root) {
