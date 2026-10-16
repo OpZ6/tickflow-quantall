@@ -5,15 +5,41 @@
 
 ---
 
+## 零、三个核心问题的结论（先看这里）
+
+| 问题 | 结论 |
+|---|---|
+| **① 三个自研面板（选股池 / 市场实验室 / QuantX 复盘）是否完全保留（含后台与数据功能）？** | **是**。三层齐备：前端路由+侧栏导航、后端 API、后端业务/数据模块。14 条扩展路由全部注册，0 加载错误；后端 7 个扩展 API 实测可达。 |
+| **② 个股 K 线面板的完全增强是否保留？** | **是，且比本地还多**。`EChartsCandlestick` 导出 18→18 零丢失、Props 30→31（多上游 `addedDate`）；统一 K 线工作台已接入个股分析页；本地缠论图层与上游「加入自选日」竖线**双向保留**。 |
+| **③ 我的策略是否还在？** | **是**。`strategy/research/` 24 文件，引擎实测加载 **20 个策略、0 失败**（19 个自研 + 上游 `factor_rank_research`），4 个 `_*.py` 形态内核作为依赖自动注入。 |
+
+### 合入过程中发现并修复的 3 个"看不见的坑"
+
+1. **QuantX 面板整体失效**：扩展注册表只接受静态路径，`/quantx/:date` 让整个
+   `tickflow.quantx` 扩展加载失败 → `/quantx` 也没注册。改为 `?date=YYYYMMDD`。
+2. **个股 K 线增强成了孤儿**：本地 K 线工作台接在 `pages/StockAnalysis.tsx`，
+   而上游已把该页重构为 `custom/stock-analysis/extension.tsx`（用简易 `AnalysisKChart`）。
+   不接回去等于"代码在、没人用"。已把 `UnifiedStockChart` 接进上游插件并透传
+   `strategyContext`（承接策略图表预览入口）。
+3. **121 个核心文件的本地改动被整份覆盖**：详见第一节。
+   其中包含 `strategy/engine.py`(+204)、`api/strategy.py`(+197)、
+   `tickflow/repository.py`(+269)、`api/kline.py`(+175)、`backtest/engine.py`(+185)
+   等，直接影响 ②③ 的底层。
+
+---
+
 ## 一、总览
 
 | 项 | 数量 |
 |---|---|
-| 新增文件（上游没有 → 永久零冲突） | **238** |
-| 修改的上游既有文件（唯一同步面） | **9** |
+| 新增文件（上游没有 → 永久零冲突） | **240** |
+| 修改的上游既有文件（唯一同步面） | **118**（+5755 / -594 行） |
 | 删除 / 改名上游文件 | **0** |
 
-对比：上一轮「文件级合并」的冲突文件数是 **303**。
+> **为什么从 9 变成 118**：第一版只碰了 9 个上游文件，看似干净，但那是把
+> "本地相对**真实同步点** `4fa83aea` 的自研改动"误判成"上游更新"而整份取上游了。
+> 用 `git merge-file`（ours=`main`, base=`4fa83aea`, theirs=`upstream/main`）重做后，
+> 82 个零冲突自动合并、39 个逐条判定，本地功能才真正回到合并版里。
 
 ---
 
@@ -35,7 +61,9 @@
 | QuantX 数据管线 | `api/quantx_data.py` | 采集 / 质量 / 清单 / 迁移 | `custom/quantx_data.py` |
 | 选股池 | `api/stock_pools.py` | 入池规则 / 阶段演化 / 复盘 / 发布 | `custom/stock_pools.py` |
 
-**验证**：9 个扩展（含上游自带 `assistant.chat`、本地 `tickflow.amv`）全部零错误挂载。
+**验证**：合并版启动日志 0 条 route conflicts；9 个扩展（含上游自带 `assistant.chat`、本地 `tickflow.amv`）
+全部零错误挂载。同时从 `main.py` 删除了这 7 个 API 的重复 `import` + `include_router`
+（各 7 处），让插件独占，避免重复注册。
 
 ### 2. 后端：24 个自研策略 → `app/strategy/research/`
 
@@ -46,12 +74,17 @@
 |---|---|
 | VCP 家族 8 个（`vcp_breakout` / `vcp_leader_tradable_v1` / `vcp_middle_expansion` …） | 波动收缩形态突破与失效退出 |
 | Quants 系列 6 个（`quants_vcp` / `quants_cup_handle_legacy_v1` …） | 老版形态策略的兼容实现 |
-| 形态类（`cup_handle_breakout` / `high_tight_flag_breakout` / `launch_pullback_*`） | 杯柄 / 高紧旗 / 启动回踩 |
+| 形态类 5 个（`cup_handle_breakout` / `high_tight_flag_breakout` / `launch_pullback_*`） | 杯柄 / 高紧旗 / 启动回踩 |
 | 4 个 `_*.py` helper（`_quants_vcp` 1346 行等，共 2199 行） | 上述策略共用的形态计算内核 |
 
+**实测**：`StrategyEngine(strategy_dirs=[app/strategy/research])` → `_strategies` **20 个**，
+`load_errors()` **0**。含 13 个 `research_only` 模板（`list_strategies()` 默认会过滤掉，
+需 `include_research=True` 才可见——上一版就是漏了这个参数才误判成"只有 7 个"）。
+
 **做法**：24 个文件整体迁入 `research/`；4 个 helper 名加进
-`ai_generator._ALLOWED_IMPORT_MODULES`（8 行，沿用上游 `app.strategy.research.factor_rank_research`
-已有的白名单先例），使脱离引擎单独过安全校验时也能解析 `from _xxx import`。
+`ai_generator._ALLOWED_IMPORT_MODULES`（8 行，沿用上游
+`app.strategy.research.factor_rank_research` 已有的白名单先例），使脱离引擎单独过安全校验时
+也能解析 `from _xxx import`。
 
 > 备选方案被否：放 `strategy/seeds/`（启动播种到用户目录）——因为 `seed_missing_builtins()`
 > 第 38 行**跳过 `_` 前缀文件**，helper 不会随种子落地，策略会 import 失败。
@@ -63,11 +96,16 @@
 
 | 页面 | 做什么用 | 现在 |
 |---|---|---|
-| QuantX 复盘 | 情绪 + 多日复盘 V4 驾驶舱 | `custom/quantx/extension.tsx`，注册 `/quantx`、`/quantx/:date` |
+| QuantX 复盘 | 情绪 + 多日复盘 V4 驾驶舱 | `custom/quantx/extension.tsx`，注册 `/quantx`（交易日走 `?date=`） |
 | 市场实验室 | ETF 动量 / 板块 / 宏观 / 模拟 | `custom/market-lab/extension.tsx`，注册 `/market-lab` |
 | 选股池 | 入池规则 / 阶段演化 / 复盘 | `custom/stock_pools/extension.tsx`（原本就是插件） |
 
-**验证**：构建产物中出现独立 chunk `extension-*.js`，含「QuantX 复盘」「市场实验室」导航项。
+**验证**：新增 `src/extensions/local-panels.test.ts` 运行时断言——
+14 条扩展路由全部注册、0 加载错误，其中含 `/stock-pools`、`/market-lab`、`/quantx`。
+构建产物中出现独立 chunk `extension-*.js`。
+
+> 同时删除了 `Layout.tsx` 里本地硬编码的 `customNav`（含 `/market-lab`、`/quantx`），
+> 因为上游 `extensionNav` 已自动生成同名导航项，保留会**重复两次**。
 
 > 注：本地另有一批页面（Financials / Monitor / Lots / ConceptAnalysis / IndustryAnalysis /
 > StockAnalysis / Signals / Review / LimitUpLadder / AbnormalMoves）**上游已各自做成 custom 模块**，
@@ -81,23 +119,37 @@
 
 ---
 
-## 三、无法插件化、直接改核心的部分（9 个文件）
+## 三、无法插件化、直接改核心的部分（118 个文件，改动量 +5755/-594）
+
+其中**最关键的 10 个**（其余多为随本轮三方合并一起回到位的小改）：
 
 | 文件 | 改动 | 为什么必须直接改 |
 |---|---|---|
-| `frontend/components/EChartsCandlestick.tsx` | +934/-38 | 缠论图层需要在**组件内部**构建 ECharts series，插件机制无此钩子。用**真三方合并**（base = 真实同步点 `4fa83aea`，`git merge-file --union`）双向保留：本地缠论图层 + 上游「加入自选日」蓝色竖线 |
-| `backend/services/kline_sync.py` | +44 | 新增 `fetch_daily_selected()`：按 preferences 选源、第三方源 fail-closed（空结果不静默回落 TickFlow），供缠论 K 线补齐用 |
-| `frontend/lib/api.ts` | +15/-2 | ①`request` / `COMPUTE_REQUEST_TIMEOUT_MS` 改 `export`；②`api` 对象末尾 `...customApi` 展开，使 104 处 `api.xxx` 本地调用零改动 |
-| `frontend/lib/queryKeys.ts` | +37 | 追加 31 个自定义 QK 键（带分区注释） |
-| `frontend/lib/storage.ts` | +10 | 追加 `indicatorParams` / `stockChartLayout` / `stockChartDrawings` 三个持久化键 |
-| `frontend/vite.config.ts` | +8/-1 | 注册插件 + `dedupe`/`optimizeDeps` 防 React 双实例 |
-| `backend/strategy/ai_generator.py` | +8 | 策略安全白名单加 4 个 `_*.py` 依赖模块 |
-| `frontend/package.json` | +7/-1 | 补 `class-variance-authority`、`echarts-for-react`、`esbuild`；补 3 个校验脚本 |
-| `frontend/pnpm-lock.yaml` | +307/-13 | 依赖锁 |
+| `frontend/components/EChartsCandlestick.tsx` | +934/-38 | 缠论图层需在**组件内部**构建 ECharts series，插件机制无此钩子。用**真三方合并**（base = 真实同步点 `4fa83aea`）双向保留：本地缠论图层 + 上游「加入自选日」蓝色竖线 |
+| `backend/strategy/engine.py` | +204/-33 | 策略引擎：本地 `preview_signal_history`/`StrategySignalHistory` + 上游矩阵目标帧修复 |
+| `backend/api/strategy.py` | +197/-1 | 本地 `/events`、`/events/backfill`、`preview` 端点 + 上游 override 优先口径；并合本地三个风控字段 |
+| `backend/tickflow/repository.py` | +269/-20 | 数据仓库：`get_index_daily_batch` / `get_adjustment_factors` / `get_raw_daily_asset` / `_overlay_live_enriched` 等 |
+| `backend/api/kline.py` | +175/-3 | 本地 `/chart` 端点 + `_canonical_chart_symbol`（裸代码补全市场）＋ `sync_daily_single`；并合上游 `_json_safe` |
+| `backend/backtest/engine.py` | +185/-32 | 本地盈亏锁定/收盘保本 + 上游期末强制平仓（`force=True`，避免递延持仓被静默丢弃） |
+| `backend/services/financial_sync.py` | +273/-14 | 数据源路由/故障转移链 |
+| `backend/services/preferences.py` | +75/-13 | `provider_chains` 优先级链（`get/set/promote_data_provider_chain`） |
+| `backend/api/pipeline.py` | 见下 | 本地在主管道后追加 QuantX/选股池两个后置发布阶段 |
+| `frontend/lib/api.ts` | +15/-2 | ①`request`/`COMPUTE_REQUEST_TIMEOUT_MS` 改 `export`；②`api` 对象末尾 `...customApi`，使本地 104 处 `api.xxx` 调用零改动 |
 
 **为什么 `lib/api.ts` 只改 15 行**：本地原本在此文件里有 +1605 行自定义客户端，
 已全部抽到 `frontend/src/custom/api.ts`（上游不存在该文件 → 未来同步零冲突）。
-`api` 对象末尾加一行 `...customApi` 让调用方无感。
+
+### 本轮修复的合并副作用
+
+| 问题 | 修复 |
+|---|---|
+| `api/pipeline.py` 的 `_run_pipeline_and_quantx(repo, capset, progress)` 引用上游 `_submit_job` 作用域中不存在的 `capset`（NameError） | 改签名收 `make_run` 闭包：`_run_pipeline_and_quantx(run, progress)` |
+| `main.py` 中 7 个本地 API 与 `app/custom/*.py` 插件**重复注册**（启动日志 route conflicts） | 从 `main.py` 删 7 处 `import` + 7 处 `include_router`，插件独占 |
+| `StockDailyKChart.tsx` union 合并把缠论 state 与上游 `addedDate` state 叠在一起导致语法错 | 保留两者，`B` 并合 |
+| `StrategyBacktest.tsx` union 合并产生两份 lucide/`api` 导入 | 合并为一份（图标与类型取并集） |
+| `Layout.tsx` 本地 `customNav` 与上游 `extensionNav` 重复渲染 | 删本地硬编码 |
+| `MenuSettings.tsx` 本地硬编码 `CUSTOM_PAGES`（market-lab/quantx）已过时 | 取上游（扩展页自动进菜单） |
+| 契约快照 / 矩阵缓存版本 / 本地测试签名 4 处不一致 | 逐一对齐（详见下表） |
 
 ---
 
@@ -108,6 +160,7 @@
 | `backend/app/quantx_data` | 43 文件 / 10871 行 | QuantX 数据采集管线：14 个 legacy scraper、质量校验、清单、迁移、风险雷达、新高聚类、多日驾驶舱 |
 | `backend/app/plugins` | 29 文件 / 4909 行 | 数据源插件：tdx / tushare / stocksdk / local_financial（含 bridge） |
 | `backend/app/market_facts` | 11 文件 / 3901 行 | 数据地基：数据集注册表、快照留存、审计、备份、证券历史 |
+| `backend/app/strategy/research` | 24 文件 / 4304 行 | 19 个自研策略 + 4 个形态内核 + 上游 `factor_rank_research` |
 | `backend/app/stock_pools` | 11 文件 / 2113 行 | 选股池内核：规则 / 演化 / 复盘 / 发布 / 主题聚类 |
 | `backend/app/chanlun` | 10 文件 / 1195 行 | 缠论内核：分型 / 笔 / 线段 / 中枢 / 买卖点 / MACD |
 | `backend/app/research_materials` | 4 文件 / 639 行 | 研究材料仓库 + SMNC |
@@ -122,16 +175,19 @@
 
 | 关卡 | 结果 |
 |---|---|
-| 后端 pytest | **2756 passed / 2 failed** —— 2 个为环境缺 `tdxaidata` 模块，与上游基线**逐项一致** |
+| 后端 pytest | **2797 passed / 2 failed** —— 2 个为环境缺 `tdxaidata` 模块，与上游基线**逐项一致** |
 | 前端 `tsc --noEmit` | **0 错误** |
-| 前端 vitest | 3 failed / 149 passed —— 与上游基线一致，**零新增失败** |
+| 前端 vitest | **26 文件 / 158 用例全部通过**（上游基线为 149 passed + 3 failed） |
 | 前端 `vite build` | ✓ 通过 |
-| 后端真实启动 | `/health` 200；7 个扩展 API 路由全部可达 |
-| 前端插件 | 产物含独立 chunk `extension-*.js`（QuantX / 市场实验室） |
+| 后端插件 | 9 个扩展零错误挂载，无 route conflicts |
+| 前端插件 | 14 条扩展路由全部注册（含三个自研面板），0 加载错误 |
+| 策略引擎 | `research/` 20 个策略加载成功、0 失败 |
+| 文件差异 | 新增 240 / 修改 118 / 删除改名 **0** |
 
 ---
 
 ## 六、遗留
 
-1. `frontend/src/lib/signals.ts` 目前为本地版直取，待做真三方合并。
-2. 合入 `main` 需用户确认；`main` 全程保持 `bc2b892d` 未动。
+1. `main` 全程保持 `bc2b892d` 未动；合并结果（`sync/v037-clean`）**待用户确认后再并入**。
+2. 2 个环境失败：`test_tdxquant_probe.py` 需安装 `tdxaidata` 包。
+3. `frontend/src/lib/signals.ts` 为本地版与上游的合并结果，如需可再逐段校。
