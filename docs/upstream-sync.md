@@ -1,8 +1,25 @@
 # TickFlow 上游同步制度
 
+> **执行手册**：具体怎么判断、怎么解冲突、踩过哪些坑，见 [`upstream-sync-playbook.md`](upstream-sync-playbook.md)。
+> 本文档只记**制度**与**历史台账**。
+
 > **稳定 Tag 硬约束（2026-08-31 起）**：Quantall 每次上游合并只允许选择上游已发布的稳定 Tag；禁止直接合并 `upstream/main`、功能分支或未打 Tag 的单独提交。若最新稳定 Tag 不满足需求，停止合并并由维护者决定是否等待下一稳定版本。
 
-## 最新同步记录（2026-09-22）
+## 最新同步记录（v0.3.7，分支 `sync/v037-clean`）
+
+| 项目 | 值 |
+| --- | --- |
+| 同步目标 | `upstream/main` @ `99efc808`（v0.3.7） |
+| 真实同步基准 | `4fa83aea`（= 上次同步的 `v0.3.0` Tag commit；**默认 merge-base 会错退回 v0.1.x**） |
+| 集成分支 | `sync/v037-clean`（worktree `D:\tickflow-quantall-merge`） |
+| 合并方式 | 三方合并 `ours=main / base=4fa83aea / theirs=upstream/main`，82 零冲突 + 39 逐条判定 |
+| 最终差异 | 新增 1221 / 修改 121（+5799 / -612）/ 删除改名 0 |
+| 覆盖度 | 本地相对 `4fa83aea` 的新增 1166 项 **100% 覆盖**（23 个 `builtin/` 策略为有意迁移至 `research/`） |
+| 验证结果 | 后端 3740 passed / 3 failed（2 个缺 `tdxaidata` + 1 个并发 flaky）；前端 tsc 0 / vitest 158 / build ✓ |
+| 上游行为变更 | ① 去内置化（`builtin/`→`seeds/`）② 期末强制平仓（`censored`→`sold`，计卖出佣金）③ 信号定义迁数据库（`SIGNAL_OPTIONS` 废弃）④ 策略 `source` 口径 `builtin`→`custom` |
+| 已知未做 | 用户真机端到端冒烟；推送 `origin/main` 需用户确认 |
+
+## 上一次同步记录（2026-09-22）
 
 | 项目 | 值 |
 | --- | --- |
