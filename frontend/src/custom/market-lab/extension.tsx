@@ -14,7 +14,7 @@ const extension: FrontendExtension = {
     { id: 'market-lab', path: '/market-lab', component: MarketLab },
   ],
   navigation: [
-    { id: 'market-lab', routeId: 'market-lab', label: '市场实验室', icon: FlaskConical, order: 175 },
+    { id: 'market-lab', routeId: 'market-lab', label: '市场实验室', icon: FlaskConical, order: 175, badge: 'beta' },
   ],
 }
 
