@@ -1,4 +1,5 @@
 import { customApi } from '@/custom/api'
+import { normalizeStockSymbol } from '@/custom/symbols'
 // 后端 API 客户端 — 全项目统一入口
 //
 // Dev: Vite 按启动脚本解析出的 BACKEND_HOST/BACKEND_PORT 代理 /api
@@ -2733,13 +2734,13 @@ export const api = {
   klineDaily: (symbol: string, days = 120, dateRange?: { start: string; end: string }, extColumns?: string) =>
     request<KlineDailyResponse>(
       (dateRange
-        ? `/api/kline/daily?symbol=${encodeURIComponent(symbol)}&start_date=${dateRange.start}&end_date=${dateRange.end}`
-        : `/api/kline/daily?symbol=${encodeURIComponent(symbol)}&days=${days}`)
+        ? `/api/kline/daily?symbol=${encodeURIComponent(normalizeStockSymbol(symbol))}&start_date=${dateRange.start}&end_date=${dateRange.end}`
+        : `/api/kline/daily?symbol=${encodeURIComponent(normalizeStockSymbol(symbol))}&days=${days}`)
       + (extColumns ? `&ext_columns=${encodeURIComponent(extColumns)}` : ''),
     ),
   klineDailyLatest: (symbol: string) =>
     request<KlineDailyLatestResponse>(
-      `/api/kline/daily/latest?symbol=${encodeURIComponent(symbol)}`,
+      `/api/kline/daily/latest?symbol=${encodeURIComponent(normalizeStockSymbol(symbol))}`,
     ),
   klineDailyBatch: (symbols: string[], days = 12) =>
     request<{ data: Record<string, KlineRow[]> }>('/api/kline/daily-batch', {
