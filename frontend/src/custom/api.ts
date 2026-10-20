@@ -5,6 +5,28 @@
 
 import { request, COMPUTE_REQUEST_TIMEOUT_MS, type KlineRow, type LevelType, type PriceLevel, type StrategyBacktestResult } from '@/lib/api'
 
+/**
+ * 把裸 6 位代码补全为带交易所后缀的完整代码。
+ *
+ * 后端 K 线接口按完整代码匹配分区数据，传 `600400` 会返回空 rows；
+ * 但 URL 参数 / 选股池跳转 / 手工输入经常只有裸代码，因此在客户端统一补全。
+ * 已带后缀、非 6 位代码（港股/美股/指数别名）原样返回。
+ */
+export function normalizeStockSymbol(raw: string): string {
+  const s = (raw || '').trim().toUpperCase()
+  if (!s || s.includes('.')) return s
+  if (!/^\d{6}$/.test(s)) return s
+  const head = s[0]
+  // 沪市: 6xxxxx 股票 / 5xxxxx ETF 基金 / 9xxxxx B 股
+  if (head === '6' || head === '5' || head === '9') return `${s}.SH`
+  // 深市: 0xxxxx / 3xxxxx 股票 / 1xxxxx ETF 基金 / 2xxxxx B 股
+  if (head === '0' || head === '1' || head === '2' || head === '3') return `${s}.SZ`
+  // 北交所: 4xxxxx / 8xxxxx
+  if (head === '4' || head === '8') return `${s}.BJ`
+  return s
+}
+
+
 export interface ChanlunStatus {
   available: boolean
   viewer_url: string | null
@@ -1466,7 +1488,7 @@ const customApiClients = {
     ),
   klineChart: (query: ChartDataQuery) => {
     const params = new URLSearchParams({
-      symbol: query.symbol,
+      symbol: normalizeStockSymbol(query.symbol),
       interval: query.interval,
       adjustment: query.adjustment,
       range: query.range,

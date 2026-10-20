@@ -10,6 +10,7 @@ import { LastStockChip } from '@/components/LastStockChip'
 import { UnifiedStockChart, type StrategyChartContext } from '@/features/stock-chart/UnifiedStockChart'
 import { PriceAlertDialog } from '@/components/stock-analysis/PriceAlertDialog'
 import { api } from '@/lib/api'
+import { normalizeStockSymbol } from '@/custom/api'
 import { useLastStock } from '@/lib/useLastStock'
 import { toast } from '@/components/Toast'
 import {
@@ -29,7 +30,9 @@ import { IconStockFocus } from '@/components/BrandIcons'
  */
 export function StockAnalysis() {
   const [searchParams] = useSearchParams()
-  const [symbol, setSymbol] = useState<string>(() => searchParams.get('symbol') ?? '')
+  // URL 里的 symbol 常是裸 6 位代码(如 600400), 后端 K 线按完整代码匹配,
+  // 因此在入口统一补交易所后缀, 否则日线取不到数据、图表空白。
+  const [symbol, setSymbol] = useState<string>(() => normalizeStockSymbol(searchParams.get('symbol') ?? ''))
   const [name, setName] = useState<string>(() => searchParams.get('name') ?? '')
   // 策略图表预览等外部入口经 URL 传入策略上下文, 透传给统一 K 线工作台叠加策略图层。
   const strategyContext: StrategyChartContext | undefined = useMemo(() => {
@@ -58,18 +61,19 @@ export function StockAnalysis() {
   // 自动恢复上次选中的股票(切走再回来不丢)。useLastStock 的 last 来自 localStorage, 同步可用。
   useEffect(() => {
     if (!symbol && lastStock) {
-      setSymbol(lastStock.symbol)
+      setSymbol(normalizeStockSymbol(lastStock.symbol))
       setName(lastStock.name)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const onSelect = (sym: string, nm: string) => {
-    setSymbol(sym)
+    const full = normalizeStockSymbol(sym)
+    setSymbol(full)
     setName(nm)
     setConfirmReport(null)
     setShowPriceAlerts(false)
-    rememberStock(sym, nm)
+    rememberStock(full, nm)
   }
 
   const handleAnalyze = async () => {
