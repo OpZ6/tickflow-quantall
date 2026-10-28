@@ -114,7 +114,8 @@ class _FakeResp:
 class _FakeClient:
     last: tuple | None = None
 
-    def __init__(self, timeout=None) -> None:
+    # verify: 生产代码复用进程级 SSLContext 后固定传入, 桩需跟上签名
+    def __init__(self, timeout=None, verify=None) -> None:
         pass
 
     async def __aenter__(self):
