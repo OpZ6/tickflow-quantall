@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import ssl
 import threading
 from datetime import UTC, date, datetime, timezone
 from functools import reduce
@@ -21,6 +22,30 @@ from app.services.ext_data import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 进程级复用的 SSL 上下文。
+#
+# 不加这个时, httpx.AsyncClient() 默认 verify=True, 每建一个客户端都会现场
+# 建 SSLContext: 载入 certifi CA 库 + Windows 证书库。本机实测单套 CA 载入
+# 约 1s, 且 trust_env 从代理环境变量派生出 http/https/all 三个挂载点, 各建
+# 一套 —— 单个 AsyncClient 构造耗时 3.0~3.4s。
+#
+# 这段构造是纯同步代码, 却跑在协程里, 于是直接独占 uvicorn 的事件循环。
+# 概念/行业 fanout 要发 700+ 次请求, 每次都新建客户端, 事件循环被连续占用
+# 约一小时, 期间 /health、/api/data/status 等全部排队 -> 前端 30s 超时。
+# 复用同一个 SSLContext 后构造耗时降到 ~1ms (实测 1.1ms)。
+_ssl_ctx: ssl.SSLContext | None = None
+_ssl_ctx_lock = threading.Lock()
+
+
+def _shared_ssl_context() -> ssl.SSLContext:
+    """懒加载并复用进程级 SSLContext (仅首次约 0.1~1s, 之后零成本)。"""
+    global _ssl_ctx
+    if _ssl_ctx is None:
+        with _ssl_ctx_lock:
+            if _ssl_ctx is None:
+                _ssl_ctx = ssl.create_default_context()
+    return _ssl_ctx
 
 
 def outbound_headers(user_headers: dict[str, str] | None = None) -> dict[str, str]:
@@ -230,7 +255,7 @@ async def _request_json(
     # getattr 兜底测试用的简化 pull 对象
     timeout = getattr(pull, "timeout_seconds", None)
     timeout = timeout if isinstance(timeout, (int, float)) and timeout > 0 else 30
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout, verify=_shared_ssl_context()) as client:
         headers = outbound_headers(pull.headers)
         url = _apply_auth(config_id, pull.auth, url, headers)
         kwargs: dict[str, Any] = {"headers": headers}

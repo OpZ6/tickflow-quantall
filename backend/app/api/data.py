@@ -79,22 +79,67 @@ def invalidate_storage_cache() -> None:
     invalidate_data_cache(None)
 
 
+# 单飞锁: 冷缓存(或被显式失效)时只允许一个线程重算, 其余等待后复用结果,
+# 防止 N 个并发请求各算一遍把 DuckDB 打满。
+_recompute_locks: dict[str, threading.Lock] = {k: threading.Lock() for k in _table_cache}
+# 正在后台刷新的表, 保证同一张表同时只有一个刷新任务在飞。
+_refreshing: set[str] = set()
+
+
+def _store_table_stats(name: str, value: dict | None) -> None:
+    with _table_cache_lock:
+        _table_cache[name] = value
+        _table_cache_ts[name] = time.time()
+
+
+def _spawn_refresh(name: str, fetch: Callable[[], dict | None]) -> None:
+    """stale-while-revalidate: 后台刷新一张过期表, 不阻塞当前请求。"""
+    with _table_cache_lock:
+        if name in _refreshing:
+            return
+        _refreshing.add(name)
+
+    def _work() -> None:
+        try:
+            _store_table_stats(name, fetch())
+        except Exception as e:  # noqa: BLE001 — 刷新失败保留旧值, 下次轮询再试
+            logger.debug("background refresh %s failed: %s", name, e)
+        finally:
+            with _table_cache_lock:
+                _refreshing.discard(name)
+
+    threading.Thread(target=_work, name=f"data-status-refresh-{name}", daemon=True).start()
+
+
 def _get_table_stats(name: str, fetch: Callable[[], dict | None]) -> dict | None:
-    """走 TTL+事件 双重缓存。fetch 在锁外执行避免阻塞别的请求。"""
+    """走 TTL+事件 双重缓存; 过期但持有旧值时先返回旧值并后台刷新。
+
+    数据页每 30s 轮询一次, 而 TTL 也是 30s, 冷算各表聚合又要 0.5~5s
+    (count(*) / count(DISTINCT) 走 Parquet 全表)。原先过期就同步重算, 页面
+    几乎次次撞上重算, 表现为数据页转圈、极端时撞 30s 前端超时。改为:
+      - 有旧值: 立刻返回旧值 + 后台刷新 (数据最多晚一个轮询周期刷新)
+      - 无旧值(冷启动 / 管道写完后显式失效): 同步重算并单飞, 保证此刻新鲜
+    """
     ttl = _TABLE_TTL_LARGE if name in _LARGE_TABLES else _TABLE_TTL
     now = time.time()
     with _table_cache_lock:
         cached = _table_cache.get(name)
         cached_ts = _table_cache_ts.get(name, 0.0)
-        if cached is not None and (now - cached_ts) < ttl:
+
+    if cached is not None:
+        if (now - cached_ts) < ttl:
             return cached
+        _spawn_refresh(name, fetch)
+        return cached
 
-    fresh = fetch()
-
-    with _table_cache_lock:
-        _table_cache[name] = fresh
-        _table_cache_ts[name] = now
-    return fresh
+    with _recompute_locks[name]:
+        with _table_cache_lock:
+            cached = _table_cache.get(name)
+            if cached is not None:
+                return cached
+        fresh = fetch()
+        _store_table_stats(name, fresh)
+        return fresh
 
 
 def _safe_aggregate(repo, view: str) -> dict | None:
