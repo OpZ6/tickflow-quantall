@@ -939,9 +939,15 @@ class QuantXReviewRepository:
             DatasetId.LIMIT_LADDER_DAILY,
         )
         if not history.is_empty():
+            # 原先对 180 天里每一天各做一次 filter (约 835 次 polars 调用, ~2s);
+            # partition_by 一次切好, 之后按交易日直接取片。
+            daily_frames = {
+                (key[0] if isinstance(key, tuple) else key): group
+                for key, group in history.partition_by("trade_date", as_dict=True).items()
+            }
             height_history: list[dict[str, Any]] = []
-            for trade_day in sorted(history["trade_date"].unique().to_list()):
-                daily = history.filter(pl.col("trade_date") == trade_day).sort(
+            for trade_day in sorted(daily_frames):
+                daily = daily_frames[trade_day].sort(
                     ["board_height", "symbol"], descending=[True, False]
                 )
                 heights = sorted(
@@ -1085,6 +1091,41 @@ class QuantXReviewRepository:
         }
         fields.append("sections.s2.new_high")
 
+    def _load_index_frames(
+        self,
+        pairs: tuple[tuple[str, str], ...],
+        day: date,
+    ) -> dict[str, pl.DataFrame]:
+        """取回各指数近 10 天收盘序列。
+
+        优先用 get_index_daily_batch 一次扫描按 is_in(symbols) 取回全部序列;
+        批量路径不可用或抛错时回退到逐个 get_index_daily, 保证行为不变。
+        """
+        start = day - timedelta(days=10)
+        columns = ["symbol", "date", "close"]
+        batch = getattr(self.indexes, "get_index_daily_batch", None)
+        if callable(batch):
+            try:
+                frame = batch(
+                    [storage_code for _, storage_code in pairs], start, day, columns
+                )
+            except (OSError, RuntimeError, ValueError):
+                frame = None
+            if frame is not None and not frame.is_empty() and "symbol" in frame.columns:
+                return {
+                    str(key[0] if isinstance(key, tuple) else key): group
+                    for key, group in frame.partition_by("symbol", as_dict=True).items()
+                }
+        frames: dict[str, pl.DataFrame] = {}
+        for _, storage_code in pairs:
+            try:
+                frames[storage_code] = self.indexes.get_index_daily(
+                    storage_code, start, day, columns
+                )
+            except (OSError, RuntimeError, ValueError):
+                continue
+        return frames
+
     def _apply_indexes(
         self,
         snapshot: dict[str, Any],
@@ -1100,8 +1141,7 @@ class QuantXReviewRepository:
             for row in cached_rows
             if isinstance(row, dict)
         }
-        updated = []
-        for display_code, storage_code in (
+        pairs: tuple[tuple[str, str], ...] = (
             ("000001.SH", "000001.SH"),
             ("399001.SZ", "399001.SZ"),
             ("399006.SZ", "399006.SZ"),
@@ -1112,17 +1152,14 @@ class QuantXReviewRepository:
             ("399303.SZ", "399303.SZ"),
             ("399905.SZ", "399905.SZ"),
             (QUANTX_ALL_A_DISPLAY_SYMBOL, QUANTX_ALL_A_STORAGE_SYMBOL),
-        ):
-            try:
-                frame = self.indexes.get_index_daily(
-                    storage_code,
-                    day - timedelta(days=10),
-                    day,
-                    ["symbol", "date", "close"],
-                )
-            except (OSError, RuntimeError, ValueError):
-                continue
-            if frame.is_empty():
+        )
+        # 原先 10 个指数各调一次 get_index_daily, 每次都是一遍全量 parquet 扫描,
+        # 复盘页 ~13s 里约 7s 耗在这。改成一次批量扫描后按 symbol 切片。
+        frames = self._load_index_frames(pairs, day)
+        updated = []
+        for display_code, storage_code in pairs:
+            frame = frames.get(storage_code)
+            if frame is None or frame.is_empty():
                 continue
             frame = frame.sort("date")
             row = frame.row(-1, named=True)
