@@ -79,7 +79,7 @@ def no_limit_window_days(symbol: str, listing_date: date | None) -> int:
         return 0
     if symbol.endswith(".BJ"):
         return NO_LIMIT_WINDOW_TRADING_DAYS_BJ if listing_date >= BJ_OPENING_DATE else 0
-    if symbol.startswith(("300", "301")):
+    if symbol.startswith(("300", "301", "302")):
         return NO_LIMIT_WINDOW_TRADING_DAYS if listing_date >= GEM_REGISTRATION_DATE else 0
     if symbol.startswith(("688", "689")):
         return NO_LIMIT_WINDOW_TRADING_DAYS if listing_date >= STAR_REGISTRATION_DATE else 0

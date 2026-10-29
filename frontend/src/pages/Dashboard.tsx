@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowUpRight, Check, Database, Gauge, GripVertical, Info, Loader2, Play, RefreshCw, RotateCcw, Sparkles, Timer } from 'lucide-react'
 import { DatePicker } from '@/components/DatePicker'
-import { api, type AlertEvent } from '@/lib/api'
+import { api, type AlertEvent, type DataStatus } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { DimensionMembersDialog, type DimensionMembersTarget } from '@/components/DimensionMembersDialog'
 import { useDataStatus, useCapabilities, useSettings, usePreferences } from '@/lib/useSharedQueries'
@@ -19,6 +19,19 @@ import { AddWidgetPanel } from '@/components/dashboard/AddWidgetPanel'
 import { useDashboardLayout } from '@/components/dashboard/useDashboardLayout'
 import { DEFAULT_LAYOUT, widgetDef, type WidgetCtx } from '@/components/dashboard/registry'
 import { cloneItems, GRID_COLS, type WidgetType } from '@/components/dashboard/layout'
+
+/** 兼容旧后端的预热标志; 同步/自动修复也会使统计暂不可用。 */
+export function isDataStatusPending(ds?: DataStatus): boolean {
+  return ds?.stats_pending === true || ds?.indicators_ready === false
+}
+
+/** 无本地数据判定: enriched/daily 交易日均为 0 才算无数据。
+ *  预热/同步/修复期间的 null 是未知态, 必须等真实统计就绪再判。 */
+export function resolveHasNoData(ds?: DataStatus): boolean {
+  if (!ds) return false
+  if (isDataStatusPending(ds)) return false
+  return (ds.enriched?.trading_days ?? 0) === 0 && (ds.daily?.trading_days ?? 0) === 0
+}
 
 /** 打开个股预览的来源榜 (用于行高亮与切股导航列表) */
 type PreviewSource = 'gain' | 'loss' | 'amount' | 'active' | 'concept' | 'industry' | 'alert'
@@ -58,7 +71,11 @@ export function Dashboard() {
   }, [dashItems, setDashItems])
   // 首次使用(无数据 + 未完成引导)自动弹窗: 同一会话只弹一次
   const [showWelcomeModal, setShowWelcomeModal] = useState(false)
-  const dataStatus = useDataStatus({ staleTime: 60_000 })
+  // 统计暂不可用时持续重查, 同步/自动修复结束后恢复真实统计并停止轮询。
+  const dataStatus = useDataStatus({
+    staleTime: 60_000,
+    refetchInterval: (q: any) => (isDataStatusPending(q.state.data) ? 5_000 : false),
+  })
   const latestDataDate = dataStatus.data?.enriched?.latest_date ?? null
   // 选中最新交易日等价于“回到实时”。后端的 as_of 是严格历史快照语义，
   // 只有更早日期才能传入，避免页面标着实时却强制读取历史指数。
@@ -94,11 +111,10 @@ export function Dashboard() {
   ].find(s => s.name === activeProvider)?.display_name
     ?.replace(/（.*?）|\(.*?\)/g, '').trim() || activeProvider
   // 无本地数据(enriched/daily 都没有)→ 常驻引导卡片
-  // 注: 后端 status 的 rows 为性能刻意返回 0, 用 trading_days 判断是否有数据
+  // 注: 后端 status 的 rows 为性能刻意返回 0, 用 trading_days 判断是否有数据;
+  // 统计暂不可用时不算无数据 (见 resolveHasNoData)
   const ds = dataStatus.data
-  const hasNoData = !!ds
-    && (ds.enriched?.trading_days ?? 0) === 0
-    && (ds.daily?.trading_days ?? 0) === 0
+  const hasNoData = resolveHasNoData(ds)
 
   // ===== 盘后管道触发(看板内一键获取数据) =====
   const [fetchJobId, setFetchJobId] = useState<string | null>(null)

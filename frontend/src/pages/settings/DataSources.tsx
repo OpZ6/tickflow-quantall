@@ -42,6 +42,7 @@ import { QK } from '@/lib/queryKeys'
 import { useCapabilities, usePreferences } from '@/lib/useSharedQueries'
 import { AnchorWrap } from '@/lib/useCardFlash'
 import { CAP_LABELS, TIER_RANK, tierRank, tierStyle, TierTag } from '@/lib/capability-labels'
+import { DEFAULT_ROUTING } from '@/lib/provider-routing'
 import { toast } from '@/components/Toast'
 import { DataSourceEditor } from './DataSourceEditor'
 import { TickFlowKeySection, TierHelpPopover, useInvalidateTierRelated } from './Keys'
@@ -149,16 +150,6 @@ function patchMatrix(
     }
   }
   return { ...matrix, capabilities: caps }
-}
-
-const DEFAULT_ROUTING: Record<ProviderField, string> = {
-  daily_data_provider: 'tickflow',
-  adj_factor_provider: 'tickflow',
-  minute_data_provider: 'tickflow',
-  full_minute_data_provider: 'tickflow',
-  depth5_data_provider: 'tickflow',
-  realtime_data_provider: 'tickflow',
-  financial_data_provider: 'tickflow',
 }
 
 /** 单个能力卡: 当前生效提供方 + 候选切换标签。

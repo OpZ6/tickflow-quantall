@@ -119,14 +119,15 @@ def test_watchlist_parser_rejects_malicious_config_id():
     from app.api.watchlist import _parse_ext_columns
     # config_id 含注入字符 → 应被白名单拒绝
     assert _parse_ext_columns("evil'; DROP--.field") == []
-    assert _parse_ext_columns("normal.field") == [("normal", "field")]
+    # 三元组 (config_id, field_name, at): @选盘时刻后缀缺省为 None
+    assert _parse_ext_columns("normal.field") == [("normal", "field", None)]
 
 
 def test_screener_parser_deduplicates_same_field():
     from app.api.screener import _parse_ext_columns
 
     assert _parse_ext_columns("concept.tags,concept.tags") == [
-        ("concept", "tags")
+        ("concept", "tags", None)
     ]
 
 

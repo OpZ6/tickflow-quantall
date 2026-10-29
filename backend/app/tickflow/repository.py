@@ -12,7 +12,9 @@
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import sys
 import threading
 import time
@@ -29,6 +31,7 @@ from app.enriched_generation import (
     EnrichedGenerationUnavailableError,
     EnrichedPublication,
     bump_enriched_generation,
+    enriched_publication_incomplete,
     get_enriched_generation,
 )
 from app.market_time import cn_today
@@ -37,6 +40,12 @@ from app.polars_guard import guarded_collect
 from app.services.minute_adjust import apply_minute_adjustment, minute_basis_is_raw
 
 logger = logging.getLogger(__name__)
+
+# GH #480: 后台 warmup 因世代漂移被丢弃时的有界重建上限。compute 窗口长达
+# 数十秒, 启动期与 quote 实时刷新的 commit 撞车后若不重建, 历史缓存长期
+# 为空, K 线接口逐请求现算指标。仅 warmup 线程用, 同步/懒加载路径单次。
+_ENRICHED_WARMUP_MAX_ATTEMPTS = 3
+_ENRICHED_WARMUP_PUBLISH_WAIT_SECONDS = 5.0
 
 
 def replace_with_retry(src: Path, dst: Path, *, attempts: int = 10, delay_s: float = 0.5) -> None:
@@ -96,6 +105,37 @@ def _last_available_rows(df: pl.DataFrame, cutoff: date) -> pl.DataFrame:
         .group_by("symbol", maintain_order=True)
         .last()
     )
+
+
+def _rescue_legacy_user_data(legacy_dir: Path, data_dir: Path) -> None:
+    """整体迁移被跳过时, 单独捞回新目录缺失的关键 user_data 文件。
+
+    场景: macOS ≤0.3.6 用户升级后先跑过新版 (新 data 已有行情), 再从废纸篓
+    把旧包数据恢复进新包 — has_new_data 守卫会跳过整目录搬迁, 但两类文件
+    是用户重新配置成本最高的, 旧有新无时应单独找回:
+      - secrets.json (AI/数据源密钥)
+      - preferences.json (onboarding_completed/界面偏好 — 丢失会让
+        onboarding_completed 回落默认 False, 升级后全屏引导重弹, 表现为
+        「明明同步过数据, 升级后又被要求获取数据」)
+    任何异常只记警告, 绝不影响启动。
+    """
+    import shutil
+
+    for name, note in (("secrets.json", "密钥"), ("preferences.json", "偏好")):
+        source = legacy_dir / "user_data" / name
+        dest = data_dir / "user_data" / name
+        if not source.is_file() or dest.exists():
+            continue
+        try:
+            data = json.loads(source.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or not data:
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            # copy2 保留源文件权限位 (secrets.json 为 0600)
+            shutil.copy2(source, dest)
+            logger.info("rescued legacy %s (%s) %s -> %s", name, note, source, dest)
+        except (OSError, ValueError) as e:
+            logger.warning("legacy %s rescue skipped: %s", name, e)
 
 
 class DataStore:
@@ -199,6 +239,8 @@ class DataStore:
                     self.data_dir.rglob("*.jsonl")
                 )
                 if has_new_data:
+                    # 整体搬迁会被守卫跳过, 但密钥/偏好等关键 user_data 文件单独捞回 (见函数 docstring)
+                    _rescue_legacy_user_data(legacy_dir, self.data_dir)
                     logger.info(
                         "legacy data dir %s exists but new %s already has data, skip migration",
                         legacy_dir, self.data_dir,
@@ -315,12 +357,14 @@ class DataStore:
     def _has_parquet(self, subdir: str) -> bool:
         return any((self.data_dir / subdir).rglob("*.parquet"))
 
-    def _register_unified_views(self) -> None:
+    def _register_unified_views(self, con=None) -> None:
         """Register optional all-asset views when their backing parquet exists.
 
         Physical storage remains split for performance and compatibility. These
-        views are convenience read models for new APIs/features.
+        views are convenience read models for new APIs/features. 运行期调用方
+        传独立 cursor (rebuild_views/refresh_index_views), 初始化走根连接。
         """
+        db = con if con is not None else self.db
         daily_parts: list[str] = []
         enriched_parts: list[str] = []
         minute_parts: list[str] = []
@@ -392,9 +436,22 @@ class DataStore:
             if not parts:
                 continue
             try:
-                self.db.execute(f"CREATE OR REPLACE VIEW {name} AS " + " UNION ALL BY NAME ".join(parts))
+                db.execute(f"CREATE OR REPLACE VIEW {name} AS " + " UNION ALL BY NAME ".join(parts))
             except Exception as e:  # noqa: BLE001
                 logger.debug("unified view %s skipped: %s", name, e)
+
+
+def _read_concurrency_env() -> int:
+    """DuckDB 并发读上限 (默认 3)。
+
+    并发扫描各自持有缓冲, 上限过高会推高峰值内存 (#516 同因); 1 = 恢复
+    完全串行的旧行为。
+    """
+    try:
+        value = int(os.environ.get("TICK_DUCKDB_READ_CONCURRENCY", "3"))
+    except ValueError:
+        return 3
+    return min(max(value, 1), 16)
 
 
 class KlineRepository:
@@ -403,7 +460,16 @@ class KlineRepository:
     def __init__(self, store: DataStore) -> None:
         self.store = store
         self.db = store.db
-        self._lock = threading.Lock()
+        # DuckDB 读并发: cursor() 即同一内存库实例的独立连接 (MVCC 快照隔离,
+        # 1.5.3 实测并发读+换视图零异常)。用信号量限制同时进行的扫描数, 取代
+        # 原全局互斥 —— 同步期的长查询 (全视图扫描) 不再把交互读堵到超时。
+        self._read_limiter = threading.Semaphore(_read_concurrency_env())
+        # DDL (视图重建) 互斥: 并发 CREATE OR REPLACE VIEW 同名视图会抛
+        # Catalog write-write conflict (1.5.3 实测), 必须串行; 与读不互斥。
+        self._ddl_lock = threading.RLock()
+        # 根连接运行期只作连接工厂, 不直接执行 SQL (跨线程共用一个
+        # Connection 对象没有契约保证, cursor 各自独立)
+        self._cursor_lock = threading.Lock()
         # 序列化 parquet 分区的读-改-写: 实时轮询线程、手动 refresh、盘后管道
         # 可能并发 merge/flush 同一分区文件, 无锁会互相覆盖丢数据
         self._write_lock = threading.Lock()
@@ -460,21 +526,55 @@ class KlineRepository:
         self._index_inst_glob = str(store.data_dir / "instruments_index" / "**" / "*.parquet")
         self._etf_inst_glob = str(store.data_dir / "instruments_etf" / "**" / "*.parquet")
 
+    def _new_cursor(self):
+        """从根连接复制一个独立连接 (共享同一库实例, 创建开销极低)。"""
+        with self._cursor_lock:
+            return self.db.cursor()
+
     def execute_all(self, sql: str, params: list | None = None) -> list[tuple]:
-        """线程安全的 SELECT → fetchall。DuckDB 单 connection 非线程安全，所有读路径须走此方法。"""
-        with self._lock:
-            cursor = self.db.cursor()
+        """并发安全的 SELECT → fetchall。
+
+        cursor 是同一库实例的独立连接: 读与读并发、读与视图重建并发 (MVCC,
+        运行中的查询继续用旧定义) 均安全; _read_limiter 只限制同时扫描数。
+        """
+        with self._read_limiter:
+            cursor = self._new_cursor()
             try:
                 return cursor.execute(sql, params or []).fetchall()
             finally:
                 cursor.close()
 
     def execute_one(self, sql: str, params: list | None = None) -> tuple | None:
-        """线程安全的 SELECT → fetchone。"""
-        with self._lock:
-            cursor = self.db.cursor()
+        """并发安全的 SELECT → fetchone。"""
+        with self._read_limiter:
+            cursor = self._new_cursor()
             try:
                 return cursor.execute(sql, params or []).fetchone()
+            finally:
+                cursor.close()
+
+    def refresh_view(self, name: str, glob: str) -> bool:
+        """重建指向 parquet glob 的视图 (视图懒扫描, 创建本身 O(1))。
+
+        运行期所有视图重建必须走此方法, 不得直连 db.execute:
+        - 并发重建同名视图抛 Catalog write-write conflict (1.5.3 实测),
+          _ddl_lock 内互斥, 也修复了旧代码两处同步路径同时刷视图的静默失败;
+        - 与读不互斥 (MVCC), 换视图期间查询不中断。
+        """
+        if not name.isidentifier():
+            logger.warning("refresh view rejected, invalid name: %r", name)
+            return False
+        with self._ddl_lock:
+            cursor = self._new_cursor()
+            try:
+                cursor.execute(
+                    f"CREATE OR REPLACE VIEW {name} AS "
+                    f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+                )
+                return True
+            except Exception as e:  # noqa: BLE001 — 空目录/权限问题降级为警告, 与既有刷新行为一致
+                logger.warning("refresh view %s failed: %s", name, e)
+                return False
             finally:
                 cursor.close()
 
@@ -533,6 +633,8 @@ class KlineRepository:
 
         仿 QuoteService 的线程模式: 设 warming 标志 → 起 daemon → 完成后清标志 +
         触发回调。重复调用时若已有线程在跑则跳过 (避免重复预热)。
+        预热走 _warmup_enriched: 世代漂移导致丢弃时有界重建 (GH #480),
+        同步/懒加载路径仍走单次 _refresh_enriched, 不阻塞 HTTP。
         """
         with self._warmup_lock:
             if self._enriched_warming:
@@ -544,7 +646,7 @@ class KlineRepository:
             t0 = time.perf_counter()
             try:
                 logger.info("enriched warmup thread started")
-                self._refresh_enriched()
+                self._warmup_enriched()
                 logger.info("enriched warmup thread done (%.1fs)", time.perf_counter() - t0)
                 self._notify_refresh_done()
             except Exception:  # noqa: BLE001
@@ -610,11 +712,42 @@ class KlineRepository:
         self._index_enriched_cache = None
         self._index_enriched_cache_date = None
 
-    def _refresh_enriched(self) -> None:
+    def _refresh_enriched(self) -> bool:
+        """刷新 enriched 内存缓存。返回 True 表示因数据换代被丢弃、可重试。
+
+        返回 False 覆盖两种情形: 成功建成, 或非换代失败 (不重试, 保持降级)。
+        现有调用方均不读返回值, 行为不变; 仅后台 warmup 线程用返回值做有界重建。
+        """
         from app.services.heavy_job_limiter import shared_heavy_job_limiter
 
         with shared_heavy_job_limiter.slot("exclusive"):
-            self._refresh_enriched_impl()
+            try:
+                self._refresh_enriched_impl()
+            except EnrichedGenerationUnavailableError as e:
+                logger.warning("enriched 历史缓存因数据换代被丢弃 (可重试): %s", e)
+                return True
+            except Exception as e:  # noqa: BLE001
+                logger.warning("enriched 缓存刷新失败: %s", e)
+                return False
+        return False
+
+    def _warmup_enriched(self) -> None:
+        """仅后台预热线程调用: 世代漂移导致丢弃时以新世代有界重建。
+
+        warmup 的 compute 窗口长达数十秒, 启动期与 quote 实时刷新的 commit
+        撞车概率高; 丢弃后不重建会把缓存长期留冷, K 线接口逐请求现算指标
+        (GH #480)。每轮重新捕获世代、各自仍 fail-closed; 发布未完成时短暂
+        等待再试; 超过上限则放弃并保持冷缓存降级 (非无限重读)。
+        """
+        for attempt in range(_ENRICHED_WARMUP_MAX_ATTEMPTS):
+            if attempt and enriched_publication_incomplete(self.store.data_dir, "stock"):
+                time.sleep(_ENRICHED_WARMUP_PUBLISH_WAIT_SECONDS)
+            if not self._refresh_enriched():
+                return
+        logger.warning(
+            "enriched 历史缓存预热因持续换代被丢弃, %d 轮后放弃 (保持冷缓存降级)",
+            _ENRICHED_WARMUP_MAX_ATTEMPTS,
+        )
 
     def _refresh_enriched_impl(self) -> None:
         """从 parquet 加载 enriched 最新日到内存 + 构建聚合表。
@@ -753,8 +886,9 @@ class KlineRepository:
 
             logger.info("enriched 缓存已加载: %d 只, 日期 %s", len(df_latest), latest)
             logger.info("enriched refresh done fallback (%.2fs)", time.perf_counter() - started)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("enriched 缓存刷新失败: %s", e)
+        except EnrichedGenerationUnavailableError:
+            # 换代丢弃上抛给 _refresh_enriched: 后台 warmup 可重试, 同步路径记 warning 降级
+            raise
 
     def _restore_missing_latest_rows(
         self,
@@ -2282,12 +2416,11 @@ class KlineRepository:
         from datetime import timedelta
         try:
             cutoff = reference_date - timedelta(days=min_gap_days)
-            with self._lock:
-                rows = self.db.execute(
-                    "SELECT symbol, max(date) AS mx FROM kline_daily "
-                    "GROUP BY symbol HAVING max(date) < ? ORDER BY mx",
-                    [cutoff],
-                ).fetchall()
+            rows = self.execute_all(
+                "SELECT symbol, max(date) AS mx FROM kline_daily "
+                "GROUP BY symbol HAVING max(date) < ? ORDER BY mx",
+                [cutoff],
+            )
             return [r[0] for r in rows if r and r[0]]
         except Exception:
             return []
@@ -2401,28 +2534,21 @@ class KlineRepository:
     def refresh_index_views(self) -> None:
         """刷新指数相关 DuckDB 视图。"""
         d = self.store.data_dir.as_posix()
-        statements = [
-            f"""CREATE OR REPLACE VIEW kline_index_daily AS
-                SELECT * FROM read_parquet('{d}/kline_index_daily/**/*.parquet', union_by_name=true)""",
-            f"""CREATE OR REPLACE VIEW kline_index_enriched AS
-                SELECT * FROM read_parquet('{d}/kline_index_enriched/**/*.parquet', union_by_name=true)""",
-            f"""CREATE OR REPLACE VIEW kline_etf_daily AS
-                SELECT * FROM read_parquet('{d}/kline_etf_daily/**/*.parquet', union_by_name=true)""",
-            f"""CREATE OR REPLACE VIEW kline_etf_enriched AS
-                SELECT * FROM read_parquet('{d}/kline_etf_enriched/**/*.parquet', union_by_name=true)""",
-            f"""CREATE OR REPLACE VIEW instruments_index AS
-                SELECT * FROM read_parquet('{d}/instruments_index/**/*.parquet', union_by_name=true)""",
-            f"""CREATE OR REPLACE VIEW instruments_etf AS
-                SELECT * FROM read_parquet('{d}/instruments_etf/**/*.parquet', union_by_name=true)""",
-        ]
-        for sql in statements:
+        for name, path in {
+            "kline_index_daily": f"{d}/kline_index_daily/**/*.parquet",
+            "kline_index_enriched": f"{d}/kline_index_enriched/**/*.parquet",
+            "kline_etf_daily": f"{d}/kline_etf_daily/**/*.parquet",
+            "kline_etf_enriched": f"{d}/kline_etf_enriched/**/*.parquet",
+            "instruments_index": f"{d}/instruments_index/**/*.parquet",
+            "instruments_etf": f"{d}/instruments_etf/**/*.parquet",
+        }.items():
+            self.refresh_view(name, path)
+        with self._ddl_lock:
+            cursor = self._new_cursor()
             try:
-                with self._lock:
-                    self.db.execute(sql)
-            except Exception as e:  # noqa: BLE001
-                logger.debug("index/etf view refresh skipped: %s", e)
-        with self._lock:
-            self.store._register_unified_views()
+                self.store._register_unified_views(cursor)
+            finally:
+                cursor.close()
 
     def rebuild_views(self) -> None:
         """重建全部核心 parquet 视图并重挂 unified 视图 —— 唯一权威实现。
@@ -2461,16 +2587,13 @@ class KlineRepository:
             "screening_candidate_daily": f"{d}/screening_candidate_daily/**/*.parquet",
         }
         for name, path in views.items():
+            self.refresh_view(name, path)
+        with self._ddl_lock:
+            cursor = self._new_cursor()
             try:
-                with self._lock:
-                    self.db.execute(
-                        f"CREATE OR REPLACE VIEW {name} AS "
-                        f"SELECT * FROM read_parquet('{path}', union_by_name=true)"
-                    )
-            except Exception as e:  # noqa: BLE001
-                logger.warning("rebuild view %s failed: %s", name, e)
-        with self._lock:
-            self.store._register_unified_views()
+                self.store._register_unified_views(cursor)
+            finally:
+                cursor.close()
 
     @staticmethod
     def _atomic_write_parquet(df: pl.DataFrame, out: Path) -> None:
@@ -2577,8 +2700,16 @@ class KlineRepository:
         if publication is None:
             self._atomic_write_parquet(merged, out)
         else:
-            publication.write_parquet(merged, out)
-            publication.commit()
+            # 写/提交失败必须结束发布会话, 否则一次瞬时失败会把 publishing
+            # 标记挂到心跳超时, 期间所有读写都报"正在发布"。abandon 按是否
+            # 已有分区落盘决定: 未写入 → 恢复 ready; 已写入 → 保持 fail-closed
+            # (磁盘可能已换新内容, 不能沿用旧 generation 放行缓存)。
+            try:
+                publication.write_parquet(merged, out)
+                publication.commit()
+            except BaseException:
+                publication.abandon()
+                raise
 
     def merge_live_daily_asset(self, asset_type: str, df: pl.DataFrame) -> None:
         """按 symbol 合并当天指定资产日K分区。用于少量自选实时，不覆盖全市场。"""

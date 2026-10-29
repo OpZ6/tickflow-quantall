@@ -15,6 +15,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.enriched_generation import EnrichedGenerationUnavailableError
+from app.market_time import cn_today
 from app.services.backtest import (
     BacktestConfig,
     BacktestService,
@@ -96,7 +98,7 @@ def run(req: BacktestRequest, request: Request):
     """信号回测 — 现有接口，向后兼容。"""
     repo = request.app.state.repo
     svc = BacktestService(repo)
-    end = req.end or date.today()
+    end = req.end or cn_today()
     start = req.start or (end - timedelta(days=365 * 3))
 
     cfg = BacktestConfig(
@@ -159,7 +161,7 @@ def factor_run(req: FactorBacktestRequest, request: Request):
     engine = _get_engine(request)
     svc = FactorBacktestService(engine)
 
-    end = req.end or date.today()
+    end = req.end or cn_today()
     start = _resolve_start(req, end, FACTOR_DEFAULT_DAYS)
     _guard_server_backtest_range(start, end)
     symbols = req.symbols if req.symbols else None
@@ -181,7 +183,14 @@ def factor_run(req: FactorBacktestRequest, request: Request):
         slippage_bps=req.slippage_bps,
         asset_type=req.asset_type,
     )
-    result = svc.run(cfg)
+    try:
+        result = svc.run(cfg)
+    except EnrichedGenerationUnavailableError as exc:
+        # 盘中实时刷新换新 generation, 重试后仍撞上发布 (api/mining.py 同款映射)
+        raise HTTPException(
+            status_code=400,
+            detail="行情数据正在更新(盘中实时刷新), 请稍后重试",
+        ) from exc
     return asdict(result)
 
 
@@ -213,7 +222,7 @@ def factor_batch(req: FactorBatchRequest, request: Request):
     if invalid:
         raise HTTPException(status_code=400, detail=f"不支持的因子: {', '.join(invalid)}")
 
-    end = req.end or date.today()
+    end = req.end or cn_today()
     start = _resolve_start(req, end, FACTOR_DEFAULT_DAYS)
     _guard_server_backtest_range(start, end)
     symbols = req.symbols if req.symbols else None
@@ -224,18 +233,24 @@ def factor_batch(req: FactorBatchRequest, request: Request):
         )
 
     svc = FactorBacktestService(_get_engine(request))
-    result = svc.run_batch(FactorBatchConfig(
-        factor_names=factor_names,
-        symbols=symbols,
-        start=start,
-        end=end,
-        n_groups=req.n_groups,
-        rebalance=req.rebalance,
-        weight=req.weight,
-        fees_pct=req.fees_pct,
-        slippage_bps=req.slippage_bps,
-        asset_type=req.asset_type,
-    ))
+    try:
+        result = svc.run_batch(FactorBatchConfig(
+            factor_names=factor_names,
+            symbols=symbols,
+            start=start,
+            end=end,
+            n_groups=req.n_groups,
+            rebalance=req.rebalance,
+            weight=req.weight,
+            fees_pct=req.fees_pct,
+            slippage_bps=req.slippage_bps,
+            asset_type=req.asset_type,
+        ))
+    except EnrichedGenerationUnavailableError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="行情数据正在更新(盘中实时刷新), 请稍后重试",
+        ) from exc
     return asdict(result)
 
 
@@ -340,7 +355,10 @@ class StrategyBacktestRequest(BaseModel):
     max_positions: int = 10
     max_exposure_pct: float = 1.0
     initial_capital: float = 1_000_000.0
-    position_sizing: Literal["equal", "score_weight"] = "equal"
+    position_sizing: Literal["equal", "score_weight", "policy"] = "equal"
+    # 自定义仓位策略: 注册表 id + 请求级参数覆盖 (不存在时 400, 不静默回退)
+    position_policy: str | None = None
+    position_policy_params: dict[str, float | int | bool | str] | None = None
     mode: Literal["position", "full"] = "position"
     holding_days: int = 5
     asset_type: str = "stock"
@@ -466,11 +484,21 @@ def strategy_run(req: StrategyBacktestRequest, request: Request):
     from app.backtest.strategy import StrategyBacktestConfig
     from app.backtest.worker import make_worker_task, run_worker_task
 
-    end = req.end or date.today()
+    end = req.end or cn_today()
     start = _resolve_start(req, end, FACTOR_DEFAULT_DAYS)
     _guard_server_backtest_range(start, end)
     _guard_minute_strategy_backtest(request, req.strategy_id, start, req.asset_type)
 
+    if req.position_sizing == "policy":
+        from app.backtest import position_policies
+
+        if not req.position_policy or position_policies.get_policy(
+            settings.data_dir, req.position_policy
+        ) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"仓位策略不存在或不可用: {req.position_policy!r}",
+            )
     cfg = StrategyBacktestConfig(
         strategy_id=req.strategy_id,
         symbols=req.symbols if req.symbols else None,
@@ -489,6 +517,8 @@ def strategy_run(req: StrategyBacktestRequest, request: Request):
         max_exposure_pct=req.max_exposure_pct,
         initial_capital=req.initial_capital,
         position_sizing=req.position_sizing,
+        position_policy=req.position_policy,
+        position_policy_params=req.position_policy_params,
         mode=req.mode,
         holding_days=req.holding_days,
         asset_type=req.asset_type,
@@ -568,8 +598,11 @@ def _make_job_key(
     asset_type: str = "stock",
     minute_fill: bool = False,
     regime_filter: str | None = None,
+    position_policy: str | None = None,
+    position_policy_params: str | None = None,
+    force: bool = False,
 ) -> str:
-    raw = f"{strategy_id}|{symbols}|{start}|{end}|{matching}|{entry_fill}|{exit_fill}|{fees_pct}|{slippage_bps}|{max_positions}|{max_exposure_pct}|{initial_capital}|{position_sizing}|{params}|{overrides}|{mode}|{holding_days}|{commission_pct}|{stamp_tax_pct}|{asset_type}|{minute_fill}|{regime_filter}"
+    raw = f"{strategy_id}|{symbols}|{start}|{end}|{matching}|{entry_fill}|{exit_fill}|{fees_pct}|{slippage_bps}|{max_positions}|{max_exposure_pct}|{initial_capital}|{position_sizing}|{params}|{overrides}|{mode}|{holding_days}|{commission_pct}|{stamp_tax_pct}|{asset_type}|{minute_fill}|{regime_filter}|{position_policy}|{position_policy_params}|force={force}"
     return hashlib.md5(raw.encode()).hexdigest()[:12]
 
 
@@ -591,6 +624,8 @@ async def strategy_stream(
     max_exposure_pct: float = 1.0,
     initial_capital: float = 1_000_000.0,
     position_sizing: str = "equal",
+    position_policy: str | None = None,
+    position_policy_params: str | None = None,
     params: str | None = None,
     overrides: str | None = None,
     mode: str = "position",
@@ -598,12 +633,15 @@ async def strategy_stream(
     asset_type: str = "stock",
     minute_fill: bool = False,
     regime_filter: str | None = None,
+    force: bool = False,
 ):
     """SSE 流式策略回测: 实时推送进度, 完成后推送结果, 支持重连 (刷新/切页后恢复)。
 
     - 相同参数的任务只启动一次, 多次连接订阅同一个任务
     - 断开连接不会取消任务 (除非显式调用 cancel)
     - 结果保留 5 分钟供重连
+    - force=1: 掺入 job_key 使其不命中已完成任务的缓存, 必然重算
+      (重连/取消仍按 qs 重算同一 key, 语义不变)
 
     事件类型:
       - progress: {day, total, date, equity}
@@ -614,7 +652,7 @@ async def strategy_stream(
     from app.backtest.worker import make_worker_task, run_worker_task
 
     try:
-        end_date = date.fromisoformat(end) if end else date.today()
+        end_date = date.fromisoformat(end) if end else cn_today()
         start_date = date.fromisoformat(start) if start else None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"日期格式错误: {e}") from e
@@ -641,6 +679,9 @@ async def strategy_stream(
         asset_type=asset_type,
         minute_fill=minute_fill,
         regime_filter=regime_filter,
+        position_policy=position_policy,
+        position_policy_params=position_policy_params,
+        force=force,
     )
 
     _cleanup_stale_jobs()
@@ -697,6 +738,10 @@ async def strategy_stream(
                 max_exposure_pct=float(max_exposure_pct),
                 initial_capital=float(initial_capital),
                 position_sizing=position_sizing,
+                position_policy=position_policy,
+                position_policy_params=(
+                    json.loads(position_policy_params) if position_policy_params else None
+                ),
                 mode=mode,
                 holding_days=int(holding_days),
                 asset_type=asset_type,
@@ -789,6 +834,9 @@ async def strategy_cancel(request: Request):
         # 可选成本参数: 缺省或空串 → None (与 stream 侧 float | None 口径一致, 保证 job_key 对齐)。
         v = _get(key)
         return float(v) if v else None
+    def _get_opt_bool(key: str) -> bool:
+        # 与 FastAPI 查询参数 bool 解析口径一致 ("1"/"true" 为真, 其余为假)
+        return _get(key).lower() in ("1", "true")
     job_key = _make_job_key(
         _get("strategy_id"),
         _get("symbols") or None,
@@ -810,6 +858,11 @@ async def strategy_cancel(request: Request):
         commission_pct=_get_opt_float("commission_pct"),
         stamp_tax_pct=_get_opt_float("stamp_tax_pct"),
         asset_type=_get("asset_type", "stock"),
+        minute_fill=_get_opt_bool("minute_fill"),
+        regime_filter=_get("regime_filter") or None,
+        position_policy=_get("position_policy") or None,
+        position_policy_params=_get("position_policy_params") or None,
+        force=_get("force") == "1",
     )
     # 持锁读任务表: 与 _cleanup_stale_jobs 的 pop、stream 的写入互斥
     with _jobs_lock:
@@ -885,17 +938,94 @@ def _opt_backtest_kwargs(
     }
 
 
-@router.get("/optimize/stream")
-async def optimize_stream(
+@router.get("/optimize-robust/preview")
+async def optimize_robust_preview(
+    start: str,
+    end: str,
+    k_segments: int = 4,
+):
+    """稳健优化折预览: 运行前查看 K 段验证窗切分与告警 (不回测)。"""
+    from app.backtest.robust_optimizer import split_validation_windows
+
+    try:
+        start_date = date.fromisoformat(start)
+        end_date = date.fromisoformat(end)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"日期格式错误: {e}") from e
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="结束日期不能早于起始日期")
+    try:
+        windows = split_validation_windows(start_date, end_date, int(k_segments))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    warnings: list[str] = []
+    if len(windows) < 3:
+        warnings.append(f"验证段数 {len(windows)} < 3, 稳健分统计意义不足, 建议扩大区间")
+    return {
+        "k_segments": len(windows),
+        "windows": [
+            {"start": ws.isoformat(), "end": we.isoformat(), "days": (we - ws).days + 1}
+            for ws, we in windows
+        ],
+        "warnings": warnings,
+    }
+
+
+@router.get("/walkforward/preview")
+async def walkforward_preview(
+    start: str,
+    end: str,
+    train_days: int = 252,
+    test_days: int = 63,
+    step_days: int = 63,
+):
+    """滚动样本外检验折预览: 运行前查看折数/窗口切分与告警 (不回测)。"""
+    from app.backtest.walkforward import generate_folds
+
+    try:
+        start_date = date.fromisoformat(start)
+        end_date = date.fromisoformat(end)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"日期格式错误: {e}") from e
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="结束日期不能早于起始日期")
+    try:
+        folds = generate_folds(start_date, end_date, int(train_days), int(test_days), int(step_days))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    warnings: list[str] = []
+    if len(folds) < 3:
+        warnings.append(f"折数 {len(folds)} < 3, 聚合统计意义不足, 建议扩大区间或减小 step")
+    return {
+        "n_folds": len(folds),
+        "folds": [
+            {
+                "index": f.index,
+                "train_start": f.train_start.isoformat(),
+                "train_end": f.train_end.isoformat(),
+                "test_start": f.test_start.isoformat(),
+                "test_end": f.test_end.isoformat(),
+            }
+            for f in folds
+        ],
+        "warnings": warnings,
+    }
+
+
+@router.get("/optimize-robust/stream")
+async def optimize_robust_stream(
     request: Request,
     strategy_id: str,
-    param_grid: str,                 # JSON: {param_id: [values] | {min,max,step}}
+    param_grid: str,
     objective: str = "sortino",
     direction: str | None = None,
+    k_segments: int = 4,
+    min_trades_total: int = 30,
+    stage2_top_n: int = 20,
     max_workers: int = 4,
     matrix_cache_max_mb: int = 512,
-    params: str | None = None,       # JSON: 未扫描参数固定为用户当前值 (base_params)
-    overrides: str | None = None,    # JSON: 策略当前的 basic_filter/signals/风控等覆盖
+    params: str | None = None,
+    overrides: str | None = None,
     symbols: str | None = None,
     start: str | None = None,
     end: str | None = None,
@@ -911,18 +1041,16 @@ async def optimize_stream(
     mode: str = "position",
     holding_days: int = 5,
 ):
-    """SSE 流式参数优化: 并行跑各参数组回测, 按 objective 排序。
+    """SSE 流式稳健优化: 每组参数在 K 个互不重叠验证段上评估, 按稳健分排名。
 
-    事件类型:
-      - progress: {type: "optimizer_progress", done, total, best_score}
-      - done: {result} (含 best_params / results 排名)
-      - error: {message}
+    设计: docs/robust-optimizer-plan.md。事件类型与 /optimize/stream 同形:
+      - job / progress(robust_optimizer_progress) / done / error
     """
-    from app.backtest.optimizer import OptimizeConfig
+    from app.backtest.robust_optimizer import RobustOptimizeConfig
     from app.backtest.worker import make_worker_task, run_worker_task
 
     try:
-        end_date = date.fromisoformat(end) if end else date.today()
+        end_date = date.fromisoformat(end) if end else cn_today()
         start_date = date.fromisoformat(start) if start else None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"日期格式错误: {e}") from e
@@ -930,30 +1058,33 @@ async def optimize_stream(
         earliest = request.app.state.repo.earliest_daily_date()
         start_date = earliest or (end_date - timedelta(days=FACTOR_DEFAULT_DAYS))
 
+    # 主目标白名单 (护栏): 稳健排名不容退化目标
+    try:
+        from app.backtest.guards import validate_primary_objective
+        validate_primary_objective(objective)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    from app.backtest.robust_optimizer import split_validation_windows
+
+    try:
+        split_validation_windows(start_date, end_date, int(k_segments))  # 仅校验可切窗
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     guard_violated = False
     if settings.backtest_range_guard and (end_date - start_date).days + 1 > BACKTEST_MAX_SERVER_DAYS:
         guard_violated = True
 
-    # 空串归一为 None, 与 cancel 侧 `_get("direction") or None` 口径一致, 避免 job_key 失配。
     direction = direction or None
     bt_kwargs = _opt_backtest_kwargs(
         matching, fees_pct, commission_pct, stamp_tax_pct, slippage_bps,
         max_positions, max_exposure_pct, initial_capital, position_sizing, mode, holding_days,
     )
     bt_sig = "|".join(f"{k}={bt_kwargs[k]}" for k in _OPT_BT_FIELDS)
-    job_key = _make_opt_job_key(
-        strategy_id,
-        symbols,
-        start,
-        end,
-        param_grid,
-        objective,
-        direction,
-        bt_sig,
-        params,
-        overrides,
-        matrix_cache_max_mb,
-    )
+    job_key = "robust:" + _make_opt_job_key(
+        strategy_id, symbols, start, end, param_grid, objective, direction,
+        bt_sig, params, overrides, matrix_cache_max_mb,
+    ) + f"|k={int(k_segments)}|mt={int(min_trades_total)}|s2={int(stage2_top_n)}"
 
     _cleanup_stale_jobs()
     with _jobs_lock:
@@ -966,7 +1097,6 @@ async def optimize_stream(
             is_new = False
 
     async def event_generator():
-        # 首个事件回吐 job_key, 前端存下供 cancel 直接引用 (消除两侧重算契约)。
         yield f"event: job\ndata: {json.dumps({'key': job_key}, ensure_ascii=False)}\n\n"
 
         if guard_violated:
@@ -978,27 +1108,22 @@ async def optimize_stream(
                 grid = json.loads(param_grid)
             except (json.JSONDecodeError, TypeError):
                 grid = None
-            # grid 必须是非空 dict; null/[]/"" 等合法 JSON 但结构错误也在此拦下,
-            # 否则会跳过线程启动却不置 done -> event_generator 永久空转、job 挂死。
             if not isinstance(grid, dict) or not grid:
                 _finish_job(job, error="param_grid 必须是非空的参数网格对象")
                 grid = None
 
             if grid is not None:
-                # 未扫描参数固定为用户当前值 (base_params); overrides 让策略的 basic_filter/
-                # 信号/风控按用户当前配置参与, 保证优化的就是用户实际回测的策略。
                 try:
                     base_params = json.loads(params) if params else {}
                 except (json.JSONDecodeError, TypeError):
-                    # 静默降级会让"用户配置丢失"变成无声 bug: 至少 warn 供诊断 (前端应传合法 JSON)。
-                    logger.warning("optimize: params JSON 解析失败, 降级为空 params: %r", params)
+                    logger.warning("optimize-robust: params JSON 解析失败, 降级为空: %r", params)
                     base_params = {}
                 try:
                     ov = json.loads(overrides) if overrides else None
                 except (json.JSONDecodeError, TypeError):
-                    logger.warning("optimize: overrides JSON 解析失败, 降级为 None: %r", overrides)
+                    logger.warning("optimize-robust: overrides JSON 解析失败, 降级为 None: %r", overrides)
                     ov = None
-                ocfg = OptimizeConfig(
+                rcfg = RobustOptimizeConfig(
                     strategy_id=strategy_id,
                     symbols=[s.strip() for s in symbols.split(",") if s.strip()] if symbols else None,
                     start=start_date,
@@ -1006,6 +1131,9 @@ async def optimize_stream(
                     param_grid=grid,
                     objective=objective,
                     direction=direction,
+                    k_segments=int(k_segments),
+                    min_trades_total=int(min_trades_total),
+                    stage2_top_n=int(stage2_top_n),
                     max_workers=int(max_workers),
                     matrix_cache_max_mb=int(matrix_cache_max_mb),
                     base_params=base_params if isinstance(base_params, dict) else {},
@@ -1013,7 +1141,7 @@ async def optimize_stream(
                     backtest_kwargs=bt_kwargs,
                 )
 
-                def _run_opt():
+                def _run_robust():
                     from app.services.heavy_job_limiter import (
                         HeavyJobCancelledError,
                         shared_heavy_job_limiter,
@@ -1024,7 +1152,7 @@ async def optimize_stream(
                             "normal",
                             cancel_event=job.cancel_event,
                         ):
-                            task = make_worker_task("optimize", settings.data_dir, ocfg)
+                            task = make_worker_task("robust_optimize", settings.data_dir, rcfg)
                             result = run_worker_task(
                                 task,
                                 lambda d: job.progress.append(d),
@@ -1036,7 +1164,7 @@ async def optimize_stream(
                     except Exception as e:
                         _finish_job(job, error=str(e))
 
-                threading.Thread(target=_run_opt, daemon=True).start()
+                threading.Thread(target=_run_robust, daemon=True).start()
 
         cursor = 0
         tick = 0
@@ -1046,7 +1174,6 @@ async def optimize_stream(
                     if job.error:
                         yield f"event: error\ndata: {json.dumps({'message': job.error}, ensure_ascii=False)}\n\n"
                     elif job.cancel_event.is_set():
-                        # 取消时优化器把每组记为 cancelled 并正常返回, 需在此分流为取消提示而非"完成"。
                         yield f"event: error\ndata: {json.dumps({'message': '优化已取消'}, ensure_ascii=False)}\n\n"
                     elif job.result is not None:
                         yield f"event: done\ndata: {json.dumps(_json_safe(job.result), ensure_ascii=False, default=str)}\n\n"
@@ -1064,27 +1191,6 @@ async def optimize_stream(
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-
-@router.post("/optimize/cancel")
-async def optimize_cancel(request: Request):
-    """取消优化任务 — 前端传 stream 首事件回吐的 job_key, 后端直接查表。
-
-    不再让 cancel 侧重算 job_key: 两侧重算必须逐字段一致的脆弱契约(PR3 C1 / direction
-    空串失配都源于此)在此彻底消除。stream 首个 SSE 事件把后端算出的 key 回吐给前端,
-    cancel 原样传回即可。
-    """
-    body = await request.json()
-    job_key = body.get("job_key", "")
-    job = _running_jobs.get(job_key)
-    if job and not job.done:
-        job.cancel_event.set()
-        return {"ok": True}
-    return {"ok": False, "message": "任务不存在或已完成"}
-
-
-# ══════════════════════════════════════════════════════════════
-# Walk-forward 优化 — 每折训练区间优化 + 测试区间 OOS 验证 (复用优化器 + job_key 回吐)
-# ══════════════════════════════════════════════════════════════
 
 def _make_wf_job_key(
     strategy_id,
@@ -1145,8 +1251,16 @@ async def walkforward_stream(
 
     direction = direction or None
 
+    # 主目标白名单 (共享护栏): 与稳健优化同口径, 退化目标不作滚动检验主目标
+    from app.backtest.guards import validate_primary_objective
+
     try:
-        end_date = date.fromisoformat(end) if end else date.today()
+        validate_primary_objective(objective)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    try:
+        end_date = date.fromisoformat(end) if end else cn_today()
         start_date = date.fromisoformat(start) if start else None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"日期格式错误: {e}") from e
@@ -1290,6 +1404,18 @@ async def walkforward_stream(
             raise
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/optimize-robust/cancel")
+async def optimize_robust_cancel(request: Request):
+    """取消稳健优化任务 — 与 /optimize/cancel 同机制 (回吐 job_key 查表)。"""
+    body = await request.json()
+    job_key = body.get("job_key", "")
+    job = _running_jobs.get(job_key)
+    if job and not job.done:
+        job.cancel_event.set()
+        return {"ok": True}
+    return {"ok": False, "message": "任务不存在或已完成"}
 
 
 @router.post("/walkforward/cancel")
