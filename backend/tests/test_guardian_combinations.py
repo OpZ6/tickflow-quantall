@@ -348,6 +348,22 @@ def test_guardian_api_combination_endpoints(tmp_path, monkeypatch):
     assert body["combinations"]["suggestions"][0]["a"] == "x"
 
 
+def _symlink_supported() -> bool:
+    """Windows 非管理员/未开开发者模式时 os.symlink 报 WinError 1314。"""
+    import os
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        target = Path(d) / "t"
+        target.mkdir()
+        try:
+            os.symlink(target, Path(d) / "l", target_is_directory=True)
+        except (OSError, NotImplementedError):
+            return False
+    return True
+
+
+@pytest.mark.skipif(not _symlink_supported(), reason="当前环境不允许创建符号链接")
 def test_create_composite_accepts_symlinked_data_dir(tmp_path):
     """data_dir 含符号链接时 (如 macOS /tmp) 不能误判为路径逃逸。"""
     from app.strategy.engine import StrategyEngine
