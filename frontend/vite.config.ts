@@ -14,6 +14,10 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // dnd-kit/framer-motion 都消费 React hooks: 把依赖钉到应用自己的 React 实例,
+    // 避免 optimize-deps 图过期时加载第二个 dispatcher。
+    // 注意: dedupe 必须放在 resolve 内, 写在顶层会被 Vite 忽略(且 TS 报错)。
+    dedupe: ['react', 'react-dom'],
   },
   server: {
     host: '0.0.0.0',   // dev.sh / dev.ps1 会用 CLI --host 覆盖
@@ -54,7 +58,6 @@ export default defineConfig({
   },
   // dnd-kit/framer-motion 都消费 React hooks: 把依赖钉到应用自己的 React 实例,
   // 避免 optimize-deps 图过期时加载第二个 dispatcher。
-  dedupe: ['react', 'react-dom'],
   optimizeDeps: {
     include: ['react', 'react-dom', '@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
   },

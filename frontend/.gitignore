@@ -3,3 +3,5 @@ dist
 .vite
 *.log
 .DS_Store
+# tsc -b 从 vite-plugin-quantx-portable.ts 生成的声明, 属构建产物
+vite-plugin-quantx-portable.d.ts
