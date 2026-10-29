@@ -28,6 +28,7 @@ from app.indicators.pipeline import filter_halt_days, run_pipeline
 from app.market_time import cn_today
 from app.services import index_sync, instrument_sync, kline_sync
 from app.services import preferences as _prefs
+from app.services.net_guard import ensure_outbound_proxy
 from app.tickflow.capabilities import Cap, CapabilitySet
 from app.tickflow.pools import get_pool
 from app.tickflow.repository import KlineRepository
@@ -220,6 +221,16 @@ def run_now(
     # 阶段软失败累积: 下列阶段 try/except 吞异常以不中断管道, 但失败即代表数据可能陈旧。
     # 管道末尾若非空则抛 PipelineStageError, 让任务终态如实标记为 failed(而非误报成功)。
     stage_errors: list[str] = []
+
+    # Step -1: 出站网络自检。启动时检测过一次, 但代理可能在盘中才失效(节点掉线/
+    # 订阅过期), 那种情况下端口仍在监听、请求却卡在 TLS 握手后被掐断, 整批数据源
+    # 请求超时 → 管道"跑完但零写入"。这里重探一次, 必要时切直连。
+    try:
+        net_mode = ensure_outbound_proxy()
+        if net_mode == "direct":
+            logger.warning("daily_pipeline: 出站代理不可用, 本次管道已切换直连")
+    except Exception as e:  # noqa: BLE001 — 自检失败不应阻断管道
+        logger.warning("daily_pipeline: 出站网络自检异常 (忽略): %s", e)
 
     # Step 0: 先同步个股维表, 再解析标的池 — 确保标的池基于最新 instruments
     emit("sync_instruments", 2, "同步个股维表…")

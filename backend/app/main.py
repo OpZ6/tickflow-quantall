@@ -59,6 +59,7 @@ from app.extensions.loader import (
 from app.jobs import daily_pipeline
 from app.services.matrix_prewarm_owner import MatrixCachePrewarmOwner
 from app.services.mining_process_lock import MiningProcessLock
+from app.services.net_guard import ensure_outbound_proxy
 from app.services.quote_service import QuoteService
 from app.tickflow import client as tf_client
 from app.tickflow.policy import detect_capabilities
@@ -91,50 +92,6 @@ if not getattr(sys, "frozen", False):
         logging.getLogger().addHandler(_file_handler)
     except Exception as _e:  # noqa: BLE001
         logger.warning("文件日志初始化失败, 仅输出到终端: %s", _e)
-
-
-_PROXY_ENV_KEYS = (
-    "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-    "http_proxy", "https_proxy", "all_proxy",
-)
-
-
-def ensure_outbound_proxy(timeout_s: float = 2.0) -> str:
-    """启动时校验出站代理; 连不上就清空代理环境变量走直连。
-
-    背景: 代理地址常来自环境变量, 而环境变量在进程启动时就被固化。代理端口
-    一旦变化(本地代理重启 / 换端口), 进程内所有 httpx 客户端仍指向旧端口,
-    表现为「数据源全部超时、无任何报错堆栈」—— 盘后管道静默失败、数据停更,
-    而 /health 之类的本地接口照常 200, 极难发现。
-
-    这里只做一件事: 探一下代理端口通不通, 不通就把代理环境变量摘掉, 让后续
-    创建的 httpx 客户端 (trust_env=True) 直接连。代价是 2s 的 TCP 探测。
-    返回: "direct" / "proxy" / "none"
-    """
-    import os
-    import socket
-    from urllib.parse import urlparse
-
-    raw = next((os.environ[k] for k in _PROXY_ENV_KEYS if os.environ.get(k)), None)
-    if not raw:
-        return "none"
-    parsed = urlparse(raw if "://" in raw else f"http://{raw}")
-    host, port = parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
-    if not host:
-        return "none"
-
-    try:
-        with socket.create_connection((host, port), timeout=timeout_s):
-            return "proxy"
-    except OSError as e:
-        for k in _PROXY_ENV_KEYS:
-            os.environ.pop(k, None)
-        logger.warning(
-            "出站代理 %s 不可达 (%s), 已改为直连 — 若网络强制走代理, "
-            "请修正 HTTP_PROXY/HTTPS_PROXY 后重启",
-            f"{host}:{port}", e,
-        )
-        return "direct"
 
 
 @asynccontextmanager
