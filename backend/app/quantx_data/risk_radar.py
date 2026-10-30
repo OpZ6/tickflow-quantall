@@ -243,15 +243,18 @@ def build_risk_radar(
         row = indices.get(code)
         if row:
             deviation = row["deviation_pct"]
+            change = row.get("change_pct")
+            # 展示的是当日涨跌幅; 偏离 MA10 只用于判高低位与配色, 写进悬停文案
+            change_txt = f"今日 {change:+.2f}%，" if change is not None else ""
             zone = "高位" if deviation >= high else "低位" if deviation <= low else "站上 MA10" if deviation > 0 else "低于 MA10"
             sentiment.append({
                 "kind": "sentiment", "code": code, "name": name,
-                "deviation_pct": deviation, "change_pct": row.get("change_pct"),
+                "deviation_pct": deviation, "change_pct": change,
                 "close": row.get("close"), "ma10": row.get("ma10"),
                 "zone": zone, "tone": "red" if deviation >= high or deviation <= low else "green" if deviation > 0 else "amber",
-                "judgement": f"{name}偏离 MA10 {deviation:+.2f}%，达到高位阈值 {high:+.1f}%" if deviation >= high else
-                f"{name}偏离 MA10 {deviation:+.2f}%，达到低位阈值 {low:.1f}%" if deviation <= low else
-                f"{name}偏离 MA10 {deviation:+.2f}%，仍在均线下方" if deviation <= 0 else None,
+                "judgement": f"{change_txt}{name}偏离 MA10 {deviation:+.2f}%，达到高位阈值 {high:+.1f}%" if deviation >= high else
+                f"{change_txt}{name}偏离 MA10 {deviation:+.2f}%，达到低位阈值 {low:.1f}%" if deviation <= low else
+                f"{change_txt}{name}偏离 MA10 {deviation:+.2f}%，仍在均线下方" if deviation <= 0 else None,
             })
     all_a = indices.get(ALL_A_INDEX)
     above = None
@@ -284,9 +287,13 @@ def build_risk_radar(
                     f"全 A 当日 {change:+.2f}%，跌幅达到 3%" if change <= -3 else
                     f"全 A 当日 {change:+.2f}%，收跌" if change < 0 else None,
                 )] if change is not None else []),
-                *[_metric(row["name"], f"{row['deviation_pct']:+.2f}%", row["tone"], row["judgement"]) for row in sentiment],
+                *[_metric(
+                    row["name"],
+                    f"{row['change_pct']:+.2f}%" if row.get("change_pct") is not None else "--",
+                    row["tone"], row["judgement"],
+                ) for row in sentiment],
             ],
-            "普通指数与通达信四情绪分别观察，不合成一个情绪分。" if len(sentiment) == 4 else "普通指数已计算；通达信四情绪日线尚待同步。",
+            "普通指数与通达信四情绪分别观察；四情绪显示当日涨跌幅，配色按偏离 MA10 的高低位判定，不合成一个情绪分。" if len(sentiment) == 4 else "普通指数已计算；通达信四情绪日线尚待同步。",
             [
                 _metric("四情绪高位信号", f"{sum(row['zone'] == '高位' for row in sentiment)} 条"),
                 _metric("四情绪低位信号", f"{sum(row['zone'] == '低位' for row in sentiment)} 条"),
