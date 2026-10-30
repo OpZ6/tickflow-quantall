@@ -1262,10 +1262,17 @@ def _resolve_macos_codex_command() -> str | None:
             continue
     for candidate in candidates:
         try:
-            if candidate.is_file():
-                return str(candidate)
+            if not candidate.is_file():
+                continue
         except OSError:
             continue
+        # 可执行位与 shutil.which 同口径: 只查 is_file 会把「同名但不可执行」的
+        # 文件当成可用 CLI, 一路走到 subprocess 才报 PermissionError, 提示不直观。
+        # Windows 无执行位 (os.access(X_OK) 对任意存在的文件恒为真), 该解析器
+        # 实际只在 darwin 上被调用, 故非 POSIX 平台跳过这一项检查。
+        if os.name != "nt" and not os.access(candidate, os.X_OK):
+            continue
+        return str(candidate)
     return None
 
 
