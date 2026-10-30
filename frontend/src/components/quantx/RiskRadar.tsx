@@ -18,10 +18,13 @@ const edgeTone = {
 
 function Metric({ item }: { item: { label: string; value: string; tone: Tone; judgement: string | null } }) {
   const risk = item.tone === 'red' || item.tone === 'amber' ? item.tone : null
+  // 数值颜色跟涨跌走 (A 股习惯: 涨红跌绿); 圆点/底色仍表示风险等级, 两套语义各司其职
+  const raw = (item.value ?? '').trim()
+  const dir = raw.startsWith('+') ? 'up' : raw.startsWith('-') ? 'down' : null
   return <span className={cn('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-1 py-0.5 text-[11px]', risk && riskSurface[risk], item.judgement && 'cursor-help')} data-tone={risk || 'normal'} title={item.judgement || undefined} aria-label={item.judgement || undefined} tabIndex={item.judgement ? 0 : undefined}>
     {risk && <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', riskDot[risk])} aria-label={risk === 'red' ? '显著风险' : '需要关注'} />}
     <span className="text-muted">{item.label}</span>
-    <strong className="font-mono font-semibold tabular-nums text-foreground">{item.value}</strong>
+    <strong className={cn('font-mono font-semibold tabular-nums', dir === 'up' ? 'text-red-600 dark:text-red-400' : dir === 'down' ? 'text-green-600 dark:text-green-400' : 'text-foreground')}>{item.value}</strong>
   </span>
 }
 
