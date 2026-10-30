@@ -31,9 +31,17 @@ def validate_sources(specs: list[SourceSpec], results: dict[str, SourceResult]) 
             warnings.append(message)
             optional_failure = optional_failure or spec.degrades_when_missing
         elif result.status in {"partial", "degraded"} or result.used_fallback:
-            detail = f"{spec.name}: degraded source payload"
+            # 尽力而为的源 (degrades_when_missing=False) 拿到残缺数据同样不该让整轮
+            # 降级 — 此前这里无条件置 True, 标志只在上一个分支生效, 于是 QuickTiny
+            # 这类登录态一过期就把每日 run 钉死在 degraded 上。
+            if result.error:
+                detail = f"{spec.name}: {result.error}"
+            elif result.used_fallback:
+                detail = f"{spec.name}: 降级到备用源"
+            else:
+                detail = f"{spec.name}: degraded source payload"
             warnings.append(detail)
-            optional_failure = True
+            optional_failure = optional_failure or spec.degrades_when_missing
     if errors:
         return RunStatus.FAILED, errors, warnings
     if optional_failure:

@@ -71,6 +71,9 @@ _BUILTIN_SPECS: tuple[SourceSpec, ...] = (
         credentials_ref="QUICKTINY_LOGIN_STATE",
         collector_type="browser",
         timeout_seconds=120,
+        # 「涨停/连板」数据集有 6 个供数源, QuickTiny 是唯一需要登录态且靠浏览器
+        # 抓取的一个: 会话过期时它只是少一路冗余输入, 不该把整轮打成 degraded。
+        degrades_when_missing=False,
     ),
     SourceSpec(
         "dabanke",

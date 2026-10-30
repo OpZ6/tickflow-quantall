@@ -298,6 +298,11 @@ class SourceManager:
                     status=status,
                     payload=payload,
                     source=str(payload.get("source") or spec.name),
+                    # 采集器在「没失败但也没拿到数据」时 (例如登录态过期只剩登录墙)
+                    # 会把可执行的结论写进 payload["error"]; 之前只透传 status,
+                    # 运维看到的就只剩一句通用的 "degraded source payload"。
+                    error=str(payload["error"]) if payload.get("error") else None,
+                    error_kind="authentication" if payload.get("error") and status in {"partial", "degraded"} else None,
                     record_count=count_records(payload),
                     collected_at=str(
                         payload.get("scraped_at")

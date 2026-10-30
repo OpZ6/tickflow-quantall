@@ -248,6 +248,21 @@ def scrape() -> dict:
             result["pages"]["daily_replay"] = _probe_page(page, f"{BASE_URL}/daily-replay")
             result["captured"] = result["captured"][:80]
 
+            # 拿到的是登录墙而不是行情时, 只报 "partial" 会掩盖真正原因 (运维看到
+            # 残缺数据只会去调解析器)。这里把可执行的结论写进 error: 401 = 会话被
+            # 服务端作废, 否则 = 页面停在登录弹窗, 两种情况都要重新登录存状态。
+            walled = [
+                name for name, probe in result["pages"].items()
+                if probe.get("login_hits") or (probe.get("text_len") or 0) < 500
+            ]
+            if len(walled) == len(result["pages"]):
+                rejected = [c["url"] for c in result["captured"] if c.get("status") == 401]
+                if rejected:
+                    reason = "登录态已失效, 接口返回 401: " + ", ".join(sorted(set(rejected))[:3])
+                else:
+                    reason = "页面停留在登录弹窗, 未取到行情"
+                result["error"] = f"QuickTiny {reason}; 请重新登录并更新 {result['state_path']}"
+
             logged_pages = [v for v in result["pages"].values() if v.get("data_hits") and not v.get("login_hits")]
             result["status"] = "ok" if len(logged_pages) >= 2 else "partial"
         except Exception as exc:

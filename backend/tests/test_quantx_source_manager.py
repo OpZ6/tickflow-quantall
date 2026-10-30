@@ -150,3 +150,41 @@ def test_source_description_separates_readiness_dimensions(
 )
 def test_source_error_classification(error: BaseException, kind: str) -> None:
     assert classify_source_error(error) == kind
+
+
+def test_partial_payload_error_is_propagated_to_result() -> None:
+    """采集器写在 payload["error"] 里的可执行结论要带到 SourceResult。
+
+    QuickTiny 会话过期时 status 仍是 partial, 但真正需要看到的是 "401 重新登录"。
+    """
+    manager = SourceManager()
+    manager.register(_spec("quicktiny", degrades_when_missing=False), lambda _date, _root: None)
+    manager._collectors["quicktiny"] = lambda _date, _root: {
+        "status": "partial",
+        "error": "QuickTiny 登录态已失效, 接口返回 401",
+    }
+
+    result = manager.collect("quicktiny", "20261030", Path("."))
+
+    assert result.status == "partial"
+    assert result.error and "401" in result.error
+    assert result.error_kind == "authentication"
+
+
+def test_partial_payload_error_is_propagated_to_result() -> None:
+    """采集器写在 payload["error"] 里的可执行结论要带到 SourceResult。
+
+    QuickTiny 会话过期时 status 仍是 partial, 但真正需要看到的是 "401 重新登录"。
+    """
+    manager = SourceManager()
+    manager.register(_spec("quicktiny", degrades_when_missing=False), lambda _date, _root: None)
+    manager._collectors["quicktiny"] = lambda _date, _root: {
+        "status": "partial",
+        "error": "QuickTiny 登录态已失效, 接口返回 401",
+    }
+
+    result = manager.collect("quicktiny", "20261030", Path("."))
+
+    assert result.status == "partial"
+    assert result.error and "401" in result.error
+    assert result.error_kind == "authentication"
