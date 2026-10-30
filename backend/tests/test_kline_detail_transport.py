@@ -18,6 +18,14 @@ _TRADE_DATE = date(2026, 1, 15)
 
 
 @pytest.fixture(autouse=True)
+def _no_real_preferences(monkeypatch):
+    """隔离本机真实偏好: 用例桩了 provider getter, 但 `_selected_minute_provider_name()`
+    还会读 `preferences.load()` 的原始值判断「getter 是否静默回退」— 本机把
+    minute_data_provider 配成 tdx 时会判成 unavailable:tdx 直接 fail-closed。"""
+    monkeypatch.setattr("app.services.preferences.load", lambda: {})
+
+
+@pytest.fixture(autouse=True)
 def _isolated_settings_and_clock(monkeypatch):
     monkeypatch.setattr("app.services.preferences.get_daily_batch_compress", lambda: True)
     monkeypatch.setattr("app.services.preferences.get_minute_batch_compress", lambda: True)

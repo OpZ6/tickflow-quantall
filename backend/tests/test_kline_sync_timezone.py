@@ -10,10 +10,24 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import polars as pl
+import pytest
 
 from app.market_time import CN_TZ
 from app.services import kline_sync
 from app.tickflow.capabilities import Cap, CapabilityLimits, CapabilitySet
+
+
+@pytest.fixture(autouse=True)
+def _no_real_preferences(monkeypatch):
+    """隔离本机真实偏好。
+
+    这些用例已桩掉 `get_minute_data_provider`, 但 `_selected_minute_provider_name()`
+    还会读 `preferences.load()` 里的原始值来判断「getter 是否静默回退」。本机把
+    minute_data_provider 配成 tdx (或任何自定义源) 时, 这里会判成
+    `unavailable:tdx` 并 fail-closed, 与 CI 的干净 HOME 行为不一致。
+    返回空字典 → 走默认 tickflow, 与 CI 环境等价。
+    """
+    monkeypatch.setattr(kline_sync.preferences, "load", lambda: {})
 
 
 def test_fetch_minute_single_window_is_beijing_wall_clock(monkeypatch):
