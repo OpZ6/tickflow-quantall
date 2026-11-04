@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from app.quantx_data.schemas import SourceSpec
-from app.quantx_data.source_manager import SourceManager, classify_source_error
+from app.quantx_data.source_manager import (
+    SourceManager,
+    classify_source_error,
+    snapshot_is_final,
+)
 
 
 def _spec(name: str = "demo", **kwargs) -> SourceSpec:
@@ -188,3 +194,61 @@ def test_partial_payload_error_is_propagated_to_result() -> None:
     assert result.status == "partial"
     assert result.error and "401" in result.error
     assert result.error_kind == "authentication"
+
+
+def test_snapshot_is_final_rejects_lunch_break_capture() -> None:
+    """午盘抓到的快照不是当日终值；11-04 就是这么被冻结在 30 家涨停的。"""
+    payload = {"trade_date": "20261104", "scraped_at": "2026-11-04T12:09:09"}
+
+    assert snapshot_is_final(payload, "20261104", now=datetime(2026, 11, 4, 21, 40)) is False
+    # 同一时刻的盘中刷新（30 分钟内）仍然可以复用，避免刷新风暴
+    assert snapshot_is_final(payload, "20261104", now=datetime(2026, 11, 4, 12, 20)) is True
+    # 次日回补历史时，午盘快照同样必须重抓
+    assert snapshot_is_final(payload, "20261104", now=datetime(2026, 11, 5, 1, 0)) is False
+
+
+def test_snapshot_is_final_accepts_post_close_and_untimed_payloads() -> None:
+    assert snapshot_is_final(
+        {"trade_date": "20261104", "scraped_at": "2026-11-04T21:48:03"}, "20261104"
+    ) is True
+    assert snapshot_is_final({"trade_date": "20261104"}, "20261104") is True
+
+
+def test_source_manager_refreshes_mid_session_snapshot(tmp_path: Path) -> None:
+    manager = SourceManager()
+    manager.register(_spec(), lambda _date, _root: {"trade_date": "20261030", "fresh": True})
+    snapshot = tmp_path / "normalized" / "demo.json"
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_text(
+        json.dumps({"trade_date": "20261030", "scraped_at": "2026-10-30T12:09:09", "fresh": False}),
+        encoding="utf-8",
+    )
+
+    result = manager.collect("demo", "20261030", tmp_path)
+
+    assert result.reused_snapshot is False
+    assert result.payload["fresh"] is True
+
+
+def test_source_manager_keeps_mid_session_snapshot_when_refresh_fails(
+    tmp_path: Path,
+) -> None:
+    manager = SourceManager()
+
+    def collect(_date: str, _root: Path) -> dict:
+        raise ConnectionError("upstream unreachable")
+
+    manager.register(_spec(max_retries=0), collect)
+    snapshot = tmp_path / "normalized" / "demo.json"
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_text(
+        json.dumps({"trade_date": "20261030", "scraped_at": "2026-10-30T12:09:09", "stocks": [1, 2]}),
+        encoding="utf-8",
+    )
+
+    result = manager.collect("demo", "20261030", tmp_path)
+
+    assert result.status == "stale"
+    assert result.error_kind == "stale"
+    assert result.payload["stocks"] == [1, 2]
+    assert "盘中快照" in (result.error or "")

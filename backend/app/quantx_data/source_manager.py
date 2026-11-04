@@ -9,10 +9,11 @@ import os
 import queue
 import time
 from collections.abc import Callable, Iterable
-from datetime import datetime
+from datetime import datetime, time as clock_time, timedelta
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .io import read_json
 from .schemas import SourceResult, SourceSpec
@@ -21,6 +22,59 @@ logger = logging.getLogger(__name__)
 
 SourceCollector = Callable[[str, Path], dict[str, Any]]
 DependencyCheck = Callable[[], tuple[bool, str]]
+
+_CN_TZ = ZoneInfo("Asia/Shanghai")
+# A 股收盘后源数据才定稿：涨停/跌停/连板梯队、涨跌家数在 15:00 前都还在变。
+_SESSION_CLOSE = clock_time(15, 0)
+# 盘中重复运行时，最近这段时间内抓到的快照仍然可复用，避免刷新时反复打满上游。
+_INTRADAY_REUSE_WINDOW = timedelta(minutes=30)
+
+
+def _cn_now() -> datetime:
+    """Naive Asia/Shanghai wall clock, independent of the host time zone."""
+    return datetime.now(_CN_TZ).replace(tzinfo=None)
+
+
+def capture_time(payload: dict[str, Any]) -> datetime | None:
+    """Return when a source payload was captured, as naive Asia/Shanghai time."""
+    raw = payload.get("scraped_at") or payload.get("collected_at")
+    if not raw:
+        return None
+    try:
+        moment = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(_CN_TZ).replace(tzinfo=None)
+    return moment
+
+
+def snapshot_is_final(
+    payload: dict[str, Any],
+    trade_date: str,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Whether a stored source payload can stand as the day's final value.
+
+    A capture taken before 15:00 on its own trade date is a mid-session
+    snapshot: limit-up counts, ladders and breadth keep moving until the close.
+    Treating it as final froze 2026-11-04 at the 12:09 lunch-break view (30
+    limit-ups instead of the 118 that closed). Payloads without a capture time
+    keep the historic behaviour so older snapshots stay reusable.
+    """
+    observed = capture_time(payload)
+    if observed is None:
+        return True
+    day = datetime.strptime(trade_date, "%Y%m%d")
+    close = datetime.combine(day.date(), _SESSION_CLOSE)
+    if observed >= close:
+        return True
+    current = now or _cn_now()
+    if day.date() == current.date() and current < close:
+        # Still trading: only reuse a capture that is barely minutes old.
+        return current - observed <= _INTRADAY_REUSE_WINDOW
+    return False
 
 
 def count_records(payload: dict[str, Any]) -> int:
@@ -259,9 +313,21 @@ class SourceManager:
     ) -> SourceResult:
         spec = self._specs[source_id]
         existing = None if force else self._load_existing(read_dir or date_dir, spec.name)
+        provisional = None
         if existing is not None:
-            return self._existing_result(spec, trade_date, date_dir, existing)
+            if self._snapshot_reusable(spec, existing, trade_date):
+                return self._existing_result(spec, trade_date, date_dir, existing)
+            # 盘中快照不能当日终值：收盘后重抓，抓不到再退回它并显式标 stale。
+            provisional = existing
+            logger.warning(
+                "QuantX source %s has a mid-session snapshot for %s (captured %s); refreshing",
+                spec.name,
+                trade_date,
+                capture_time(existing),
+            )
         if not allow_network:
+            if provisional is not None:
+                return self._stale_result(spec, trade_date, date_dir, provisional)
             return SourceResult(
                 name=spec.name,
                 status="missing",
@@ -271,6 +337,10 @@ class SourceManager:
 
         available, reason = self._dependency_checks[source_id]()
         if not available:
+            if provisional is not None:
+                return self._stale_result(
+                    spec, trade_date, date_dir, provisional, reason
+                )
             return SourceResult(
                 name=spec.name,
                 status="error",
@@ -323,6 +393,10 @@ class SourceManager:
                 )
                 if attempt < spec.max_retries:
                     time.sleep(0.25 * (attempt + 1))
+        if provisional is not None:
+            return self._stale_result(
+                spec, trade_date, date_dir, provisional, last_error
+            )
         return SourceResult(
             name=spec.name,
             status="error",
@@ -330,6 +404,37 @@ class SourceManager:
             error_kind=last_error_kind,
             attempts=spec.max_retries + 1,
         )
+
+    @staticmethod
+    def _snapshot_reusable(
+        spec: SourceSpec,
+        existing: dict[str, Any],
+        trade_date: str,
+    ) -> bool:
+        if not spec.freshness_required:
+            return True
+        return snapshot_is_final(existing, trade_date)
+
+    @classmethod
+    def _stale_result(
+        cls,
+        spec: SourceSpec,
+        trade_date: str,
+        date_dir: Path,
+        existing: dict[str, Any],
+        reason: str | None = None,
+    ) -> SourceResult:
+        """Keep a mid-session snapshot only when refreshing it failed."""
+        result = cls._existing_result(spec, trade_date, date_dir, existing)
+        observed = capture_time(existing)
+        stamp = observed.isoformat(sep=" ") if observed else "时间未知"
+        detail = f"盘中快照（{stamp} 抓取）未能刷新，当前值不是 {trade_date} 收盘终值"
+        if reason:
+            detail = f"{detail}：{reason}"
+        result.status = "stale"
+        result.error = detail
+        result.error_kind = "stale"
+        return result
 
     @staticmethod
     def _load_existing(date_dir: Path, name: str) -> dict[str, Any] | None:
