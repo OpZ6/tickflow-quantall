@@ -56,8 +56,8 @@ interface Props {
   className?: string
 }
 
-/** 默认显示最近一年 ≈ 250 个交易日 (本地口径: 与 VCP 252 根趋势模板对齐) */
-const VISIBLE_BARS = 250
+/** 默认显示最近 6 个月 ≈ 120 个交易日 */
+const VISIBLE_BARS = 120
 
 export function AnalysisKChart({
   rows,

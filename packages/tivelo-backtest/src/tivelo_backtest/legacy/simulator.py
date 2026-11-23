@@ -259,6 +259,8 @@ class SimulationOptions:
     include_trades: bool = True
     include_per_symbol_stats: bool = True
     include_return_distribution: bool = True
+    # 本地扩展: 把每笔被拒的买/卖尝试落成可审计记录 (默认关闭, 不改变匹配语义)。
+    include_execution_rejections: bool = False
 
 
 def _resolve_signal_id(panel: pl.DataFrame, idx: int, signal_ids: list[str] | None) -> str | None:
@@ -394,7 +396,8 @@ class LegacySimulator:
                         pnl_pct = (
                             (exit_price - entry_price) / entry_price if entry_price > 0 else 0.0
                         )
-                        fee_cost = config.buy_cost_pct() + config.sell_cost_pct()
+                        # 印花税按本笔卖出日取对应税率 (a_share_historical 分段)。
+                        fee_cost = config.buy_cost_pct() + config.sell_cost_pct(sym_dates[i])
                         pnl_pct -= fee_cost
 
                         e_date = sym_dates[entry_idx]
@@ -495,7 +498,8 @@ class LegacySimulator:
         entry_prices = self._resolve_entry_prices(matrix, config)
         exit_prices = matrix.open if config.exit_fill == "open_t+1" else matrix.close
         buy_cost_pct = config.buy_cost_pct()
-        sell_cost_pct = config.sell_cost_pct()
+        # 卖出腿含印花税, 税率随卖出日所在分段变化 (a_share_historical),
+        # 只能在每笔平仓时按该笔成交日求值, 不能在此一次性算定。
         trades: list[TradeRecord] = []
         execution_stats = {
             "buy_invalid_price": 0,
@@ -698,6 +702,10 @@ class LegacySimulator:
             override: float | None = None,
             force: bool = False,
         ) -> bool:
+            # 收盘保本信号产生于 T 日收盘, T+1 开盘才能成交: 无论 exit_fill
+            # 口径如何, 该笔都按次日开盘价成交。
+            if reason == "close_breakeven":
+                override = float(matrix.open[time_id, asset_id])
             signal_id = (
                 _signal_id(int(matrix.exit_signal_code[time_id, asset_id]), matrix.exit_signal_ids)
                 if reason == "signal"
@@ -744,6 +752,8 @@ class LegacySimulator:
             shares = 100.0
             entry_scale = matrix.scale_at(pos["entry_time"], asset_id)
             entry_value = round(shares * (pos["entry_price"] / entry_scale) * (1 + buy_cost_pct), 2)
+            # 印花税按本笔卖出日取对应税率。
+            sell_cost_pct = config.sell_cost_pct(matrix.timestamp_labels[time_id])
             exit_value = round((shares / entry_scale) * exit_price * (1 - sell_cost_pct), 2)
             pnl_amount = round(exit_value - entry_value, 2)
             trades.append(
@@ -842,6 +852,8 @@ class LegacySimulator:
                 "blocked_exit_days": 0,
             }
             closed = False
+            # 建仓当日收盘价已发生, 可用于保本 arm (信号次日起生效)。
+            _update_close_breakeven(config, pos, float(matrix.close[time_id, asset_id]), entry_date)
             for future in future_times:
                 pos["hold_days"] += 1
                 date_text = matrix.timestamp_labels[future][:10]
@@ -854,6 +866,9 @@ class LegacySimulator:
                 if pos.get("pending_exit_reason"):
                     reason = str(pos["pending_exit_reason"])
                     signal_date = str(pos.get("pending_exit_signal_date") or date_text)
+                elif pos.get("close_breakeven_signal_date"):
+                    reason = "close_breakeven"
+                    signal_date = pos["close_breakeven_signal_date"]
                 elif matrix.exit[future, asset_id]:
                     reason = "signal"
                     signal_date = _signal_date(
@@ -869,6 +884,9 @@ class LegacySimulator:
                 high_price = float(matrix.high[future, asset_id])
                 if _valid_price(high_price):
                     pos["max_high"] = max(float(pos["max_high"]), high_price)
+                _update_close_breakeven(
+                    config, pos, float(matrix.close[future, asset_id]), date_text
+                )
             if not closed and future_times:
                 last_time = future_times[-1]
                 # 尾部仍被递延(封板/停牌)的持仓不再静默丢弃: 期末已无未来数据
@@ -1059,7 +1077,6 @@ class LegacySimulator:
             rows.append(i)
 
         buy_cost_pct = config.buy_cost_pct()
-        sell_cost_pct = config.sell_cost_pct()
         score_min = getattr(config, "score_min", None)
         score_max = getattr(config, "score_max", None)
         trades: list[TradeRecord] = []
@@ -1163,6 +1180,12 @@ class LegacySimulator:
             open_price = float(open_prices[idx])
             low_price = float(low_prices[idx])
             high_price = float(high_prices[idx])
+            # 已定档的收盘保本信号 / 次日开盘的排定卖出, 不能被当日后续 high/low
+            # 抢先: 该笔按开盘价成交, 日内极值不参与本日判定。
+            if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(
+                config, bool(ext[idx]), pos["hold_days"]
+            ):
+                low_price = high_price = open_price
             peak_price = float(pos.get("max_high", entry_price))
             risk_lines: list[tuple[float, str]] = []
 
@@ -1221,6 +1244,9 @@ class LegacySimulator:
             exit_price_override: float | None = None,
             force: bool = False,
         ) -> bool:
+            # 收盘保本信号 T 日收盘产生, T+1 开盘成交 (与 exit_fill 口径无关)。
+            if reason == "close_breakeven":
+                exit_price_override = float(open_prices[idx])
             if force:
                 # 期末强制记录: 已无未来数据可等, 跳过可卖性闸门按末日价格落账
                 ok, block_reason = True, ""
@@ -1241,6 +1267,7 @@ class LegacySimulator:
                 exit_price = _refill_price(idx, "sell", float(exit_prices[idx]))
             shares = 100.0
             entry_value = round(shares * float(pos["entry_price"]) * (1 + buy_cost_pct), 2)
+            sell_cost_pct = config.sell_cost_pct(self._date_str(panel_dates[idx]))
             exit_value = round(shares * exit_price * (1 - sell_cost_pct), 2)
             pnl_amount = round(exit_value - entry_value, 2)
             pnl_pct = pnl_amount / entry_value if entry_value > 0 else 0.0
@@ -1338,6 +1365,9 @@ class LegacySimulator:
 
             closed = False
             last_idx = entry_idx
+            _update_close_breakeven(
+                config, pos, float(close_prices[entry_idx]), pos["entry_date"]
+            )
             for idx in rows[start_pos + 1 :]:
                 last_idx = idx
                 pos["hold_days"] = int(pos["hold_days"]) + 1
@@ -1348,6 +1378,8 @@ class LegacySimulator:
                         return str(pos["pending_exit_reason"]), str(
                             pos.get("pending_exit_signal_date") or d_str
                         )
+                    if pos.get("close_breakeven_signal_date"):
+                        return "close_breakeven", pos["close_breakeven_signal_date"]
                     # 卖点信号优先于到期: 策略主动离场先于 max_hold 兜底。
                     if ext[idx]:
                         return "signal", str(exit_signal_dates[idx] or d_str)
@@ -1374,6 +1406,7 @@ class LegacySimulator:
                 hi = float(high_prices[idx])
                 if _valid_price(hi):
                     pos["max_high"] = max(float(pos.get("max_high", entry_price)), hi)
+                _update_close_breakeven(config, pos, float(close_prices[idx]), d_str)
 
             if not closed:
                 if last_idx == entry_idx:
@@ -1531,7 +1564,7 @@ class LegacySimulator:
         entry_prices = self._resolve_entry_prices(matrix, config)
         exit_prices = matrix.open if config.exit_fill == "open_t+1" else matrix.close
         buy_cost_pct = config.buy_cost_pct()
-        sell_cost_pct = config.sell_cost_pct()
+        # 卖出腿含印花税, 税率随卖出日分段变化, 逐笔按成交日求值。
         cash = float(config.initial_capital)
         peak = cash
         max_positions = max(int(config.max_positions), 0)
@@ -1719,6 +1752,7 @@ class LegacySimulator:
                 if override is not None
                 else _refill_price(time_id, asset_id, "sell", float(exit_prices[time_id, asset_id]))
             )
+            sell_cost_pct = config.sell_cost_pct(matrix.timestamp_labels[time_id])
             exit_value = round(pos["shares"] * exit_price * (1 - sell_cost_pct), 2)
             cash = round(cash + exit_value, 2)
             pnl_amount = round(exit_value - pos["entry_value"], 2)
@@ -1765,6 +1799,9 @@ class LegacySimulator:
             sold_today: set[int],
             override: float | None = None,
         ) -> bool:
+            # 收盘保本信号产生于 T 日收盘, T+1 开盘才能成交。
+            if reason == "close_breakeven":
+                override = float(matrix.open[time_id, asset_id])
             signal_id = (
                 _signal_id(int(matrix.exit_signal_code[time_id, asset_id]), matrix.exit_signal_ids)
                 if reason == "signal"
@@ -1790,10 +1827,38 @@ class LegacySimulator:
                     signal_id,
                     next_open=minute_trigger,
                 )
-                _count(blocked)
+                _reject(blocked, time_id, asset_id, signal_date=signal_date)
                 return False
             _sell(time_id, asset_id, reason, signal_date, sold_today, override)
             return True
+
+        execution_rejections: list[dict] = []
+
+        def _reject(
+            reason: str,
+            time_id: int,
+            asset_id: int,
+            *,
+            signal_date: str | None = None,
+            counted: bool = True,
+        ) -> None:
+            """记录一次买/卖尝试被拒 (counted=False 表示不进 execution_stats 的软拒)。"""
+            if counted:
+                _count(reason)
+            if options.include_execution_rejections:
+                side = "buy" if reason.startswith("buy_") else "sell"
+                source_time = int(matrix.entry_signal_time[time_id, asset_id])
+                execution_rejections.append(
+                    {
+                        "date": matrix.timestamp_labels[time_id][:10],
+                        "symbol": matrix.symbols[asset_id],
+                        "side": side,
+                        "reason": reason,
+                        "signal_date": signal_date
+                        or _signal_date(source_time, matrix.timestamp_labels[time_id][:10]),
+                        "counted_in_execution_stats": counted,
+                    }
+                )
 
         for time_id, date_label in enumerate(matrix.timestamp_labels):
             date_text = date_label[:10]
@@ -1827,6 +1892,12 @@ class LegacySimulator:
                 open_price = float(matrix.open[time_id, asset_id])
                 low_price = float(matrix.low[time_id, asset_id])
                 high_price = float(matrix.high[time_id, asset_id])
+                # 已定档的收盘保本信号 / 次日开盘的排定卖出, 不能被当日后续
+                # high/low 抢先: 该笔按开盘价成交, 日内极值不参与本日判定。
+                if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(
+                    config, bool(matrix.exit[time_id, asset_id]), pos["hold_days"]
+                ):
+                    low_price = high_price = open_price
                 entry_price = float(pos["entry_price"])
                 peak_price = float(pos["max_high"])
                 risk_lines: list[tuple[float, str]] = []
@@ -1882,6 +1953,9 @@ class LegacySimulator:
                 if pos.get("pending_exit_reason"):
                     reason = str(pos["pending_exit_reason"])
                     signal_date = str(pos.get("pending_exit_signal_date") or date_text)
+                elif pos.get("close_breakeven_signal_date"):
+                    reason = "close_breakeven"
+                    signal_date = pos["close_breakeven_signal_date"]
                 elif matrix.exit[time_id, asset_id]:
                     reason = "signal"
                     signal_date = _signal_date(
@@ -1899,34 +1973,43 @@ class LegacySimulator:
                 for asset_id in np.flatnonzero(matrix.entry[time_id]):
                     asset = int(asset_id)
                     if asset in positions:
+                        # 已持仓不算被拒: 信号仍有效, 只是无需再买。
+                        _reject("buy_already_held", time_id, asset, counted=False)
                         continue
                     if asset in sold_today:
-                        _count("buy_same_day_reentry")
+                        _reject("buy_same_day_reentry", time_id, asset)
                         continue
                     ok, blocked = _can_buy(time_id, asset)
                     if not ok:
-                        _count(blocked)
+                        _reject(blocked, time_id, asset)
                         continue
                     score = _matrix_entry_score(matrix, time_id, asset)
                     if config.score_min is not None and score < config.score_min:
-                        _count("buy_score_filter")
+                        _reject("buy_score_filter", time_id, asset)
                         continue
                     if config.score_max is not None and score > config.score_max:
-                        _count("buy_score_filter")
+                        _reject("buy_score_filter", time_id, asset)
                         continue
                     candidates.append((asset, score))
                 candidates.sort(key=lambda item: item[1], reverse=True)
                 slots = max_positions - len(positions)
                 if slots <= 0:
-                    execution_stats["buy_no_slot"] += len(candidates)
+                    for asset, _ in candidates:
+                        _reject("buy_no_slot", time_id, asset)
                 elif candidates:
                     selected = candidates[:slots]
+                    if options.include_execution_rejections:
+                        # 排名靠后未入选: 只进审计记录, 不计入 execution_stats,
+                        # 否则 buy_rank_cutoff 会和 buy_no_slot 重复计数。
+                        for asset, _ in candidates[slots:]:
+                            _reject("buy_rank_cutoff", time_id, asset, counted=False)
                     market_value_before = _market_value()
                     equity_before = cash + market_value_before
                     target_value = equity_before * max_exposure_pct / max_positions
                     exposure_capacity = equity_before * max_exposure_pct - market_value_before
                     if equity_before <= 0 or exposure_capacity <= 0 or max_exposure_pct <= 0:
-                        execution_stats["buy_exposure"] += len(selected)
+                        for asset, _ in selected:
+                            _reject("buy_exposure", time_id, asset)
                     else:
                         weights = np.repeat(1 / len(selected), len(selected))
                         if config.position_sizing == "score_weight":
@@ -1968,7 +2051,7 @@ class LegacySimulator:
                             total_budget = max(total_budget * policy_scale, 0.0)
                         for (asset_id, entry_score), weight in zip(selected, weights, strict=False):
                             if len(positions) >= max_positions:
-                                _count("buy_no_slot")
+                                _reject("buy_no_slot", time_id, asset_id)
                                 break
                             market_value = _market_value()
                             equity = cash + market_value
@@ -1977,7 +2060,7 @@ class LegacySimulator:
                                 total_budget * float(weight), target_value, cash, capacity
                             )
                             if allocation <= 0:
-                                _count("buy_exposure")
+                                _reject("buy_exposure", time_id, asset_id)
                                 continue
                             entry_price = _refill_price(
                                 time_id, asset_id, "buy", float(entry_prices[time_id, asset_id])
@@ -1997,13 +2080,13 @@ class LegacySimulator:
                             shares = lots * 100 / scale
                             entry_value = round(lots * lot_cost, 2)
                             if shares <= 0:
-                                _count("buy_lot_size")
+                                _reject("buy_lot_size", time_id, asset_id)
                                 continue
                             if entry_value > cash + 1e-6:
-                                _count("buy_cash")
+                                _reject("buy_cash", time_id, asset_id)
                                 continue
                             if entry_value > capacity + 1e-6:
-                                _count("buy_exposure")
+                                _reject("buy_exposure", time_id, asset_id)
                                 continue
                             cash = round(cash - entry_value, 2)
                             positions[asset_id] = {
@@ -2043,6 +2126,10 @@ class LegacySimulator:
                     and pos["entry_date"] == date_text
                 ):
                     pos["max_high"] = max(float(pos["max_high"]), high_price)
+                # 当日收盘价可用于保本 arm, 信号次日生效。
+                _update_close_breakeven(
+                    config, pos, float(matrix.close[time_id, asset_id]), date_text
+                )
             valid_closes = np.isfinite(matrix.close[time_id]) & (matrix.close[time_id] > 0)
             last_close[valid_closes] = matrix.close[time_id, valid_closes]
 
@@ -2123,6 +2210,9 @@ class LegacySimulator:
         stats["terminal_settlement_count"] = len(trades) - trades_before_settlement
         stats["market_matrix_shape"] = [time_count, asset_count]
         stats["market_matrix_bytes"] = matrix.nbytes
+        if options.include_execution_rejections:
+            stats["execution_rejections"] = execution_rejections
+            stats["execution_rejection_scope"] = "portfolio_matrix_attempts"
         return SimResult(
             equity_curve=equity_curve if options.include_curves else [],
             drawdown_curve=drawdown_curve if options.include_curves else [],
@@ -2232,7 +2322,7 @@ class LegacySimulator:
             return self._empty_result()
 
         buy_cost_pct = config.buy_cost_pct()
-        sell_cost_pct = config.sell_cost_pct()
+        # 卖出腿含印花税, 税率随卖出日分段变化, 逐笔按成交日求值。
         cash = float(config.initial_capital)
         peak = cash
         max_positions = max(int(config.max_positions), 0)
@@ -2432,6 +2522,7 @@ class LegacySimulator:
                 exit_price = float(exit_price_override)
             else:
                 exit_price = _refill_price(idx, "sell", float(exit_prices[idx]))
+            sell_cost_pct = config.sell_cost_pct(self._date_str(panel_dates[idx]))
             exit_value = round(pos["shares"] * exit_price * (1 - sell_cost_pct), 2)
             cash = round(cash + exit_value, 2)
             pnl_amount = round(exit_value - pos["entry_value"], 2)
@@ -2483,6 +2574,9 @@ class LegacySimulator:
                 _mark_pending(sym, reason, signal_date)
                 _count("sell_suspended")
                 return False
+            # 收盘保本信号 T 日收盘产生, T+1 开盘成交。
+            if reason == "close_breakeven":
+                exit_price_override = float(open_prices[idx])
             ok, block_reason = _can_sell(idx, exit_price_override)
             if not ok:
                 _mark_pending(sym, reason, signal_date)
@@ -2507,6 +2601,9 @@ class LegacySimulator:
                 if pos.get("pending_exit_reason"):
                     reason = str(pos["pending_exit_reason"])
                     signal_date = str(pos.get("pending_exit_signal_date") or d_str)
+                elif pos.get("close_breakeven_signal_date"):
+                    reason = "close_breakeven"
+                    signal_date = pos["close_breakeven_signal_date"]
                 # 卖点信号优先于到期: 策略主动离场先于 max_hold 兜底。
                 elif idx is not None and ext[idx]:
                     reason = "signal"
@@ -2533,6 +2630,12 @@ class LegacySimulator:
                 open_price = float(open_prices[idx])
                 low_price = float(low_prices[idx])
                 high_price = float(high_prices[idx])
+                # 已定档的收盘保本信号 / 次日开盘的排定卖出, 不能被当日后续
+                # high/low 抢先: 该笔按开盘价成交, 日内极值不参与本日判定。
+                if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(
+                    config, bool(ext[idx]), pos["hold_days"]
+                ):
+                    low_price = high_price = open_price
                 entry_price = float(pos["entry_price"])
                 peak_price = float(pos.get("max_high", entry_price))
                 risk_lines: list[tuple[float, str]] = []
@@ -2770,6 +2873,8 @@ class LegacySimulator:
                         and pos["entry_date"] == str(d_str)[:10]
                     ):
                         pos["max_high"] = max(float(pos.get("max_high", pos["entry_price"])), hi)
+                    # 当日收盘价可用于保本 arm, 信号次日生效。
+                    _update_close_breakeven(config, pos, float(close_prices[idx]), d_str)
 
             for i in idxs:
                 c = float(close_prices[i])

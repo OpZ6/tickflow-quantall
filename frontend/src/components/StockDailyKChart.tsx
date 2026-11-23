@@ -357,8 +357,6 @@ export function StockDailyKChart({
           onDateClick={onDateClick}
           onPriceDoubleClick={onPriceDoubleClick}
           visibleBars={visibleBars ?? (renderer === 'lightweight' ? undefined : 60)}
-          activeIndicators={activeIndicators}
-          volumeCompare={volumeCompare}
           chanlunData={chanlunLayer}
           chanlunConfig={chanlunConfig}
           addedDate={showAddedMark ? addedDate : null}

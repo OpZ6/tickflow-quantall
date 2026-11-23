@@ -2358,8 +2358,14 @@ def _limit_lock_matrices(
                 matches = quoted_dates == ordinal
                 no_limit = np.isfinite(latest_up) & (latest_up >= 10_000.0)
                 valid &= ~(matches & no_limit)
-                use_up = matches & (latest_up > 0) & (latest_up < 10_000.0)
-                use_down = matches & (latest_down > 0) & (latest_down < 10_000.0)
+                # 与 compute_limit_signals 同口径: 涨停价必须高于昨收、跌停价必须
+                # 低于昨收, 否则是维表未滚动的上一交易日旧值。不加这条会让直连
+                # 矩阵与面板构建两条路径的锁定判定打架 (前者信维表、后者校验)。
+                has_prev = np.isfinite(previous_raw)
+                up_ok = ~has_prev | (latest_up > previous_raw)
+                down_ok = ~has_prev | (latest_down < previous_raw)
+                use_up = matches & (latest_up > 0) & (latest_up < 10_000.0) & up_ok
+                use_down = matches & (latest_down > 0) & (latest_down < 10_000.0) & down_ok
                 up_price = np.where(use_up, latest_up, up_price)
                 down_price = np.where(use_down, latest_down, down_price)
             up_locked[time_id, valid] = (
@@ -3786,10 +3792,12 @@ class MatrixStrategyPipeline:
         precomputed_signals: SignalMatrix | None = None,
     ) -> SignalMatrix:
         strategy_started = time.perf_counter()
+        # dynamic 决定信号来源与评分特征解析口径, 预计算信号分支同样要用到,
+        # 必须在分支外先求值 (否则预计算路径 UnboundLocalError)。
+        dynamic = REPLAY_SCALE in market.fields
         if precomputed_signals is not None:
             signals = precomputed_signals
         else:
-            dynamic = REPLAY_SCALE in market.fields
             signals = (current_replay().dynamic_signals(strategy, market, params)
                        if dynamic else strategy.compute_signals(market, params))
         validate_signal_matrix(signals, market.shape)

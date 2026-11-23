@@ -16,7 +16,17 @@ vi.mock('@/lib/kline', async importOriginal => ({
   ...await importOriginal<typeof import('@/lib/kline')>(), klineDailyQueryOptions: vi.fn(() => ({})),
 }))
 vi.mock('./charts/LightweightDaily', () => ({ LightweightDaily: (props: any) => <output>{JSON.stringify(props)}</output> }))
-vi.mock('./EChartsCandlestick', () => ({ EChartsCandlestick: (props: any) => <output>{JSON.stringify(props)}</output> }))
+// 本地恢复了缠论图层, 组件会静态引用这几个导出, mock 必须一并提供。
+vi.mock('./EChartsCandlestick', () => ({
+  EChartsCandlestick: (props: any) => <output>{JSON.stringify(props)}</output>,
+  DEFAULT_CHANLUN_CONFIG: {
+    visible: false, showBi: true, showSegments: true, showZhongshu: true, showBsp: true,
+    showOfficial: false,
+  },
+  buildTimeIndex: () => new Map<string, number>(),
+  mapChanlunData: () => null,
+  toChanlunCandles: () => [],
+}))
 vi.mock('./charts/CustomChart', () => ({ CustomDaily: (props: any) => <output>{JSON.stringify(props)}</output> }))
 
 let host: HTMLDivElement, root: Root

@@ -109,7 +109,9 @@ def test_get_daily_falls_back_to_scan_when_cache_does_not_cover_start():
 def test_cold_stock_queries_do_not_warm_entire_market():
     raw = _raw_frame()
     repo, _ = _bare_repo(raw)
-    def forbidden():
+    def forbidden(*_args, **_kwargs):
+        # 上游给 get_enriched_latest/_refresh_enriched 增加了 symbols/end 窄化参数,
+        # 拦断函数必须容忍关键字实参, 否则会变成 TypeError 而不是本意上的告警。
         raise AssertionError("single-stock read triggered full-market warmup")
     repo.get_enriched_latest = forbidden
     repo._refresh_enriched = forbidden

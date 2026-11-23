@@ -859,7 +859,9 @@ def compute_limit_signals(
 
     # 生效涨跌停价: 维表日期与行情日期一致时使用权威值, 否则使用理论价。
     # 部分上游会在盘前返回上一交易日的涨跌停价, 而本地同步仍把维表标成今天。
-    # 因此日期一致还不够: 有昨收时必须同时与交易所规则计算值一致。
+    # 这里只用一条逻辑不变量判定错位: 涨停价必须高于昨收、跌停价必须低于昨收;
+    # 低于/等于昨收的"涨停价"在交易所规则下不可能存在, 一定是没滚动的旧值。
+    # (不做与理论价的容差比对 — 那会把合法的非整数限价一并拒掉。)
     # 旧版维表没有 as_of, 保持仅在最新行情日使用权威值的兼容行为。
     _SENTINEL = 10000.0
     valid_prev_raw = (
@@ -881,13 +883,7 @@ def compute_limit_signals(
             & pl.col("limit_up").is_not_null()
             & (pl.col("limit_up") > 0)
             & (pl.col("limit_up") < _SENTINEL)
-            & (
-                ~valid_prev_raw
-                | (
-                    (pl.col("limit_up") - pl.col("_theoretical_limit_up")).abs()
-                    <= 0.005
-                )
-            )
+            & (~valid_prev_raw | (pl.col("limit_up") > pl.col("_prev_raw_close")))
         ).then(pl.col("limit_up")).otherwise(pl.col("_theoretical_limit_up"))
     else:
         effective_limit_up = pl.col("_theoretical_limit_up")
@@ -897,13 +893,7 @@ def compute_limit_signals(
             & pl.col("limit_down").is_not_null()
             & (pl.col("limit_down") > 0)
             & (pl.col("limit_down") < _SENTINEL)
-            & (
-                ~valid_prev_raw
-                | (
-                    (pl.col("limit_down") - pl.col("_theoretical_limit_down")).abs()
-                    <= 0.005
-                )
-            )
+            & (~valid_prev_raw | (pl.col("limit_down") < pl.col("_prev_raw_close")))
         ).then(pl.col("limit_down")).otherwise(pl.col("_theoretical_limit_down"))
     else:
         effective_limit_down = pl.col("_theoretical_limit_down")

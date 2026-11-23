@@ -1006,8 +1006,15 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
             raise HTTPException(400, "该插件正在等待卸载，请选择其他数据源")
         for dataset, chain in chains.items():
             preferences.set_data_provider_chain(dataset, chain)
-        for field, provider in updates.items():
+        # 有 provider 链语义的字段走 promote (选中的源提到链首); 其余字段
+        # (如 full_minute_data_provider — 上游路由表新增的声明) 不能在这里
+        # 维护第二份字段表, 交给通用写入。之前直接下标映射, 新增字段即 KeyError。
+        chained = {f: p for f, p in updates.items() if f in field_to_dataset}
+        rest = {f: p for f, p in updates.items() if f not in field_to_dataset}
+        for field, provider in chained.items():
             preferences.promote_data_provider(field_to_dataset[field], provider)
+        if rest:
+            preferences.save(rest)
         # 与插件卸载共用写锁，避免并发请求重新引用已移除的数据源。
         # 当前 provider 变化会改变自定义源能力增广结果 (读缓存, 无网络请求)。
         request.app.state.capabilities = detect_capabilities()
@@ -1022,10 +1029,8 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
         "depth5_data_provider": preferences.get_depth5_data_provider(),
         "realtime_data_provider": preferences.get_realtime_data_provider(),
         "financial_data_provider": preferences.get_financial_provider(),
-        "provider_chains": {
-            dataset: preferences.get_data_provider_chain(dataset)
-            for dataset in field_to_dataset.values()
-        },
+        # 不回显 provider_chains: PUT 的响应契约是"原样回显本次保存的字段"
+        # (上游用例按请求体逐键比对)。链顺序由 GET /data-sources 提供。
     }
 
 

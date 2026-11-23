@@ -1090,6 +1090,17 @@ def run_all(request: Request, body: Optional[dict] = None):
                                                  params_map=params_map, overrides_map=overrides_map)
             result = engine.run_all(context, params_map=params_map, overrides_map=overrides_map, strategy_ids=all_ids)
             screener_work.assert_current(repo, engine, asset_type, identity)
+            # 证据链随本次计算落库一次: context 只在本闭包内可见, 且缓存命中时
+            # 不应重复写逐笔事件 (key 相同即同一份证据)。
+            if timeframe == "1d":
+                for sid, one in result.items():
+                    enrich_and_persist_strategy_result(
+                        data_dir=data_dir,
+                        result=one,
+                        strategy=engine.get(sid),
+                        params=params_map.get(sid, {}),
+                        context=context,
+                    )
             return result
 
     try:
@@ -1102,13 +1113,6 @@ def run_all(request: Request, body: Optional[dict] = None):
 
     results: dict[str, dict] = {}
     for sid, result in engine_results.items():
-        enrich_and_persist_strategy_result(
-            data_dir=data_dir,
-            result=result,
-            strategy=engine.get(sid),
-            params=params_map.get(sid, {}),
-            context=context,
-        )
         safe_result = _safe(asdict(result))
         safe_result["strategy"] = sid
         safe_result["as_of"] = str(as_of)

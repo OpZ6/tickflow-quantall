@@ -44,10 +44,12 @@ export interface ChartMarker {
   color?: string
   /** 明确的异动来源，避免把策略买卖点按颜色猜成涨停或炸板。 */
   event?: 'limit_up' | 'broken_limit_up' | 'limit_down' | 'limit_down_recovery'
-  // ===== 本地扩展: 策略证据链标记 =====
+  // ===== 本地扩展: 策略证据链 / 标注图层 =====
+  /** 标注层标记身份，用于回跳与去重。 */
+  id?: string
   /** 点击标记时定位回测逐笔证据。 */
   evidenceId?: string
-  /** 多标的叠加时标记所属标的。 */
+  /** 标记形状 (ECharts symbol: arrow / diamond / triangle / circle / pin)，默认 arrow。 */
   symbol?: string
 }
 
@@ -59,8 +61,9 @@ export interface ChartRange {
   label?: string
   color?: string
   // ===== 本地扩展: 区间上下沿与证据回跳 =====
-  high?: number
-  low?: number
+  /** 区间上/下沿；标注层来源可能为空 (只画时间区间不画价位带)。 */
+  high?: number | null
+  low?: number | null
   evidenceId?: string
 }
 

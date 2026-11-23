@@ -39,10 +39,8 @@ from app.enriched_generation import (
     get_enriched_generation,
     get_enriched_generation_snapshot,
 )
-from app.market_time import cn_today
-from app.parquet import scan_daily_parquet, scan_enriched_parquet
 from app.market_time import CN_TZ, cn_today
-from app.parquet import scan_enriched_parquet
+from app.parquet import scan_daily_parquet, scan_enriched_parquet
 from app.polars_guard import guarded_collect
 from app.services.minute_adjust import apply_minute_adjustment, minute_basis_is_raw
 from app.startup_diagnostics import startup_phase
@@ -1748,7 +1746,11 @@ class KlineRepository:
         if columns:
             df = self._scan_daily_symbol(symbol, start, end, columns)
             if not df.is_empty() and all(c in df.columns for c in columns):
-                cached, cache_date = self.get_enriched_latest(symbols=[symbol], end=end)
+                # 单股热路径 (每个行情 tick 调一次) 不触发全市场 warmup:
+                # 只读已就绪的内存快照, 冷缓存时由扫描路径兜底。上游的
+                # get_enriched_latest(symbols=...) 在 _enriched_warming 之外仍会
+                # 同步调用 _refresh_enriched(), 会把 50s+ 的重算拉回请求线程。
+                cached, cache_date = self._enriched_cache, self._enriched_cache_date
                 if cached is not None and not cached.is_empty() and cache_date:
                     if start <= cache_date <= end:
                         cached_part = self._filter_cached(cached, symbol, columns)
@@ -1783,7 +1785,8 @@ class KlineRepository:
                 df = self._compute_enriched_range(df)
 
         # 尝试用缓存数据覆盖最新日 (盘中更准确)
-        cached, cache_date = self.get_enriched_latest(symbols=[symbol], end=end)
+        # 同上: 覆盖最新日只消费已就绪内存快照, 不在请求线程里触发预热。
+        cached, cache_date = self._enriched_cache, self._enriched_cache_date
         if not df.is_empty() and cached is not None and not cached.is_empty() and cache_date:
             if start <= cache_date <= end:
                 cached_part = self._filter_cached(cached, symbol, None)
@@ -1811,7 +1814,9 @@ class KlineRepository:
     ) -> pl.DataFrame:
         """批量日K查询。"""
         self._assert_daily_usable(symbols=symbols, end=end)
-        cached, cache_date = self.get_enriched_latest(symbols=symbols, end=end)
+        # 与单股 get_daily 同口径: 批量热路径同样只消费已就绪内存快照,
+        # 不通过 get_enriched_latest 触发同步全市场预热。
+        cached, cache_date = self._enriched_cache, self._enriched_cache_date
         if cached is not None and not cached.is_empty() and cache_date:
             if start >= cache_date:
                 return self._filter_cached_batch(cached, symbols, columns)
