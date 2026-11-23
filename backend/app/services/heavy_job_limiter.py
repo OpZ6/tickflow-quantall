@@ -10,6 +10,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import ClassVar, Literal
 
+from app.services.shared_work import WorkBusyError
+
 HeavyJobKind = Literal["normal", "mining", "exclusive"]
 
 
@@ -33,9 +35,9 @@ _MEMORY_POLL_S = 5.0
 def _memory_admission_ok() -> bool:
     if _HEAVY_MIN_AVAILABLE_BYTES <= 0:
         return True
-    import psutil
+    from app.services.memory_budget import memory_budget
 
-    return psutil.virtual_memory().available >= _HEAVY_MIN_AVAILABLE_BYTES
+    return memory_budget().available_bytes >= _HEAVY_MIN_AVAILABLE_BYTES
 
 
 class HeavyJobLimitTimeoutError(TimeoutError):
@@ -51,7 +53,8 @@ class HeavyJobLimiter:
 
     _WEIGHTS: ClassVar[dict[HeavyJobKind, int]] = {"normal": 1, "mining": 2}
 
-    def __init__(self, capacity: int = 2, *, cancel_poll_interval: float = 0.05) -> None:
+    def __init__(self, capacity: int = 2, *, cancel_poll_interval: float = 0.05,
+                 max_waiters: int = 32, queue_timeout_s: float = 120) -> None:
         if capacity <= 0:
             raise ValueError("capacity must be positive")
         if cancel_poll_interval <= 0:
@@ -63,6 +66,12 @@ class HeavyJobLimiter:
         self._condition = threading.Condition()
         self._waiters: deque[object] = deque()
         self._local = threading.local()
+        self._max_waiters, self._queue_timeout_s = max_waiters, queue_timeout_s
+
+    def snapshot(self) -> dict:
+        with self._condition:
+            return {"capacity": self.capacity, "in_use": self._used, "waiting": len(self._waiters),
+                    "max_waiters": self._max_waiters}
 
     @property
     def in_use(self) -> int:
@@ -88,8 +97,10 @@ class HeavyJobLimiter:
         if timeout is not None and timeout < 0:
             raise ValueError("timeout must be non-negative")
 
-        deadline = None if timeout is None else time.monotonic() + timeout
+        deadline = time.monotonic() + (self._queue_timeout_s if timeout is None else timeout)
         with self._condition:
+            if len(self._waiters) >= self._max_waiters:
+                raise WorkBusyError("重任务等待队列已满，请稍后重试")
             ticket = object()
             self._waiters.append(ticket)
             try:

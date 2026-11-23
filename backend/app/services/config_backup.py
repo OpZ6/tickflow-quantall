@@ -56,6 +56,7 @@ _STRATEGY_SOURCES = ("custom", "ai", "composite")
 _CATEGORY_LABELS: dict[str, str] = {
     "strategies": "策略源码",
     "strategy_overrides": "策略调参",
+    "strategy_pool": "策略库与策略池",
     "custom_signals": "自定义信号",
     "custom_factors": "自定义因子",
     "position_policies": "仓位策略",
@@ -84,6 +85,7 @@ _SOUND_PACK_EXTS = frozenset({".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", "
 _CATEGORY_ORDER = (
     "strategies",
     "strategy_overrides",
+    "strategy_pool",
     "custom_signals",
     "custom_factors",
     "position_policies",
@@ -180,6 +182,8 @@ def _classify(rel: PurePosixPath, data_dir: Path) -> tuple[str, Path] | None:
         name = parts[1]
         if name == "preferences.json":
             return "preferences", data_dir / "user_data" / "preferences.json"
+        if name == "strategy_pool.json":
+            return "strategy_pool", data_dir / "user_data" / name
         if name == "secrets.json":
             return "secrets", data_dir / "user_data" / "secrets.json"
         if name == "auth.json":
@@ -247,7 +251,7 @@ def _collect_backup_files(data_dir: Path) -> list[Path]:
     _glob(data_dir / "user_data" / "lots", "lot_*.json")
     for name in (
         "watchlist.parquet", "watchlist_groups.json", "preferences.json",
-        "research_candidates.json", "alerts.jsonl", "assistant_sessions.json", "auth.json",
+        "research_candidates.json", "alerts.jsonl", "assistant_sessions.json", "auth.json", "strategy_pool.json",
     ):
         p = data_dir / "user_data" / name
         if p.is_file():
@@ -320,10 +324,52 @@ def _normalize_selection(categories: Iterable[str] | None) -> frozenset[str] | N
     return frozenset(k for k in categories if k in _CATEGORY_LABELS)
 
 
+def _backup_secrets(data_dir: Path) -> dict[str, Any]:
+    """备份生效的凭据, 包含环境变量后备值, 不回写源设备或复制整个 .env。"""
+    from app import secrets_store
+    from app.data_providers.custom import loader
+    from app.services.ext_data import ext_api_key_field, get_ext_api_key
+
+    payload = secrets_store.load()
+    tickflow_key = secrets_store.get_tickflow_key()
+    if tickflow_key:
+        payload["tickflow_api_key"] = tickflow_key
+    ai_key = secrets_store.get_ai_key()
+    if ai_key:
+        payload["ai_api_key"] = ai_key
+        # 仅带 Key 而漏掉服务地址/模型, 在新设备上仍无法按原配置使用。
+        for field in (
+            "ai_provider", "ai_protocol", "ai_base_url", "ai_model",
+            "ai_codex_command", "ai_codex_reasoning_effort", "ai_user_agent",
+        ):
+            payload[field] = secrets_store.get_ai_config(field)
+        from app.config import settings
+
+        for field in ("ai_max_output_tokens", "ai_context_window", "ai_round_checkpoint"):
+            payload[field] = secrets_store.get_ai_config_int(field, getattr(settings, field))
+
+    # 插件清单声明 Key 的环境变量名, 不依赖某个供应商或插件是否装好依赖。
+    for plugin in loader.list_plugins():
+        env_name = plugin.get("api_key_env")
+        if not env_name:
+            continue
+        field = f"{plugin['name'].lower()}_api_key"
+        key = secrets_store.get_env_backed_secret(field, env_name)
+        if key:
+            payload[field] = key
+    for path in sorted((data_dir / "ext_data").glob("*/config.json")):
+        config_id = path.parent.name
+        if _NAME_RE.fullmatch(config_id):
+            key = get_ext_api_key(config_id)
+            if key:
+                payload[ext_api_key_field(config_id)] = key
+    return payload
+
+
 def build_backup(*, categories: Iterable[str] | None = None) -> tuple[bytes, str]:
     """打包用户配置, 返回 (zip 字节, 建议文件名)。
 
-    categories=None 导出全部 (不含密钥); 显式包含 "secrets" 才打包密钥。
+    categories=None 导出全部 (不含密钥); 显式包含 "secrets" 才打包当前生效密钥。
     """
     selected = _normalize_selection(categories)
     include_secrets = selected is not None and "secrets" in selected
@@ -348,9 +394,9 @@ def build_backup(*, categories: Iterable[str] | None = None) -> tuple[bytes, str
             zf.writestr(rel, payload)
             counts[category] = counts.get(category, 0) + 1
         if include_secrets:
-            secrets_path = data_dir / "user_data" / "secrets.json"
-            if secrets_path.is_file():
-                zf.writestr("user_data/secrets.json", secrets_path.read_bytes())
+            secrets_payload = _backup_secrets(data_dir)
+            if secrets_payload:
+                zf.writestr("user_data/secrets.json", json.dumps(secrets_payload, ensure_ascii=False, indent=2))
                 counts["secrets"] = counts.get("secrets", 0) + 1
         manifest = {
             "format": BACKUP_FORMAT,
@@ -441,6 +487,10 @@ def inspect_archive(data: bytes) -> dict[str, Any]:
     """解析备份并给出预览: 各类别条目数、与本地冲突数。不写任何文件。"""
     parsed = _parse_archive(data)
     cats: dict[str, dict[str, Any]] = {}
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        for entry in parsed.entries:
+            if entry.category == "preferences":
+                _validate_preferences(_read_entry(archive, entry.name))
     for entry in parsed.entries:
         c = cats.setdefault(
             entry.category,
@@ -488,9 +538,38 @@ def _validate_json_object(payload: bytes, *, what: str) -> dict:
     return doc
 
 
+def _validate_preferences(payload: bytes) -> dict:
+    document = _validate_json_object(payload, what="偏好设置 ")
+    if "stock_preview_daily_bars" in document:
+        from app.services.preferences import valid_stock_preview_daily_bars
+
+        if not valid_stock_preview_daily_bars(document["stock_preview_daily_bars"]):
+            raise ConfigBackupError("日 K 默认显示根数必须为有效的正整数")
+    if "stock_info_bar_layout" in document:
+        from app.services.stock_info_bar import StockInfoBarLayout
+
+        try:
+            StockInfoBarLayout.model_validate(document["stock_info_bar_layout"])
+        except ValueError as exc:
+            raise ConfigBackupError("个股信息条配置无效") from exc
+    if "chart_indicators" in document:
+        from app.services.chart_indicators import validate_library
+
+        try:
+            validate_library(document["chart_indicators"])
+        except ValueError as exc:
+            raise ConfigBackupError(f"图表指标配置无效：{exc}") from exc
+    return document
+
+
 def _validate_payload(entry: _Entry, payload: bytes) -> None:
     """写盘前的内容级校验 (策略的安全校验独立处理)。"""
     name = entry.target.name
+    if entry.category == "strategy_pool":
+        from app.services import strategy_pool
+
+        strategy_pool.validate_snapshot(_validate_json_object(payload, what="策略库配置 "))
+        return
     if entry.category in ("sound_packs",):
         return  # 音频二进制, 无从校验内容, 路径白名单已限死
     if entry.category == "ext_pages" and name == "bundle.js":
@@ -601,7 +680,7 @@ def apply_archive(data: bytes, *, allow_overwrite: bool = False, categories: Ite
                 _result(entry.category)["failed"].append({"file": entry.name, "error": str(e)})
                 continue
             if entry.category == "preferences":
-                prefs_payload = _validate_json_object(payload, what="偏好设置 ")
+                prefs_payload = _validate_preferences(payload)
                 continue
             if entry.category == "secrets":
                 secrets_payload = _validate_json_object(payload, what="密钥文件 ")
@@ -666,7 +745,12 @@ def apply_archive(data: bytes, *, allow_overwrite: bool = False, categories: Ite
     for entry, payload in plain_entries:
         try:
             _validate_payload(entry, payload)
-            _write_payload(entry.target, payload)
+            if entry.category == "strategy_pool":
+                from app.services import strategy_pool
+
+                strategy_pool.restore_snapshot(json.loads(payload), allow_overwrite=allow_overwrite)
+            else:
+                _write_payload(entry.target, payload)
         except (ConfigBackupError, ValueError, OSError, UnicodeDecodeError) as e:
             _result(entry.category)["failed"].append({"file": entry.name, "error": str(e)})
             continue
@@ -696,6 +780,19 @@ def apply_archive(data: bytes, *, allow_overwrite: bool = False, categories: Ite
 
         secrets_store.save(secrets_payload)
         _result("secrets")["imported"] += 1
+
+    ui_prefs = prefs_payload.get("ui_prefs") if prefs_payload else None
+    has_legacy_pool = isinstance(ui_prefs, dict) and "strategy_pool" in ui_prefs
+    legacy_only = not any(entry.category == "strategy_pool" for entry in parsed.entries)
+    has_pool_file = (_data_dir() / "user_data" / "strategy_pool.json").is_file()
+    if (has_pool_file and (results.get("strategy_pool") or has_legacy_pool)) or (legacy_only and has_legacy_pool):
+        from app.services import strategy_pool
+
+        # 完整新文件优先; 未勾选/冲突跳过新文件时也不能借旧偏好绕过保护。
+        try:
+            strategy_pool.restore_legacy_preferences(allow_overwrite=legacy_only and allow_overwrite and has_legacy_pool)
+        except (ValueError, OSError):
+            logger.warning("strategy library preference shadow could not be reconciled after import")
 
     failed_total = sum(len(r["failed"]) for r in results.values())
     logger.info(

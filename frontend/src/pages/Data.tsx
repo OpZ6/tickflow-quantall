@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Info,
   WandSparkles,
+  Upload,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { EndpointTestDialog } from '@/components/EndpointTestDialog'
@@ -32,7 +33,7 @@ import {
 } from '@/lib/useSharedQueries'
 import { useToggleRealtimeQuotes, useUpdateQuoteInterval } from '@/lib/useSharedMutations'
 import { MissingCapChip, routeCap, routeCapUsable, routeProviderDisplay, type RouteCapId } from '@/lib/capability-labels'
-import { QK } from '@/lib/queryKeys'
+import { QK, DAILY_DATA_QUERY_PREFIXES } from '@/lib/queryKeys'
 import { PageHeader } from '@/components/PageHeader'
 import { useAdjFactorSyncGate } from '@/components/AdjFactorSyncGate'
 import { formatScheduleDatePart, formatScheduleTimePart, isToday } from '@/lib/format'
@@ -46,6 +47,7 @@ import { SettingsModal } from '@/components/data/SettingsModal'
 import { ScheduleEditor } from '@/components/data/ScheduleEditor'
 import { ExtendHistoryPanel } from '@/components/data/ExtendHistoryPanel'
 import { RepairDailyPanel } from '@/components/data/RepairDailyPanel'
+import { DataIntegrityPanel } from '@/components/data/DataIntegrityPanel'
 import { EnrichedRebuildPanel } from '@/components/data/EnrichedRebuildPanel'
 import { FinancialSyncPanel } from '@/components/data/FinancialSyncPanel'
 import { MinuteSyncConfig } from '@/components/data/MinuteSyncConfig'
@@ -61,6 +63,7 @@ import { Skeleton } from '@/components/data/Skeleton'
 import { ExtDataStatCard } from '@/components/ext-data/ExtDataStatCard'
 import { CreateExtDialog } from '@/components/ext-data/CreateExtDialog'
 import { EditExtDialog } from '@/components/ext-data/EditExtDialog'
+import { ExtConfigImportDialog } from '@/components/ext-data/ExtConfigTransfer'
 
 export function Data() {
   const qc = useQueryClient()
@@ -76,8 +79,8 @@ export function Data() {
   const status = useDataStatus({
     refetchInterval: (query) => {
       const data = query.state.data
-      // 指标异步预热中 或 有活跃 job → 加快轮询到 2s
-      if (activeJobId || data?.indicators_ready === false) return 2_000
+      // 指标预热、统计后台刷新或活跃 job 期间加快轮询。
+      if (activeJobId || data?.indicators_ready === false || data?.stats_pending) return 2_000
       return 30_000
     },
   })
@@ -166,6 +169,7 @@ export function Data() {
   const [schemaTable, setSchemaTable] = useState<string | null>(null)
   const [showEndpointTest, setShowEndpointTest] = useState(false)
   const [showCreateExt, setShowCreateExt] = useState(false)
+  const [showImportExt, setShowImportExt] = useState(false)
   const [showRepair, setShowRepair] = useState(false)
   const [editingExt, setEditingExt] = useState<ExtDataConfig | null>(null)
   const [indexBatchInput, setIndexBatchInput] = useState('100')
@@ -292,16 +296,15 @@ export function Data() {
     if (job.data && (job.data.status === 'succeeded' || job.data.status === 'failed')) {
       qc.invalidateQueries({ queryKey: QK.dataStatus })
       qc.invalidateQueries({ queryKey: QK.pipelineJobs })
+      qc.invalidateQueries({ queryKey: QK.dataIntegrity })
       // 同步任务结束后 regime 覆盖范围可能变化, 一并刷新画像
       qc.invalidateQueries({ queryKey: QK.regimeCoverage })
       // 同步重写了指数日K/enriched/日K → 失效消费这些数据的查询。
       // 侧边栏指数查询挂在 Layout 常驻不重挂载 (refetchOnWindowFocus 已关),
       // 不失效会一直显示同步前的旧值; 自选相关查询在页面正打开时同理。
-      if (job.data.status === 'succeeded') {
-        qc.invalidateQueries({ queryKey: QK.indexQuotes })
-        qc.invalidateQueries({ queryKey: ['index-daily'] })
-        qc.invalidateQueries({ queryKey: ['watchlist-enriched'] })
-        qc.invalidateQueries({ queryKey: ['kline-batch'] })
+      // 失败/取消也可能已经写入部分修补数据; 弹窗关闭时同样刷新消费页。
+      if (!job.data.result?.integrity_report) {
+        qc.invalidateQueries({ predicate: q => DAILY_DATA_QUERY_PREFIXES.has(String(q.queryKey[0])) })
       }
       const t = setTimeout(() => setActiveJobId(null), 5_000)
       return () => clearTimeout(t)
@@ -327,7 +330,11 @@ export function Data() {
   const isLoading = status.isLoading
   const isRunning = job.data?.status === 'running' || job.data?.status === 'pending'
   const isStarting = startSync.isPending
-  const hasData = !!(s?.instruments?.rows || s?.daily?.rows)
+  // 契约 (与 Dashboard/回测页的 stats_pending 同族): busy 降级 (预热/同步/
+  // 修复期间) 统计为 null = 未知 → 按有数据对待, 不误禁"修复数据"; 非 busy
+  // 的 null = 表确为空 (后端空表返回 null 而非 rows:0) → 显示首装引导。
+  const statsPending = s?.stats_pending === true
+  const hasData = statsPending || !!(s?.instruments?.rows || s?.daily?.rows)
   // none 档(无 key / 无效 key) → 禁用立即同步 (同步依赖付费档的批量端点)
   const isNoKey = settings.data?.mode === 'none'
   const indexOverviewStats = s ? {
@@ -641,11 +648,11 @@ export function Data() {
             </button>
             <button
               onClick={() => setShowRepair(true)}
-              disabled={!hasData || isRunning}
+              disabled={isRunning}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-btn text-secondary hover:text-accent hover:bg-accent/8 text-xs transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none"
             >
               <WandSparkles className="h-3.5 w-3.5" />
-              修正数据
+              自检/修补
             </button>
             <div className="w-px h-4 bg-border" />
             <div className="flex items-center gap-1.5">
@@ -944,7 +951,13 @@ export function Data() {
 
         {/* 数据画像 */}
         <div>
-          <SectionTitle icon={Database}>数据画像</SectionTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <SectionTitle icon={Database}>数据画像</SectionTitle>
+            <button type="button" onClick={() => setShowImportExt(true)}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-btn border border-border px-3 text-xs text-secondary transition-colors hover:bg-elevated hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+              <Upload className="h-3.5 w-3.5" />导入扩展配置
+            </button>
+          </div>
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-stretch">
             {getCardOrder().filter(k => cardVisible[k]).map((k: CardKey) => (
               <Fragment key={k}>{renderStatCard(k)}</Fragment>
@@ -1017,6 +1030,7 @@ export function Data() {
       )}
 
       <AnimatePresence>
+        {showImportExt && <ExtConfigImportDialog onClose={() => setShowImportExt(false)} />}
         {showCreateExt && (
           <CreateExtDialog onClose={() => setShowCreateExt(false)} />
         )}
@@ -1040,13 +1054,24 @@ export function Data() {
 
       <AnimatePresence>
         {showRepair && (
-          <SettingsModal title="日 K · 修正 / 补数据" onClose={() => setShowRepair(false)}>
-            <RepairDailyPanel
+          <SettingsModal title="日K数据自检与修补" width="max-w-3xl" onClose={() => setShowRepair(false)}>
+            <DataIntegrityPanel hasCap={hasDailyBatchCap} isRunning={!!activeJobId}
+              job={job.data}
+              defaultAssets={[
+                ...(prefs.data?.pipeline_pull_a_share !== false ? ['stock' as const] : []),
+                ...(prefs.data?.pipeline_pull_etf ? ['etf' as const] : []),
+                ...(prefs.data?.pipeline_pull_index !== false ? ['index' as const] : []),
+              ]}
+              onStart={id => { setActiveJobId(id); qc.invalidateQueries({ queryKey: QK.pipelineJobs }) }} />
+            <details className="mt-5 border-t border-border pt-4">
+              <summary className="cursor-pointer text-xs text-secondary">手动指定起点修正数据</summary>
+              <div className="mt-4"><RepairDailyPanel
               hasCap={hasDailyBatchCap}
               isRunning={!!activeJobId}
               latestDate={s?.daily?.latest_date ?? null}
               onStart={() => setShowRepair(false)}
-            />
+              /></div>
+            </details>
           </SettingsModal>
         )}
       </AnimatePresence>
@@ -1207,8 +1232,8 @@ export function Data() {
 
       <AnimatePresence>
         {openSettings === 'minute' && (
-          <SettingsModal title="分钟 K · 同步设置" onClose={() => setOpenSettings(null)}>
-            <MinuteSyncConfig hasCap={hasMinuteCap} onJobStart={(jobId) => { setActiveJobId(jobId); setOpenSettings(null) }} />
+          <SettingsModal title="分钟 K · 同步设置" width="max-w-4xl" contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden" onClose={() => setOpenSettings(null)}>
+            <MinuteSyncConfig hasCap={hasMinuteCap} onClose={() => setOpenSettings(null)} onJobStart={(jobId) => { setActiveJobId(jobId); setOpenSettings(null) }} />
           </SettingsModal>
         )}
       </AnimatePresence>

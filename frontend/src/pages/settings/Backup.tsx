@@ -13,37 +13,41 @@ import type { ConfigBackupApplyResult, ConfigBackupInspect } from '@/lib/api'
 import { toast } from '@/components/Toast'
 import { Modal } from '@/components/Modal'
 import { QK } from '@/lib/queryKeys'
+import { notifyStrategyLibraryChanged, STRATEGY_LIBRARY_QUERY_KEYS } from '@/lib/strategyLibrary'
 
 /** 类别选项 — key 与后端 config_backup._CATEGORY_LABELS 一一对应 */
-const CATEGORY_OPTIONS: { key: string; label: string; desc: string; sensitive?: boolean }[] = [
+export const CATEGORY_OPTIONS: { key: string; label: string; desc: string; sensitive?: boolean }[] = [
   { key: 'strategies',         label: '策略源码',       desc: '自定义 / AI / 组合策略' },
   { key: 'strategy_overrides', label: '策略调参',       desc: '参数覆盖' },
+  { key: 'strategy_pool',      label: '策略库与策略池', desc: '自定义分组、归档状态、加入时间与池顺序' },
   { key: 'custom_signals',     label: '自定义信号',     desc: '信号库中的自定义信号' },
   { key: 'custom_factors',     label: '自定义因子',     desc: '自定义与组合因子' },
+  { key: 'position_policies',  label: '仓位策略',       desc: '自定义仓位计算配置与源码' },
   { key: 'monitor_rules',      label: '监控规则',       desc: '监控中心规则' },
   { key: 'watchlist',          label: '自选股与分组',   desc: '自选列表与分组定义' },
   { key: 'lots',               label: '批量持仓',       desc: '批量交易持仓记录' },
   { key: 'paper',              label: '模拟盘账户',     desc: '账户 / 持仓 / 成交台账' },
   { key: 'research_candidates', label: '挖掘候选',      desc: '挖掘入选清单' },
-  { key: 'data_sources',       label: '自定义数据源',   desc: '数据源连接配置' },
+  { key: 'data_sources',       label: '自定义数据源',   desc: '连接配置；API Key 需另选“密钥”' },
   { key: 'analysis_menus',     label: '分析菜单',       desc: '自定义分析入口' },
-  { key: 'ext_pages',          label: '扩展页面',       desc: '自定义页面插件 (含可执行代码)' },
+  { key: 'ext_pages',          label: '独立页面插件',   desc: '单独导入的页面产物；不含完整包的配套页面' },
   { key: 'ext_data',           label: '扩展数据集配置', desc: '不含数据本体与 Key' },
   { key: 'sound_packs',        label: '语音包',         desc: '自定义提示音' },
   { key: 'history',            label: '历史记录',       desc: '告警历史与助手会话' },
-  { key: 'preferences',        label: '偏好设置',       desc: '界面与通知偏好 (脱敏)' },
-  { key: 'secrets',            label: '密钥',           desc: 'AI Key / 数据源 Key / Webhook Secret', sensitive: true },
+  { key: 'preferences',        label: '偏好设置',       desc: '界面、通知偏好与自定义图表指标' },
+  { key: 'secrets',            label: '密钥（API Key）', desc: '当前生效的 AI / 数据源 / 扩展数据 Key 及通知密钥', sensitive: true },
   { key: 'auth',               label: '访问凭证',       desc: '访问密码与会话 — 导入后原密码在本机生效', sensitive: true },
 ]
 
 /** 导出默认勾选: 除密钥外全选 (安全默认)。 */
 const DEFAULT_EXPORT_KEYS = CATEGORY_OPTIONS.filter((c) => !c.sensitive).map((c) => c.key)
 
-const SCOPE_EXCLUDED = '行情数据、K 线缓存、回测矩阵、任务记录等可重新同步或派生的运行数据不在备份范围内'
+const SCOPE_EXCLUDED = '行情数据、K 线缓存、回测矩阵和任务记录等运行数据不在备份范围内。外部数据源安装包、后端扩展包及完整包的配套页面也不包含，请另存原始 ZIP；换机时先重新安装扩展，再恢复配置和密钥。'
 
 /** 导入成功后需要失效的查询 — 与备份类别覆盖的领域对应。 */
-const INVALIDATE_KEYS: readonly (readonly unknown[])[] = [
+export const INVALIDATE_KEYS: readonly (readonly unknown[])[] = [
   QK.preferences,
+  QK.chartIndicatorLibrary,
   QK.settings,
   QK.monitorRules,
   QK.customSignals,
@@ -54,6 +58,11 @@ const INVALIDATE_KEYS: readonly (readonly unknown[])[] = [
   QK.lots,
   QK.paperAll,
   QK.soundPacks,
+  QK.definitions,
+  QK.factorColumns,
+  QK.resourceCatalog,
+  QK.positionPolicies,
+  ...STRATEGY_LIBRARY_QUERY_KEYS,
   ['alerts'],
   // 参数化键按前缀失效 (与 Screener/FactorEditor 的既有做法一致)
   ['screener-strategies'],
@@ -76,7 +85,7 @@ function CardHeader({ icon, title, subtitle, children }: {
   children?: React.ReactNode
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2.5">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-btn bg-accent/10 text-accent">
           {icon}
@@ -124,7 +133,7 @@ function CategoryCheck({ label, desc, checked, onChange, sensitive }: {
   )
 }
 
-export function SettingsBackupPanel() {
+export function SettingsBackupPanel({ mode = 'all' }: { mode?: 'all' | 'export' | 'import' } = {}) {
   const qc = useQueryClient()
 
   // ── 导出 ──
@@ -146,8 +155,7 @@ export function SettingsBackupPanel() {
     mutationFn: (f: File) => api.configBackupInspect(f),
     onSuccess: (r) => {
       setInspect(r)
-      // 新备份默认全选 (含密钥 — 导出方已决定打包它)
-      setImportSel(new Set(r.categories.map((c) => c.key)))
+      setImportSel(new Set(r.categories.filter(c => c.key !== 'secrets' && c.key !== 'auth').map(c => c.key)))
       setApplyResult(null)
     },
     onError: () => setFile(null),  // 错误提示由 request 层统一 toast
@@ -172,6 +180,7 @@ export function SettingsBackupPanel() {
       const failed = r.categories.reduce((s, c) => s + c.failed.length, 0)
       toast(failed > 0 ? `导入完成: ${imported} 项成功, ${failed} 项失败` : `导入完成: ${imported} 项`, failed > 0 ? 'error' : 'success')
       INVALIDATE_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: k }))
+      notifyStrategyLibraryChanged()
     },
     onError: () => setConfirming(false),
   })
@@ -191,11 +200,11 @@ export function SettingsBackupPanel() {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       {/* ── 导出 ── */}
-      <div className="rounded-card border border-border bg-surface p-4">
+      {mode !== 'import' && <div className="rounded-card border border-border bg-surface p-4">
         <CardHeader
           icon={<Download className="h-4 w-4" />}
           title="导出配置备份"
-          subtitle="打包为单个 ZIP 文件, 拷贝到新设备后即可导入恢复"
+          subtitle="打包所选用户配置；外部扩展安装文件需单独保留"
         >
           <a
             href={exportSel.size > 0 ? api.configBackupExportUrl([...exportSel]) : undefined}
@@ -213,9 +222,15 @@ export function SettingsBackupPanel() {
           </a>
         </CardHeader>
 
+        {!exportSel.has('secrets') && (
+          <p role="status" className="mt-2.5 text-xs leading-relaxed text-secondary">
+            当前备份不含 API Key。换机恢复时，请勾选下方“密钥（API Key）”。
+          </p>
+        )}
+
         {/* 备份内容选择 */}
         <div className="mt-3 rounded-btn border border-border/70 bg-elevated/25 p-2.5">
-          <div className="mb-1.5 flex items-center justify-between px-0.5">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 px-0.5">
             <div className="flex items-center gap-2 text-[11px] font-medium text-secondary">
               备份内容
               <span className={`rounded-full px-1.5 py-px text-[10px] ${
@@ -224,12 +239,12 @@ export function SettingsBackupPanel() {
                 已选 {exportSel.size} / {CATEGORY_OPTIONS.length}
               </span>
             </div>
-            <div className="flex items-center gap-2 text-[11px]">
+            <div className="flex shrink-0 items-center gap-2 text-[11px]">
               <button
                 onClick={() => setExportSel(new Set(DEFAULT_EXPORT_KEYS))}
-                className="text-muted transition-colors hover:text-accent"
+                className="whitespace-nowrap text-muted transition-colors hover:text-accent"
               >
-                全选
+                全选普通配置
               </button>
               <span className="text-border">·</span>
               <button
@@ -277,10 +292,10 @@ export function SettingsBackupPanel() {
           </div>
         )}
         <div className="mt-2.5 px-0.5 text-[11px] text-muted">{SCOPE_EXCLUDED}</div>
-      </div>
+      </div>}
 
       {/* ── 导入 ── */}
-      <div className="rounded-card border border-border bg-surface p-4">
+      {mode !== 'export' && <div className="rounded-card border border-border bg-surface p-4">
         <CardHeader
           icon={<Upload className="h-4 w-4" />}
           title="导入配置备份"
@@ -523,7 +538,7 @@ export function SettingsBackupPanel() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* 二次确认 */}
       {confirming && inspect && (

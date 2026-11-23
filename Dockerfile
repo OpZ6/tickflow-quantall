@@ -76,6 +76,12 @@ RUN if [ "$USE_CN_MIRROR" = "1" ]; then \
 # Backend deps
 COPY README.md ./README.md
 COPY backend/pyproject.toml backend/uv.lock* ./
+# Keep the same ../packages relation as the source checkout.
+COPY packages/tivelo-contracts /packages/tivelo-contracts
+COPY packages/tivelo-extensions /packages/tivelo-extensions
+COPY packages/tivelo-data /packages/tivelo-data
+COPY packages/tivelo-market-cn /packages/tivelo-market-cn
+COPY packages/tivelo-backtest /packages/tivelo-backtest
 # uv 原生支持同时挂多个 index(主源 + 备用源),会自动在两源中查找,
 # 比逐个重试更稳健 —— 任一源缺包时另一源补位。
 RUN if [ "$USE_CN_MIRROR" = "1" ]; then \
@@ -90,7 +96,7 @@ RUN if [ "$USE_CN_MIRROR" = "1" ]; then \
 # Backend code
 # 注意:Docker 里 WORKDIR=/app, 而 config.py 的 _PROJECT_ROOT 是按开发布局
 # (<root>/backend/app/) 推导的, 容器内会错算到 /。这里用环境变量显式指定
-# 三个关键路径, 确保 static / tiers / data 都指向容器内正确位置。
+# 三个关键路径；TSP_DOCKER 也确保 env_file 中的相对 DATA_DIR 按 /app 解析。
 COPY backend/app ./app
 COPY tiers.yaml /app/tiers.yaml
 # 版本号运行时兜底 (issue #513): 非冻结路径 _load_version() 读
@@ -99,6 +105,7 @@ COPY frontend/package.json /app/frontend/package.json
 ENV STATIC_DIR=/app/static \
     TIERS_YAML=/app/tiers.yaml \
     DATA_DIR=/app/data \
+    TSP_DOCKER=1 \
     TICKFLOW_ENV_FILE=/app/.env
 
 # Frontend 静态产物

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { DailyResultStaleNotice } from '@/components/data/DailyDataHealthNotice'
 import { motion } from 'framer-motion'
 import { Play, BarChart3, BookmarkPlus, Clock } from 'lucide-react'
 import { api, type FactorColumn, type FactorBacktestResult, type GroupStat } from '@/lib/api'
@@ -8,6 +9,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { DatePicker } from '@/components/DatePicker'
 import { toast } from '@/components/Toast'
 import { QK } from '@/lib/queryKeys'
+import { selectableDefinitions, definitionOptionLabel } from '@/lib/definitionOptions'
 import { FactorICChart } from './charts/FactorICChart'
 import { FactorGroupNavChart } from './charts/FactorGroupNavChart'
 import { factorResultCandidate } from './researchCandidates'
@@ -104,13 +106,13 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', autoRun = f
 
   // 按 group 分类的因子
   const factorGroups = useMemo(() => {
-    const cols = columns.data?.columns ?? []
+    const cols = selectableDefinitions(columns.data?.columns ?? [], [factorName])
     const groups: Record<string, FactorColumn[]> = {}
     for (const c of cols) {
       ;(groups[c.group] ??= []).push(c)
     }
     return groups
-  }, [columns.data])
+  }, [columns.data, factorName])
 
   // 当前因子描述
   const factorDesc = useMemo(() => {
@@ -218,7 +220,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', autoRun = f
             {Object.entries(factorGroups).map(([group, cols]) => (
               <optgroup key={group} label={group}>
                 {cols.map(c => (
-                  <option key={c.id} value={c.id}>{c.label}</option>
+                  <option key={c.id} value={c.id}>{definitionOptionLabel(c)}</option>
                 ))}
               </optgroup>
             ))}
@@ -377,6 +379,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', autoRun = f
           <LoadingPanel symbolsText={symbols ? `${symbols.split(',').length} 只标的` : '全市场 · 当前区间'} />
         )}
 
+        <DailyResultStaleNotice result={result} assetType={result?.config.asset_type === 'etf' ? 'etf' : 'stock'} />
         {result && !result.error && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}

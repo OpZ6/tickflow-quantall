@@ -72,6 +72,30 @@ def _history_scan_start(target_date: date, lookback_days: int, warmup: int = 60)
 def _history_retained_days(lookback_days: int, warmup: int = 60) -> int:
     """Trading-calendar rows retained for per-symbol valid-bar calculations."""
     return max(lookback_days, 1) + max(warmup, 0)
+def _join_instruments(df: pl.DataFrame, instruments: pl.DataFrame) -> pl.DataFrame:
+    if instruments.is_empty():
+        return df
+    if "name" not in df.columns:
+        columns = [c for c in ["symbol", "name", "total_shares", "float_shares"] if c in instruments.columns]
+        return df.join(instruments.select(columns), on="symbol", how="left")
+    if "name" not in instruments.columns:
+        return df
+    missing = pl.col("name").is_null() | (pl.col("name").cast(pl.Utf8).str.strip_chars() == "")
+    if not df.select(missing.any()).item():
+        return df
+    # 实时/历史缓存可能已有 name 列却只有部分名称，按行补齐且保持缓存本身不变。
+    return (
+        df.join(
+            instruments.select("symbol", pl.col("name").alias("_instrument_name")),
+            on="symbol", how="left", maintain_order="left",
+        )
+        .with_columns(
+            pl.when(missing).then(
+                pl.col("_instrument_name").cast(pl.Utf8).str.strip_chars().replace("", None)
+            ).otherwise(pl.col("name")).alias("name")
+        )
+        .drop("_instrument_name")
+    )
 
 
 @dataclass
@@ -99,12 +123,24 @@ class ScreenerService:
         self._enriched_dirname = enriched_dirname(asset_type)
 
     @staticmethod
-    def clear_history_cache() -> None:
+    def clear_history_cache(asset_type: str | None = None) -> None:
         """清空进程级 _history_cache (TTL 缓存)。
 
         清除数据后调用, 避免内存里的旧历史窗口残留导致策略/看板仍命中旧数据。
         """
-        _history_cache.clear()
+        if asset_type is None:
+            _history_cache.clear()
+        else:
+            for key in list(_history_cache):
+                if key[0] == asset_type:
+                    _history_cache.pop(key, None)
+
+    def _assert_integrity(self, end: date, *, enriched_only=False) -> None:
+        from app.services.daily_health import assert_usable
+
+        root = getattr(getattr(self.repo, "store", None), "data_dir", None)
+        if root is not None:
+            assert_usable(root, self.asset_type, end=end, enriched_only=enriched_only)
 
     def _load_enriched_for_date(self, target_date: date) -> pl.DataFrame:
         """从 enriched parquet 读取指定日期的基础数据并即时计算完整指标+信号。
@@ -112,17 +148,11 @@ class ScreenerService:
         enriched parquet 仅存 14 列。读取后需要即时计算 ma/ema/macd/kdj/rsi/boll/momentum/signal 等列。
         对于最新日, 优先使用内存缓存 (已包含完整指标)。
         """
+        self._assert_integrity(target_date, enriched_only=True)
         # 优先使用 repo 最新日缓存
         cache, cache_date = self.repo.get_enriched_latest_asset(self.asset_type)
         if cache is not None and not cache.is_empty() and cache_date == target_date:
-            df = cache
-            # JOIN instruments
-            df_i = self.repo.get_instruments_asset(self.asset_type)
-            if not df_i.is_empty():
-                inst_cols = [c for c in ["symbol", "name", "total_shares", "float_shares"] if c in df_i.columns]
-                if "name" not in df.columns:
-                    df = df.join(df_i.select(inst_cols), on="symbol", how="left")
-            return df
+            return _join_instruments(cache, self.repo.get_instruments_asset(self.asset_type))
 
         # 尝试从 repo 级预计算历史缓存中提取目标日期 (仅 stock: 该缓存为股票专用)
         if self.asset_type == "stock":
@@ -131,13 +161,7 @@ class ScreenerService:
                 df = cached_hist.filter(pl.col("date") == target_date)
                 if not df.is_empty():
                     logger.debug("_load_enriched_for_date: repo history cache for %s", target_date)
-                    # JOIN instruments
-                    df_i = self.repo.get_instruments_asset(self.asset_type)
-                    if not df_i.is_empty():
-                        inst_cols = [c for c in ["symbol", "name", "total_shares", "float_shares"] if c in df_i.columns]
-                        if "name" not in df.columns:
-                            df = df.join(df_i.select(inst_cols), on="symbol", how="left")
-                    return df
+                    return _join_instruments(df, self.repo.get_instruments_asset(self.asset_type))
 
         # 历史日期: 从 parquet 读取 14 列, 即时计算指标 (慢路径)
         enriched_dir = self.repo.store.data_dir / self._enriched_dirname
@@ -276,13 +300,7 @@ class ScreenerService:
         # 只保留目标日期
         df_result = df_full.filter(pl.col("date") == target_date)
 
-        # JOIN instruments (name, total_shares, float_shares)
-        if not instruments.is_empty():
-            inst_cols = [c for c in ["symbol", "name", "total_shares", "float_shares"] if c in instruments.columns]
-            if "name" not in df_result.columns:
-                df_result = df_result.join(instruments.select(inst_cols), on="symbol", how="left")
-
-        return df_result
+        return _join_instruments(df_result, instruments)
 
     def _load_enriched_history(self, target_date: date, lookback_days: int) -> pl.DataFrame:
         """读取目标日期之前的基础行情数据, 供历史窗口策略使用。
@@ -290,6 +308,7 @@ class ScreenerService:
         优先从 repo 内存缓存获取 (启动时已预计算), 命中时 0ms。
         缓存 miss 时走 scan_parquet + compute_indicators 慢路径。
         """
+        self._assert_integrity(target_date, enriched_only=True)
         # 优先级 1: repo 级预计算缓存 (启动时 _refresh_enriched 已计算完整历史; 仅 stock)
         t0 = time.perf_counter()
         if self.asset_type == "stock":
@@ -409,6 +428,7 @@ class ScreenerService:
         先通过 Polars 即时计算完整指标, 再用 DuckDB 做 SQL WHERE 过滤。
         kline_enriched DuckDB 视图只有 14 列, 不能直接用于指标过滤。
         """
+        self._assert_integrity(as_of)
         t0 = time.perf_counter()
 
         if not conditions:
@@ -480,6 +500,7 @@ class ScreenerService:
         """按调用方要求装配标准策略数据上下文，不解释策略公式。"""
         from app.strategy.engine import StrategyDataContext
 
+        self._assert_integrity(as_of)
         if current is None:
             current = self._load_enriched_for_date(as_of)
         if timeframe == "1m":

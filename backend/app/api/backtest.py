@@ -6,22 +6,26 @@ import json
 import logging
 import re
 import threading
+import weakref
 from dataclasses import asdict
 from datetime import date, timedelta
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+from tivelo_contracts.base import Digest
 
+from app.api.auth import COOKIE_NAME
+from app.backtest.entry_inputs import EntryFilters
+from app.backtest.price_basis import BacktestPriceBasis
 from app.config import settings
 from app.enriched_generation import EnrichedGenerationUnavailableError
 from app.market_time import cn_today
-from app.services.backtest import (
-    BacktestConfig,
-    BacktestService,
-    VectorbtUnavailable,
-)
+from app.services.backtest import BacktestConfig, BacktestService
+from app.services.daily_health import DailyIntegrityError
+from app.services.engine_jobs.daily_snapshot import DailySnapshotRef
+from app.services.workload import admit_request, workload
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +118,8 @@ def run(req: BacktestRequest, request: Request):
         matching=req.matching,
         asset_type=req.asset_type,
     )
-    try:
-        result = svc.run(cfg)
-    except VectorbtUnavailable as e:
-        raise HTTPException(status_code=503, detail=str(e)) from e
-    return asdict(result)
+    admit_request(request, COOKIE_NAME)
+    return _stamp_daily_data(svc.run(cfg))
 
 
 # ================================================================
@@ -130,10 +131,15 @@ class FactorColumnsResponse(BaseModel):
 
 
 @router.get("/factor/columns")
-def factor_columns():
+def factor_columns(request: Request):
     """返回可用的因子列列表 (含运行期注册的自定义/复合因子)。"""
+    from app.factors import store
     from app.factors.registry import factor_columns_view
-    return {"columns": factor_columns_view()}
+
+    archived = {item["id"]: item.get("archived") is True
+                for item in store.load_all(request.app.state.repo.store.data_dir)}
+    return {"columns": [{**item, "archived": archived.get(item["id"], False)}
+                        for item in factor_columns_view()]}
 
 
 class FactorBacktestRequest(BaseModel):
@@ -153,10 +159,11 @@ class FactorBacktestRequest(BaseModel):
 def factor_run(req: FactorBacktestRequest, request: Request):
     """因子回测 — IC/IR 分析 + 分层回测。"""
     from app.backtest.factor import FactorBacktestService, FactorConfig
-    from app.factors.registry import factor_columns_view
+    from app.factors.registry import missing_factor_ids
 
-    if req.factor_name not in {item["id"] for item in factor_columns_view()}:
-        raise HTTPException(status_code=400, detail=f"不支持的因子: {req.factor_name}")
+    invalid = missing_factor_ids([req.factor_name])
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"不支持的因子: {', '.join(invalid)}")
 
     engine = _get_engine(request)
     svc = FactorBacktestService(engine)
@@ -184,14 +191,17 @@ def factor_run(req: FactorBacktestRequest, request: Request):
         asset_type=req.asset_type,
     )
     try:
+        admit_request(request, COOKIE_NAME)
         result = svc.run(cfg)
+    except DailyIntegrityError:
+        raise
     except EnrichedGenerationUnavailableError as exc:
         # 盘中实时刷新换新 generation, 重试后仍撞上发布 (api/mining.py 同款映射)
         raise HTTPException(
             status_code=400,
             detail="行情数据正在更新(盘中实时刷新), 请稍后重试",
         ) from exc
-    return asdict(result)
+    return _stamp_daily_data(result)
 
 
 class FactorBatchRequest(BaseModel):
@@ -214,11 +224,10 @@ def factor_batch(req: FactorBatchRequest, request: Request):
         FactorBacktestService,
         FactorBatchConfig,
     )
-    from app.factors.registry import factor_columns_view
+    from app.factors.registry import missing_factor_ids
 
     factor_names = list(dict.fromkeys(req.factor_names))
-    allowed = {item["id"] for item in factor_columns_view()}
-    invalid = [name for name in factor_names if name not in allowed]
+    invalid = missing_factor_ids(factor_names)
     if invalid:
         raise HTTPException(status_code=400, detail=f"不支持的因子: {', '.join(invalid)}")
 
@@ -234,6 +243,7 @@ def factor_batch(req: FactorBatchRequest, request: Request):
 
     svc = FactorBacktestService(_get_engine(request))
     try:
+        admit_request(request, COOKIE_NAME)
         result = svc.run_batch(FactorBatchConfig(
             factor_names=factor_names,
             symbols=symbols,
@@ -246,12 +256,14 @@ def factor_batch(req: FactorBatchRequest, request: Request):
             slippage_bps=req.slippage_bps,
             asset_type=req.asset_type,
         ))
+    except DailyIntegrityError:
+        raise
     except EnrichedGenerationUnavailableError as exc:
         raise HTTPException(
             status_code=400,
             detail="行情数据正在更新(盘中实时刷新), 请稍后重试",
         ) from exc
-    return asdict(result)
+    return _stamp_daily_data(result)
 
 
 # ================================================================
@@ -364,6 +376,10 @@ class StrategyBacktestRequest(BaseModel):
     asset_type: str = "stock"
     minute_fill: bool = False
     regime_filter: dict | None = None
+    price_basis: BacktestPriceBasis = "qfq"
+    snapshot: DailySnapshotRef | None = None
+    entry_filters: EntryFilters | None = None
+    filter_data_version: Digest | None = None
 
 
 _RESEARCH_PATH_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -464,30 +480,41 @@ def _guard_minute_strategy_backtest(
         return
     if s is None or s.execution_backend != "minute_filter":
         return
-    if asset_type != "stock":
-        raise HTTPException(400, detail="分钟策略回测当前仅支持 A 股 (stock)")
-    earliest = request.app.state.repo.earliest_minute_date()
-    if earliest is None or start < earliest:
-        have = f"最早到 {earliest}, " if earliest else ""
-        raise HTTPException(
-            400,
-            detail=(
-                f"本地分钟K{have}无法覆盖回测起始日 {start}。"
-                "请先用「扩展分钟K历史」拉取更多数据, 或缩小回测区间"
-            ),
+    from app.backtest.strategy import validate_minute_backtest_coverage
+
+    try:
+        validate_minute_backtest_coverage(
+            s, request.app.state.repo, start, asset_type,
         )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+
+def _guard_snapshot_request(snapshot, start, end, asset_type, price_basis, minute_fill, exit_fill):
+    if snapshot is None:
+        return
+    if not start or not end:
+        raise HTTPException(400, "快照回测需要明确的开始和结束日期")
+    if asset_type != "stock" or price_basis != "qfq":
+        raise HTTPException(400, "此快照支持 A 股前复权日线回测")
+    if minute_fill or exit_fill == "signal_next_minute":
+        raise HTTPException(400, "日线快照缺少分钟K，请选择日线成交方式")
 
 
 @router.post("/strategy/run")
 def strategy_run(req: StrategyBacktestRequest, request: Request):
     """策略回测 — 复用 StrategyDef 体系做全周期回测。"""
     from app.backtest.strategy import StrategyBacktestConfig
-    from app.backtest.worker import make_worker_task, run_worker_task
+    from app.backtest.worker import BacktestWorkerError, make_worker_task, run_worker_task
 
+    _guard_snapshot_request(
+        req.snapshot, req.start, req.end, req.asset_type, req.price_basis, req.minute_fill, req.exit_fill,
+    )
     end = req.end or cn_today()
     start = _resolve_start(req, end, FACTOR_DEFAULT_DAYS)
     _guard_server_backtest_range(start, end)
-    _guard_minute_strategy_backtest(request, req.strategy_id, start, req.asset_type)
+    if req.snapshot is None:
+        _guard_minute_strategy_backtest(request, req.strategy_id, start, req.asset_type)
 
     if req.position_sizing == "policy":
         from app.backtest import position_policies
@@ -524,67 +551,189 @@ def strategy_run(req: StrategyBacktestRequest, request: Request):
         asset_type=req.asset_type,
         minute_fill=req.minute_fill,
         regime_filter=req.regime_filter,
+        price_basis=req.price_basis,
+        snapshot=req.snapshot,
+        entry_filters=req.entry_filters,
+        filter_data_version=req.filter_data_version,
     )
     task = make_worker_task("backtest", settings.data_dir, cfg)
     from app.services.heavy_job_limiter import shared_heavy_job_limiter
 
+    admit_request(request, COOKIE_NAME)
     with shared_heavy_job_limiter.slot("normal"):
-        return run_worker_task(task)
+        workload.record("backtest.task", "executed")
+        try:
+            result = run_worker_task(task)
+        except BacktestWorkerError as exc:
+            if exc.code == "SNAPSHOT_UNAVAILABLE":
+                raise HTTPException(409, str(exc)) from exc
+            raise
+        return _stamp_daily_data(result, {} if req.snapshot else None)
 
 
 # ── SSE 流式回测 (实时进度 + 可取消 + 支持重连) ───────────────────
 
-import time
 import hashlib
+import time
+
+
+def _daily_data_revisions() -> dict[str, str]:
+    from app.services.daily_health import ASSET_LABELS, revision
+
+    return {asset: revision(settings.data_dir, asset) for asset in ASSET_LABELS}
+
+
+def _stamp_daily_data(result, revisions=None) -> dict:
+    payload = result if isinstance(result, dict) else asdict(result)
+    return {**payload, "daily_data_revisions": revisions if revisions is not None else _daily_data_revisions()}
+
+
+@router.get("/strategy/runs/{run_id}/evidence")
+def strategy_run_evidence(run_id: str):
+    from app.backtest.evidence import load_evidence
+
+    try:
+        return load_evidence(settings.data_dir, run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, detail="该回测没有版本记录，旧结果可重新回测生成") from exc
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(503, detail="暂时无法读取回测版本记录") from exc
 
 
 class _BacktestJob:
     """单个回测任务的状态, 存模块级供重连使用。"""
-    __slots__ = ("key", "cancel_event", "progress", "result", "error", "done", "finish_ts")
+    __slots__ = ("key", "cancel_event", "progress", "result", "error", "done", "finish_ts",
+                 "daily_data_revisions", "started", "expiry_timer", "__weakref__")
 
-    def __init__(self, key: str):
+    def __init__(self, key: str, *, pinned_daily: bool = False):
         self.key = key
         self.cancel_event = threading.Event()
         self.progress: list[dict] = []   # 进度历史 (新连接可回放)
         self.result = None               # 完成后的结果
         self.error: str | None = None
         self.done = False
+        self.started = False
+        self.expiry_timer = None
         self.finish_ts: float = 0.0
+        self.daily_data_revisions = {} if pinned_daily else _daily_data_revisions()
 
 
 # 模块级任务表: key -> _BacktestJob
 _running_jobs: dict[str, _BacktestJob] = {}
 _jobs_lock = threading.Lock()
 _JOB_TTL = 300  # 完成后保留 5 分钟
+_MAX_ACTIVE_JOBS = 32
+_MAX_FINISHED_JOBS = 16
+
+
+def _drop_job(key: str) -> None:
+    """Caller holds _jobs_lock; evict timers along with their cache entries."""
+    job = _running_jobs.pop(key, None)
+    if job is not None and job.expiry_timer is not None:
+        job.expiry_timer.cancel()
 
 
 def _cleanup_stale_jobs():
     """清理过期任务 (完成超过 TTL 的)。全程持 _jobs_lock: 迭代+pop 与其他访问互斥。"""
     now = time.time()
+    revisions = _daily_data_revisions()
     with _jobs_lock:
-        stale = [k for k, j in _running_jobs.items() if j.done and now - j.finish_ts > _JOB_TTL]
+        stale = [k for k, j in _running_jobs.items() if j.done and (
+            now - j.finish_ts > _JOB_TTL
+            or (j.daily_data_revisions and j.daily_data_revisions != revisions)
+        )]
         for k in stale:
-            _running_jobs.pop(k, None)
+            _drop_job(k)
+        completed = sorted((j.finish_ts, k) for k, j in _running_jobs.items() if j.done)
+        for _, key in completed[:-_MAX_FINISHED_JOBS]:
+            _drop_job(key)
+
+
+def _acquire_or_evict_job(
+    job_key: str, *, force: bool, on_submit=None, pinned_daily: bool = False,
+) -> tuple[_BacktestJob, bool]:
+    """获取或创建任务, 返回 (job, is_new)。
+
+    force 强制重跑: 同 key 已完成任务 (5 分钟 TTL 内) 直接丢弃重建, 不回放旧
+    结果/旧报错 — force 任务自己的结果同样进任务缓存, 不丢弃的话 TTL 内重复
+    强制重跑只是重放上一次。运行中的任务仍允许订阅 (重连/取消按同 key 对齐,
+    语义不变); 非 force 连接保持既有缓存复用行为。
+    """
+    with _jobs_lock:
+        job = _running_jobs.get(job_key)
+        if job is not None and force and job.done:
+            job = None
+        if job is None:
+            if sum(not current.done for current in _running_jobs.values()) >= _MAX_ACTIVE_JOBS:
+                from app.services.shared_work import WorkBusyError
+
+                workload.record("backtest.task", "rejected")
+                raise WorkBusyError("回测与优化等待队列已满，请稍后重试")
+            if on_submit is not None:
+                on_submit()
+            _drop_job(job_key)
+            job = _BacktestJob(job_key, pinned_daily=pinned_daily)
+            _running_jobs[job_key] = job
+            return job, True
+        workload.record("backtest.task", "cache_hit" if job.done else "shared")
+        return job, False
+
+
+def _claim_job_start(job: _BacktestJob) -> bool:
+    """A disconnected creator must not prevent another subscriber starting the job."""
+    with _jobs_lock:
+        if job.done or job.started:
+            return False
+        job.started = True
+        return True
+
+
+def _discard_unstarted_job(job: _BacktestJob) -> None:
+    with _jobs_lock:
+        if not job.started and _running_jobs.get(job.key) is job:
+            _running_jobs.pop(job.key, None)
+
+
+def _start_job_thread(job: _BacktestJob, target) -> None:
+    try:
+        threading.Thread(target=target, daemon=True).start()
+    except RuntimeError:
+        _finish_job(job, error="无法启动计算任务，请稍后重试")
 
 
 def _finish_job(job: _BacktestJob, *, result=None, error: str | None = None) -> None:
     """Publish the terminal state and proactively drop the reconnect entry after TTL."""
     finished_at = time.time()
+    if result is not None and job.daily_data_revisions and job.daily_data_revisions != _daily_data_revisions():
+        result = None
+        error = "日K数据已修正, 请重新运行计算"
     with _jobs_lock:
         job.result = result
         job.error = error
         job.done = True
         job.finish_ts = finished_at
+    workload.record("backtest.task", "failed" if error else "completed")
+
+    reference, key = weakref.ref(job), job.key
 
     def _expire() -> None:
         with _jobs_lock:
-            current = _running_jobs.get(job.key)
-            if current is job and current.done and current.finish_ts == finished_at:
-                _running_jobs.pop(job.key, None)
+            current = _running_jobs.get(key)
+            if current is not None and current is reference() and current.done and current.finish_ts == finished_at:
+                _running_jobs.pop(key, None)
 
     timer = threading.Timer(_JOB_TTL, _expire)
     timer.daemon = True
+    with _jobs_lock:
+        if _running_jobs.get(key) is not job:
+            return
+        if job.expiry_timer is not None:
+            job.expiry_timer.cancel()
+        job.expiry_timer = timer
     timer.start()
+    _cleanup_stale_jobs()
 
 
 def _make_job_key(
@@ -601,8 +750,19 @@ def _make_job_key(
     position_policy: str | None = None,
     position_policy_params: str | None = None,
     force: bool = False,
+    price_basis: BacktestPriceBasis = "qfq",
+    snapshot: str | None = None,
+    entry_filters: str | None = None,
+    filter_data_version: str | None = None,
+    request_id: str | None = None,
 ) -> str:
     raw = f"{strategy_id}|{symbols}|{start}|{end}|{matching}|{entry_fill}|{exit_fill}|{fees_pct}|{slippage_bps}|{max_positions}|{max_exposure_pct}|{initial_capital}|{position_sizing}|{params}|{overrides}|{mode}|{holding_days}|{commission_pct}|{stamp_tax_pct}|{asset_type}|{minute_fill}|{regime_filter}|{position_policy}|{position_policy_params}|force={force}"
+    if price_basis != "qfq":
+        raw += f"|price_basis={price_basis}"
+    if snapshot:
+        raw += f"|snapshot={snapshot}"
+    if entry_filters or filter_data_version or request_id:
+        raw += "|" + json.dumps([entry_filters, filter_data_version, request_id])
     return hashlib.md5(raw.encode()).hexdigest()[:12]
 
 
@@ -634,14 +794,20 @@ async def strategy_stream(
     minute_fill: bool = False,
     regime_filter: str | None = None,
     force: bool = False,
+    price_basis: BacktestPriceBasis = "qfq",
+    snapshot: str | None = None,
+    entry_filters: str | None = None,
+    filter_data_version: Digest | None = None,
+    request_id: Annotated[str | None, Query(pattern=r"^[a-zA-Z0-9_-]{1,80}$")] = None,
 ):
     """SSE 流式策略回测: 实时推送进度, 完成后推送结果, 支持重连 (刷新/切页后恢复)。
 
     - 相同参数的任务只启动一次, 多次连接订阅同一个任务
     - 断开连接不会取消任务 (除非显式调用 cancel)
     - 结果保留 5 分钟供重连
-    - force=1: 掺入 job_key 使其不命中已完成任务的缓存, 必然重算
-      (重连/取消仍按 qs 重算同一 key, 语义不变)
+    - force=1: 掺入 job_key 使其不命中普通 (非 force) 参数的结果缓存;
+      同 key 已完成的 force 任务也会被丢弃重建 — 5 分钟内重复强制重跑
+      都真正重算 (重连/取消仍按 qs 重算同一 key, 语义不变)
 
     事件类型:
       - progress: {day, total, date, equity}
@@ -652,6 +818,15 @@ async def strategy_stream(
     from app.backtest.worker import make_worker_task, run_worker_task
 
     try:
+        snapshot_ref = DailySnapshotRef.model_validate_json(snapshot) if snapshot else None
+    except ValidationError as exc:
+        raise HTTPException(400, "回测快照标识无效") from exc
+    try:
+        extension_filters = EntryFilters.model_validate_json(entry_filters) if entry_filters else None
+    except ValidationError as exc:
+        raise HTTPException(400, "扩展回测过滤条件无效") from exc
+    _guard_snapshot_request(snapshot_ref, start, end, asset_type, price_basis, minute_fill, exit_fill)
+    try:
         end_date = date.fromisoformat(end) if end else cn_today()
         start_date = date.fromisoformat(start) if start else None
     except ValueError as e:
@@ -660,7 +835,8 @@ async def strategy_stream(
         # 空 start = 全部历史: 用本地最早日K日期, 查不到再回退到默认窗口
         earliest = request.app.state.repo.earliest_daily_date()
         start_date = earliest or (end_date - timedelta(days=FACTOR_DEFAULT_DAYS))
-    _guard_minute_strategy_backtest(request, strategy_id, start_date, asset_type)
+    if snapshot_ref is None:
+        _guard_minute_strategy_backtest(request, strategy_id, start_date, asset_type)
 
     # 服务端范围保护
     guard_violated = False
@@ -682,19 +858,25 @@ async def strategy_stream(
         position_policy=position_policy,
         position_policy_params=position_policy_params,
         force=force,
+        price_basis=price_basis,
+        snapshot=snapshot,
+        entry_filters=entry_filters,
+        filter_data_version=filter_data_version,
+        request_id=request_id,
     )
 
     _cleanup_stale_jobs()
 
-    # 获取或创建任务
-    with _jobs_lock:
-        job = _running_jobs.get(job_key)
-        if job is None:
-            job = _BacktestJob(job_key)
-            _running_jobs[job_key] = job
-            is_new = True
-        else:
-            is_new = False
+    for raw in (params, overrides, regime_filter, position_policy_params):
+        if raw:
+            try:
+                json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(400, "回测参数必须是有效 JSON") from exc
+    job, _ = (_BacktestJob(job_key), False) if guard_violated else _acquire_or_evict_job(
+        job_key, force=force and request_id is None, on_submit=lambda: admit_request(request, COOKIE_NAME),
+        pinned_daily=snapshot_ref is not None,
+    )
 
     async def event_generator():
         # 范围保护: 直接报错
@@ -707,6 +889,7 @@ async def strategy_stream(
             capset = request.app.state.capabilities
             from app.tickflow.capabilities import Cap
             if not capset.has(Cap.KLINE_MINUTE_BATCH):
+                _discard_unstarted_job(job)
                 yield f"event: error\ndata: {json.dumps({'message': '分钟K精确回测需要 Pro+ 权限 (kline.minute.batch)'}, ensure_ascii=False)}\n\n"
                 return
             # 检查本地分钟K历史是否覆盖回测区间
@@ -715,11 +898,12 @@ async def strategy_stream(
             if earliest_minute is not None and start_date < earliest_minute:
                 msg = (f"本地分钟K历史最早到 {earliest_minute}, 无法覆盖回测起始日 {start_date}。"
                        f"请先用「扩展分钟K历史」功能拉取更多数据, 或缩小回测区间。")
+                _discard_unstarted_job(job)
                 yield f"event: error\ndata: {json.dumps({'message': msg}, ensure_ascii=False)}\n\n"
                 return
 
         # 如果是新任务, 启动回测线程
-        if is_new and not job.done:
+        if _claim_job_start(job):
             cfg = StrategyBacktestConfig(
                 strategy_id=strategy_id,
                 symbols=[s.strip() for s in symbols.split(",") if s.strip()] if symbols else None,
@@ -747,6 +931,10 @@ async def strategy_stream(
                 asset_type=asset_type,
                 minute_fill=minute_fill,
                 regime_filter=json.loads(regime_filter) if regime_filter else None,
+                price_basis=price_basis,
+                snapshot=snapshot_ref,
+                entry_filters=extension_filters,
+                filter_data_version=filter_data_version,
             )
 
             def _run_backtest():
@@ -761,6 +949,7 @@ async def strategy_stream(
                         cancel_event=job.cancel_event,
                     ):
                         task = make_worker_task("backtest", settings.data_dir, cfg)
+                        workload.record("backtest.task", "executed")
                         result = run_worker_task(
                             task,
                             lambda d: job.progress.append(d),
@@ -773,7 +962,7 @@ async def strategy_stream(
                     _finish_job(job, error=str(e))
 
             # 启动后台线程 (不阻塞事件循环)
-            threading.Thread(target=_run_backtest, daemon=True).start()
+            _start_job_thread(job, _run_backtest)
 
         # 订阅进度: 用读指针读 job.progress 列表 (多连接互不干扰)
         cursor = 0
@@ -793,7 +982,7 @@ async def strategy_stream(
                         elif error:
                             yield f"event: error\ndata: {json.dumps({'message': error}, ensure_ascii=False)}\n\n"
                         else:
-                            payload = r if isinstance(r, dict) else asdict(r)
+                            payload = _stamp_daily_data(r, job.daily_data_revisions)
                             from app.services.strategy_evidence import persist_backtest_fill_events
 
                             persist_backtest_fill_events(settings.data_dir, payload)
@@ -835,8 +1024,9 @@ async def strategy_cancel(request: Request):
         v = _get(key)
         return float(v) if v else None
     def _get_opt_bool(key: str) -> bool:
-        # 与 FastAPI 查询参数 bool 解析口径一致 ("1"/"true" 为真, 其余为假)
-        return _get(key).lower() in ("1", "true")
+        # 与 FastAPI/pydantic v2 查询参数 bool 解析口径一致 (真值别名集合),
+        # 否则 stream/cancel 两端算出不同 job_key, 停止按钮失效
+        return _get(key).lower() in ("1", "true", "on", "yes", "t", "y")
     job_key = _make_job_key(
         _get("strategy_id"),
         _get("symbols") or None,
@@ -862,7 +1052,12 @@ async def strategy_cancel(request: Request):
         regime_filter=_get("regime_filter") or None,
         position_policy=_get("position_policy") or None,
         position_policy_params=_get("position_policy_params") or None,
-        force=_get("force") == "1",
+        force=_get_opt_bool("force"),
+        price_basis=_get("price_basis", "qfq"),
+        snapshot=_get("snapshot") or None,
+        entry_filters=_get("entry_filters") or None,
+        filter_data_version=_get("filter_data_version") or None,
+        request_id=_get("request_id") or None,
     )
     # 持锁读任务表: 与 _cleanup_stale_jobs 的 pop、stream 的写入互斥
     with _jobs_lock:
@@ -1087,14 +1282,9 @@ async def optimize_robust_stream(
     ) + f"|k={int(k_segments)}|mt={int(min_trades_total)}|s2={int(stage2_top_n)}"
 
     _cleanup_stale_jobs()
-    with _jobs_lock:
-        job = _running_jobs.get(job_key)
-        if job is None:
-            job = _BacktestJob(job_key)
-            _running_jobs[job_key] = job
-            is_new = True
-        else:
-            is_new = False
+    job, _ = (_BacktestJob(job_key), False) if guard_violated else _acquire_or_evict_job(
+        job_key, force=False, on_submit=lambda: admit_request(request, COOKIE_NAME),
+    )
 
     async def event_generator():
         yield f"event: job\ndata: {json.dumps({'key': job_key}, ensure_ascii=False)}\n\n"
@@ -1103,7 +1293,7 @@ async def optimize_robust_stream(
             yield f"event: error\ndata: {json.dumps({'message': BACKTEST_SERVER_GUARD_MESSAGE}, ensure_ascii=False)}\n\n"
             return
 
-        if is_new and not job.done:
+        if _claim_job_start(job):
             try:
                 grid = json.loads(param_grid)
             except (json.JSONDecodeError, TypeError):
@@ -1153,6 +1343,7 @@ async def optimize_robust_stream(
                             cancel_event=job.cancel_event,
                         ):
                             task = make_worker_task("robust_optimize", settings.data_dir, rcfg)
+                            workload.record("backtest.task", "executed")
                             result = run_worker_task(
                                 task,
                                 lambda d: job.progress.append(d),
@@ -1164,7 +1355,7 @@ async def optimize_robust_stream(
                     except Exception as e:
                         _finish_job(job, error=str(e))
 
-                threading.Thread(target=_run_robust, daemon=True).start()
+                _start_job_thread(job, _run_robust)
 
         cursor = 0
         tick = 0
@@ -1176,7 +1367,7 @@ async def optimize_robust_stream(
                     elif job.cancel_event.is_set():
                         yield f"event: error\ndata: {json.dumps({'message': '优化已取消'}, ensure_ascii=False)}\n\n"
                     elif job.result is not None:
-                        yield f"event: done\ndata: {json.dumps(_json_safe(job.result), ensure_ascii=False, default=str)}\n\n"
+                        yield f"event: done\ndata: {json.dumps(_json_safe(_stamp_daily_data(job.result, job.daily_data_revisions)), ensure_ascii=False, default=str)}\n\n"
                     return
                 tick += 1
                 if tick % 4 == 0 and await request.is_disconnected():
@@ -1297,14 +1488,9 @@ async def walkforward_stream(
     )
 
     _cleanup_stale_jobs()
-    with _jobs_lock:
-        job = _running_jobs.get(job_key)
-        if job is None:
-            job = _BacktestJob(job_key)
-            _running_jobs[job_key] = job
-            is_new = True
-        else:
-            is_new = False
+    job, _ = (_BacktestJob(job_key), False) if wf_guard_violated else _acquire_or_evict_job(
+        job_key, force=False, on_submit=lambda: admit_request(request, COOKIE_NAME),
+    )
 
     async def event_generator():
         yield f"event: job\ndata: {json.dumps({'key': job_key}, ensure_ascii=False)}\n\n"
@@ -1314,7 +1500,7 @@ async def walkforward_stream(
             yield f"event: error\ndata: {json.dumps({'message': msg}, ensure_ascii=False)}\n\n"
             return
 
-        if is_new and not job.done:
+        if _claim_job_start(job):
             try:
                 grid = json.loads(param_grid)
             except (json.JSONDecodeError, TypeError):
@@ -1367,6 +1553,7 @@ async def walkforward_stream(
                             cancel_event=job.cancel_event,
                         ):
                             task = make_worker_task("walkforward", settings.data_dir, wf_cfg)
+                            workload.record("backtest.task", "executed")
                             result = run_worker_task(
                                 task,
                                 lambda d: job.progress.append(d),
@@ -1378,7 +1565,7 @@ async def walkforward_stream(
                     except Exception as e:
                         _finish_job(job, error=str(e))
 
-                threading.Thread(target=_run_wf, daemon=True).start()
+                _start_job_thread(job, _run_wf)
 
         cursor = 0
         tick = 0
@@ -1390,7 +1577,7 @@ async def walkforward_stream(
                     elif job.cancel_event.is_set():
                         yield f"event: error\ndata: {json.dumps({'message': 'walk-forward 已取消'}, ensure_ascii=False)}\n\n"
                     elif job.result is not None:
-                        yield f"event: done\ndata: {json.dumps(_json_safe(job.result), ensure_ascii=False, default=str)}\n\n"
+                        yield f"event: done\ndata: {json.dumps(_json_safe(_stamp_daily_data(job.result, job.daily_data_revisions)), ensure_ascii=False, default=str)}\n\n"
                     return
                 tick += 1
                 if tick % 4 == 0 and await request.is_disconnected():

@@ -184,6 +184,87 @@ def test_raw_gives_up_on_persistent_none(monkeypatch):
         c.his_dats("600519.SH", date(2026, 1, 10), 5)
 
 
+@pytest.mark.parametrize("encoded", [False, True])
+def test_explicit_auth_error_is_preserved_without_retry_or_key_leak(monkeypatch, encoded):
+    import json
+
+    secret = "TDX-private-test-key"
+    response = {"ErrorId": -1, "Error": f"TokenKey Insufficient Or Key Error {secret}"}
+    sleeps = []
+    c = _client_with_raw(monkeypatch, [json.dumps(response) if encoded else response], sleeps)
+    c.api_key = secret
+    clean = c._tqs._clean
+    c._tqs._clean = lambda raw: None if raw else clean(raw)  # SDK 会把错误抹成 None。
+    with pytest.raises(tc.TdxQuantAuthError, match=r"凭据|额度") as caught:
+        c.his_dats("600519.SH", date(2026, 1, 10), 1, period="1m")
+    assert secret not in str(caught.value)
+    assert sleeps == []
+
+
+def test_server_error_retains_reason_and_can_retry(monkeypatch):
+    sleeps = []
+    c = _client_with_raw(monkeypatch, [{"error": "server busy", "error_code": 503}, {"Date": ["20260101"]}], sleeps)
+    assert c.his_dats("600519.SH", date(2026, 1, 10), 1)["Date"] == ["20260101"]
+    assert sleeps
+
+
+def test_historical_minute_failure_stops_remaining_symbols():
+    fake = _FakeClient()
+    fake.his_default = tc.TdxQuantError("网络连接失败")
+    with pytest.raises(tc.TdxQuantError, match="连接失败"):
+        _provider(fake).get_minute(["600519.SH", "000001.SZ"], None, datetime(2026, 10, 29, 15))
+    assert len(fake.his_calls) == 1
+
+
+@pytest.mark.parametrize("dataset", ["minute", "full_minute"])
+def test_minute_dataset_probe_reports_explicit_auth_failure(dataset):
+    fake = _FakeClient()
+    fake.his_default = tc.TdxQuantAuthError("凭据或额度不可用")
+    result = _provider(fake).test_dataset(dataset, ["600519.SH"])
+    assert result["rows"] == 0
+    assert "凭据或额度" in result["error"]
+    assert len(fake.his_calls) == 1
+
+
+@pytest.mark.parametrize("zone", [ZoneInfo("Asia/Shanghai"), ZoneInfo("UTC")])
+def test_minute_aware_request_window_matches_beijing_wallclock(zone):
+    fake = _FakeClient()
+    fake.his = {"600519.SH": _minute_raw([
+        ("20261009", 93100, 10.0, 10.1, 9.9, 10.0, 1000.0, 100.0),
+    ])}
+    start = datetime(2026, 10, 9, 9, 30, tzinfo=_BEIJING).astimezone(zone)
+    end = datetime(2026, 10, 9, 9, 32, tzinfo=_BEIJING).astimezone(zone)
+    frame = _provider(fake).get_minute(["600519.SH"], start, end)
+    assert frame.height == 1
+    assert frame["datetime"][0] == datetime(2026, 10, 9, 9, 31)
+    assert fake.his_calls[0]["end"] == datetime(2026, 10, 9, 9, 32)
+
+
+def test_tdx_minute_window_flows_through_service_to_parquet(monkeypatch, tmp_path):
+    import polars as pl
+
+    from app.services import kline_sync
+
+    fake = _FakeClient()
+    fake.his = {"600519.SH": {"Value": _minute_raw([
+        ("20261009", 93100, 10.0, 10.1, 9.9, 10.0, 1000.0, 100.0),
+    ])}}
+    provider = _provider(fake)
+    monkeypatch.setattr(kline_sync, "_selected_minute_provider_name", lambda: "tdxquant")
+    monkeypatch.setattr(kline_sync, "_resolve_minute_provider", lambda name: (provider, False, None))
+    monkeypatch.setattr(kline_sync, "get_client", lambda: pytest.fail("不得跨源请求"))
+    kline_sync.sync_minute_batch(
+        ["600519.SH"], datetime(2026, 10, 9, 9, 30, tzinfo=_BEIJING),
+        datetime(2026, 10, 9, 9, 32, tzinfo=_BEIJING),
+        on_segment=lambda frame: kline_sync._write_minute_partition(frame, tmp_path),
+    )
+    stored = pl.read_parquet(tmp_path / "date=2026-10-09/part.parquet")
+    assert stored.height == 1
+    assert stored["datetime"][0] == datetime(2026, 10, 9, 9, 31)
+    assert stored["volume"][0] == 10.0
+    assert stored["amount"][0] == 1000000.0
+
+
 def test_snapshot_batch_retries_transient_failure(monkeypatch):
     sleeps: list[float] = []
     c = _client_with_raw(monkeypatch, [], sleeps)
@@ -329,6 +410,21 @@ def test_realtime_indices_none_on_failure():
     fake = _FakeClient()
     fake.snapshot_results = [tc.TdxQuantError("snapshot_batch(1 只): down")]
     assert _provider(fake).get_realtime_indices(["000001.SH"]) is None
+
+
+def test_realtime_symbols_can_supplement_etf_without_rounding_price():
+    fake = _FakeClient()
+    fake.snapshot_results = [{"159558.SZ": _snap_row(Now="0.827", LastClose="0.826")}]
+    records = _provider(fake).get_realtime_symbols(["159558.SZ"], asset_type="etf")
+    assert fake.snapshot_calls == [["159558.SZ"]]
+    assert records[0]["last_price"] == .827
+    assert records[0]["symbol"] == "159558.SZ"
+
+
+def test_realtime_symbols_failure_does_not_fake_empty_success():
+    fake = _FakeClient()
+    fake.snapshot_results = [tc.TdxQuantError("unavailable")]
+    assert _provider(fake).get_realtime_symbols(["159558.SZ"], asset_type="etf") is None
 
 
 # ---------------------------------------------------------------- provider: daily
@@ -515,6 +611,18 @@ def _minute_raw(rows: list[tuple[str, object, float, float, float, float, float,
     }
 
 
+def test_minute_stream_groups_small_frames_without_changing_request_policy(monkeypatch):
+    fake = _FakeClient()
+    fake.his_default = _minute_raw([("20261106", "093100", 10, 11, 9, 10.5, 10000, 10.5)])
+    monkeypatch.setattr(tp, "_MINUTE_INTERVAL_S", 0)
+    source = _provider(fake)
+    stream = source.iter_minute([f"{i:06d}.SZ" for i in range(120)], None, datetime(2026, 11, 6, 15))
+    first = next(stream)
+    assert first.height == 50 and len(fake.his_calls) == 50
+    assert [part.height for part in stream] == [50, 20]
+    assert len(fake.his_calls) == 120
+
+
 def test_minute_units_and_wallclock_datetime():
     fake = _FakeClient()
     fake.his = {"600519.SH": _minute_raw([
@@ -556,11 +664,11 @@ def test_minute_freq_and_asset_guards():
     assert fake.his_calls == []  # 未发起取数
 
 
-def test_minute_transport_error_soft():
+def test_minute_transport_error_is_not_successful_empty_result():
     fake = _FakeClient()
     fake.his = {"600519.SH": tc.TdxQuantError("boom")}
-    df = _provider(fake).get_minute(["600519.SH"], None, datetime.now())
-    assert df.is_empty()  # 软失败不阻断
+    with pytest.raises(tc.TdxQuantError, match="boom"):
+        _provider(fake).get_minute(["600519.SH"], None, datetime.now())
 
 
 # ---------------------------------------------------------------- minute: #509 返回形态容错
@@ -734,9 +842,10 @@ def test_loader_manifest_parses_and_entry_importable():
     assert manifest["name"] == "tdxquant"
     assert manifest["display_name"] == "TdxQuant (TdxAiData)"
     assert set(manifest["datasets"]) == {"realtime", "depth5", "daily", "adj_factor", "minute", "full_minute"}
-    # 计费标识与 Key/积分管理页 (设置页积分角标 + 商城入口的契约来源)
+    # 计费标识与注册入口由插件清单声明。
     assert manifest["billing"] == "points"
-    assert manifest["key_manage_url"].startswith("https://vip.tdx.com.cn/")
+    assert "key_manage_url" not in manifest
+    assert manifest["register_url"].startswith("https://agent.tdx.com.cn/tdx-mcp/register.html?")
     # 计费提示与使用要点 (设置页警示框 + 详情列表的契约来源)
     assert "积分" in manifest["billing_note"] and "间隔" in manifest["billing_note"]
     assert len(manifest["usage_notes"]) >= 4
