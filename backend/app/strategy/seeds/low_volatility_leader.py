@@ -1,4 +1,5 @@
 """低波动趋势延续 — 正动量、低波动且位于 MA20 上方。"""
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 import numpy as np
 
@@ -89,6 +90,7 @@ class LowVolatilityLeaderMatrixStrategy:
             entry_signal_code=np.where(entry, 0, -1).astype(np.int16),
             exit_signal_code=np.where(exit_, 0, -1).astype(np.int16),
             entry_signal_ids=tuple(ENTRY_SIGNALS),
+# <<< LOCAL-EXT
             exit_signal_ids=("signal_ma20_breakdown",),
         )
 

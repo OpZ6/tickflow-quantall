@@ -227,9 +227,9 @@ class FuyaoClient(FuyaoHistoryClient):
             params["tag_codes"] = tag_codes
         return self._get("/api/a-share/special-data/anomaly-analysis-list", params)
 
+    # <<< LOCAL-EXT
     # ---- 市场 dump ----
     def dump_download_url(self, dump_kind: str) -> dict:
-    # <<< LOCAL-EXT
         """获取 dump 预签名下载信息(约 300s 有效)。
 
         dump_kind: adjustment-factors | daily-k-10d | daily-k。

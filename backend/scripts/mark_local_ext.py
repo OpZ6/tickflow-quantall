@@ -1,18 +1,29 @@
-"""LOCAL-EXT 标记工具（降债步骤 1）
+"""LOCAL-EXT 标记工具
 
-目标: 让"下次上游同步"一眼看出哪些代码是本地的。
+给"本地改过、上游也有"的文件标出本地增强区块，让下次上游同步一眼看到
+"哪些块是我的"，不用通读全文件。
 
-策略:
-- Python: 在本地新增区块前后插入 `# >>> LOCAL-EXT` / `# <<< LOCAL-EXT`。
-  每插一块都 ast.parse 校验, 并先用 tokenize 排除落在字符串/文档字符串里的区间
-  (那样插进去会污染字符串内容却仍然能解析通过)。
-- TS/TSX: **不插内联标记**。JSX 属性区里 `//` 不是注释, 会直接破坏结构;
-  改为全部记进 docs/local-ext-map.md 清单。
+设计要点（踩过的坑都在这里）
+------------------------------
+1. **自洽基线**：不依赖 `git diff` 的行号（HEAD 里已含标记，行号会错位），
+   改为「先剥离标记取出干净文本 → 用 difflib 与 `git show <base>:<file>` 比较」。
+   因此可以反复运行，结果幂等。
+2. **只有 Python 插内联标记**：JSX 属性区里的 `//` 不是注释，插进去会破坏结构
+   （已验证会插到 `aria-label` 与 `onClick` 之间）。TS/TSX 只进清单。
+3. **只保证"插入点"安全**：标记插在区块首行之前、末行之后，只要这两处不在
+   多行字符串里就安全；区块内部夹文档字符串没问题。
+4. 每块插完都 `ast.parse` 校验，不合法就跳过（宁缺勿错）。
+
+用法
+----
+    python backend/scripts/mark_local_ext.py            # 写入
+    LOCAL_EXT_GAP=25 python backend/scripts/... --dry    # 试算区块数
 """
 
 from __future__ import annotations
 
 import ast
+import difflib
 import io
 import os
 import re
@@ -22,16 +33,22 @@ import tokenize
 from pathlib import Path
 
 BASE = os.environ.get("LOCAL_EXT_BASE", "v0.4.1")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+GAP = int(os.environ.get("LOCAL_EXT_GAP", "40"))
+TARGET_PREFIXES = ("backend/app/", "packages/", "frontend/src/")
+
 PY_BEGIN = "# >>> LOCAL-EXT 本地增强, 上游同步时保护"
 PY_END = "# <<< LOCAL-EXT"
-GAP = int(os.environ.get("LOCAL_EXT_GAP", "10"))
-TARGET_PREFIXES = ("backend/app/", "packages/", "frontend/src/")
 
 
 def git(*args: str) -> str:
     return subprocess.run(
         ["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace"
     ).stdout
+
+
+def base_text(path: str) -> str:
+    return git("show", f"{BASE}:{path}")
 
 
 def modified_code_files() -> list[str]:
@@ -48,15 +65,21 @@ def modified_code_files() -> list[str]:
     return out
 
 
-def added_ranges(path: str) -> list[tuple[int, int]]:
+def strip_markers(text: str) -> str:
+    return "".join(
+        ln
+        for ln in text.splitlines(keepends=True)
+        if not ln.lstrip().startswith((PY_BEGIN, PY_END))
+    )
+
+
+def added_ranges(clean: str, base: str) -> list[tuple[int, int]]:
+    """干净文本里相对上游"新增/替换"的行区间（1-based，闭区间）。"""
+    matcher = difflib.SequenceMatcher(None, base.splitlines(), clean.splitlines(), autojunk=False)
     ranges = []
-    for line in git("diff", "-U0", BASE, "HEAD", "--", path).splitlines():
-        m = re.match(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", line)
-        if not m:
-            continue
-        start, count = int(m.group(1)), int(m.group(2) or 1)
-        if count > 0:
-            ranges.append((start, start + count - 1))
+    for tag, _i1, _i2, j1, j2 in matcher.get_opcodes():
+        if tag in ("insert", "replace") and j2 > j1:
+            ranges.append((j1 + 1, j2))
     return ranges
 
 
@@ -73,35 +96,18 @@ def merge_ranges(ranges: list[tuple[int, int]], gap: int = GAP) -> list[tuple[in
 
 
 def string_lines(source: str) -> set[int]:
-    """字符串字面量覆盖的所有行号（含三引号块）。"""
     covered: set[int] = set()
     extra = getattr(tokenize, "FSTRING_MIDDLE", -1)
     try:
         for tok in tokenize.generate_tokens(io.StringIO(source).readline):
             if tok.type == tokenize.STRING or tok.type == extra:
-                for ln in range(tok.start[0], tok.end[0] + 1):
-                    covered.add(ln)
+                covered.update(range(tok.start[0], tok.end[0] + 1))
     except (tokenize.TokenError, IndentationError, SyntaxError):
         pass
     return covered
 
 
-def read(path: Path) -> tuple[str, bool]:
-    raw = path.read_bytes()
-    bom = raw.startswith(b"\xef\xbb\xbf")
-    return raw.decode("utf-8-sig"), bom
-
-
-def write(path: Path, text: str, bom: bool) -> None:
-    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + text.encode("utf-8"))
-
-
 def safe_span(start: int, end: int, covered: set[int]) -> tuple[int, int] | None:
-    """把 [start,end] 收缩到"插入点不落在多行字符串里"的范围。
-
-    标记是插在区块**首行之前 / 末行之后**的，只要这两个位置不在字符串内部就安全；
-    区块内部夹着文档字符串没关系（注释不会进到字符串里去）。
-    """
     first = next((ln for ln in range(start, end + 1) if ln not in covered), None)
     last = next((ln for ln in range(end, start - 1, -1) if ln not in covered), None)
     if first is None or last is None or last < first:
@@ -110,28 +116,27 @@ def safe_span(start: int, end: int, covered: set[int]) -> tuple[int, int] | None
 
 
 def mark_python(path: Path) -> tuple[int, list[str]]:
-    ranges = merge_ranges(added_ranges(str(path)))
-    if not ranges:
+    raw = path.read_bytes()
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    clean = strip_markers(raw.decode("utf-8-sig"))
+    base = base_text(path.as_posix())
+    if not base:
         return 0, []
-    text, bom = read(path)
-    original = text
-    skipped: list[str] = []
-    marked = 0
 
+    lines = clean.splitlines(keepends=True)
+    covered = string_lines(clean)
+    skipped: list[str] = []
     targets: list[tuple[int, int]] = []
-    covered = string_lines(text)
-    for start, end in ranges:
+    for start, end in merge_ranges(added_ranges(clean, base)):
         span = safe_span(start, end, covered)
         if span:
             targets.append(span)
         else:
             skipped.append(f"{path}:{start}-{end} (整段落在字符串内)")
 
+    marked = 0
     for start, end in reversed(sorted(targets)):
-        lines = text.splitlines(keepends=True)
         if end > len(lines):
-            continue
-        if PY_BEGIN in "".join(lines[start - 1:end]):
             continue
         indent = re.match(r"[ \t]*", lines[start - 1]).group(0)
         candidate = (
@@ -146,45 +151,47 @@ def mark_python(path: Path) -> tuple[int, list[str]]:
         except SyntaxError:
             skipped.append(f"{path}:{start}-{end} (插入后语法不合法)")
             continue
-        text = "".join(candidate)
+        lines = candidate
         marked += 1
-    if marked:
-        write(path, text, bom)
-    elif text != original:
-        write(path, original, bom)
+
+    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + "".join(lines).encode("utf-8"))
     return marked, skipped
 
 
 def main() -> int:
+    os.chdir(REPO_ROOT)
     dry = "--dry" in sys.argv
-    files = modified_code_files()
-    py_hits = 0
-    py_files = 0
-    skipped_all: list[str] = []
     manifest: list[tuple[str, int, int]] = []
+    hits = files = 0
+    skipped_all: list[str] = []
 
-    for f in files:
-        p = Path(f)
-        if not p.exists():
+    for name in modified_code_files():
+        path = Path(name)
+        if not path.exists():
             continue
-        ranges = merge_ranges(added_ranges(f))
-        manifest.append((f, len(ranges), sum(b - a + 1 for a, b in ranges)))
-        if p.suffix != ".py":
+        raw = path.read_bytes().decode("utf-8-sig")
+        base = base_text(name)
+        if not base:
+            continue
+        ranges = merge_ranges(added_ranges(strip_markers(raw), base))
+        manifest.append((name, len(ranges), sum(b - a + 1 for a, b in ranges)))
+        if path.suffix != ".py":
             continue
         if dry:
-            n = len(ranges)
-        else:
-            n, skipped = mark_python(p)
-            skipped_all.extend(skipped)
+            hits += len(ranges)
+            files += 1
+            continue
+        n, skipped = mark_python(path)
+        skipped_all.extend(skipped)
         if n:
-            py_hits += n
-            py_files += 1
+            hits += n
+            files += 1
 
     if not dry:
         out = [
             "# 本地增强分布图（LOCAL-EXT 清单）",
             "",
-            f"> 基线：上游 `{BASE}`。由 `git diff {BASE} HEAD` 自动生成，",
+            f"> 基线：上游 `{BASE}`。由 `backend/scripts/mark_local_ext.py` 生成，",
             "> 用于下次同步时快速定位「这个文件里哪些区块是我们的」。",
             ">",
             "> Python 文件已插入 `# >>> LOCAL-EXT` / `# <<< LOCAL-EXT` 内联标记；",
@@ -201,11 +208,11 @@ def main() -> int:
         Path("docs/local-ext-map.md").write_text("\n".join(out), encoding="utf-8")
         print("已写入 docs/local-ext-map.md")
 
-    print(f"\n{'[dry] ' if dry else ''}Python 标记: {py_files} 文件 / {py_hits} 区块")
+    print(f"\n{'[dry] ' if dry else ''}Python 标记: {files} 文件 / {hits} 区块")
     if skipped_all:
         print(f"跳过 {len(skipped_all)} 处:")
-        for s in skipped_all[:20]:
-            print("   ", s)
+        for item in skipped_all[:10]:
+            print("   ", item)
     return 0
 
 

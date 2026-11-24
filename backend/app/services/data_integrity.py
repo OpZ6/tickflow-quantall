@@ -23,9 +23,9 @@ import json
 import logging
 # >>> LOCAL-EXT 本地增强, 上游同步时保护
 from functools import lru_cache
+# <<< LOCAL-EXT
 import threading
 import time
-# <<< LOCAL-EXT
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -330,10 +330,10 @@ def _candidate_days(today: date, lookback_days: int) -> list[date]:
     return sorted(days)
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 @lru_cache(maxsize=2)
 def _trading_days_for_integrity(today: date) -> frozenset[date] | None:
     """Use the configured exchange calendar when available; unknown keeps weekday fallback."""
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     try:
         from app.data_providers import custom
 
@@ -344,6 +344,7 @@ def _trading_days_for_integrity(today: date) -> frozenset[date] | None:
     except Exception as exc:  # noqa: BLE001
         logger.debug("integrity trading calendar unavailable: %s", exc)
     return None
+# <<< LOCAL-EXT
 # ---------------------------------------------------------------------------
 # 交易日历 (fuyao) — 「工作日近似」在节假日误报 missing; 修复任务对休市日
 # 永远拉不到数据, realtime_gate 因此循环 409 (2026-09-25 中秋实证)。
@@ -354,7 +355,6 @@ _CAL_TTL_S = 1800.0  # 成功/失败结论统一 30 分钟复取 (日历变化�
 _CAL_LOCK = threading.Lock()
 _CAL: tuple[float, set[date] | None] = (0.0, None)  # (取数时刻, 交易日集合)
 
-    # <<< LOCAL-EXT
 
 def _trading_calendar() -> set[date] | None:
     """A 股交易日集合 (fuyao 近一年); 从未取到过 → None (调用方回退周几近似)。
@@ -435,6 +435,7 @@ def scan_recent_integrity(
             candidates = weekdays & known_days
         candidates |= {d for d in known_days if window_start <= d < today}
         candidates |= unconfirmed
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     # 本地: 配置了 fuyao 数据源时用其权威交易日历收窄候选日, 避免节假日被当成
     # 缺口反复重拉。只在生产数据目录启用 — 隔离仓库和测试保留工作日近似, 不依赖
@@ -445,8 +446,8 @@ def scan_recent_integrity(
         exchange_days = _trading_days_for_integrity(today)
         if exchange_days:
             candidates = {day for day in candidates if day in exchange_days}
+# <<< LOCAL-EXT
 
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     total = max(1, len(selected) * len(candidates))
     done = 0
     for table in selected:
@@ -459,7 +460,6 @@ def scan_recent_integrity(
             if on_progress:
                 on_progress(done, total)
             continue
-    # <<< LOCAL-EXT
 
         earliest = min(existing)
         for day in sorted(candidates):

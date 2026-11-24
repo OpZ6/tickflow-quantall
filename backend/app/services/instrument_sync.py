@@ -87,11 +87,11 @@ def sync_instruments(data_dir: Path) -> int:
         except Exception as exc:
             logger.warning("instrument client unavailable, keep local dimension: %s", exc)
             return 0
+        # <<< LOCAL-EXT
         # 免费接口的限价来自历史行情，不能盖上同步日期当作当日权威价。
         current_limits = tf_client.current_mode() == "api_key"
         all_rows = []
         for ex in _EXCHANGES:
-        # <<< LOCAL-EXT
             try:
                 items = tf.exchanges.get_instruments(ex, instrument_type="stock")
                 if items:

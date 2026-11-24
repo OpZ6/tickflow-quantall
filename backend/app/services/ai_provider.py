@@ -1365,11 +1365,11 @@ def _resolve_macos_codex_command() -> str | None:
         if os.name != "nt" and not os.access(candidate, os.X_OK):
             continue
         return str(candidate)
+            # <<< LOCAL-EXT
     return None
 
 
 def _resolve_windows_desktop_codex() -> str | None:
-            # <<< LOCAL-EXT
     """Prefer the Codex Desktop bundled CLI over an older npm shim."""
     local_appdata = os.environ.get("LOCALAPPDATA")
     if not local_appdata:

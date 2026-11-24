@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 _SIGNAL_CN: dict[str, str] = {
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 内置信号
+    # <<< LOCAL-EXT
     "signal_ma_golden_5_20": "MA5上穿MA20", "signal_ma_dead_5_20": "MA5下穿MA20",
     "signal_ma_golden_20_60": "MA20上穿MA60", "signal_macd_golden": "MACD金叉",
     "signal_macd_dead": "MACD死叉", "signal_ma20_breakout": "突破MA20",
@@ -50,7 +51,6 @@ _SIGNAL_CN: dict[str, str] = {
     "signal_limit_down_recovery": "跌停翘板", "signal_broken_limit_up": "炸板",
     **INTRADAY_SIGNAL_LABELS,
     # 涨跌停判定价 (运行时列)
-    # <<< LOCAL-EXT
     "limit_up_price": "涨停判定价", "limit_down_price": "跌停判定价",
     # 行情字段
     "close": "收盘价", "open": "开盘价", "high": "最高价", "low": "最低价",
@@ -672,13 +672,13 @@ class MonitorRuleEngine:
                 if getattr(strategy, "execution_backend", "polars_expr") != "matrix_native":
                     continue
                 if getattr(strategy, "meta", {}).get("realtime_supported") is False:
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     continue
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
+                    # <<< LOCAL-EXT
                 overrides = {}
                 if self._data_dir:
                     overrides = _strategy_config.load_override(self._data_dir, sid)
                 matrix_rules.append(rule)
-                # <<< LOCAL-EXT
                 overrides_map[sid] = overrides
                 params_map[sid] = dict(overrides.get("params") or {})
         if matrix_rules:
@@ -1251,15 +1251,15 @@ class MonitorRuleEngine:
         if s is None:
             return []
         if getattr(s, "meta", {}).get("realtime_supported") is False:
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return []
+            # <<< LOCAL-EXT
 
         # 运行策略: 复用当前 enriched DataFrame 跳过数据加载
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         overrides = {}
         if self._data_dir:
             try:
                 overrides = _strategy_config.load_override(self._data_dir, sid)
-        # <<< LOCAL-EXT
             except Exception:
                 pass
 
@@ -1432,13 +1432,13 @@ class MonitorRuleEngine:
             "pool_entry": set() if prev_pool is None else current_pool - prev_pool,
             "pool_exit": set() if prev_pool is None else prev_pool - current_pool,
         }
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if self._data_dir is not None and any(changes.values()):
             try:
                 from app.services.strategy_evidence import persist_realtime_trigger_events
 
                 persist_realtime_trigger_events(
                     data_dir=self._data_dir,
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     strategy_id=sid,
                     strategy_version=str(s.meta.get("version") or "1.0.0"),
                     params=dict(overrides.get("params") or {}),
@@ -1448,6 +1448,7 @@ class MonitorRuleEngine:
                     rows=row_map,
                 )
             except Exception as exc:
+        # <<< LOCAL-EXT
                 logger.warning("策略 %s 实时触发事件持久化失败: %s", sid, exc)
 
         results: list[tuple[str, str, Any, Any, Any, list[str]]] = []
@@ -1459,7 +1460,6 @@ class MonitorRuleEngine:
             "sell_signal": {
                 str(hit["symbol"]): list(hit.get("signals") or [])
                 for hit in result.exit_signal_hits
-                    # <<< LOCAL-EXT
             },
         }
         action_labels = {

@@ -6,9 +6,9 @@ import json
 import logging
 # >>> LOCAL-EXT 本地增强, 上游同步时保护
 import re
+# <<< LOCAL-EXT
 import threading
 import weakref
-# <<< LOCAL-EXT
 from dataclasses import asdict
 from datetime import date, timedelta
 from typing import Annotated, Literal
@@ -382,11 +382,11 @@ class StrategyBacktestRequest(BaseModel):
     snapshot: DailySnapshotRef | None = None
     entry_filters: EntryFilters | None = None
     filter_data_version: Digest | None = None
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 _RESEARCH_PATH_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 def _read_research_json(path):
     try:
@@ -468,6 +468,7 @@ def strategy_research_run(research_key: str, run_id: str):
     if not isinstance(result, dict):
         raise HTTPException(status_code=404, detail="研究回测结果不可用")
     return result
+# <<< LOCAL-EXT
 
 
 def _guard_minute_strategy_backtest(
@@ -512,7 +513,6 @@ def strategy_run(req: StrategyBacktestRequest, request: Request):
 
     _guard_snapshot_request(
         req.snapshot, req.start, req.end, req.asset_type, req.price_basis, req.minute_fill, req.exit_fill,
-# <<< LOCAL-EXT
     )
     end = req.end or cn_today()
     start = _resolve_start(req, end, FACTOR_DEFAULT_DAYS)
@@ -987,9 +987,11 @@ async def strategy_stream(
                             yield f"event: error\ndata: {json.dumps({'message': error}, ensure_ascii=False)}\n\n"
                         else:
                             payload = _stamp_daily_data(r, job.daily_data_revisions)
+                            # >>> LOCAL-EXT 本地增强, 上游同步时保护
                             from app.services.strategy_evidence import persist_backtest_fill_events
 
                             persist_backtest_fill_events(settings.data_dir, payload)
+                            # <<< LOCAL-EXT
                             yield f"event: done\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
                     return
 
@@ -1029,11 +1031,9 @@ async def strategy_cancel(request: Request):
         return float(v) if v else None
     def _get_opt_bool(key: str) -> bool:
         # 与 FastAPI/pydantic v2 查询参数 bool 解析口径一致 (真值别名集合),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 否则 stream/cancel 两端算出不同 job_key, 停止按钮失效
         return _get(key).lower() in ("1", "true", "on", "yes", "t", "y")
     job_key = _make_job_key(
-        # <<< LOCAL-EXT
         _get("strategy_id"),
         _get("symbols") or None,
         _get("start") or None,

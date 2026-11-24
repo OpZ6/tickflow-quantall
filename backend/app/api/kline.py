@@ -1584,7 +1584,9 @@ async def sync_minute_single(request: Request, body: dict):
     if requested_days is not None:
         if isinstance(requested_days, bool) or not isinstance(requested_days, int):
             raise HTTPException(status_code=400, detail="days 必须是整数")
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if requested_days < 1 or requested_days > 1095:
+        # <<< LOCAL-EXT
             raise HTTPException(status_code=400, detail="days 必须在 1 到 1095 之间")
 
     repo = request.app.state.repo
@@ -1652,12 +1654,10 @@ async def minute_migrate(request: Request):
     返回 { partitions, converted_symbols, skipped_no_daily, failed, marked }。
     """
     import asyncio
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     repo = request.app.state.repo
     loop = asyncio.get_event_loop()
     stats = await loop.run_in_executor(
-# <<< LOCAL-EXT
         _long_task_executor,
         lambda: minute_adjust.migrate_minute_to_raw(
             repo.store.data_dir, write_lock=repo._write_lock,

@@ -335,11 +335,11 @@ def _aggregate_daily(df: pl.DataFrame, index_pct_map: dict | None = None) -> pl.
         schema_overrides={"promo_rate": pl.Float64},
         infer_schema_length=None,
     )
+    # <<< LOCAL-EXT
 
 
 # 全量回填分批参数(控制内存峰值) —— 实际值从用户偏好读取(preferences.get_regime_*),
 # 这里的常量仅作 fallback(偏好读取失败时)和文档说明:
-    # <<< LOCAL-EXT
 # - batch_days: 每批目标交易日数。越小内存越省、批次越多越慢; ma20 需 20 交易日。
 # - warmup_days: 每批前缀预热天数(日历日), 必须 > ma20 的 20 交易日(≈28 日历日)。
 _REGIME_BATCH_DAYS_DEFAULT = 60

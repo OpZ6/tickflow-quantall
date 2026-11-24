@@ -891,6 +891,7 @@ def compute_limit_signals(
     if "limit_down" in df.columns:
         effective_limit_down = pl.when(
             authoritative_date
+    # <<< LOCAL-EXT
             & pl.col("limit_down").is_not_null()
             & (pl.col("limit_down") > 0)
             & (pl.col("limit_down") < _SENTINEL)
@@ -903,7 +904,6 @@ def compute_limit_signals(
     no_price_limit = pl.lit(False)
     if "limit_up" in df.columns:
         no_price_limit = (
-    # <<< LOCAL-EXT
             authoritative_date
             & pl.col("limit_up").is_not_null()
             & (pl.col("limit_up") >= _SENTINEL)
@@ -1108,6 +1108,7 @@ def compute_enriched(
     return df
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _restore_raw_daily_history(enriched: pl.DataFrame) -> pl.DataFrame:
     """Restore raw OHLC before recomputing an already-enriched history window.
 
@@ -1118,7 +1119,6 @@ def _restore_raw_daily_history(enriched: pl.DataFrame) -> pl.DataFrame:
     is recovered from the row's close adjustment ratio.
     """
     required = {"open", "high", "low", "close", "raw_close", "raw_high", "raw_low"}
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if enriched.is_empty() or not required.issubset(enriched.columns):
         return enriched
     ratio = (
@@ -1134,6 +1134,7 @@ def _restore_raw_daily_history(enriched: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+# <<< LOCAL-EXT
 def _select_storage_cols(df: pl.DataFrame) -> pl.DataFrame:
     """写入 parquet 前裁剪到存储列 (14 列)。"""
     cols = [c for c in ENRICHED_STORAGE_COLS if c in df.columns]
@@ -1150,7 +1151,6 @@ def _select_storage_cols(df: pl.DataFrame) -> pl.DataFrame:
 # ================================================================
 
 DEVIATION_WINDOWS: tuple[int, ...] = (3, 10, 30)
-    # <<< LOCAL-EXT
 
 # 各板块基准指数 (偏离值规则的「对应指数」, 按交易所官方口径): 优先首选, 缺失时回退
 # - 沪主板:   上证A指 → 上证指数 (两者差异可忽略)
@@ -1178,6 +1178,7 @@ _benchmark_cache: dict[str, tuple[float, pl.DataFrame | None]] = {}
 _BENCHMARK_CACHE_TTL = 600.0
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def load_benchmark_momentum(
     data_dir: Path,
     *,
@@ -1194,7 +1195,6 @@ def load_benchmark_momentum(
     import time as _time
 
     now = _time.monotonic()
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     key = str(Path(data_dir).resolve())
     cached = _benchmark_cache.get(key)
     if (
@@ -1202,6 +1202,7 @@ def load_benchmark_momentum(
         and cached is not None
         and now - cached[0] < _BENCHMARK_CACHE_TTL
     ):
+# <<< LOCAL-EXT
         return cached[1]
 
     frame: pl.DataFrame | None = None
@@ -1222,7 +1223,6 @@ def load_benchmark_momentum(
             .select(["symbol", "date", "close"])
             .sort(["symbol", "date"])
             .collect()
-    # <<< LOCAL-EXT
         )
         if not df_idx.is_empty():
             available = set(df_idx["symbol"].to_list())
@@ -1290,10 +1290,12 @@ def attach_deviation_columns(df: pl.DataFrame, data_dir: Path) -> pl.DataFrame:
     """
     if df.is_empty():
         return df
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # This cold path rebuilds the repository's latest enriched frame. Index
     # daily data may have been published moments after an earlier warmup cached
     # the previous trading day, so the normal 10-minute cache is unsafe here.
     bench = load_benchmark_momentum(data_dir, force_refresh=True)
+    # <<< LOCAL-EXT
     dev_cols = [f"deviate_{n}d" for n in DEVIATION_WINDOWS]
     if bench is None or bench.is_empty():
         return df.with_columns([pl.lit(None, dtype=pl.Float64).alias(c) for c in dev_cols])
@@ -1311,13 +1313,11 @@ def attach_deviation_columns(df: pl.DataFrame, data_dir: Path) -> pl.DataFrame:
         .join(bench, left_on=["_bench_ex", "date"], right_on=["bench_key", "date"], how="left")
         .with_columns([
             (pl.col(f"momentum_{n}d") - pl.col(f"bench_mom{n}d")).alias(f"deviate_{n}d")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             for n in DEVIATION_WINDOWS
         ])
         .drop(["_bench_ex", "bench_close", *[f"bench_mom{n}d" for n in DEVIATION_WINDOWS]])
     )
     return out
-            # <<< LOCAL-EXT
 
 
 def _bench_rt_pct_of(index_quotes: pl.DataFrame | None, candidates: list[str]) -> float:
@@ -1432,6 +1432,7 @@ def attach_deviation_columns_today(
     )
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def repair_today_deviation_columns(
     df: pl.DataFrame,
     data_dir: Path,
@@ -1454,9 +1455,9 @@ def repair_today_deviation_columns(
         today_rows[col].null_count() < today_rows.height for col in dev_cols
     ):
         return df
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     repaired = attach_deviation_columns_today(today_rows, data_dir)
     return pl.concat(
+# <<< LOCAL-EXT
         [df.filter(pl.col("date") != cn_today()), repaired],
         how="diagonal_relaxed",
     ).sort(["symbol", "date"])
@@ -1490,7 +1491,6 @@ def _total_ram_bytes() -> int | None:
         return None
 
 
-    # <<< LOCAL-EXT
 def _adaptive_sym_batch(default_batch: int, rows_per_symbol: int) -> int:
     """小内存机器按单批目标行数收缩批次; 大内存机器保持原值 (#208)。"""
     if (_total_ram_bytes() or 0) >= _RAM_LARGE_BYTES:
@@ -1786,7 +1786,9 @@ def _run_pipeline_impl(data_dir: Path | None = None,
                 hist_cols = [c for c in ["symbol", "date", "open", "high", "low", "close",
                                          "volume", "amount", "raw_close", "raw_high", "raw_low"]
                              if c in hist_df.columns]
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 raw_history = _restore_raw_daily_history(hist_df.select(hist_cols))
+                # <<< LOCAL-EXT
                 raw_full = pl.concat([raw_history, raw_new], how="diagonal_relaxed")
             else:
                 raw_full = raw_new
@@ -1816,12 +1818,10 @@ def _run_pipeline_impl(data_dir: Path | None = None,
                     dt = date_df["date"][0]
                     ds = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
                     out = enriched_base / f"date={ds}" / "part.parquet"
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     out.parent.mkdir(parents=True, exist_ok=True)
                     date_df = _select_storage_cols(date_df).sort(["symbol"])
                     publication.write_parquet(date_df, out)
                     written += date_df.height
-                    # <<< LOCAL-EXT
                 t_write_new = _t.perf_counter()
                 logger.info("增量写入: %.2fs, %d 行", t_write_new - t_new, written)
             del raw_new, hist_df, raw_full, enriched_new
@@ -2124,9 +2124,7 @@ def compute_enriched_single(daily_for_symbol: pl.DataFrame) -> pl.DataFrame:
 # ================================================================
 # 盘中增量计算: 只算今天 5500 行 (不复算历史)
 # ================================================================
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
-# <<< LOCAL-EXT
 def compute_enriched_today(
     live_agg: pl.DataFrame,
     prev_enriched: pl.DataFrame,
@@ -2456,6 +2454,7 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
 
     df = df.join(inst_subset, on="symbol", how="left", suffix="_inst")
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 换手率: API 有效值直接用; 缺列或空值时从 float_shares 计算。
     if "float_shares" in df.columns and "volume" in df.columns:
         calculated_turnover = (
@@ -2488,7 +2487,6 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
     trade_date = pl.col("date") if "date" in df.columns else pl.lit(cn_today())
     limit_pct = polars_price_limit_pct(
         pl.col("symbol"),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         trade_date,
         is_risk_warning,
     ).alias("_limit_pct")
@@ -2542,6 +2540,7 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
                 ~valid_prev_raw
                 | ((pl.col("limit_down") - limit_down_price).abs() <= 0.005)
             )
+    # <<< LOCAL-EXT
         )
         effective_limit_down = pl.when(
             has_authoritative_down
@@ -2591,7 +2590,6 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
           .then(pl.col("raw_close") <= pl.col("limit_down_price"))
           .otherwise(None).cast(pl.Boolean)
     )
-        # <<< LOCAL-EXT
     if "_prev_consec_up" not in df.columns:
         df = df.with_columns(pl.lit(0).cast(pl.UInt32).alias("_prev_consec_up"))
     if "_prev_consec_down" not in df.columns:

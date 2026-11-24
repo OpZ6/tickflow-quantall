@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 _BATCH_SIZE = 100
 
 # 财务报表 + 历史股本表
+# <<< LOCAL-EXT
 FINANCIAL_TABLES = ("metrics", "income", "balance_sheet", "cash_flow", "shares")
 OVERVIEW_TABLE = "overview"
 
 
-# <<< LOCAL-EXT
 # ================================================================
 # 同步函数
 # ================================================================
@@ -79,9 +79,9 @@ def _fetch_table(
         logger.warning("sync_%s skipped: no symbols", table)
         return pl.DataFrame()
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.data_providers import custom as custom_sources
     from app.data_providers import routing
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.services import preferences
 
     chain = preferences.get_data_provider_chain("financial")
@@ -110,6 +110,7 @@ def _fetch_table(
     if not tickflow_enabled or not capset.has(Cap.FINANCIAL):
         logger.info("sync_%s skipped: provider chain exhausted", table)
         return pl.DataFrame()
+    # <<< LOCAL-EXT
 
     from app.tickflow.client import get_client
     tf = get_client()
@@ -131,7 +132,6 @@ def _fetch_table(
 
     for i in range(0, len(symbols), _BATCH_SIZE):
         chunk = symbols[i : i + _BATCH_SIZE]
-    # <<< LOCAL-EXT
         batch_num = i // _BATCH_SIZE + 1
         try:
             data = api_method(chunk, latest=latest_only)
@@ -331,6 +331,7 @@ def get_financial_df(data_dir: Path, table: str) -> pl.DataFrame:
         return pl.DataFrame()
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 class FinancialScheduler:
@@ -348,6 +349,7 @@ class FinancialScheduler:
         self._active_scope: str | None = None
         self._last_error: str | None = None
         self._progress: dict[str, Any] | None = None
+# <<< LOCAL-EXT
 
     def start(self, data_dir: Path, capset: CapabilitySet, *, auto_schedule: bool = False) -> None:
         """初始化调度器，并按需启动周期同步后台任务。
@@ -423,7 +425,6 @@ class FinancialScheduler:
         now = capset.has(Cap.FINANCIAL)
         if had != now:
             logger.info(
-    # <<< LOCAL-EXT
                 "FinancialScheduler capabilities updated: FINANCIAL %s -> %s", had, now
             )
 
@@ -466,6 +467,7 @@ class FinancialScheduler:
         table=None 同步全部财务表;否则只同步指定表。
         每张表完成立即更新 last_sync,让前端轮询 /status 能看到进度递增。
         """
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 本地增强实现已拆到 financial_sync_ext（此处惰性导入, 避免模块级循环）
         from app.services.financial_sync_ext import (
             provider_info,
@@ -560,6 +562,7 @@ class FinancialScheduler:
             "symbol": symbol,
             "start_year": start_year,
         }
+        # <<< LOCAL-EXT
 
     def run_now(self, table: str | None = None) -> dict[str, int]:
         """同步执行一次同步(阻塞调用线程)。
@@ -626,6 +629,7 @@ class FinancialScheduler:
             return self._is_syncing
 
     @property
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def active_scope(self) -> str | None:
         return self._active_scope
 
@@ -638,6 +642,7 @@ class FinancialScheduler:
         return dict(self._progress) if self._progress else None
 
     @property
+    # <<< LOCAL-EXT
     def last_sync(self) -> dict[str, str]:
         return dict(self._last_sync)
 

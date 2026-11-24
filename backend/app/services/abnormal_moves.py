@@ -156,13 +156,13 @@ def _hist_snapshot(repo: Any) -> dict[str, Any]:
         "rows": rows,
         "cache_date": cache_date.isoformat() if cache_date else None,
     }
+    # <<< LOCAL-EXT
     with _hist_cache_lock:
         _hist_cache["data"] = payload
     return payload
 
 
 def _bench_rt_pct(quote_service: Any) -> float:
-    # <<< LOCAL-EXT
     """基准指数今日实时涨跌 (各候选均值, 小数制, 缺数据时 0)。
 
     quote_service.get_index_quotes() 返回指数展示缓存, change_pct/pct/pct_change

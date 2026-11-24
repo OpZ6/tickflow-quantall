@@ -361,6 +361,7 @@ class DepthService:
             symbol: {**record, "source": provider_name}
             for symbol, record in result.items()
         }
+        # <<< LOCAL-EXT
 
     def finalize(self) -> None:
         """盘后定版: 拉一次 + 落盘。"""
@@ -382,7 +383,6 @@ class DepthService:
         rows = []
         for sym, e in cache.items():
             rows.append({
-        # <<< LOCAL-EXT
                 "symbol": sym,
                 "sealed_up": e.get("sealed_up"),
                 "sealed_down": e.get("sealed_down"),
@@ -559,6 +559,7 @@ class DepthService:
         - user_interval: 用户设置(经套餐 clamp 后)的间隔
         """
         from app.services import preferences
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         provider_name = preferences.get_depth5_data_provider()
         if provider_name == "tickflow":
             capset = self._get_capset()
@@ -585,8 +586,8 @@ class DepthService:
         raw_user = preferences.get_depth_polling_interval()
         user_interval = max(lo, min(hi, raw_user))
 
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # ② 限速安全 clamp (与 resolve_limit 共用 SAFETY_RPM_FACTOR, 不叠乘)
+        # <<< LOCAL-EXT
         batches = max(1, math.ceil(n_symbols / batch_size))
         usable_rpm = apply_safety_rpm(rpm) or 1
         calls_per_min = usable_rpm / batches if batches > 0 else usable_rpm
@@ -625,7 +626,6 @@ class DepthService:
         qs = getattr(self._app_state, "quote_service", None)
         if not qs:
             return
-        # <<< LOCAL-EXT
         msg = (f"五档轮询: 当前涨跌停 {n_stocks} 只, 您设置的 {user_interval:.0f} 秒间隔会超限, "
                f"系统已自动调整为 {actual_interval:.0f} 秒")
         alert = {

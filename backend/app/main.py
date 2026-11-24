@@ -141,6 +141,7 @@ async def _application_lifespan(app: FastAPI):
     from app.market_facts.repository import MarketFactRepository
 
     app.state.market_facts = MarketFactRepository(store.data_dir)
+    # <<< LOCAL-EXT
     # 去内置化种子迁移必须赶在下方 refresh_cache 之前: enriched 缓存构建时
     # 编译自定义信号表达式, 晚种会让本次启动的看板/梯队引用的 signal_limit_*
     # 列缺失 (跌停恒 0、连板梯队无数据), 直到下一次缓存刷新才自愈。
@@ -153,7 +154,6 @@ async def _application_lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.warning("signal seeding failed (ignored): %s", e)
     # 自定义/复合因子载入注册表 (P3); 单个失败只跳过该因子 (fail-隔离)
-    # <<< LOCAL-EXT
     with startup_phase(logger, "custom factor module import"):
         from app.factors.store import load_runtime_registry
 
@@ -270,19 +270,20 @@ async def _application_lifespan(app: FastAPI):
     try:
         daily_pipeline.set_app_state(app.state)  # 供 depth_finalize job 访问 depth_service
         scheduler = daily_pipeline.start_scheduler(repo, capset)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from app.quantx_data.scheduler import register as register_quantx_data_scheduler
         from app.stock_pools.scheduler import run_scheduled as run_stock_pool_scheduled
         register_quantx_data_scheduler(
             scheduler, store.data_dir,
             after_run=lambda day: run_stock_pool_scheduled(repo, trade_date=day),
         )
+        # <<< LOCAL-EXT
         app.state.scheduler = scheduler
     except Exception as e:  # noqa: BLE001
         logger.warning("scheduler not started: %s", e)
         app.state.scheduler = None
 
     # depth sealed: 启动补跑(当天文件不存在) + 盘中轮询(有能力时)
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     try:
         depth_service.boot_check()
         depth_service.start_polling()
@@ -291,7 +292,6 @@ async def _application_lifespan(app: FastAPI):
 
     # 盘中分钟增量刷新 (Expert 专有): 线程常驻, 开关/时段/能力门控在循环内每轮判断
     try:
-    # <<< LOCAL-EXT
         from app.services.minute_refresh import MinuteRefreshService
         minute_refresh = MinuteRefreshService(repo)
         minute_refresh.set_app_state(app.state)
@@ -724,8 +724,10 @@ async def auth_middleware(request: Request, call_next):
 app.include_router(core_router)
 app.include_router(auth_api.router)
 app.include_router(kline.router)
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 # 本地增强的图表/单股补数端点（独立模块, 上游同步零冲突）
 app.include_router(kline_ext.router)
+# <<< LOCAL-EXT
 app.include_router(chart_indicators.router)
 app.include_router(watchlist.router)
 app.include_router(screener.router)

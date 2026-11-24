@@ -56,6 +56,7 @@ META = {
 EXECUTION_BACKEND = "matrix_native"
 ENTRY_SIGNALS = ["signal_oversold_reversal_confirmed"]
 EXIT_SIGNALS = ["signal_ma20_breakdown"]
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 STOP_LOSS = -0.05
 MAX_HOLD_DAYS = 15
 
@@ -95,6 +96,7 @@ class OversoldReversalMatrixStrategy:
             entry_signal_code=np.where(entry, 0, -1).astype(np.int16),
             exit_signal_code=np.where(exit_, 0, -1).astype(np.int16),
             entry_signal_ids=tuple(ENTRY_SIGNALS),
+# <<< LOCAL-EXT
             exit_signal_ids=("signal_ma20_breakdown",),
         )
 

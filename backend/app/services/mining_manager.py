@@ -242,6 +242,7 @@ class MiningJobManager:
                 return
             self._store.write_summary(run_id, result)
             self._store.append_event(run_id, status, {"status": status})
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # Publish the terminal manifest last. Readers that observe a
             # terminal status can then rely on its summary/event already
             # being durable.
@@ -269,4 +270,5 @@ class MiningJobManager:
                 "error",
                 {"status": "failed", "message": message},
             )
+            # <<< LOCAL-EXT
             self._store.transition_status(run_id, "failed", error=message)

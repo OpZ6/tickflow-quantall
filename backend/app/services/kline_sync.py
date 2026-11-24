@@ -24,9 +24,9 @@ import polars as pl
 
 # >>> LOCAL-EXT 本地增强, 上游同步时保护
 from app.config import settings
+# <<< LOCAL-EXT
 from app.data_providers.base import AssetType, ProviderRequestError
 from app.data_providers.minute_normalizer import (
-# <<< LOCAL-EXT
     CANONICAL_MINUTE_COLS as CANONICAL_MINUTE_COLS,
 )
 from app.data_providers.minute_normalizer import (
@@ -278,9 +278,9 @@ def sync_daily_batch(symbols: list[str],
     return pl.concat(out, how="diagonal_relaxed")
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def fetch_daily_selected(
     symbols: list[str],
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     *,
     count: int | None = None,
     start_time: datetime | None = None,
@@ -323,6 +323,7 @@ def fetch_daily_selected(
         return pl.DataFrame()
 
 
+# <<< LOCAL-EXT
 def iter_custom_daily_frames(provider, symbols, *, asset_type="stock", **kwargs):
     """复用流式/单帧插件契约; 旧股票插件可继续省略 asset_type 参数。"""
     if asset_type != "stock":
@@ -337,7 +338,6 @@ def iter_custom_daily_frames(provider, symbols, *, asset_type="stock", **kwargs)
 
 
 class DailySourceUnavailableError(RuntimeError):
-    # <<< LOCAL-EXT
     """有效日K路由没有可用数据能力。"""
 
 
@@ -423,9 +423,11 @@ def sync_and_persist_daily_batch(
 
     original = list(symbols)
     store = getattr(repo, "store", None)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     symbols, resolved, skipped_bare = _normalize_bare_symbols(
         symbols, getattr(store, "data_dir", settings.data_dir)
     )
+    # <<< LOCAL-EXT
     requested = symbols
     # 完整符号 → 调用方原始写法: 0 行回报用用户输入的形式, 裸符号也能对上
     orig_by_full: dict[str, str] = {}
@@ -437,14 +439,12 @@ def sync_and_persist_daily_batch(
 
     provider_name = preferences.get_daily_data_provider()
     if provider_name != "tickflow":
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from app.data_providers import custom as custom_sources
         if custom_sources.provider_has_dataset(provider_name, "daily"):
             provider = custom_sources.get_provider(provider_name)
             end_time = end_date or datetime.now()
             days = count or 365
             start_time = start_date or (end_time - timedelta(days=days))
-        # <<< LOCAL-EXT
             iter_daily = getattr(provider, "iter_daily", None)
             if callable(iter_daily):
 
@@ -499,6 +499,7 @@ def sync_and_persist_daily_batch(
         seen.update(df["symbol"].cast(pl.Utf8).unique().to_list())
 
     if df.is_empty():
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if failed_syms:
             # fail-closed: 全量失败时不再"显示成功实则全空", 抛错并保留旧数据。
             # 抛错前仍要把失败标的交给调用方 (#514 出参契约), 否则上层只能看到一个
@@ -508,6 +509,7 @@ def sync_and_persist_daily_batch(
             raise RuntimeError(
                 f"日K同步失败: {len(failed_syms)}/{len(symbols)} 只标的未获取, 已保留旧数据"
             )
+        # <<< LOCAL-EXT
         return _finalize(0)
 
     repo.append_daily(df)
@@ -517,7 +519,6 @@ def sync_and_persist_daily_batch(
 
     return _finalize(df.height)
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 def _persist_daily_chunks(chunks, repo: KlineRepository) -> int:
     """先把流式 provider 结果写入私有 staging,完整取数后再提交正式分区。"""
@@ -531,7 +532,6 @@ def _persist_daily_chunks(chunks, repo: KlineRepository) -> int:
                 continue
             # Buffer one month per provider batch. Publishing still works a
             # month at a time and each day lands as one canonical partition.
-# <<< LOCAL-EXT
             buffered = df.with_columns(pl.col("date").dt.strftime("%Y-%m").alias("_staging_month"))
             for month_df in buffered.partition_by("_staging_month"):
                 month = month_df["_staging_month"][0]

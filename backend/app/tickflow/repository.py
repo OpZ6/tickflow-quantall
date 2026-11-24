@@ -42,11 +42,11 @@ from app.enriched_generation import (
 )
 from app.market_time import CN_TZ, cn_today
 from app.parquet import scan_daily_parquet, scan_enriched_parquet
+# <<< LOCAL-EXT
 from app.polars_guard import guarded_collect
 from app.services.minute_adjust import apply_minute_adjustment, minute_basis_is_raw
 from app.startup_diagnostics import startup_phase
 
-# <<< LOCAL-EXT
 logger = logging.getLogger(__name__)
 
 # GH #480: 后台 warmup 因世代漂移被丢弃时的有界重建上限。compute 窗口长达
@@ -168,12 +168,10 @@ class DataStore:
             "market_state_daily",
             "market_signal_daily",
             "screening_candidate_daily",
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         ):
             (self.data_dir / sub).mkdir(parents=True, exist_ok=True)
 
         # 财务数据子目录
-        # <<< LOCAL-EXT
         for sub in ("metrics", "income", "balance_sheet", "cash_flow", "shares"):
             (self.data_dir / "financials" / sub).mkdir(parents=True, exist_ok=True)
 
@@ -285,11 +283,9 @@ class DataStore:
                 SELECT * FROM read_parquet('{d}/market_signal_daily/**/*.parquet', union_by_name=true)""",
             f"""CREATE OR REPLACE VIEW screening_candidate_daily AS
                 SELECT * FROM read_parquet('{d}/screening_candidate_daily/**/*.parquet', union_by_name=true)""",
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         ]
         for sql in statements:
             try:
-        # <<< LOCAL-EXT
                 with startup_phase(logger, f"DuckDB view {sql.split()[4]}"):
                     db.execute(sql)
             except Exception as e:  # noqa: BLE001
@@ -475,9 +471,7 @@ class KlineRepository:
         self._inst_glob = str(store.data_dir / "instruments" / "**" / "*.parquet")
         self._index_inst_glob = str(store.data_dir / "instruments_index" / "**" / "*.parquet")
         self._etf_inst_glob = str(store.data_dir / "instruments_etf" / "**" / "*.parquet")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
-# <<< LOCAL-EXT
     @property
     def db(self) -> duckdb.DuckDBPyConnection:
         return self.store.db
@@ -754,11 +748,11 @@ class KlineRepository:
             # 300 日历天 ≈ 210 交易日, 覆盖 filter_history 最大 lookback(90) + warmup(60)
             try:
                 from datetime import timedelta
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 from app.indicators.pipeline import (
                     compute_enriched_history_window,
                     repair_today_deviation_columns,
                 )
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 start_full = latest - timedelta(days=300)
                 read_cols = [c for c in ["symbol", "date", "open", "high", "low", "close",
                                          "volume", "amount", "turnover_rate", "quote_ts",
@@ -793,6 +787,7 @@ class KlineRepository:
                         include_instrument_metadata=True,
                     )
                     df_full = repair_today_deviation_columns(df_full, self.store.data_dir)
+                # <<< LOCAL-EXT
                     del df_hist
                     logger.info("enriched refresh step done: compute window rows=%d (%.2fs)",
                                 len(df_full), time.perf_counter() - step)
@@ -803,7 +798,6 @@ class KlineRepository:
                             "enriched data changed while refreshing its history cache"
                         )
                     self._enriched_history_cache = df_full
-                # <<< LOCAL-EXT
                     self._enriched_history_start = df_full["date"].min()
                     self._enriched_history_generation = refresh_generation
                     self._enriched_history_snapshot = (df_full, refresh_snapshot)
@@ -947,7 +941,9 @@ class KlineRepository:
                 window_start = _live_agg_window_start(hist_all["date"], latest, start_60d)
                 df_hist = hist_all.select(needed).filter(
                     (pl.col("date") >= window_start) & (pl.col("date") <= latest)
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 ).unique(
+                # <<< LOCAL-EXT
                     subset=["symbol", "date"], keep="last",
                 ).sort(["symbol", "date"])
                 logger.info("live agg step done: slice history cache rows=%d (%.2fs)", len(df_hist), time.perf_counter() - step)
@@ -960,9 +956,7 @@ class KlineRepository:
                     "atr_14",
                     "close", "high", "low",
                     "annual_vol_20d",
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 ]
-                # <<< LOCAL-EXT
                 existing_state = [c for c in state_cols if c in hist_all.columns]
                 state_source = _last_available_rows(
                     hist_all.select("date", *existing_state), latest,
@@ -1440,6 +1434,7 @@ class KlineRepository:
         # 验证缓存覆盖完整范围 (含 warmup)。lookback_days 是交易日语义, 用 ×2 日历日
         # 放宽确保覆盖 (节假日/周末), 与 warmup 60 一起留足余量。
         warmup_start = target_date - timedelta(days=(lookback_days + 60) * 2)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         live_extends = cache_max < target_date and self._live_snapshot_covers_range_end(
             cache_max, target_date
         )
@@ -1452,7 +1447,6 @@ class KlineRepository:
         trading_dates = cache["date"].filter(cache["date"] <= target_date).unique().sort()
         if live_extends:
             trading_dates = pl.concat([
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 trading_dates,
                 pl.Series([target_date], dtype=trading_dates.dtype),
             ]).unique().sort()
@@ -1569,6 +1563,7 @@ class KlineRepository:
             df = df.select(list(dict.fromkeys(existing)))
         df = df.filter((pl.col("date") >= start) & (pl.col("date") <= end))
         df = self._overlay_live_enriched(df, start, end)
+        # <<< LOCAL-EXT
         if symbols is not None:
             df = df.filter(pl.col("symbol").is_in(symbols))
         if columns:
@@ -1607,7 +1602,6 @@ class KlineRepository:
             if self._enriched_warming:
                 # 后台预热中: 返回空表, 不触发同步重算 (同 get_enriched_latest 守卫)
                 return pl.DataFrame()
-                # <<< LOCAL-EXT
             self._refresh_enriched()
             self._live_agg_check_date = cn_today()  # 刚建过, 当天不必再查磁盘
         else:
@@ -1760,6 +1754,7 @@ class KlineRepository:
         if columns:
             df = self._scan_daily_symbol(symbol, start, end, columns)
             if not df.is_empty() and all(c in df.columns for c in columns):
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 # 单股热路径 (每个行情 tick 调一次) 不触发全市场 warmup:
                 # 只读已就绪的内存快照, 冷缓存时由扫描路径兜底。上游的
                 # get_enriched_latest(symbols=...) 在 _enriched_warming 之外仍会
@@ -1798,7 +1793,6 @@ class KlineRepository:
             if not df.is_empty():
                 df = self._compute_enriched_range(df)
 
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 尝试用缓存数据覆盖最新日 (盘中更准确)
         # 同上: 覆盖最新日只消费已就绪内存快照, 不在请求线程里触发预热。
         cached, cache_date = self._enriched_cache, self._enriched_cache_date
@@ -1832,6 +1826,7 @@ class KlineRepository:
         # 与单股 get_daily 同口径: 批量热路径同样只消费已就绪内存快照,
         # 不通过 get_enriched_latest 触发同步全市场预热。
         cached, cache_date = self._enriched_cache, self._enriched_cache_date
+                # <<< LOCAL-EXT
         if cached is not None and not cached.is_empty() and cache_date:
             if start >= cache_date:
                 return self._filter_cached_batch(cached, symbols, columns)
@@ -1876,7 +1871,6 @@ class KlineRepository:
         table = self.store.data_dir / daily_dirname("stock")
         try:
             files = date_partition_files(table, start, end)
-        # <<< LOCAL-EXT
             if not files:
                 raise ValueError("回测区间没有本地原始日 K，请先同步行情")
             query = pl.scan_parquet(
@@ -1929,6 +1923,7 @@ class KlineRepository:
             df = df.select(existing)
         return df
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def get_index_daily_batch(
         self,
         symbols: list[str],
@@ -1954,6 +1949,7 @@ class KlineRepository:
             logger.exception("index daily batch read failed")
             return pl.DataFrame()
 
+    # <<< LOCAL-EXT
     def get_etf_daily(
         self,
         symbol: str,
@@ -1973,7 +1969,6 @@ class KlineRepository:
                 return df
 
         warmup_start = start - timedelta(days=150)
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         df = self._scan_etf_daily_symbol(symbol, warmup_start, end, None)
         if df.is_empty():
             # 旧版 ETF 曾存入 kline_index_enriched；没有独立数据时回退读取。
@@ -2002,6 +1997,7 @@ class KlineRepository:
             return self.get_etf_daily(symbol, start, end, columns)
         return pl.DataFrame()
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def get_raw_daily_asset(
         self,
         asset_type: str,
@@ -2011,7 +2007,6 @@ class KlineRepository:
     ) -> pl.DataFrame:
         """读取权威原始日 K, 供显式复权和跨周期聚合使用。"""
         glob = {
-        # <<< LOCAL-EXT
             "stock": self._daily_glob,
             "index": self._index_daily_glob,
             "etf": self._etf_daily_glob,
@@ -2054,6 +2049,7 @@ class KlineRepository:
         except Exception as exc:
             logger.debug("复权因子查询跳过 %s: %s", symbol, exc)
             return pl.DataFrame()
+    # <<< LOCAL-EXT
     def chart_history_version(
         self, timeframe: str, asset_type: str, symbol: str, start: date, end: date,
     ) -> tuple | None:
@@ -2063,7 +2059,6 @@ class KlineRepository:
         minute partitions, factors and the raw-basis marker. Legacy symbol
         partitions remain readable through the uncached path.
         """
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from datetime import timedelta
 
         root = self.store.data_dir
@@ -2133,7 +2128,6 @@ class KlineRepository:
         本地分钟历史线性增长; 单日数据按约定完整落在 date= 分区内, 谓词不变。
         """
         try:
-        # <<< LOCAL-EXT
             part = self._minute_partition_path(asset_type, trade_date)
             source = part if part is not None else self._minute_glob_for(asset_type)
             df = guarded_collect(
@@ -2683,10 +2677,8 @@ class KlineRepository:
             out = part / "part.parquet"
             self._atomic_write_parquet(merged, out)
             for path in paths:
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 if path != out:
                     path.unlink()
-                # <<< LOCAL-EXT
 
     def validate_daily_repair_target(self, asset_type: str, day: date) -> None:
         self._validate_repair_path(self.store.data_dir / daily_dirname(asset_type) / f"date={day}")
@@ -2902,6 +2894,7 @@ class KlineRepository:
         内联了同一份视图重建 SQL, 清库那份还漏了几张视图导致漂移。此处收敛为单一入口:
         覆盖全部 13 张视图 (二者的超集), 空目录 (清库后) 也能安全重挂。
         """
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         d = self.store.data_dir.as_posix()
         views = {
             "kline_daily": f"{d}/kline_daily/**/*.parquet",
@@ -2975,7 +2968,6 @@ class KlineRepository:
             self._optimistic_upsert_partition(out, date_df, publication)
 
         partitions = df.partition_by("date")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # Raw history partitions are independent and may be merged concurrently.
         # Enriched publication owns one generation transaction and stays sequential.
         if publication is None and len(partitions) >= 32:
@@ -2984,6 +2976,7 @@ class KlineRepository:
         else:
             for date_df in partitions:
                 write_one(date_df)
+        # <<< LOCAL-EXT
 
     @staticmethod
     def _partition_fingerprint(path: Path) -> tuple[int, int] | None:
@@ -3069,7 +3062,6 @@ class KlineRepository:
         if not table:
             return
         base = self.store.data_dir / table
-        # <<< LOCAL-EXT
         dt = df["date"][0]
         ds = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
         out = base / f"date={ds}" / "part.parquet"
@@ -3089,6 +3081,7 @@ class KlineRepository:
         ]
         fill_name = "name" in df.columns and "name" in instruments.columns and (
             df["name"].is_null().any() or (df["name"] == "").any()
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
         if not metadata_cols and not fill_name:
             return df
@@ -3106,6 +3099,7 @@ class KlineRepository:
                 .alias("name")
             ).drop("_instrument_name")
         return result
+        # <<< LOCAL-EXT
 
     def merge_live_enriched_asset(self, asset_type: str, df: pl.DataFrame) -> None:
         """按 symbol 合并当天 enriched 分区和内存缓存。用于少量自选实时。"""
@@ -3173,7 +3167,6 @@ class KlineRepository:
         }.get(asset_type)
         if not table:
             return
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         base = self.store.data_dir / table
         dt = df["date"][0]
         ds = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
@@ -3195,7 +3188,6 @@ class KlineRepository:
         """覆写当天指定资产 enriched 分区 (实时 enriched 落盘, 非merge)。"""
         if df.is_empty() or "date" not in df.columns:
             return
-        # <<< LOCAL-EXT
         dt = df["date"][0]
         cache_df = self._with_instrument_metadata(asset_type, df).sort(["symbol"])
         if asset_type == "stock":
@@ -3209,6 +3201,7 @@ class KlineRepository:
 
         from app.indicators.pipeline import ENRICHED_STORAGE_COLS
         storage_cols = [c for c in ENRICHED_STORAGE_COLS if c in df.columns]
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         df_storage = df.select(storage_cols).unique(
             subset=["symbol", "date"], keep="last",
         ).sort(["symbol"])
@@ -3241,6 +3234,7 @@ class KlineRepository:
                     self._enriched_history_generation = self.get_matrix_data_generation("stock")
                 except EnrichedGenerationUnavailableError:
                     self._enriched_history_generation = None
+        # <<< LOCAL-EXT
         elif asset_type == "etf":
             self._etf_enriched_cache = cache_df
             self._etf_enriched_cache_date = dt

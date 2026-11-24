@@ -207,6 +207,7 @@ def build_capability_matrix(
             priority_chain = [cap["default"]]
         usable = effective in available_names
         capabilities.append({
+# <<< LOCAL-EXT
             "id": cap["id"],
             "label": cap["label"],
             "desc": cap["desc"],
@@ -235,7 +236,6 @@ def _cap_specs_by_id() -> dict[str, dict]:
     return {c["id"]: c for c in CAPABILITY_REGISTRY}
 
 
-# <<< LOCAL-EXT
 def _current_routing() -> dict[str, str]:
     """偏好字段 → 当前生效源 (经 preferences getters, 非法值已回退默认)。
 

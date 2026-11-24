@@ -166,9 +166,9 @@ class StrategyDataContext:
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # Optional caller-owned sink; currently supported by matrix snapshot screening.
     screening_trace: dict | None = None
+    # <<< LOCAL-EXT
     # enriched 数据换代号 (repo.get_matrix_data_generation, 详见 enriched_generation):
     # 装配方填入, 消费方用作共享矩阵缓存的失效指纹 — 数据重建换代号变, 缓存自动失效。
-    # <<< LOCAL-EXT
     data_generation: str | None = None
 
 
@@ -235,9 +235,9 @@ class StrategyResult:
     scores: dict[str, float] = field(default_factory=dict)
     entry_signal_hits: list[dict] = field(default_factory=list)
     exit_signal_hits: list[dict] = field(default_factory=list)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     strategy_version: str | None = None
     params_fingerprint: str | None = None
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     source_run_id: str | None = None
     input_fingerprint: str | None = None
     evidence: list[dict] = field(default_factory=list)
@@ -256,13 +256,13 @@ class StrategySignalHistory:
     market: Any
     signals: Any
     params: dict
+    # <<< LOCAL-EXT
 
 
 @dataclass
 class _RealtimeMatrixEntry:
     fingerprint: tuple[Any, ...]
     buffer: Any
-    # <<< LOCAL-EXT
 
 
 def _resolve_required_features(meta: dict, mod, filter_history_fn, path: Path) -> frozenset[str]:
@@ -978,13 +978,13 @@ class StrategyEngine:
     # 执行
     # ================================================================
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def preview_signal_history(
         self,
         strategy_id: str,
         context: StrategyDataContext,
         *,
         params: dict | None = None,
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         overrides: dict | None = None,
     ) -> StrategySignalHistory:
         """Evaluate one registered matrix strategy across one asset's history.
@@ -1052,6 +1052,7 @@ class StrategyEngine:
             params=effective_params,
         )
 
+    # <<< LOCAL-EXT
     def run(
         self,
         strategy_id: str,
@@ -1072,7 +1073,6 @@ class StrategyEngine:
         t0 = time.perf_counter()
 
         s = self.get(strategy_id)
-        # <<< LOCAL-EXT
         self.validate_context(s, context)
         as_of = context.as_of
         overrides = overrides or {}
@@ -1584,6 +1584,7 @@ class StrategyEngine:
         from app.backtest.matrix import (
             MatrixPipelineConfig,
             MatrixStrategyPipeline,
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             build_basic_filter_mask,
             build_market_data_matrix,
             build_matrix_score,
@@ -1604,7 +1605,6 @@ class StrategyEngine:
             market = build_market_data_matrix(
                 source_panel,
                 field_columns=self._matrix_field_columns(strategy, overrides, params),
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
 
         if source_panel is None or source_panel.is_empty():
@@ -1665,6 +1665,7 @@ class StrategyEngine:
                 asset_mask=asset_mask,
             ),
             precomputed_signals=snapshot_signals,
+            # <<< LOCAL-EXT
         )
         target_ids = [
             time_id
@@ -1699,7 +1700,6 @@ class StrategyEngine:
                     if source_panel is None or source_panel.is_empty():
                         raise ValueError("叠加条件含「前 N 日」偏移, 需要历史数据窗口")
                     eval_frame = source_panel
-            # <<< LOCAL-EXT
                 eval_frame = custom_signals.materialize_factor_columns(
                     eval_frame, {"__overlay__": overlay_expr}
                 )
@@ -1745,6 +1745,7 @@ class StrategyEngine:
             signals.exit_signal_ids,
             market.symbols,
         )
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         candidate_mask = entry_active.astype(bool)
         candidate_scores = signals.score
         trace_by_symbol = {}
@@ -1781,7 +1782,6 @@ class StrategyEngine:
             candidate_scores = build_matrix_score(
                 market, universe, scoring, strategy.meta.get("order_by"),
                 bool(strategy.meta.get("descending", True)), fallback=snapshot_signals.score,
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 directions=effective_scoring_directions(overrides),
             )
         selected_assets = np.flatnonzero(candidate_mask)
@@ -1822,6 +1822,7 @@ class StrategyEngine:
                 trace_by_symbol[symbol]["stage"] = (
                     "displayed_candidate" if symbol in displayed else "display_limit"
                 )
+        # <<< LOCAL-EXT
         rows = _sanitize([row for _, row in selected_rows])
         scores = {str(row["symbol"]): float(row.get("score") or 0.0) for row in rows}
         return StrategyResult(
@@ -1886,7 +1887,6 @@ class StrategyEngine:
             if shared_basic_filter:
                 child_override["basic_filter"] = shared_basic_filter
             overrides_map[cid] = child_override
-                # <<< LOCAL-EXT
 
         # 共享 context 跑所有子策略。run_all 内部对 matrix_native 子策略会
         # 合并 field_columns 构建超集矩阵, 一次加载。
@@ -1985,6 +1985,7 @@ class StrategyEngine:
             exprs.append(pl.col("close") >= bf["price_min"])
         if bf.get("price_max") is not None:
             exprs.append(pl.col("close") <= bf["price_max"])
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # Enriched close is adjusted. Raw-only/live inputs expose raw price as
         # close; an existing but null raw_close must never fall back to close.
         cap_price = pl.col("raw_close" if "raw_close" in df.columns else "close")
@@ -2002,6 +2003,7 @@ class StrategyEngine:
                 exprs.append(values >= minimum)
             if maximum is not None:
                 exprs.append(values <= maximum)
+        # <<< LOCAL-EXT
         if bf.get("amount_min") is not None:
             exprs.append(pl.col("amount") >= bf["amount_min"])
         if bf.get("amount_max") is not None:
@@ -2049,7 +2051,6 @@ class StrategyEngine:
         """Stage 1: 基础参数过滤"""
         expr = StrategyEngine._basic_filter_expr(df, bf)
         if expr is not None:
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return df.filter(expr)
         return df
 
@@ -2068,7 +2069,6 @@ class StrategyEngine:
         return None
 
     def _inject_intraday_signal_columns(self, minute_df: pl.DataFrame) -> pl.DataFrame:
-            # <<< LOCAL-EXT
         """向当日分钟K帧注入自定义盘中信号列(csgi_, 当日条件上升沿)。
 
         单点注入: 实盘分钟扫描与分钟回测 worker 共用本方法, 特征计算与

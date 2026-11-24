@@ -114,6 +114,7 @@ def financial_status(request: Request):
             "coverage": round(overview_symbols / universe, 4) if universe else 0,
             "latest_period": latest_period,
         },
+# <<< LOCAL-EXT
     }
 
 
@@ -145,7 +146,6 @@ def get_income(request: Request, symbol: str | None = None):
     return {"data": df.to_dicts()}
 
 
-# <<< LOCAL-EXT
 @router.get("/balance-sheet")
 def get_balance_sheet(request: Request, symbol: str | None = None):
     """查询资产负债表。"""
@@ -219,6 +219,7 @@ class AnalyzeRequest(BaseModel):
     focus: str = ""  # 可选:用户追加的分析关注点
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 class SyncRequest(BaseModel):
     scope: str
     symbol: str | None = None
@@ -251,8 +252,8 @@ def deterministic_analysis(request: Request, symbol: str, as_of: date | None = N
     _require_financial(request.app.state.capabilities)
     return analyze_stock(request.app.state.repo.store.data_dir, symbol, as_of or date.today())
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
+# <<< LOCAL-EXT
 @router.post("/analyze")
 async def analyze_financials(request: Request, req: AnalyzeRequest):
     """AI 财务分析 — SSE 流式返回。
@@ -303,7 +304,6 @@ def list_reports(request: Request):
     return {"reports": ai_reports.list_reports()}
 
 
-# <<< LOCAL-EXT
 @router.post("/reports")
 def save_report(request: Request, req: SaveReportRequest):
     """保存一条报告。"""

@@ -325,7 +325,7 @@ v0.3.23 → v0.4.1 攒了 15 个 release / 113 commits，规模 1099 文件 / +1
 ## 13. 已做 / 待做的降债项
 
 1. **区块标记（已做，v0.4.1 同步后）**：`backend/app` 与 `packages/*/src` 下的 Python 文件已插入
-   `# >>> LOCAL-EXT` / `# <<< LOCAL-EXT`，共 40 文件 / 661 区块。下次冲突一眼认出"这是我的块"。
+   `# >>> LOCAL-EXT` / `# <<< LOCAL-EXT`，共 40 文件 / 150 个区域级标记。下次冲突一眼认出"这是我的块"。
    工具：`backend/scripts/mark_local_ext.py`（幂等，`LOCAL_EXT_BASE` 可换基线）。
    - **TS/TSX 不插内联标记**：JSX 属性区里的 `//` 不是注释，插进去会直接破坏结构
      （已验证会把标记插到 `onClick` 与 `aria-label` 之间）。前端以 `docs/local-ext-map.md` 清单为准。

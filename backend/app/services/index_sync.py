@@ -6,8 +6,8 @@ quotes.get_by_universes 作为补充来源。日K统一走 klines.batch。
 """
 from __future__ import annotations
 
-import gc
 # >>> LOCAL-EXT 本地增强, 上游同步时保护
+import gc
 import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -46,6 +46,7 @@ _REQUIRED_INDEX_INSTRUMENTS = (
         "asset_type": "index",
     },
 )
+# <<< LOCAL-EXT
 
 
 def _quotes_to_index_instruments(resp) -> pl.DataFrame:
@@ -57,7 +58,6 @@ def _quotes_to_index_instruments(resp) -> pl.DataFrame:
         return pl.DataFrame()
 
     if isinstance(resp, pl.DataFrame):
-# <<< LOCAL-EXT
         df = resp
     elif hasattr(resp, "columns"):
         df = pl.from_pandas(resp.reset_index() if hasattr(resp, "reset_index") else resp)
@@ -104,6 +104,7 @@ def _fetch_instruments_by_type(instrument_type: str, asset_type_label: str) -> p
     instrument_type: 'index' / 'etf'
     asset_type_label: 写入 instruments 表的 asset_type 标记('index' / 'etf')
     """
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     try:
         tf = get_client()
     except Exception as exc:
@@ -114,7 +115,6 @@ def _fetch_instruments_by_type(instrument_type: str, asset_type_label: str) -> p
         try:
             items = tf.exchanges.get_instruments(ex, instrument_type=instrument_type)
             for it in items or []:
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 item = it if isinstance(it, dict) else {}
                 symbol = item.get("symbol")
                 if not symbol:
@@ -190,6 +190,7 @@ def sync_index_instruments(
                                 index_parts.append(sup)
                             break
                     except Exception as e:
+    # <<< LOCAL-EXT
                         logger.debug("CN_Index universe supplement failed: %s", e)
 
     total = 0
@@ -213,7 +214,6 @@ def sync_index_instruments(
 
 
 def sync_etf_instruments(repo: KlineRepository) -> int:
-                # <<< LOCAL-EXT
     """单独同步 ETF 标的维表(返回 ETF 数量)。"""
     etf_df = _fetch_instruments_by_type("etf", "etf")
     if etf_df.is_empty():
@@ -369,6 +369,7 @@ def sync_and_persist_index_daily(
     return total_rows
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def sync_quantx_all_a_fallback(
     repo: KlineRepository,
     *,
@@ -393,7 +394,6 @@ def sync_quantx_all_a_fallback(
         "QuantX required index fallback synced: %s, +%d rows",
         QUANTX_ALL_A_STORAGE_SYMBOL,
         raw.height,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     )
     return raw.height
 
@@ -448,6 +448,7 @@ def _load_etf_factors(repo: KlineRepository) -> pl.DataFrame:
     try:
         return pl.read_parquet(factor_path)
     except Exception as e:
+# <<< LOCAL-EXT
         logger.warning("ETF 复权因子读取失败: %s", e)
         return pl.DataFrame()
 
@@ -496,7 +497,6 @@ def _load_local_etf_daily(repo: KlineRepository, symbols: list[str]) -> pl.DataF
 
 def sync_etf_adj_factor(
     symbols: list[str],
-    # <<< LOCAL-EXT
     repo: KlineRepository,
     capset: CapabilitySet,
     start_time: datetime | None = None,
@@ -551,9 +551,7 @@ def sync_and_persist_etf_daily(
         batch_factors = (
             factors.filter(pl.col("symbol").is_in(frame_symbols))
             if not factors.is_empty() else factors
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
-        # <<< LOCAL-EXT
         # 前复权 ratio = cum/total, 新除权事件会改写全部历史价。只用本次拉取
         # 窗口算 enriched 时, 拆分日前的分区停在未复权价, 日K 留下跳空。
         local = _load_local_etf_daily(repo, frame_symbols)

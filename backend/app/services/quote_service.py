@@ -266,9 +266,9 @@ def _monitor_name_map(repo) -> dict[str, str]:
     避免每轮监控对 ~7000 行维表 iter_rows 重建。过滤空名称与旧行为一致。
     """
     return {s: n for s, n in repo.get_name_map().items() if n}
-
-
 # >>> LOCAL-EXT 本地增强, 上游同步时保护
+
+
 def supplement_realtime_indices(
     records: list[dict],
     symbols: list[str],
@@ -291,6 +291,7 @@ def supplement_realtime_indices(
     else:
         logger.warning("核心指数实时补齐为空: %d 只仍将使用盘后日线", len(missing))
     return [*records, *supplemental]
+# <<< LOCAL-EXT
 
 
 class QuoteService:
@@ -298,7 +299,6 @@ class QuoteService:
 
     # 档位 → 最小轮询间隔 (秒) — TickFlow 档位限速保护, 仅实时源为 tickflow 时适用
     TIER_MIN_INTERVAL = {
-# <<< LOCAL-EXT
         "expert": 1.0,
         "pro": 3.0,
         "starter": 6.0,
@@ -887,6 +887,7 @@ class QuoteService:
         """
         from app.services import preferences
 
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from app.data_providers import custom as custom_sources
         from app.data_providers import routing
 
@@ -895,7 +896,6 @@ class QuoteService:
         chain = preferences.get_data_provider_chain("realtime")
         # 显式选择必须先于白名单回退生效 (上游 v0.4.1 语义): 用户配了一个不存在/
         # 已卸载的源时, 不能悄悄换成 tickflow 还装作正常——保留旧快照并告警,
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 否则"配了付费源却全程走免费档"这类问题无从排查。
         explicit = preferences.configured_realtime_data_provider()
         if explicit and explicit != "tickflow" and explicit not in chain:
@@ -977,6 +977,7 @@ class QuoteService:
         if not tickflow_enabled:
             logger.warning("realtime provider chain exhausted: %s", chain)
             return
+        # <<< LOCAL-EXT
 
         from app.tickflow.client import get_paid_realtime_client
 
@@ -1023,7 +1024,6 @@ class QuoteService:
             base_indices = core_index_symbols | BENCHMARK_INDEX_SYMBOLS | monitor_index_symbols
             _core_syms = sorted(base_indices | demand["index"])
             partial_assets = set()
-        # <<< LOCAL-EXT
             received = {q.get("symbol") for q in resp}
             for asset in ("stock", "etf"):
                 missing = demand[asset] - received
@@ -1124,7 +1124,9 @@ class QuoteService:
         只更新展示缓存, 不写 daily/enriched、不评估监控 —— 防止收盘后数据源仍
         返回竞价前旧价时把陈旧收盘价固化到当日分区。
         """
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         records = self._normalize_custom_realtime_records(records)
+        # <<< LOCAL-EXT
         all_index_symbols = set(self._repo.get_index_symbol_set()) if self._repo else set()
         core_index_symbols = set(CORE_INDEX_SYMBOLS)
         all_index_symbols.update(core_index_symbols)
@@ -1172,11 +1174,9 @@ class QuoteService:
             if replace_index_cache:
                 self._index_symbol_count = len(index_records)
                 self._index_quotes_cache = self._build_index_quotes(index_records)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             else:
                 logger.info("指数本轮获取失败,沿用上轮缓存: %d 只", self._index_symbol_count)
 
-            # <<< LOCAL-EXT
         _persist_last_fetch(fetched_at)
         logger.info("行情刷新: %d 只股票, %d 只ETF, %d 只指数, 耗时 %.0fms", len(stock_records), len(etf_records), len(index_records), fetch_ms)
 
@@ -1262,6 +1262,7 @@ class QuoteService:
         return out
 
     @staticmethod
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def _normalize_custom_realtime_records(
         records: list[dict],
     ) -> list[dict]:
@@ -1280,6 +1281,7 @@ class QuoteService:
             })
         return normalized
 
+    # <<< LOCAL-EXT
     @staticmethod
     def _build_daily(records: list[dict]) -> pl.DataFrame:
         """将 API records 转为日K格式 DataFrame (OHLCV + quote_ts, 写 kline_daily 用)。"""
@@ -1312,7 +1314,6 @@ class QuoteService:
         # 日期归属过滤; 时间戳缺失/为空的源无法判断, 维持原行为保留。
         if "quote_ts" in result.columns:
             day_start_ms = int(
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 datetime.combine(cn_today(), dt_time(0, 0), tzinfo=CN_TZ).timestamp() * 1000
             )
             result = result.filter(
@@ -1338,7 +1339,6 @@ class QuoteService:
 
     @staticmethod
     def _build_quote_extra(records: list[dict]) -> pl.DataFrame:
-                # <<< LOCAL-EXT
         """构建 API 直接提供的补充字段 (不写 daily, 只传给 enriched 计算)。
 
         包含: prev_close, change_pct, change_amount, amplitude, turnover_rate。

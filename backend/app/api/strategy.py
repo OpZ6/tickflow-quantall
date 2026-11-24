@@ -33,9 +33,9 @@ from app.strategy.ai_generator import (
     find_meta_assignment,
 )
 from app.strategy.catalog import catalog_label_for, catalog_origin
+# <<< LOCAL-EXT
 from app.strategy.engine import StrategyDef, StrategyEngine
 from app.strategy.monitor import StrategyMonitorService
-# <<< LOCAL-EXT
 from app.strategy.prompt_builder import build_step1, build_step2
 from app.strategy.scoring import (
     SCORING_DIRECTIONS,
@@ -198,8 +198,8 @@ def _strategy_detail(
     name = overrides.get("name", s.meta.get("name", "")) if overrides else s.meta.get("name", "")
     description = overrides.get("description", s.meta.get("description", "")) if overrides else s.meta.get("description", "")
     origin = catalog_origin(str(s.meta["id"]), s.source)
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return {
         "id": s.meta["id"],
         "name": name or s.meta.get("name", ""),
@@ -303,6 +303,7 @@ class EventBackfillRequest(BaseModel):
     start_date: date
     end_date: date
     strategy_ids: list[str]
+# <<< LOCAL-EXT
     asset_type: str = "stock"
     timeframe: str = "1d"
 
@@ -327,7 +328,6 @@ class AIIterateRequest(BaseModel):
 
 
 class AISaveRequest(BaseModel):
-    # <<< LOCAL-EXT
     code: str
     strategy_id: str
     name: str = ""
@@ -407,6 +407,7 @@ def list_strategies(
 
 
 @router.get("/events")
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def query_strategy_events(
     request: Request,
     symbol: str | None = None,
@@ -426,7 +427,6 @@ def query_strategy_events(
         end_date=end_date,
         event_types=(item.strip() for item in (event_types or "").split(",") if item.strip()),
         source_run_id=source_run_id,
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         params_fingerprint=params_fingerprint,
     )
     return {"rows": rows[-limit:], "total": len(rows), "generation": StrategySignalEventRepository(_data_dir(request)).generation()}
@@ -560,6 +560,7 @@ def preview_strategy(req: PreviewRequest, request: Request):
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+# <<< LOCAL-EXT
 
 
 @router.post("/run")
@@ -603,6 +604,7 @@ def run_strategy(req: RunRequest, request: Request):
             pool=req.pool,
             params=params,
             overrides=overrides or None,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
         enrich_and_persist_strategy_result(
             data_dir=data_dir,
@@ -610,6 +612,7 @@ def run_strategy(req: RunRequest, request: Request):
             strategy=engine.get(req.strategy_id),
             params=params,
             context=context,
+        # <<< LOCAL-EXT
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -626,7 +629,6 @@ def run_all(req: RunAllRequest, request: Request):
     if not as_of:
         from app.services.screener import ScreenerService
         svc = ScreenerService(request.app.state.repo, asset_type=req.asset_type)
-        # <<< LOCAL-EXT
         as_of = svc.latest_date()
     if not as_of:
         return {"as_of": None, "results": {}}
@@ -660,6 +662,7 @@ def run_all(req: RunAllRequest, request: Request):
         overrides_map={sid: all_overrides.get(sid, {}) for sid in strategy_ids},
         strategy_ids=strategy_ids,
     ).items():
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         enrich_and_persist_strategy_result(
             data_dir=data_dir,
             result=result,
@@ -667,10 +670,10 @@ def run_all(req: RunAllRequest, request: Request):
             params=params_map.get(sid, {}),
             context=context,
         )
+        # <<< LOCAL-EXT
         results[sid] = {"total": result.total, "as_of": str(as_of)}
 
     return {"as_of": str(as_of), "results": results}
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 # ── 配置持久化 ───────────────────────────────────────────────────────
@@ -679,7 +682,6 @@ def run_all(req: RunAllRequest, request: Request):
 @router.post("/config")
 def save_config(req: SaveConfigRequest, request: Request):
     engine = _get_engine(request)
-# <<< LOCAL-EXT
     strategy = _get_public_strategy(engine, req.strategy_id)
     data_dir = _data_dir(request)
 
@@ -728,7 +730,6 @@ def _overlay_changed(old, new) -> bool:
 # 叠加条件第一版只支持日线 polars_expr / matrix_native; composite 已有自身
 # 的叠加合并语义, minute 帧不带 enriched 列 (ext_*/因子列不可见)。
 _OVERLAY_UNSUPPORTED_BACKENDS = frozenset({"composite", "minute_filter"})
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 def _validate_overlay_filter(strategy, overrides: dict) -> None:
@@ -738,7 +739,6 @@ def _validate_overlay_filter(strategy, overrides: dict) -> None:
     """
     conditions = overrides.get("overlay_filter")
     if conditions is None:
-# <<< LOCAL-EXT
         return
     if strategy.execution_backend in _OVERLAY_UNSUPPORTED_BACKENDS:
         raise HTTPException(

@@ -33,12 +33,12 @@ def atomic_write_text(path: Path, text: str, *, mode: int | None = None, durable
             stream.flush()
             os.fsync(stream.fileno())
     else:
+    # <<< LOCAL-EXT
         tmp.write_text(text, encoding="utf-8", newline="\n")
     if mode is not None:
         try:
             os.chmod(tmp, mode)
         except OSError:
-    # <<< LOCAL-EXT
             pass
     os.replace(tmp, path)
     if durable and os.name != "nt":

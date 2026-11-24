@@ -562,9 +562,9 @@ class DataProvidersIn(BaseModel):
     financial_data_provider: str | None = None
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     provider_chains: dict[str, list[str]] | None = None
-
-
     # <<< LOCAL-EXT
+
+
 class PluginKeyIn(BaseModel):
     plugin: str
     api_key: str
@@ -664,18 +664,18 @@ def get_preferences() -> dict:
         "realtime_data_provider": preferences.get_realtime_data_provider(),
         "financial_data_provider": preferences.get_financial_provider(),
         "provider_chains": {
-            dataset: preferences.get_data_provider_chain(dataset)
             # >>> LOCAL-EXT 本地增强, 上游同步时保护
+            dataset: preferences.get_data_provider_chain(dataset)
             for dataset in (
                 "daily", "adj_factor", "minute", "depth5", "realtime", "financial"
             )
         },
+            # <<< LOCAL-EXT
         "data_source_job_timeout_s": preferences.get_data_source_job_timeout_s(),
         "data_source_long_job_timeout_s": preferences.get_data_source_long_job_timeout_s(),
         "minute_batch_compress": preferences.get_minute_batch_compress(),
         "daily_batch_compress": preferences.get_daily_batch_compress(),
         **preferences.get_realtime_quote_scope(),
-            # <<< LOCAL-EXT
         "pipeline_pull_a_share": preferences.get_pipeline_pull_a_share(),
         "pipeline_pull_etf": preferences.get_pipeline_pull_etf(),
         "pipeline_pull_index": preferences.get_pipeline_pull_index(),
@@ -755,13 +755,13 @@ def get_capability_matrix() -> dict:
     TickFlow 当前档位由 tickflow policy 注入 (候选按档位过滤),
     组装逻辑在 data_providers.capabilities, 本层保持薄。
     """
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.data_providers import routing
     from app.data_providers.capabilities import build_capability_matrix
     from app.services import preferences
     from app.tickflow import policy
 
     datasets = ("daily", "adj_factor", "realtime", "minute", "depth5", "financial")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return build_capability_matrix(
         {
             "realtime_data_provider": preferences.get_realtime_data_provider(),
@@ -777,12 +777,12 @@ def get_capability_matrix() -> dict:
             dataset: preferences.get_data_provider_chain(dataset) for dataset in datasets
         },
         provider_health={dataset: routing.health_snapshot(dataset) for dataset in datasets},
+    # <<< LOCAL-EXT
     )
 
 
 @router.post("/plugin-key")
 def save_plugin_key(req: PluginKeyIn) -> dict:
-    # <<< LOCAL-EXT
     """保存插件 API Key(先探后存, 对齐 /tickflow-key 语义)。
 
     流程: probe_plugin_key 用候选 Key 实探 → 有效才写 secrets.json
@@ -997,6 +997,7 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
     from app.services import preferences
     updates = req.model_dump(exclude_none=True)
     chains = updates.pop("provider_chains", {})
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     field_to_dataset = {
         "daily_data_provider": "daily",
         "adj_factor_provider": "adj_factor",
@@ -1006,7 +1007,6 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
         "financial_data_provider": "financial",
     }
     with preferences.mutation():
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from app.data_providers import custom as custom_sources
         removing = {p["name"] for p in custom_sources.list_plugins() if p.get("pending_remove")}
         if any(provider.lower() in removing for provider in updates.values()):
@@ -1038,6 +1038,7 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
         "financial_data_provider": preferences.get_financial_provider(),
         # 不回显 provider_chains: PUT 的响应契约是"原样回显本次保存的字段"
         # (上游用例按请求体逐键比对)。链顺序由 GET /data-sources 提供。
+    # <<< LOCAL-EXT
     }
 
 
@@ -1059,7 +1060,6 @@ def update_minute_batch_compress(req: MinuteBatchCompressPrefs) -> dict:
 
 @router.put("/preferences/daily-batch-compress")
 def update_daily_batch_compress(req: DailyBatchCompressPrefs) -> dict:
-        # <<< LOCAL-EXT
     """保存日K详情与批量响应的 gzip 传输压缩开关 (与分时独立)。逐请求即时读取。"""
     from app.services import preferences
     preferences.save({"daily_batch_compress": req.daily_batch_compress})

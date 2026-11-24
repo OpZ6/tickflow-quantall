@@ -37,6 +37,7 @@ def _run_pipeline_and_quantx(run, progress) -> dict:
     result["quantx"] = daily_pipeline._run_quantx_after_pipeline()
     result["stock_pools"] = daily_pipeline._run_stock_pools_after_pipeline()
     return result
+# <<< LOCAL-EXT
 
 
 @router.post("/run")
@@ -47,7 +48,6 @@ async def run_now(request: Request) -> dict:
         request.app.state.capabilities,
         getattr(request.app.state, "quote_service", None),
     )
-# <<< LOCAL-EXT
 
 
 async def trigger_pipeline_job(repo, capset, quote_service=None) -> dict:
@@ -99,19 +99,19 @@ async def _submit_job(repo, quote_service, make_run) -> dict:
                 try:
                     if qs:
                         with qs.paused():
+                            # >>> LOCAL-EXT 本地增强, 上游同步时保护
                             return _run_pipeline_and_quantx(run, progress)
                     return _run_pipeline_and_quantx(run, progress)
+                            # <<< LOCAL-EXT
                 finally:
                     repo.refresh_cache()
 
             result = await loop.run_in_executor(_long_task_executor, run_with_capacity, job_id, _run)
             job_store.succeed(job_id, result)
             invalidate_storage_cache()
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         except JobCancelledError:
             # 已被 reap/手动取消终止: job 状态已由 terminate() 写为 failed,
             # 拉取线程在分块回调处自行退出, 这里无需(也无法)再写状态。
-        # <<< LOCAL-EXT
             logger.warning("pipeline job %s cancelled", job_id)
         except Exception as e:  # noqa: BLE001
             logger.exception("pipeline job failed")
