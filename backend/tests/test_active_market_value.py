@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.kline import router as kline_router
+from app.api.kline_ext import router as kline_ext_router
 from app.custom.amv import router
 from app.indicators.active_market_value import (
     compute_active_market_value,
@@ -308,6 +309,7 @@ def test_chart_api_rejects_bad_parameters_and_supports_presets():
     app = FastAPI()
     app.state.repo = ChartRepo()
     app.include_router(kline_router)
+    app.include_router(kline_ext_router)
     with TestClient(app) as client:
         base = {"symbol": "000001.SZ", "indicator_warmups": "amv:131"}
         for bad in ('[]', '{"amv":{"kf":0}}', '{"amv":{"gamma":true}}', '{"amv":{"h":8.5}}', '{"amv":{"extra":1}}', '{"bogus":{}}'):

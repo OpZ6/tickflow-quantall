@@ -7,8 +7,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.kline import _canonical_chart_symbol
 from app.api.kline import router as kline_router
+from app.api.kline_ext import _canonical_chart_symbol
+from app.api.kline_ext import router as kline_ext_router
 from app.indicators.pipeline import compute_indicators
 from app.services.chart_data import (
     ChartQuery,
@@ -400,6 +401,7 @@ def test_single_daily_sync_uses_explicit_range_without_full_market_job(monkeypat
     app.state.repo = Repo()
     app.state.capabilities = Capset()
     app.include_router(kline_router)
+    app.include_router(kline_ext_router)
 
     response = TestClient(app).post("/api/kline/sync_daily_single", json={
         "symbol": "000001.SZ", "start_date": "2023-09-01", "end_date": "2026-09-01",
@@ -451,6 +453,7 @@ def test_single_daily_sync_skips_covered_prices_but_still_refreshes_adjustment_f
     app.state.repo = Repo()
     app.state.capabilities = Capset()
     app.include_router(kline_router)
+    app.include_router(kline_ext_router)
 
     response = TestClient(app).post("/api/kline/sync_daily_single", json={
         "symbol": "605319.SH", "start_date": "2021-06-07", "end_date": "2026-09-01",

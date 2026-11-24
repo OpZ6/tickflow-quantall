@@ -33,6 +33,7 @@ from app.api import (
     indices,
     intraday,
     kline,
+    kline_ext,
     lab,
     lots,
     market_recap,
@@ -723,6 +724,8 @@ async def auth_middleware(request: Request, call_next):
 app.include_router(core_router)
 app.include_router(auth_api.router)
 app.include_router(kline.router)
+# 本地增强的图表/单股补数端点（独立模块, 上游同步零冲突）
+app.include_router(kline_ext.router)
 app.include_router(chart_indicators.router)
 app.include_router(watchlist.router)
 app.include_router(screener.router)
