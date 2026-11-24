@@ -642,6 +642,7 @@ def load_market_data_matrix_from_daily_panel(
     *,
     field_columns: set[str],
     instruments: pl.DataFrame,
+    share_history: pl.DataFrame | None = None,
     cancel_event: threading.Event | None = None,
 ) -> MarketDataMatrix:
     """Build with the same daily scanner, field projection and limit masks as Parquet."""
@@ -649,6 +650,9 @@ def load_market_data_matrix_from_daily_panel(
     _validate_matrix_dataset_schema(dataset)
     return _build_market_data_matrix_from_dataset(
         dataset, start, end, _normalize_matrix_cache_fields(field_columns), None, instruments,
+        # 快照面板本身已带策略请求的列; 侧面股本表只在 Parquet 路径存在,
+        # 缺失时与上游一致: 由 _resolve_matrix_storage_fields 明确报"字段不可用"。
+        share_history,
         batch_size=_ARROW_BATCH_SIZE, cache_status="none", cancel_event=cancel_event,
     )
 
