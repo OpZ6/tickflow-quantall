@@ -65,11 +65,17 @@ def enrich_and_persist_strategy_result(
     strategy_version = str(strategy.meta.get("version") or "1.0.0")
     params_fingerprint = _fingerprint(params)
     input_fingerprint = _input_fingerprint(context)
+    # 真实 StrategyResult 一定带 as_of; 上游 screener 用例用的是只含 total/rows 的
+    # 极简替身, 这里按鸭子类型取值, 避免把"没这个字段"当成错误。
+    as_of = getattr(result, "as_of", None) or getattr(context, "as_of", None)
+    if as_of is None:
+        # 拿不到事件日期就无法构造合法证据事件 (写入层会拒), 直接跳过持久化。
+        return []
     source_run_id = _fingerprint({
         "strategy_id": getattr(result, "strategy_id", None) or getattr(result, "strategy", "unknown"),
         "strategy_version": strategy_version,
         "params_fingerprint": params_fingerprint,
-        "as_of": result.as_of,
+        "as_of": as_of,
         "asset_type": getattr(context, "asset_type", "stock"),
         "timeframe": getattr(context, "timeframe", "1d"),
         "input_fingerprint": input_fingerprint,
@@ -93,7 +99,7 @@ def enrich_and_persist_strategy_result(
             "params_fingerprint": params_fingerprint,
             "symbol": symbol,
             "asset_type": getattr(context, "asset_type", "stock"),
-            "event_date": result.as_of,
+            "event_date": as_of,
             "event_type": event_type,
             "signal_kind": signal_kind,
             "score": getattr(result, "scores", {}).get(symbol, row.get("score")),
@@ -102,7 +108,17 @@ def enrich_and_persist_strategy_result(
             "input_fingerprint": input_fingerprint,
             "reason_codes": list(dict.fromkeys((signals or [f"strategy_{event_type}"]) + detail.get("reason_codes", []))),
             "metrics": _row_metrics(row, params, signals) + detail.get("metrics", []),
-            "anchors": [{"date": result.as_of.isoformat() if hasattr(result.as_of, "isoformat") else str(result.as_of), "role": event_type, "ohlc": {key: row.get(key) for key in ("open", "high", "low", "close")}}, *detail.get("anchors", [])],
+            "anchors": (
+                [
+                    {
+                        "date": as_of.isoformat() if hasattr(as_of, "isoformat") else str(as_of),
+                        "role": event_type,
+                        "ohlc": {key: row.get(key) for key in ("open", "high", "low", "close")},
+                    }
+                ]
+                if as_of is not None
+                else []
+            ) + detail.get("anchors", []),
             "levels": levels + detail.get("levels", []),
             "pattern_refs": detail.get("pattern_refs", []),
             "observed_at": datetime.now(),

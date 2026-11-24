@@ -891,6 +891,13 @@ class QuoteService:
         source_stamp = preferences.data_source_stamp()
         demand = self._wanted_quotes()
         chain = preferences.get_data_provider_chain("realtime")
+        # 显式选择必须先于白名单回退生效 (上游 v0.4.1 语义): 用户配了一个不存在/
+        # 已卸载的源时, 不能悄悄换成 tickflow 还装作正常——保留旧快照并告警,
+        # 否则"配了付费源却全程走免费档"这类问题无从排查。
+        explicit = preferences.configured_realtime_data_provider()
+        if explicit and explicit != "tickflow" and explicit not in chain:
+            logger.warning("所选实时数据源 %s 不可用, 保留已有行情", explicit)
+            return
         tickflow_enabled = "tickflow" in chain
         for provider_name in chain:
             if provider_name == "tickflow":

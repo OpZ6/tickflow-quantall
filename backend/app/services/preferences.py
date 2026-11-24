@@ -492,8 +492,12 @@ def get_depth5_data_provider() -> str:
     return _validated_provider(provider, "depth5_data_provider")
 
 
+def configured_realtime_data_provider() -> str:
+    return str(load().get("realtime_data_provider", "tickflow") or "tickflow").lower()
+
+
 def get_realtime_data_provider() -> str:
-    provider = str(load().get("realtime_data_provider", "tickflow") or "tickflow").lower()
+    provider = configured_realtime_data_provider()
     return _validated_provider(provider, "realtime_data_provider")
 
 
