@@ -10,7 +10,7 @@
 
 | 文件 | 本地区块数 | 本地新增行 |
 |---|---|---|
-| `frontend/src/components/EChartsCandlestick.tsx` | 9 | 1454 |
+| `frontend/src/components/EChartsCandlestick.tsx` | 9 | 1367 |
 | `packages/tivelo-backtest/src/tivelo_backtest/legacy/simulator.py` | 18 | 732 |
 | `backend/app/tickflow/repository.py` | 14 | 528 |
 | `backend/app/backtest/matrix.py` | 13 | 486 |
