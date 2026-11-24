@@ -114,6 +114,17 @@ grep -rn "MatcherConfig(" backend/app | head   # 每个构造点都要对齐
 本项目 `repository.get_daily` 原本直读内存快照，合并后变成"冷查询触发全市场 warmup"，
 单股行情 tick 每次都全量预热 → 用本地既有测试守住的这个行为回归，必须人工改回。
 
+**收尾必跑一条静态检查**（它能抓到上面这类"签名变了、调用点没跟上"的静默 TypeError）：
+
+```bash
+cd backend && .venv/Scripts/python.exe scripts/check_call_signatures.py   # 退出码 0 才算过
+```
+
+v0.4.1 同步时它抓出 1 处：`load_market_data_matrix_from_daily_panel` 新增的
+快照入口没给 `_build_market_data_matrix_from_dataset` 传 `share_history`，
+快照/流式回测直接 `TypeError`，被 worker 吞成 `ENGINE_EXECUTION_FAILED`
+（只透错误码、不透堆栈，表现为"任务失败但看不到原因"）。
+
 ---
 
 ## 4. 第三步：三方合并 + 冲突分级
@@ -281,6 +292,7 @@ git merge-base --is-ancestor main sync/upstream-<ver>   # 真=可快进
 - [ ] 四道关卡全绿；失败项都做过**对照实验**并归因
 - [ ] 覆盖度复查 100%（新增文件 + 修改文件抽查）
 - [ ] `packages/tivelo-*/` 内移植项逐条对齐（数据类字段 + 每个构造点 + 消费点）
+- [ ] `scripts/check_call_signatures.py` 退出码 0（跨模块必填参数无缺口）
 - [ ] 依赖变更已装：`uv pip install --no-deps -e packages/*`（后端）、`pnpm install`（前端）
 - [ ] 三大自研面板路由实测注册（`/quantx`、`/market-lab`、`/stock-pools` 等）
 - [ ] 自研策略引擎实测加载数正确、`load_errors()` 为空
