@@ -106,6 +106,7 @@ def test_custom_provider_monitor_indices_join_fetch(monkeypatch):
     assert provider.index_calls == [sorted(set(CORE_INDEX_SYMBOLS) | BENCHMARK_INDEX_SYMBOLS | {"000300.SH"})]
 
 
+# LOCAL-DIVERGENCE: 本地实时记录多带 source 字段
 def test_custom_provider_without_indices_protocol_is_silent(monkeypatch):
     """未实现 get_realtime_indices 的源: 个股 records 照常, 指数不补充不报错。"""
     service, captured, replacements = _service_with_provider(monkeypatch, _ProviderNoIndices())
@@ -129,6 +130,7 @@ def test_custom_provider_index_fetch_error_is_soft(monkeypatch):
     assert replacements == [False]
 
 
+# LOCAL-DIVERGENCE: 本地实时记录多带 source 字段
 def test_custom_provider_index_fetch_failure_preserves_cache(monkeypatch):
     """None 表示指数请求失败: 股票继续更新, 但不得替换上一轮指数缓存。"""
     class _Unavailable:
@@ -145,6 +147,7 @@ def test_custom_provider_index_fetch_failure_preserves_cache(monkeypatch):
     assert replacements == [False]
 
 
+# LOCAL-DIVERGENCE: 本地实时记录多带 source 字段
 def test_custom_provider_successful_empty_index_fetch_replaces_cache(monkeypatch):
     """空 list 是成功响应: 与失败 None 区分, 仍按现有语义替换缓存。"""
     service, captured, replacements = _service_with_provider(

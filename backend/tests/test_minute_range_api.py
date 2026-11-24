@@ -108,6 +108,7 @@ def test_sync_minute_single_uses_requested_days(monkeypatch):
     refresh.assert_called_once_with(repo, "kline_minute")
 
 
+# LOCAL-DIVERGENCE: 本地把分钟回补上限从 30 天放宽到 1095 天
 def test_sync_minute_single_rejects_invalid_days():
     with pytest.raises(HTTPException, match="days 必须在 1 到 1095 之间"):
         asyncio.run(kline_api.sync_minute_single(

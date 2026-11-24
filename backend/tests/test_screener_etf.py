@@ -45,6 +45,7 @@ def test_all_builtin_strategies_declare_asset_types_and_timeframes():
         assert meta["timeframes"] == ["1d"]
 
 
+# LOCAL-DIVERGENCE: 上游锁死策略数=25; 本地策略更多, 改为只校验契约不校验数量
 def test_all_builtin_strategies_use_matrix_backend_only():
     engine = _engine()
     assert engine.load_errors() == []

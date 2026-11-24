@@ -131,6 +131,7 @@ def test_execution_rejections_are_dated_and_do_not_change_matching():
         assert sum(row["reason"] == key for row in events) == traced.stats["execution"][key]
 
 
+# LOCAL-DIVERGENCE: 上游缺 bar 时信号顺延到下个月; 本地判为过期作废 (entry=[0,1,0])
 def test_open_t_plus_one_signal_expires_when_next_market_session_bar_is_missing():
     panel = pl.DataFrame([
         _row("A", 0, 10, signal_entry=True),
@@ -149,6 +150,7 @@ def test_open_t_plus_one_signal_expires_when_next_market_session_bar_is_missing(
     assert matrix.entry_signal_time[1, 0] == 0
 
 
+# LOCAL-DIVERGENCE: 同上: 本地把缺失 bar / 停牌占位都视作吃掉了入场信号
 def test_missing_bar_and_suspension_placeholder_both_consume_entry_signal():
     rows = [_row("A", 0, 10, signal_entry=True), _row("A", 2, 12), _row("A", 3, 12)]
     rows += [_row("B", day, 20) for day in range(4)]

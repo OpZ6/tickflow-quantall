@@ -218,6 +218,7 @@ def test_all_halted_partition_does_not_require_active_rows(tmp_path):
     assert _prune_partial_enriched_partitions(daily, enriched) == []
 
 
+# LOCAL-DIVERGENCE: 上游把中间空洞当增量补(new_dates_only=True); 本地当向后延伸, 重建滚动指标
 def test_pruned_interior_date_is_rebuilt_without_new_daily_or_factors(tmp_path, monkeypatch):
     daily = tmp_path / "kline_daily"
     enriched = tmp_path / "kline_daily_enriched"

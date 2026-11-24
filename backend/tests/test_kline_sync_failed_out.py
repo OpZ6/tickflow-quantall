@@ -21,6 +21,7 @@ def repo(tmp_path):
     return KlineRepository(DataStore(tmp_path))
 
 
+# LOCAL-DIVERGENCE: 上游静默返回 written=0; 本地 fail-closed 抛 RuntimeError
 def test_accepts_failed_out_and_surfaces_failed_symbols(monkeypatch, repo):
     def fake_sync_daily_batch(symbols, **kwargs):
         # 模拟分块拉取失败: 内部经由 failed_out 出参上报失败标的
