@@ -560,7 +560,9 @@ class DataProvidersIn(BaseModel):
     depth5_data_provider: str | None = None
     realtime_data_provider: str | None = None
     financial_data_provider: str | None = None
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     provider_chains: dict[str, list[str]] | None = None
+    # <<< LOCAL-EXT
 
 
 class PluginKeyIn(BaseModel):
@@ -662,11 +664,15 @@ def get_preferences() -> dict:
         "realtime_data_provider": preferences.get_realtime_data_provider(),
         "financial_data_provider": preferences.get_financial_provider(),
         "provider_chains": {
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             dataset: preferences.get_data_provider_chain(dataset)
             for dataset in (
+            # <<< LOCAL-EXT
                 "daily", "adj_factor", "minute", "depth5", "realtime", "financial"
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
         },
+            # <<< LOCAL-EXT
         "data_source_job_timeout_s": preferences.get_data_source_job_timeout_s(),
         "data_source_long_job_timeout_s": preferences.get_data_source_long_job_timeout_s(),
         "minute_batch_compress": preferences.get_minute_batch_compress(),
@@ -751,11 +757,13 @@ def get_capability_matrix() -> dict:
     TickFlow 当前档位由 tickflow policy 注入 (候选按档位过滤),
     组装逻辑在 data_providers.capabilities, 本层保持薄。
     """
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.data_providers import routing
     from app.data_providers.capabilities import build_capability_matrix
     from app.services import preferences
     from app.tickflow import policy
 
+    # <<< LOCAL-EXT
     datasets = ("daily", "adj_factor", "realtime", "minute", "depth5", "financial")
     return build_capability_matrix(
         {
@@ -768,10 +776,12 @@ def get_capability_matrix() -> dict:
             "financial_data_provider": preferences.get_financial_provider(),
         },
         tickflow_tier=policy.base_tier_name(),
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         provider_chains={
             dataset: preferences.get_data_provider_chain(dataset) for dataset in datasets
         },
         provider_health={dataset: routing.health_snapshot(dataset) for dataset in datasets},
+        # <<< LOCAL-EXT
     )
 
 
@@ -991,19 +1001,26 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
     from app.services import preferences
     updates = req.model_dump(exclude_none=True)
     chains = updates.pop("provider_chains", {})
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     field_to_dataset = {
+    # <<< LOCAL-EXT
         "daily_data_provider": "daily",
         "adj_factor_provider": "adj_factor",
         "minute_data_provider": "minute",
         "depth5_data_provider": "depth5",
         "realtime_data_provider": "realtime",
         "financial_data_provider": "financial",
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     }
     with preferences.mutation():
         from app.data_providers import custom as custom_sources
+    # <<< LOCAL-EXT
         removing = {p["name"] for p in custom_sources.list_plugins() if p.get("pending_remove")}
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if any(provider.lower() in removing for provider in updates.values()):
+        # <<< LOCAL-EXT
             raise HTTPException(400, "该插件正在等待卸载，请选择其他数据源")
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         for dataset, chain in chains.items():
             preferences.set_data_provider_chain(dataset, chain)
         # 有 provider 链语义的字段走 promote (选中的源提到链首); 其余字段
@@ -1018,10 +1035,13 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
         # 与插件卸载共用写锁，避免并发请求重新引用已移除的数据源。
         # 当前 provider 变化会改变自定义源能力增广结果 (读缓存, 无网络请求)。
         request.app.state.capabilities = detect_capabilities()
+        # <<< LOCAL-EXT
     scheduler = getattr(request.app.state, "financial_scheduler", None)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if scheduler is not None:
         scheduler.update_capabilities(request.app.state.capabilities)
     return {
+    # <<< LOCAL-EXT
         "daily_data_provider": preferences.get_daily_data_provider(),
         "adj_factor_provider": preferences.get_adj_factor_provider(),
         "minute_data_provider": preferences.get_minute_data_provider(),
@@ -1029,8 +1049,10 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
         "depth5_data_provider": preferences.get_depth5_data_provider(),
         "realtime_data_provider": preferences.get_realtime_data_provider(),
         "financial_data_provider": preferences.get_financial_provider(),
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 不回显 provider_chains: PUT 的响应契约是"原样回显本次保存的字段"
         # (上游用例按请求体逐键比对)。链顺序由 GET /data-sources 提供。
+        # <<< LOCAL-EXT
     }
 
 

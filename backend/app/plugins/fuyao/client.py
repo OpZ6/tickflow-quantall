@@ -214,18 +214,24 @@ class FuyaoClient(FuyaoHistoryClient):
             params["date"] = date
         return self._get("/api/a-share/auction/short-term-benchmark", params)
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def anomaly_analysis_list(self, tag_codes: str | None = None) -> dict:
+    # <<< LOCAL-EXT
         """当日个股异动原因列表 (特色数据)。
 
         返回 data 原始容器: {timestamp, item[]}。item 行:
         {stock_name, analysis_content, keyword_list[], thscode, tag_name}。
         仅提供当日快照, 无法回补历史日期; 当日数据未就绪返回 code=3002。
         """
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         params: dict = {}
         if tag_codes:
+        # <<< LOCAL-EXT
             params["tag_codes"] = tag_codes
         return self._get("/api/a-share/special-data/anomaly-analysis-list", params)
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
+# <<< LOCAL-EXT
     # ---- 市场 dump ----
     def dump_download_url(self, dump_kind: str) -> dict:
         """获取 dump 预签名下载信息(约 300s 有效)。

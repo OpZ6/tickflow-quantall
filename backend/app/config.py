@@ -190,10 +190,12 @@ class Settings(BaseSettings):
     ai_context_window: int = 128000
     # AI 助手工具轮次检查点: 连续 N 轮工具调用未完成时弹「继续/停止」卡; 0=不检查。
     ai_round_checkpoint: int = 100
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 股票池题材聚类 LLM 归一化 (同义合并/噪声剔除)。默认关闭:
     # 关闭时使用确定性聚类, 开启且已配置 AI Key 时每次发布调用一次 LLM,
     # 结果写入快照并在同日重算时复用; 调用失败自动降级回确定性结果。
     stock_pool_topic_llm: bool = False
+    # <<< LOCAL-EXT
 
     # Server
     host: str = "0.0.0.0"
@@ -240,12 +242,14 @@ class Settings(BaseSettings):
     # (均可被环境变量 DATA_DIR 覆盖, pydantic-settings 自动注入)
     data_dir: Path = _user_data_root()
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # External research items dir for research material index auto-refresh.
     # Set via RESEARCH_SOURCE_DIR env var to enable automatic index rebuild
     # before stock-pool publication. Points to the "items" subdirectory of a
     # completed QuantX Research publication tree.
     research_source_dir: Path | None = None
 
+    # <<< LOCAL-EXT
     # tiers.yaml 路径 — frozen: 资源目录内; 非 frozen: 项目根目录
     tiers_yaml: Path = _RESOURCE_ROOT / "tiers.yaml" if _IS_FROZEN else _PROJECT_ROOT / "tiers.yaml"
 

@@ -21,7 +21,9 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 from functools import lru_cache
+# <<< LOCAL-EXT
 import threading
 import time
 from collections.abc import Callable, Iterable
@@ -328,19 +330,27 @@ def _candidate_days(today: date, lookback_days: int) -> list[date]:
     return sorted(days)
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 @lru_cache(maxsize=2)
 def _trading_days_for_integrity(today: date) -> frozenset[date] | None:
+# <<< LOCAL-EXT
     """Use the configured exchange calendar when available; unknown keeps weekday fallback."""
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     try:
         from app.data_providers import custom
 
+    # <<< LOCAL-EXT
         if custom.is_custom_provider("fuyao"):
             days = custom.get_provider("fuyao").trading_days()
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if days:
                 return frozenset(days)
     except Exception as exc:  # noqa: BLE001
+            # <<< LOCAL-EXT
         logger.debug("integrity trading calendar unavailable: %s", exc)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return None
+    # <<< LOCAL-EXT
 # ---------------------------------------------------------------------------
 # 交易日历 (fuyao) — 「工作日近似」在节假日误报 missing; 修复任务对休市日
 # 永远拉不到数据, realtime_gate 因此循环 409 (2026-09-25 中秋实证)。
@@ -432,6 +442,7 @@ def scan_recent_integrity(
         candidates |= {d for d in known_days if window_start <= d < today}
         candidates |= unconfirmed
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 本地: 配置了 fuyao 数据源时用其权威交易日历收窄候选日, 避免节假日被当成
     # 缺口反复重拉。只在生产数据目录启用 — 隔离仓库和测试保留工作日近似, 不依赖
     # 本机 provider 状态。
@@ -442,6 +453,7 @@ def scan_recent_integrity(
         if exchange_days:
             candidates = {day for day in candidates if day in exchange_days}
 
+    # <<< LOCAL-EXT
     total = max(1, len(selected) * len(candidates))
     done = 0
     for table in selected:

@@ -23,15 +23,19 @@ def atomic_write_text(path: Path, text: str, *, mode: int | None = None, durable
     同步失败上抛，替换后的完整文件可能仍存在，调用方应核对提交标记。
     """
     tmp = path.with_suffix(path.suffix + ".tmp")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # newline="\n": 原样落盘。默认 newline=None 在 Windows 上会把 "\n" 翻成 "\r\n",
     # 若入参本身已含 "\r\n" (例如从备份归档里读出的原文件), 会变成 "\r\r\n",
     # 再读回来就多出空行 — 配置恢复因此会篡改行尾。
     if durable:
+    # <<< LOCAL-EXT
         with tmp.open("w", encoding="utf-8", newline="\n") as stream:
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
     else:
+            # <<< LOCAL-EXT
         tmp.write_text(text, encoding="utf-8", newline="\n")
     if mode is not None:
         try:

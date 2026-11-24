@@ -69,24 +69,35 @@ class OversoldReversalMatrixStrategy:
         return 60
 
     def compute_signals(self, market: MarketDataMatrix, params: dict) -> SignalMatrix:
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         qualifying = np.ones(market.shape, dtype=bool)
+        # <<< LOCAL-EXT
         if params.get("use_rsi_filter", True):
             qualifying &= matrix_feature(market, "rsi_14") < float(
                 params.get("rsi_max", 30.0)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
+            # <<< LOCAL-EXT
         if params.get("use_change_filter", True):
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             qualifying &= (
+            # <<< LOCAL-EXT
                 matrix_feature(market, "change_pct") > float(params.get("min_change", 1.0)) / 100.0
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
+            # <<< LOCAL-EXT
         if params.get("require_above_ma5", True):
             qualifying &= market.close > matrix_feature(market, "ma5")
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         previous_qualifying = shift(
             qualifying,
             1,
             valid_mask=np.isfinite(market.close),
         ) > 0.5
         entry = qualifying & ~previous_qualifying
+        # <<< LOCAL-EXT
         ma20 = matrix_feature(market, "ma20")
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         exit_ = (market.close < ma20) & (shift(market.close, 1) >= shift(ma20, 1))
         return make_signal_matrix(
             market.shape,
@@ -95,6 +106,7 @@ class OversoldReversalMatrixStrategy:
             entry_signal_code=np.where(entry, 0, -1).astype(np.int16),
             exit_signal_code=np.where(exit_, 0, -1).astype(np.int16),
             entry_signal_ids=tuple(ENTRY_SIGNALS),
+        # <<< LOCAL-EXT
             exit_signal_ids=("signal_ma20_breakdown",),
         )
 

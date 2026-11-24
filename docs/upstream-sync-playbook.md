@@ -322,12 +322,18 @@ v0.3.23 → v0.4.1 攒了 15 个 release / 113 commits，规模 1099 文件 / +1
 
 ---
 
-## 13. 可选加固（未做，按需）
+## 13. 已做 / 待做的降债项
 
-1. **区块标记**：在 121 个修改文件的核心块加 `# >>> LOCAL-EXT` / `# <<< LOCAL-EXT`，
-   冲突时一眼认出"这是我的块"，不用通读全文件
+1. **区块标记（已做，v0.4.1 同步后）**：`backend/app` 与 `packages/*/src` 下的 Python 文件已插入
+   `# >>> LOCAL-EXT` / `# <<< LOCAL-EXT`，共 40 文件 / 661 区块。下次冲突一眼认出"这是我的块"。
+   工具：`backend/scripts/mark_local_ext.py`（幂等，`LOCAL_EXT_BASE` 可换基线）。
+   - **TS/TSX 不插内联标记**：JSX 属性区里的 `//` 不是注释，插进去会直接破坏结构
+     （已验证会把标记插到 `onClick` 与 `aria-label` 之间）。前端以 `docs/local-ext-map.md` 清单为准。
 2. **继续外置**：仍可搬进 `custom/` 的改动——`frontend/src/lib/signals.ts`（+166）、
    `backend/app/api/kline.py`（+175）、`backend/app/services/financial_sync.py`（+273）
-3. **数据备份**：现有 `D:\tickflow-quantall-backups` 是 2026-08-27 的整份快照（923M），
+3. **图表引擎迁扩展槽**：`frontend/src/components/EChartsCandlestick.tsx`（+949 / 25 个区块）
+   是本项目单文件最大债务。v0.4.1 已提供 `stock-preview.tabs` 插槽与可安装扩展包，
+   可把这套引擎做成扩展而不是改上游组件
+4. **数据备份**：现有 `D:\tickflow-quantall-backups` 是 2026-08-27 的整份快照（923M），
    已被当前 `data/` 全面覆盖。若要"新备份点"，用 `backend/scripts/backup_quantx_data_foundation.py`
    生成新快照后删旧快照，比留着一个 7 周前的快照更有意义

@@ -22,7 +22,9 @@ from typing import NamedTuple
 
 import polars as pl
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 from app.config import settings
+# <<< LOCAL-EXT
 from app.data_providers.base import AssetType, ProviderRequestError
 from app.data_providers.minute_normalizer import (
     CANONICAL_MINUTE_COLS as CANONICAL_MINUTE_COLS,
@@ -276,6 +278,7 @@ def sync_daily_batch(symbols: list[str],
     return pl.concat(out, how="diagonal_relaxed")
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def fetch_daily_selected(
     symbols: list[str],
     *,
@@ -284,12 +287,14 @@ def fetch_daily_selected(
     end_time: datetime | None = None,
     on_chunk_done: Callable[[int, int], None] | None = None,
 ) -> pl.DataFrame:
+# <<< LOCAL-EXT
     """Fetch daily bars from the provider selected in preferences without persisting.
 
     A configured third-party provider is fail-closed: an empty/error result is
     returned as empty and is not silently replaced by TickFlow data. This keeps
     source provenance observable for analysis-only requests such as Chan charts.
     """
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not symbols:
         return pl.DataFrame()
     from app.data_providers import custom as custom_sources
@@ -299,27 +304,36 @@ def fetch_daily_selected(
     start = start_time or (end - timedelta(days=count or 365))
 
     def fetch(provider_name: str) -> pl.DataFrame:
+    # <<< LOCAL-EXT
         if provider_name == "tickflow":
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return sync_daily_batch(
                 symbols, count=count, start_time=start_time, end_time=end_time,
                 on_chunk_done=on_chunk_done,
             )
+            # <<< LOCAL-EXT
         if not custom_sources.provider_has_dataset(provider_name, "daily"):
             raise RuntimeError("provider does not declare daily")
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return custom_sources.get_provider(provider_name).get_daily(
             symbols, start_time=start, end_time=end, on_chunk_done=on_chunk_done,
         )
 
     try:
         df, _provider = routing.run_with_failover(
+        # <<< LOCAL-EXT
             "daily", fetch, is_success=lambda _value: True,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
         return df
     except routing.ProviderChainExhaustedError as exc:
+        # <<< LOCAL-EXT
         logger.warning("daily provider chain failed: %s", exc)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return pl.DataFrame()
 
 
+        # <<< LOCAL-EXT
 def iter_custom_daily_frames(provider, symbols, *, asset_type="stock", **kwargs):
     """复用流式/单帧插件契约; 旧股票插件可继续省略 asset_type 参数。"""
     if asset_type != "stock":
@@ -419,9 +433,13 @@ def sync_and_persist_daily_batch(
 
     original = list(symbols)
     store = getattr(repo, "store", None)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     symbols, resolved, skipped_bare = _normalize_bare_symbols(
+    # <<< LOCAL-EXT
         symbols, getattr(store, "data_dir", settings.data_dir)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     )
+    # <<< LOCAL-EXT
     requested = symbols
     # 完整符号 → 调用方原始写法: 0 行回报用用户输入的形式, 裸符号也能对上
     orig_by_full: dict[str, str] = {}
@@ -493,6 +511,7 @@ def sync_and_persist_daily_batch(
         seen.update(df["symbol"].cast(pl.Utf8).unique().to_list())
 
     if df.is_empty():
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if failed_syms:
             # fail-closed: 全量失败时不再"显示成功实则全空", 抛错并保留旧数据。
             # 抛错前仍要把失败标的交给调用方 (#514 出参契约), 否则上层只能看到一个
@@ -500,8 +519,11 @@ def sync_and_persist_daily_batch(
             if failed_out is not None:
                 failed_out.extend(failed_syms)
             raise RuntimeError(
+        # <<< LOCAL-EXT
                 f"日K同步失败: {len(failed_syms)}/{len(symbols)} 只标的未获取, 已保留旧数据"
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
+            # <<< LOCAL-EXT
         return _finalize(0)
 
     repo.append_daily(df)

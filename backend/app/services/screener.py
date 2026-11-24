@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import logging
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 import math
+# <<< LOCAL-EXT
 import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -53,7 +55,9 @@ _HISTORY_CACHE_TTL = 120.0  # 秒
 _PRIOR_PARTITION_SCAN = 10
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _history_scan_start(target_date: date, lookback_days: int, warmup: int = 60) -> date:
+# <<< LOCAL-EXT
     """Return a conservative calendar start for a trading-bar history request.
 
     A-share daily rows contain roughly 240 trading sessions per year.  The old
@@ -65,13 +69,17 @@ def _history_scan_start(target_date: date, lookback_days: int, warmup: int = 60)
     per-symbol valid-bar offsets and suspended stocks can have fewer rows than
     the market's global trading calendar.
     """
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     calendar_days = max(180, math.ceil((max(lookback_days, 1) + warmup) * 1.6))
     return target_date - timedelta(days=calendar_days)
 
 
 def _history_retained_days(lookback_days: int, warmup: int = 60) -> int:
+    # <<< LOCAL-EXT
     """Trading-calendar rows retained for per-symbol valid-bar calculations."""
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return max(lookback_days, 1) + max(warmup, 0)
+    # <<< LOCAL-EXT
 def _join_instruments(df: pl.DataFrame, instruments: pl.DataFrame) -> pl.DataFrame:
     if instruments.is_empty():
         return df
@@ -105,6 +113,7 @@ class ScreenerResult:
     rows: list[dict] = field(default_factory=list)
     total: int = 0
     elapsed_ms: float = 0.0
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     scores: dict[str, float] = field(default_factory=dict)
     entry_signal_hits: list[dict] = field(default_factory=list)
     exit_signal_hits: list[dict] = field(default_factory=list)
@@ -113,6 +122,7 @@ class ScreenerResult:
     source_run_id: str | None = None
     input_fingerprint: str | None = None
     evidence: list[dict] = field(default_factory=list)
+    # <<< LOCAL-EXT
 
 
 class ScreenerService:
@@ -346,7 +356,9 @@ class ScreenerService:
         )
 
         warmup = 60
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         start = _history_scan_start(target_date, lookback_days, warmup)
+        # <<< LOCAL-EXT
 
         enriched_dir = self.repo.store.data_dir / self._enriched_dirname
         # 同 _compute_enriched_full: turnover_rate 存储列随行透传 (#187)
@@ -389,9 +401,11 @@ class ScreenerService:
         # 不能用 timedelta(days=N) (自然日), 否则周末/节假日会让窗口偏少, 与回测不一致。
         if "date" in df_full.columns:
             trading_dates = df_full["date"].unique().sort()
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             retained_days = _history_retained_days(lookback_days, warmup)
             if len(trading_dates) > retained_days:
                 lookback_start = trading_dates[-(retained_days + 1)]
+            # <<< LOCAL-EXT
             else:
                 lookback_start = trading_dates[0]
             df_full = df_full.filter(pl.col("date") >= lookback_start)

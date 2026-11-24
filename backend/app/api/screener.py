@@ -20,7 +20,9 @@ from app.config import settings
 from app.db_safe import quote_ident
 from app.services import screener_work, strategy_cache, strategy_pool, strategy_run_queue
 from app.services.screener import ScreenerService
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 from app.services.strategy_evidence import enrich_and_persist_strategy_result
+# <<< LOCAL-EXT
 from app.services.shared_work import WorkBusyError
 from app.strategy import config as strategy_config
 
@@ -471,11 +473,15 @@ def strategies(
             continue
         sid = meta["id"]
         overrides = strategy_config.load_override(data_dir, sid)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from app.strategy.catalog import catalog_label_for, catalog_origin
 
+        # <<< LOCAL-EXT
         origin = catalog_origin(sid, meta.get("source"))
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         presets.append({
             **meta,
+        # <<< LOCAL-EXT
             "name": overrides.get("name") or meta["name"],
             "description": overrides.get("description") or meta.get("description", ""),
             "catalog_origin": origin,
@@ -554,9 +560,12 @@ def run_preset(req: PresetRequest, request: Request):
                 )
                 result = engine.run(req.strategy_id, context, pool=req.pool, params=params, overrides=overrides or None)
                 screener_work.assert_current(repo, engine, req.asset_type, identity)
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 # 本地证据链: 与策略缓存同为日线语义, 分钟预设在有专门事件 schema 前
                 # 不落库, 避免污染日线证据。
+                # <<< LOCAL-EXT
                 if req.timeframe == "1d":
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     enrich_and_persist_strategy_result(
                         data_dir=data_dir,
                         result=result,
@@ -568,13 +577,18 @@ def run_preset(req: PresetRequest, request: Request):
 
         result = copy.deepcopy(screener_work.single_work.run(key, compute, ttl_s=6 if req.ensure else 0))
     except ValueError as e:
+                    # <<< LOCAL-EXT
         status_code = 404 if "unknown strategy" in str(e) else 400
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         raise HTTPException(status_code=status_code, detail=str(e)) from e
 
     safe_data = _safe(asdict(result))
+        # <<< LOCAL-EXT
     safe_data["strategy"] = req.strategy_id
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 分钟周期结果不写入盘后缓存 (strategy_cache 是日线语义, as_of/updated_at
     # 混入分钟结果会污染页面秒加载路径)。
+    # <<< LOCAL-EXT
     if req.timeframe == "1d":
         # 数据不足提示随结果返回并写入盘后缓存 (#303); 分钟周期结果不写入盘后缓存
         # (strategy_cache 是日线语义, as_of/updated_at 混入分钟结果会污染页面秒加载路径),
@@ -608,6 +622,7 @@ def _cached_with_realtime(request: Request) -> dict:
         realtime_results = monitor_engine.latest_strategy_results()
         if realtime_results:
             results = dict(cached.get("results") or {})
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             for strategy_id, realtime_result in realtime_results.items():
                 previous = results.get(strategy_id)
                 if isinstance(previous, dict) and isinstance(realtime_result, dict):
@@ -616,6 +631,7 @@ def _cached_with_realtime(request: Request) -> dict:
                     results[strategy_id] = {**previous, **realtime_result}
                 else:
                     results[strategy_id] = realtime_result
+            # <<< LOCAL-EXT
             cached = dict(cached)
             cached["results"] = results
             # 有实时数据时, 以最新时间戳为准
@@ -1090,9 +1106,12 @@ def run_all(request: Request, body: Optional[dict] = None):
                                                  params_map=params_map, overrides_map=overrides_map)
             result = engine.run_all(context, params_map=params_map, overrides_map=overrides_map, strategy_ids=all_ids)
             screener_work.assert_current(repo, engine, asset_type, identity)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 证据链随本次计算落库一次: context 只在本闭包内可见, 且缓存命中时
             # 不应重复写逐笔事件 (key 相同即同一份证据)。
+            # <<< LOCAL-EXT
             if timeframe == "1d":
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 for sid, one in result.items():
                     enrich_and_persist_strategy_result(
                         data_dir=data_dir,
@@ -1101,6 +1120,7 @@ def run_all(request: Request, body: Optional[dict] = None):
                         params=params_map.get(sid, {}),
                         context=context,
                     )
+                # <<< LOCAL-EXT
             return result
 
     try:
@@ -1113,10 +1133,14 @@ def run_all(request: Request, body: Optional[dict] = None):
 
     results: dict[str, dict] = {}
     for sid, result in engine_results.items():
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         safe_result = _safe(asdict(result))
+        # <<< LOCAL-EXT
         safe_result["strategy"] = sid
         safe_result["as_of"] = str(as_of)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         results[sid] = safe_result
+        # <<< LOCAL-EXT
         if timeframe == "1d":
             w = _coverage_warnings(
                 svc, as_of, engine=engine, strategy_ids=[sid],

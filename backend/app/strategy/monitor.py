@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 # 信号布尔列 (csg_/csgi_/迁移的 signal_*) 的中文名由 _signal_label 查用户定义,
 # 此处只保留技术指标/行情字段与盘中信号。
 _SIGNAL_CN: dict[str, str] = {
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 内置信号
+    # <<< LOCAL-EXT
     "signal_ma_golden_5_20": "MA5上穿MA20", "signal_ma_dead_5_20": "MA5下穿MA20",
     "signal_ma_golden_20_60": "MA20上穿MA60", "signal_macd_golden": "MACD金叉",
     "signal_macd_dead": "MACD死叉", "signal_ma20_breakout": "突破MA20",
@@ -670,7 +672,9 @@ class MonitorRuleEngine:
                 if getattr(strategy, "execution_backend", "polars_expr") != "matrix_native":
                     continue
                 if getattr(strategy, "meta", {}).get("realtime_supported") is False:
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     continue
+                    # <<< LOCAL-EXT
                 overrides = {}
                 if self._data_dir:
                     overrides = _strategy_config.load_override(self._data_dir, sid)
@@ -1247,7 +1251,9 @@ class MonitorRuleEngine:
         if s is None:
             return []
         if getattr(s, "meta", {}).get("realtime_supported") is False:
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return []
+            # <<< LOCAL-EXT
 
         # 运行策略: 复用当前 enriched DataFrame 跳过数据加载
         overrides = {}
@@ -1426,6 +1432,7 @@ class MonitorRuleEngine:
             "pool_entry": set() if prev_pool is None else current_pool - prev_pool,
             "pool_exit": set() if prev_pool is None else prev_pool - current_pool,
         }
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if self._data_dir is not None and any(changes.values()):
             try:
                 from app.services.strategy_evidence import persist_realtime_trigger_events
@@ -1433,14 +1440,17 @@ class MonitorRuleEngine:
                 persist_realtime_trigger_events(
                     data_dir=self._data_dir,
                     strategy_id=sid,
+        # <<< LOCAL-EXT
                     strategy_version=str(s.meta.get("version") or "1.0.0"),
                     params=dict(overrides.get("params") or {}),
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     as_of=result.as_of,
                     asset_type=at,
                     changes=changes,
                     rows=row_map,
                 )
             except Exception as exc:
+                    # <<< LOCAL-EXT
                 logger.warning("策略 %s 实时触发事件持久化失败: %s", sid, exc)
 
         results: list[tuple[str, str, Any, Any, Any, list[str]]] = []

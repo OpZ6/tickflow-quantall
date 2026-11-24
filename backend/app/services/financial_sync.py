@@ -8,8 +8,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 import uuid
 from datetime import date, datetime, timezone
+# <<< LOCAL-EXT
 from pathlib import Path
 from typing import Any
 
@@ -77,37 +79,55 @@ def _fetch_table(
         logger.warning("sync_%s skipped: no symbols", table)
         return pl.DataFrame()
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.data_providers import custom as custom_sources
     from app.data_providers import routing
     from app.services import preferences
 
+    # <<< LOCAL-EXT
     chain = preferences.get_data_provider_chain("financial")
     tickflow_enabled = "tickflow" in chain
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     for provider_name in chain:
+    # <<< LOCAL-EXT
         if provider_name == "tickflow":
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             break
+            # <<< LOCAL-EXT
         if not routing.is_healthy("financial", provider_name):
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             continue
         try:
+            # <<< LOCAL-EXT
             if not custom_sources.provider_has_dataset(provider_name, "financial"):
                 raise RuntimeError("provider does not declare financial")
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             provider = custom_sources.get_provider(provider_name)
             df = provider.get_financials(table, symbols, latest_only=latest_only)
         except Exception as exc:  # noqa: BLE001
+            # <<< LOCAL-EXT
             routing.record_failure("financial", provider_name, str(exc))
             logger.warning("sync_%s provider %s failed: %s", table, provider_name, exc)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             continue
+            # <<< LOCAL-EXT
         if df.is_empty() or "symbol" not in df.columns:
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             continue
         routing.record_publication(
+            # <<< LOCAL-EXT
             "financial", provider_name, rows=df.height, scope=table,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
         return df
 
     if not tickflow_enabled or not capset.has(Cap.FINANCIAL):
+        # <<< LOCAL-EXT
         logger.info("sync_%s skipped: provider chain exhausted", table)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return pl.DataFrame()
 
+        # <<< LOCAL-EXT
     from app.tickflow.client import get_client
     tf = get_client()
 
@@ -327,19 +347,28 @@ def get_financial_df(data_dir: Path, table: str) -> pl.DataFrame:
         return pl.DataFrame()
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def provider_info() -> dict[str, Any]:
+# <<< LOCAL-EXT
     """Return the effective provider and its supported synchronization mode."""
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.services import preferences
     name = preferences.get_financial_provider()
+    # <<< LOCAL-EXT
     if name == "tickflow":
         return {"provider": name, "mode": "expert_bulk", "supports_overview": False}
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.data_providers import custom as custom_sources
     provider = custom_sources.get_provider(name)
+    # <<< LOCAL-EXT
     mode_fn = getattr(provider, "financial_mode", None)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return {
+    # <<< LOCAL-EXT
         "provider": name,
         "mode": mode_fn() if callable(mode_fn) else "custom",
         "supports_overview": callable(getattr(provider, "get_financial_overview", None)),
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     }
 
 
@@ -347,15 +376,23 @@ def sync_market_overview(data_dir: Path) -> int:
     from app.services import preferences
     from app.data_providers import custom as custom_sources
     provider = custom_sources.get_provider(preferences.get_financial_provider())
+    # <<< LOCAL-EXT
     fn = getattr(provider, "get_financial_overview", None)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not callable(fn):
+    # <<< LOCAL-EXT
         raise RuntimeError("当前财务数据源不支持全市场业绩概览")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     df = fn()
     symbols = set(_get_symbols(data_dir))
     if symbols and not df.is_empty():
+    # <<< LOCAL-EXT
         df = df.filter(pl.col("symbol").is_in(symbols))
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if df.is_empty():
+    # <<< LOCAL-EXT
         raise RuntimeError("上游返回空概览，已保留本地上一版数据")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return _write_table(OVERVIEW_TABLE, df, data_dir)
 
 
@@ -371,26 +408,36 @@ def _report_periods(start_year: int, today: date | None = None) -> list[date]:
 
 
 def _merge_market_core(existing: pl.DataFrame, fresh: pl.DataFrame) -> pl.DataFrame:
+    # <<< LOCAL-EXT
     """Merge bulk core facts without replacing richer non-AkShare detail rows."""
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if fresh.is_empty():
         return existing
     if existing.is_empty():
         return _merge_report_history(fresh)
+    # <<< LOCAL-EXT
     keys = fresh.select(["symbol", "period_end"]).unique()
     marked = existing.join(keys.with_columns(pl.lit(True).alias("_incoming")),
                            on=["symbol", "period_end"], how="left")
     source = pl.col("source").fill_null("") if "source" in marked.columns else pl.lit("")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     keep_existing = marked.filter(
+    # <<< LOCAL-EXT
         pl.col("_incoming").is_null() | ~source.str.starts_with("akshare")
     ).drop("_incoming")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     protected = existing.filter(
+    # <<< LOCAL-EXT
         ~pl.col("source").fill_null("").str.starts_with("akshare")
     ) if "source" in existing.columns else existing.head(0)
     protected_keys = protected.select(["symbol", "period_end"]).unique()
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     accepted_fresh = fresh.join(
+    # <<< LOCAL-EXT
         protected_keys.with_columns(pl.lit(True).alias("_protected")),
         on=["symbol", "period_end"], how="left",
     ).filter(pl.col("_protected").is_null()).drop("_protected")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return _merge_report_history(keep_existing, accepted_fresh)
 
 
@@ -400,25 +447,33 @@ def sync_market_history(
     start_year: int = 2012,
     on_progress=None,
 ) -> dict[str, int]:
+    # <<< LOCAL-EXT
     """Backfill full-market core financial history by report period.
 
     Older periods above the historical completion threshold are skipped; the
     latest four periods are always refreshed for delayed filings and revisions.
     """
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.data_providers import custom as custom_sources
     from app.services import preferences
 
     provider = custom_sources.get_provider(preferences.get_financial_provider())
+    # <<< LOCAL-EXT
     fetch = getattr(provider, "get_financial_market_table", None)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not callable(fetch):
+    # <<< LOCAL-EXT
         raise RuntimeError("当前财务数据源不支持全市场历史核心报表")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     universe_symbols = set(_get_symbols(data_dir))
     # Historical listed-company counts are much lower than today's universe.
     # A completed old market period still has well over 1,000 rows, while the
     # pre-existing on-demand detail cache normally has only a handful.
     threshold = min(1000, max(100, int(len(universe_symbols) * 0.85)))
     periods = _report_periods(start_year)
+    # <<< LOCAL-EXT
     tables = ("metrics", "income", "balance_sheet", "cash_flow")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     total_steps = len(periods) * len(tables)
     step = 0
     result: dict[str, int] = {}
@@ -429,39 +484,51 @@ def sync_market_history(
         for period in periods:
             step += 1
             period_rows = 0
+    # <<< LOCAL-EXT
             if not existing.is_empty() and "period_end" in existing.columns:
                 period_rows = existing.filter(pl.col("period_end") == period)[
                     "symbol"
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 ].n_unique()
             refresh_recent = period in periods[-4:]
             skipped = period_rows >= threshold and not refresh_recent
             if on_progress:
                 on_progress({
+                # <<< LOCAL-EXT
                     "step": step,
                     "total": total_steps,
                     "table": table,
                     "period": period.isoformat(),
                     "skipped": skipped,
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 })
             if skipped:
                 continue
             try:
                 fresh = fetch(table, period)
             except Exception as exc:  # noqa: BLE001
+                # <<< LOCAL-EXT
                 logger.warning("market financial %s %s failed: %s", table, period, exc)
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 if on_progress:
                     on_progress({
+                # <<< LOCAL-EXT
                         "step": step,
                         "total": total_steps,
                         "table": table,
                         "period": period.isoformat(),
                         "error": str(exc),
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     })
                 continue
             if universe_symbols and not fresh.is_empty():
+                    # <<< LOCAL-EXT
                 fresh = fresh.filter(pl.col("symbol").is_in(universe_symbols))
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if fresh.is_empty():
+            # <<< LOCAL-EXT
                 logger.warning("market financial %s %s returned empty", table, period)
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 continue
             existing = _merge_market_core(existing, fresh)
             dirty += 1
@@ -476,9 +543,13 @@ def sync_market_history(
 
 
 def sync_stock(symbol: str, data_dir: Path, capset: CapabilitySet) -> dict[str, int]:
+                # <<< LOCAL-EXT
     """Fetch all detailed tables for one stock and merge them into local history."""
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not symbol:
+    # <<< LOCAL-EXT
         raise ValueError("symbol 不能为空")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     result: dict[str, int] = {}
     for table in FINANCIAL_TABLES:
         fresh = _fetch_table(table, [symbol], capset, latest_only=False)
@@ -486,13 +557,16 @@ def sync_stock(symbol: str, data_dir: Path, capset: CapabilitySet) -> dict[str, 
             result[table] = 0
             continue
         existing = get_financial_df(data_dir, table)
+    # <<< LOCAL-EXT
         if table == "shares" and not existing.is_empty() and "symbol" in existing.columns:
             existing = existing.filter(pl.col("symbol") != symbol)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         merged = _merge_report_history(existing, fresh)
         result[table] = _write_table(table, merged, data_dir)
     return result
 
 
+        # <<< LOCAL-EXT
 # ================================================================
 # 调度器
 # ================================================================
@@ -509,9 +583,11 @@ class FinancialScheduler:
         self._last_sync: dict[str, str] = {}  # {table: iso_timestamp}
         # 手动同步(run_now)是否正在进行。前端据此显示"同步中"并防重复点击。
         self._is_syncing = False
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         self._active_scope: str | None = None
         self._last_error: str | None = None
         self._progress: dict[str, Any] | None = None
+        # <<< LOCAL-EXT
 
     def start(self, data_dir: Path, capset: CapabilitySet, *, auto_schedule: bool = False) -> None:
         """初始化调度器，并按需启动周期同步后台任务。
@@ -653,24 +729,33 @@ class FinancialScheduler:
         _refresh_financials_views(self._data_dir)
         return result
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def _run_scope(
         self, scope: str, symbol: str | None = None, start_year: int = 2012
     ) -> dict[str, int]:
+    # <<< LOCAL-EXT
         if scope == "market_overview":
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             rows = sync_market_overview(self._data_dir)
             self._record_sync(OVERVIEW_TABLE)
             return {OVERVIEW_TABLE: rows}
+            # <<< LOCAL-EXT
         if scope == "stock":
             result = sync_stock(symbol or "", self._data_dir, self._capset)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             for table, rows in result.items():
                 if rows:
                     self._record_sync(table)
             return result
+            # <<< LOCAL-EXT
         if scope == "market_history":
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             result = sync_market_history(
                 self._data_dir,
                 start_year=start_year,
+            # <<< LOCAL-EXT
                 on_progress=lambda value: setattr(self, "_progress", value),
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
             for table, rows in result.items():
                 if rows:
@@ -679,18 +764,24 @@ class FinancialScheduler:
             self._record_sync(OVERVIEW_TABLE)
             result[OVERVIEW_TABLE] = overview_rows
             return result
+            # <<< LOCAL-EXT
         if scope == "market_detail" and provider_info()["mode"] == "standard_on_demand":
             raise RuntimeError("当前 Tushare 权限仅支持按个股更新详细财报，请先选择股票")
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return self._run_body(None)
 
     def trigger_scope(
         self, scope: str, symbol: str | None = None, start_year: int = 2012
     ) -> dict[str, Any]:
         if not self._capset or (not self._capset.has(Cap.FINANCIAL) and not _financial_is_custom()):
+        # <<< LOCAL-EXT
             return {"started": False, "reason": "no FINANCIAL capability"}
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         with self._lock:
             if self._is_syncing:
+        # <<< LOCAL-EXT
                 return {"started": False, "reason": "already running"}
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             self._is_syncing = True
             self._active_scope = scope
             self._last_error = None
@@ -700,7 +791,9 @@ class FinancialScheduler:
             try:
                 self._run_scope(scope, symbol, start_year)
             except Exception as exc:  # noqa: BLE001
+            # <<< LOCAL-EXT
                 logger.exception("financial %s sync failed", scope)
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 self._last_error = str(exc)
             finally:
                 with self._lock:
@@ -708,14 +801,19 @@ class FinancialScheduler:
                     self._active_scope = None
                     self._progress = None
 
+                # <<< LOCAL-EXT
         threading.Thread(target=_bg, name=f"financial-{scope}", daemon=True).start()
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return {
+        # <<< LOCAL-EXT
             "started": True,
             "scope": scope,
             "symbol": symbol,
             "start_year": start_year,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         }
 
+        # <<< LOCAL-EXT
     def run_now(self, table: str | None = None) -> dict[str, int]:
         """同步执行一次同步(阻塞调用线程)。
 
@@ -780,6 +878,7 @@ class FinancialScheduler:
         with self._lock:
             return self._is_syncing
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     @property
     def active_scope(self) -> str | None:
         return self._active_scope
@@ -792,6 +891,7 @@ class FinancialScheduler:
     def progress(self) -> dict[str, Any] | None:
         return dict(self._progress) if self._progress else None
 
+    # <<< LOCAL-EXT
     @property
     def last_sync(self) -> dict[str, str]:
         return dict(self._last_sync)

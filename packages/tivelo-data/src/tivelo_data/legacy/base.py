@@ -99,13 +99,17 @@ class MarketDataProvider(Protocol):
     ) -> pl.DataFrame:
         """Return normalized realtime quotes. Implementations may return empty."""
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def get_depth5(self, symbols: list[str]) -> dict[str, dict]:
+    # <<< LOCAL-EXT
         """Return level-1..5 prices/volumes keyed by normalized symbol.
 
         Each value contains bid_prices, bid_volumes, ask_prices, ask_volumes and
         timestamp. Volumes use shares and timestamp uses epoch milliseconds.
         Implementations may return an empty dict on an isolated upstream failure.
         """
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
+# <<< LOCAL-EXT
     def get_depth_batch(self, symbols: list[str]) -> dict[str, dict]:
         """Return five-level order books keyed by symbol."""

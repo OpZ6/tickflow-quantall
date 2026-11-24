@@ -858,6 +858,7 @@ def compute_limit_signals(
     )
 
     # 生效涨跌停价: 维表日期与行情日期一致时使用权威值, 否则使用理论价。
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 部分上游会在盘前返回上一交易日的涨跌停价, 而本地同步仍把维表标成今天。
     # 这里只用一条逻辑不变量判定错位: 涨停价必须高于昨收、跌停价必须低于昨收;
     # 低于/等于昨收的"涨停价"在交易所规则下不可能存在, 一定是没滚动的旧值。
@@ -865,9 +866,12 @@ def compute_limit_signals(
     # 旧版维表没有 as_of, 保持仅在最新行情日使用权威值的兼容行为。
     _SENTINEL = 10000.0
     valid_prev_raw = (
+    # <<< LOCAL-EXT
         pl.col("_prev_raw_close").is_not_null()
         & (pl.col("_prev_raw_close") > 0)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     )
+    # <<< LOCAL-EXT
     if "_instrument_as_of" in df.columns:
         authoritative_date = (
             pl.col("_instrument_as_of") == pl.col("date").cast(pl.Date, strict=False)
@@ -885,11 +889,15 @@ def compute_limit_signals(
             & (pl.col("limit_up") < _SENTINEL)
             & (~valid_prev_raw | (pl.col("limit_up") > pl.col("_prev_raw_close")))
         ).then(pl.col("limit_up")).otherwise(pl.col("_theoretical_limit_up"))
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     else:
+    # <<< LOCAL-EXT
         effective_limit_up = pl.col("_theoretical_limit_up")
     if "limit_down" in df.columns:
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         effective_limit_down = pl.when(
             authoritative_date
+        # <<< LOCAL-EXT
             & pl.col("limit_down").is_not_null()
             & (pl.col("limit_down") > 0)
             & (pl.col("limit_down") < _SENTINEL)
@@ -1106,7 +1114,9 @@ def compute_enriched(
     return df
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _restore_raw_daily_history(enriched: pl.DataFrame) -> pl.DataFrame:
+# <<< LOCAL-EXT
     """Restore raw OHLC before recomputing an already-enriched history window.
 
     Forward-incremental builds prepend stored qfq rows to newly downloaded raw
@@ -1116,21 +1126,27 @@ def _restore_raw_daily_history(enriched: pl.DataFrame) -> pl.DataFrame:
     is recovered from the row's close adjustment ratio.
     """
     required = {"open", "high", "low", "close", "raw_close", "raw_high", "raw_low"}
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if enriched.is_empty() or not required.issubset(enriched.columns):
         return enriched
     ratio = (
+    # <<< LOCAL-EXT
         pl.when(pl.col("close").is_not_null() & (pl.col("close") != 0))
         .then(pl.col("raw_close") / pl.col("close"))
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         .otherwise(1.0)
     )
     return enriched.with_columns(
+        # <<< LOCAL-EXT
         (pl.col("open") * ratio).alias("open"),
         pl.col("raw_high").alias("high"),
         pl.col("raw_low").alias("low"),
         pl.col("raw_close").alias("close"),
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     )
 
 
+    # <<< LOCAL-EXT
 def _select_storage_cols(df: pl.DataFrame) -> pl.DataFrame:
     """写入 parquet 前裁剪到存储列 (14 列)。"""
     cols = [c for c in ENRICHED_STORAGE_COLS if c in df.columns]
@@ -1174,11 +1190,13 @@ _benchmark_cache: dict[str, tuple[float, pl.DataFrame | None]] = {}
 _BENCHMARK_CACHE_TTL = 600.0
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def load_benchmark_momentum(
     data_dir: Path,
     *,
     force_refresh: bool = False,
 ) -> pl.DataFrame | None:
+# <<< LOCAL-EXT
     """读取指数日K, 计算各基准指数的滚动 N 日涨跌幅。
 
     返回长表: date, bench_key, bench_close, bench_mom3d, bench_mom10d, bench_mom30d。
@@ -1192,11 +1210,13 @@ def load_benchmark_momentum(
     now = _time.monotonic()
     key = str(Path(data_dir).resolve())
     cached = _benchmark_cache.get(key)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if (
         not force_refresh
         and cached is not None
         and now - cached[0] < _BENCHMARK_CACHE_TTL
     ):
+    # <<< LOCAL-EXT
         return cached[1]
 
     frame: pl.DataFrame | None = None
@@ -1284,10 +1304,12 @@ def attach_deviation_columns(df: pl.DataFrame, data_dir: Path) -> pl.DataFrame:
     """
     if df.is_empty():
         return df
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # This cold path rebuilds the repository's latest enriched frame. Index
     # daily data may have been published moments after an earlier warmup cached
     # the previous trading day, so the normal 10-minute cache is unsafe here.
     bench = load_benchmark_momentum(data_dir, force_refresh=True)
+    # <<< LOCAL-EXT
     dev_cols = [f"deviate_{n}d" for n in DEVIATION_WINDOWS]
     if bench is None or bench.is_empty():
         return df.with_columns([pl.lit(None, dtype=pl.Float64).alias(c) for c in dev_cols])
@@ -1424,10 +1446,12 @@ def attach_deviation_columns_today(
     )
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def repair_today_deviation_columns(
     df: pl.DataFrame,
     data_dir: Path,
 ) -> pl.DataFrame:
+# <<< LOCAL-EXT
     """Fill today's null deviation columns when index daily lags by one session.
 
     A realtime stock snapshot may publish today's enriched partition before the
@@ -1437,17 +1461,23 @@ def repair_today_deviation_columns(
     Historical dates and already-computed deviation values are left untouched.
     """
     if df.is_empty() or "date" not in df.columns or df["date"].max() != cn_today():
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return df
+        # <<< LOCAL-EXT
     dev_cols = [f"deviate_{n}d" for n in DEVIATION_WINDOWS if f"deviate_{n}d" in df.columns]
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not dev_cols:
         return df
+    # <<< LOCAL-EXT
     today_rows = df.filter(pl.col("date") == cn_today())
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if today_rows.is_empty() or any(
         today_rows[col].null_count() < today_rows.height for col in dev_cols
     ):
         return df
     repaired = attach_deviation_columns_today(today_rows, data_dir)
     return pl.concat(
+    # <<< LOCAL-EXT
         [df.filter(pl.col("date") != cn_today()), repaired],
         how="diagonal_relaxed",
     ).sort(["symbol", "date"])
@@ -1776,7 +1806,9 @@ def _run_pipeline_impl(data_dir: Path | None = None,
                 hist_cols = [c for c in ["symbol", "date", "open", "high", "low", "close",
                                          "volume", "amount", "raw_close", "raw_high", "raw_low"]
                              if c in hist_df.columns]
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 raw_history = _restore_raw_daily_history(hist_df.select(hist_cols))
+                # <<< LOCAL-EXT
                 raw_full = pl.concat([raw_history, raw_new], how="diagonal_relaxed")
             else:
                 raw_full = raw_new
@@ -2442,21 +2474,31 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
 
     df = df.join(inst_subset, on="symbol", how="left", suffix="_inst")
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 换手率: API 有效值直接用; 缺列或空值时从 float_shares 计算。
+    # <<< LOCAL-EXT
     if "float_shares" in df.columns and "volume" in df.columns:
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         calculated_turnover = (
+        # <<< LOCAL-EXT
             pl.when(pl.col("float_shares") > 0)
             .then(pl.col("volume") * 10000.0 / pl.col("float_shares"))
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             .otherwise(None)
         )
+            # <<< LOCAL-EXT
         if "turnover_rate" in df.columns:
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             turnover_rate = (
+            # <<< LOCAL-EXT
                 pl.col("turnover_rate")
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 .cast(pl.Float64, strict=False)
                 .fill_null(calculated_turnover)
             )
         else:
             turnover_rate = calculated_turnover
+                # <<< LOCAL-EXT
         df = df.with_columns(turnover_rate.alias("turnover_rate"))
 
     # 涨跌停 (用 raw_close / raw_high 和前一日原始收盘价)
@@ -2480,12 +2522,14 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
 
     limit_up_price = polars_limit_price(prev_raw, limit_pct, up=True)
     limit_down_price = polars_limit_price(prev_raw, limit_pct, up=False)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     valid_prev_raw = prev_raw.is_not_null() & (prev_raw > 0)
 
     # 生效涨跌停价: 维表日期与行情日期一致时优先使用交易所权威值;
     # 维表过期、价格缺失或与实时昨收推导值不一致时回退自算理论价。
     # 后一个校验防止盘前维表把昨日涨停价带到今天并误报整条连板梯队。
     # 旧版无 as_of 维表保持兼容, 但同样必须通过价格一致性校验。
+    # <<< LOCAL-EXT
     # 哨兵阈值 10000 用于识别 "新股无涨跌停限制" 的占位值 (实际涨停价不可能上万)。
     _SENTINEL = 10000.0
     authoritative_date = (
@@ -2502,10 +2546,14 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
             & pl.col("limit_up").is_not_null()
             & (pl.col("limit_up") > 0)
             & (pl.col("limit_up") < _SENTINEL)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             & (
                 ~valid_prev_raw
+            # <<< LOCAL-EXT
                 | ((pl.col("limit_up") - limit_up_price).abs() <= 0.005)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
+            # <<< LOCAL-EXT
         )
         no_price_limit = (
             authoritative_date
@@ -2523,10 +2571,14 @@ def _compute_limit_signals_today(df: pl.DataFrame, instruments: pl.DataFrame) ->
             & pl.col("limit_down").is_not_null()
             & (pl.col("limit_down") > 0)
             & (pl.col("limit_down") < _SENTINEL)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             & (
                 ~valid_prev_raw
+            # <<< LOCAL-EXT
                 | ((pl.col("limit_down") - limit_down_price).abs() <= 0.005)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
+            # <<< LOCAL-EXT
         )
         effective_limit_down = pl.when(
             has_authoritative_down

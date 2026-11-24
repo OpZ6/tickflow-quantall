@@ -7,7 +7,9 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 from app.api.data import invalidate_storage_cache
+# <<< LOCAL-EXT
 from app.jobs import daily_pipeline
 from app.services.pipeline_jobs import (
     JobCancelledError,
@@ -25,19 +27,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _run_pipeline_and_quantx(run, progress) -> dict:
+# <<< LOCAL-EXT
     """Run the main data pipeline and all dependent daily publications.
 
     run 由 _submit_job 的 make_run 闭包提供 (已绑定 repo/capset), 这里只负责
     在主管道成功后再追加 QuantX 复盘与选股池两个后置发布阶段。
     """
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     result = run()
+# <<< LOCAL-EXT
     result["quantx"] = daily_pipeline._run_quantx_after_pipeline()
     result["stock_pools"] = daily_pipeline._run_stock_pools_after_pipeline()
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return result
 
 
+    # <<< LOCAL-EXT
 @router.post("/run")
 async def run_now(request: Request) -> dict:
     """异步触发盘后管道,立即返回 job_id。客户端轮询 /jobs/{id} 拿进度。"""
@@ -97,8 +105,10 @@ async def _submit_job(repo, quote_service, make_run) -> dict:
                 try:
                     if qs:
                         with qs.paused():
+                            # >>> LOCAL-EXT 本地增强, 上游同步时保护
                             return _run_pipeline_and_quantx(run, progress)
                     return _run_pipeline_and_quantx(run, progress)
+                            # <<< LOCAL-EXT
                 finally:
                     repo.refresh_cache()
 

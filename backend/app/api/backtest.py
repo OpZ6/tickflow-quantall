@@ -4,7 +4,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 import re
+# <<< LOCAL-EXT
 import threading
 import weakref
 from dataclasses import asdict
@@ -383,57 +385,85 @@ class StrategyBacktestRequest(BaseModel):
 
 
 _RESEARCH_PATH_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 def _read_research_json(path):
     try:
+# <<< LOCAL-EXT
         return json.loads(path.read_text(encoding="utf-8"))
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     except (OSError, ValueError):
+    # <<< LOCAL-EXT
         logger.warning("invalid research backtest artifact: %s", path)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return None
 
 
 def _research_run_dir(research_key: str, run_id: str):
+        # <<< LOCAL-EXT
     """Resolve a research run without allowing callers to escape data/research."""
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not _RESEARCH_PATH_SEGMENT.fullmatch(research_key) or not _RESEARCH_PATH_SEGMENT.fullmatch(run_id):
+    # <<< LOCAL-EXT
         raise HTTPException(status_code=404, detail="研究回测不存在")
     research_root = (settings.data_dir / "research").resolve()
     run_dir = (research_root / research_key / "runs" / run_id).resolve()
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if research_root not in run_dir.parents or not run_dir.is_dir():
+    # <<< LOCAL-EXT
         raise HTTPException(status_code=404, detail="研究回测不存在")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return run_dir
 
 
+    # <<< LOCAL-EXT
 @router.get("/strategy/research-runs")
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def strategy_research_runs(strategy_id: str | None = None, limit: int = 50):
+# <<< LOCAL-EXT
     """List completed, reproducible strategy research runs stored under data/research."""
     research_root = settings.data_dir / "research"
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     items: list[dict] = []
     if not research_root.is_dir():
+    # <<< LOCAL-EXT
         return {"items": items}
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     safe_limit = min(max(limit, 1), 200)
     for research_dir in research_root.iterdir():
+# <<< LOCAL-EXT
         runs_dir = research_dir / "runs"
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if not research_dir.is_dir() or not runs_dir.is_dir():
             continue
         for run_dir in runs_dir.iterdir():
+        # <<< LOCAL-EXT
             if not run_dir.is_dir() or not (run_dir / "result.json").is_file():
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 continue
+                # <<< LOCAL-EXT
             status = _read_research_json(run_dir / "status.json") or {}
             if status.get("status") != "completed":
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 continue
+                # <<< LOCAL-EXT
             protocol = _read_research_json(run_dir / "protocol.json") or {}
             result = _read_research_json(run_dir / "result.json") or {}
             config = result.get("config") or protocol.get("backtest") or {}
             stats = result.get("stats") or {}
             run_strategy_id = config.get("strategy_id")
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if strategy_id and run_strategy_id != strategy_id:
                 continue
             items.append({
+            # <<< LOCAL-EXT
                 "research_key": research_dir.name,
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 # The directory id is the immutable artifact locator. Engine run_id
                 # may be a shorter hash and cannot be used to resolve the folder.
+                # <<< LOCAL-EXT
                 "run_id": run_dir.name,
                 "result_id": result.get("run_id"),
                 "phase": status.get("phase"),
@@ -445,28 +475,40 @@ def strategy_research_runs(strategy_id: str | None = None, limit: int = 50):
                 "start": config.get("start"),
                 "end": config.get("end"),
                 "stats": {
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     key: stats.get(key)
                     for key in (
+                    # <<< LOCAL-EXT
                         "total_return", "annual_return", "max_drawdown", "sharpe",
                         "sortino", "calmar", "win_rate", "profit_factor", "n_trades",
                         "avg_pnl", "avg_win", "avg_loss", "best", "worst",
                         "avg_holding_days", "avg_exposure", "max_exposure",
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     )
                 },
             })
+                    # <<< LOCAL-EXT
     items.sort(key=lambda item: (item.get("started_at") or "", item["run_id"]), reverse=True)
     return {"items": items[:safe_limit]}
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
+# <<< LOCAL-EXT
 @router.get("/strategy/research-runs/{research_key}/{run_id}")
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def strategy_research_run(research_key: str, run_id: str):
+# <<< LOCAL-EXT
     """Load one immutable research result in the normal strategy result schema."""
     result = _read_research_json(_research_run_dir(research_key, run_id) / "result.json")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not isinstance(result, dict):
+    # <<< LOCAL-EXT
         raise HTTPException(status_code=404, detail="研究回测结果不可用")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return result
 
 
+    # <<< LOCAL-EXT
 def _guard_minute_strategy_backtest(
     request: Request, strategy_id: str, start: date, asset_type: str,
 ) -> None:
@@ -983,9 +1025,11 @@ async def strategy_stream(
                             yield f"event: error\ndata: {json.dumps({'message': error}, ensure_ascii=False)}\n\n"
                         else:
                             payload = _stamp_daily_data(r, job.daily_data_revisions)
+                            # >>> LOCAL-EXT 本地增强, 上游同步时保护
                             from app.services.strategy_evidence import persist_backtest_fill_events
 
                             persist_backtest_fill_events(settings.data_dir, payload)
+                            # <<< LOCAL-EXT
                             yield f"event: done\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
                     return
 

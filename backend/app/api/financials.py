@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 from datetime import date
 
 import polars as pl
@@ -18,6 +19,7 @@ from app.services.financial_sync import (
     get_financial_df,
     provider_info,
 )
+# <<< LOCAL-EXT
 from app.services.ndjson_heartbeat import with_heartbeat
 from app.tickflow.capabilities import Cap
 
@@ -51,59 +53,87 @@ def financial_status(request: Request):
     data_dir = request.app.state.repo.store.data_dir
     tables = {}
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     for table in (*FINANCIAL_TABLES, OVERVIEW_TABLE):
+    # <<< LOCAL-EXT
         path = data_dir / "financials" / table / "part.parquet"
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if path.exists():
             try:
+        # <<< LOCAL-EXT
                 df = pl.read_parquet(path, columns=["symbol", "period_end"])
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 tables[table] = {
+                # <<< LOCAL-EXT
                     "rows": len(df),
                     "symbols": df["symbol"].n_unique() if not df.is_empty() else 0,
                     "periods": df["period_end"].n_unique() if not df.is_empty() else 0,
                     "earliest_period": (
                         str(df["period_end"].min()) if not df.is_empty() else None
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     ),
+                    # <<< LOCAL-EXT
                     "latest_period": (
                         str(df["period_end"].max()) if not df.is_empty() else None
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     ),
                 }
             except Exception:
+                    # <<< LOCAL-EXT
                 tables[table] = {"rows": 0, "symbols": 0}
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         else:
+        # <<< LOCAL-EXT
             tables[table] = {"rows": 0, "symbols": 0}
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
+# <<< LOCAL-EXT
     fs = getattr(request.app.state, "financial_scheduler", None)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     last_sync = fs.last_sync if fs else {}
 
     try:
         source = provider_info()
     except Exception as exc:  # noqa: BLE001
         source = {
+    # <<< LOCAL-EXT
             "provider": "unavailable",
             "mode": "unavailable",
             "supports_overview": False,
             "error": str(exc),
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         }
     overview = get_financial_df(data_dir, OVERVIEW_TABLE)
     latest_period = None
+        # <<< LOCAL-EXT
     if not overview.is_empty() and "period_end" in overview.columns:
         latest_period = str(overview["period_end"].max())
     instruments = data_dir / "instruments" / "instruments.parquet"
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     universe = 0
     if instruments.exists():
         try:
+    # <<< LOCAL-EXT
             universe = pl.read_parquet(instruments, columns=["symbol"])["symbol"].n_unique()
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         except Exception:
             pass
+        # <<< LOCAL-EXT
     overview_symbols = tables.get(OVERVIEW_TABLE, {}).get("symbols", 0)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return {
+    # <<< LOCAL-EXT
         "available": True,
         "tables": tables,
         "last_sync": last_sync,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 服务端是否正在同步(手动触发)——前端据此显示"同步中"并防重复点击,
         # 且刷新页面后仍能正确反映服务端状态。
+        # <<< LOCAL-EXT
         "syncing": bool(fs and fs.is_syncing),
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         **source,
+        # <<< LOCAL-EXT
         "active_scope": fs.active_scope if fs else None,
         "last_error": fs.last_error if fs else None,
         "progress": fs.progress if fs else None,
@@ -112,7 +142,9 @@ def financial_status(request: Request):
             "universe": universe,
             "coverage": round(overview_symbols / universe, 4) if universe else 0,
             "latest_period": latest_period,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         },
+        # <<< LOCAL-EXT
     }
 
 
@@ -217,39 +249,57 @@ class AnalyzeRequest(BaseModel):
     focus: str = ""  # 可选:用户追加的分析关注点
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 class SyncRequest(BaseModel):
     scope: str
     symbol: str | None = None
     start_year: int = 2012
 
 
+# <<< LOCAL-EXT
 @router.post("/sync")
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def sync_scope(request: Request, req: SyncRequest):
     _require_financial(request.app.state.capabilities)
+# <<< LOCAL-EXT
     if req.scope not in {"market_overview", "market_history", "stock", "market_detail"}:
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         raise HTTPException(
             400,
+        # <<< LOCAL-EXT
             "scope 必须是 market_overview、market_history、stock 或 market_detail",
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
+        # <<< LOCAL-EXT
     if req.scope == "stock" and not req.symbol:
         raise HTTPException(400, "按个股更新时必须提供 symbol")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not 2012 <= req.start_year <= date.today().year:
+    # <<< LOCAL-EXT
         raise HTTPException(400, "start_year 必须在 2012 到当前年份之间")
     fs = getattr(request.app.state, "financial_scheduler", None)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not fs:
+    # <<< LOCAL-EXT
         raise HTTPException(503, "FinancialScheduler not available")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return {
+    # <<< LOCAL-EXT
         "status": "ok",
         "synced": fs.trigger_scope(req.scope, req.symbol, req.start_year),
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     }
 
 
+    # <<< LOCAL-EXT
 @router.get("/analysis/{symbol}")
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def deterministic_analysis(request: Request, symbol: str, as_of: date | None = None):
     _require_financial(request.app.state.capabilities)
     return analyze_stock(request.app.state.repo.store.data_dir, symbol, as_of or date.today())
 
 
+# <<< LOCAL-EXT
 @router.post("/analyze")
 async def analyze_financials(request: Request, req: AnalyzeRequest):
     """AI 财务分析 — SSE 流式返回。

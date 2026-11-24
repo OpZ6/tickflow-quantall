@@ -57,10 +57,15 @@ def load_fundamental_snapshot(data_dir: Path | None) -> pl.DataFrame | None:
         logger.warning("读取财务指标快照失败: %s", exc)
         return None
     identity = {"symbol", "announce_date"}
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not identity.issubset(frame.columns):
+    # <<< LOCAL-EXT
         logger.warning("financial snapshot missing identity columns: %s", sorted(identity - set(frame.columns)))
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return None
+        # <<< LOCAL-EXT
     metric_columns = {spec["column"] for spec in FUNDAMENTAL_FACTORS.values()}
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     missing_metrics = sorted(metric_columns - set(frame.columns))
     if missing_metrics:
         # Providers may expose a useful subset of the canonical metrics. Keep
@@ -69,6 +74,7 @@ def load_fundamental_snapshot(data_dir: Path | None) -> pl.DataFrame | None:
             [pl.lit(None, dtype=pl.Float64).alias(name) for name in missing_metrics]
         )
     needed = identity | metric_columns
+    # <<< LOCAL-EXT
     snapshot = (
         frame.select(sorted(needed))
         .filter(
@@ -176,10 +182,12 @@ def build_fundamental_matrices(
     }
     announce_values = snapshot["_announce"].to_list()
     for row_index, symbol in enumerate(snapshot["symbol"].to_list()):
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         column_index = asset_index.get(symbol)
         if column_index is None:
             continue
         announce = announce_values[row_index]
+        # <<< LOCAL-EXT
         if announce is None:
             continue
         # 公告日之后 (严格大于) 的首个时间行索引

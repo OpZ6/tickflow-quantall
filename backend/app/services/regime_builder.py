@@ -323,6 +323,7 @@ def _aggregate_daily(df: pl.DataFrame, index_pct_map: dict | None = None) -> pl.
             # 梯队指标(阶段判定所需); phase 由 refresh_phase_labels 统一重标
             **finalize_ladder_row(r),
         })
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not rows:
         return pl.DataFrame()
     # Long histories can have more than 100 days without an eligible promotion
@@ -331,9 +332,12 @@ def _aggregate_daily(df: pl.DataFrame, index_pct_map: dict | None = None) -> pl.
     # keep the optional rate on a stable numeric dtype.
     return pl.DataFrame(
         rows,
+    # <<< LOCAL-EXT
         schema_overrides={"promo_rate": pl.Float64},
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         infer_schema_length=None,
     )
+        # <<< LOCAL-EXT
 
 
 # 全量回填分批参数(控制内存峰值) —— 实际值从用户偏好读取(preferences.get_regime_*),

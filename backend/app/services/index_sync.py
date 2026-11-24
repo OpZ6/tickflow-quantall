@@ -7,6 +7,7 @@ quotes.get_by_universes 作为补充来源。日K统一走 klines.batch。
 from __future__ import annotations
 
 import gc
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -14,6 +15,7 @@ from datetime import datetime, timedelta
 import polars as pl
 
 from app.data_providers.tencent_index import fetch_index_daily as fetch_tencent_index_daily
+# <<< LOCAL-EXT
 from app.indicators.pipeline import compute_enriched
 from app.services import kline_sync, preferences
 from app.tickflow.capabilities import Cap, CapabilitySet
@@ -26,26 +28,34 @@ logger = logging.getLogger(__name__)
 # exchanges.get_instruments 查询的交易所(沪深京)
 _EXCHANGES = ["SH", "SZ", "BJ"]
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 # QuantX displays the Tushare-style ``000985.CSI`` identifier, while TickFlow's
 # exchange and K-line APIs expose the same CSI All Share index as ``000985.SH``.
 # Keep storage/provider identifiers separate from presentation identifiers so
 # the scheduled index sync can actually fetch the series.
+# <<< LOCAL-EXT
 QUANTX_ALL_A_DISPLAY_SYMBOL = "000985.CSI"
 QUANTX_ALL_A_STORAGE_SYMBOL = "000985.SH"
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 QUANTX_SENTIMENT_SYMBOLS = (
+# <<< LOCAL-EXT
     "880699.SH", "880880.SH", "880823.SH", "880003.SH",
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 )
 
 _REQUIRED_INDEX_INSTRUMENTS = (
     {
+# <<< LOCAL-EXT
         "symbol": QUANTX_ALL_A_STORAGE_SYMBOL,
         "name": "CSI All Share",
         "code": "000985",
         "asset_type": "index",
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     },
 )
 
+    # <<< LOCAL-EXT
 
 def _quotes_to_index_instruments(resp) -> pl.DataFrame:
     """将 TickFlow quotes 响应(get_by_universes)规范为指数 instruments。
@@ -102,11 +112,15 @@ def _fetch_instruments_by_type(instrument_type: str, asset_type_label: str) -> p
     instrument_type: 'index' / 'etf'
     asset_type_label: 写入 instruments 表的 asset_type 标记('index' / 'etf')
     """
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     try:
         tf = get_client()
     except Exception as exc:
+    # <<< LOCAL-EXT
         logger.warning("index instrument client unavailable: %s", exc)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return pl.DataFrame()
+        # <<< LOCAL-EXT
     rows: list[dict] = []
     for ex in _EXCHANGES:
         try:
@@ -120,7 +134,9 @@ def _fetch_instruments_by_type(instrument_type: str, asset_type_label: str) -> p
                     "symbol": str(symbol),
                     "name": item.get("name") or str(symbol),
                 })
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         except Exception as e:
+        # <<< LOCAL-EXT
             logger.warning("get_instruments(%s, type=%s) failed: %s", ex, instrument_type, e)
 
     if not rows:
@@ -152,7 +168,9 @@ def sync_index_instruments(
 
     # 1) 免费通道:按开关分别拉 index / etf
     if pull_index:
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         index_parts.append(pl.DataFrame(_REQUIRED_INDEX_INSTRUMENTS))
+        # <<< LOCAL-EXT
         index_df = _fetch_instruments_by_type("index", "index")
         if not index_df.is_empty():
             index_parts.append(index_df)
@@ -167,17 +185,22 @@ def sync_index_instruments(
         try:
             from app.tickflow import policy
             capset = policy.detect_capabilities(force=False)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         except Exception:
             pass
         if capset is not None and capset.has(Cap.QUOTE_POOL):
             try:
                 tf = get_client()
             except Exception as exc:
+        # <<< LOCAL-EXT
                 logger.debug("CN_Index universe client unavailable: %s", exc)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             else:
                 for kwargs in (
+            # <<< LOCAL-EXT
                     {"universes": ["CN_Index"]},
                     {"universes": ["CN_Index"], "as_dataframe": False},
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 ):
                     try:
                         resp = tf.quotes.get_by_universes(**kwargs)
@@ -187,6 +210,7 @@ def sync_index_instruments(
                                 index_parts.append(sup)
                             break
                     except Exception as e:
+                # <<< LOCAL-EXT
                         logger.debug("CN_Index universe supplement failed: %s", e)
 
     total = 0
@@ -365,13 +389,16 @@ def sync_and_persist_index_daily(
     return total_rows
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def sync_quantx_all_a_fallback(
     repo: KlineRepository,
     *,
     start_date: datetime,
     end_date: datetime,
 ) -> int:
+# <<< LOCAL-EXT
     """Publish the required CSI All Share series when TickFlow K-line is unavailable."""
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if start_date > end_date:
         return 0
     raw = fetch_tencent_index_daily(
@@ -386,7 +413,9 @@ def sync_quantx_all_a_fallback(
     repo.append_index_enriched(enriched)
     repo.refresh_index_views()
     logger.info(
+    # <<< LOCAL-EXT
         "QuantX required index fallback synced: %s, +%d rows",
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         QUANTX_ALL_A_STORAGE_SYMBOL,
         raw.height,
     )
@@ -394,21 +423,29 @@ def sync_quantx_all_a_fallback(
 
 
 def sync_quantx_sentiment_indices(repo: KlineRepository, *, end_date: datetime) -> int:
+        # <<< LOCAL-EXT
     """Persist the four TDX-only QuantX sentiment indices as standard index bars."""
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.plugins.tdx.provider import TdxProvider, availability
 
     available, reason = availability()
     if not available:
+    # <<< LOCAL-EXT
         raise RuntimeError(f"TDX sentiment index source unavailable: {reason}")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     start_date = end_date - timedelta(days=365)
     latest_days = []
     for symbol in QUANTX_SENTIMENT_SYMBOLS:
         existing = repo.get_index_daily(
+    # <<< LOCAL-EXT
             symbol, start_date.date(), end_date.date(), ["date"],
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
         if existing.is_empty():
             break
+        # <<< LOCAL-EXT
         latest_days.append(existing["date"].max())
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if len(latest_days) == len(QUANTX_SENTIMENT_SYMBOLS):
         start_date = datetime.combine(
             min(latest_days) - timedelta(days=14), datetime.min.time(),
@@ -419,17 +456,25 @@ def sync_quantx_sentiment_indices(repo: KlineRepository, *, end_date: datetime) 
             list(QUANTX_SENTIMENT_SYMBOLS),
             start_date,
             end_date,
+    # <<< LOCAL-EXT
             asset_type="index",
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
     finally:
         provider.close()
     if raw.is_empty():
+        # <<< LOCAL-EXT
         raise RuntimeError("TDX sentiment index source returned no daily bars")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     current_symbols = set(
+    # <<< LOCAL-EXT
         raw.filter(pl.col("date") == end_date.date())["symbol"].to_list()
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     )
     if current_symbols != set(QUANTX_SENTIMENT_SYMBOLS):
+    # <<< LOCAL-EXT
         raise RuntimeError("TDX sentiment index source is missing target-day bars")
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     repo.append_index_daily(raw)
     repo.append_index_enriched(compute_enriched(raw, factors=None, instruments=None))
     repo.refresh_index_views()
@@ -437,12 +482,15 @@ def sync_quantx_sentiment_indices(repo: KlineRepository, *, end_date: datetime) 
 
 
 def _load_etf_factors(repo: KlineRepository) -> pl.DataFrame:
+    # <<< LOCAL-EXT
     factor_path = repo.store.data_dir / "adj_factor_etf" / "all.parquet"
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not factor_path.exists():
         return pl.DataFrame()
     try:
         return pl.read_parquet(factor_path)
     except Exception as e:
+    # <<< LOCAL-EXT
         logger.warning("ETF 复权因子读取失败: %s", e)
         return pl.DataFrame()
 

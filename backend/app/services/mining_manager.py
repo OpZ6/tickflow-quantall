@@ -242,6 +242,7 @@ class MiningJobManager:
                 return
             self._store.write_summary(run_id, result)
             self._store.append_event(run_id, status, {"status": status})
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # Publish the terminal manifest last. Readers that observe a
             # terminal status can then rely on its summary/event already
             # being durable.
@@ -253,8 +254,11 @@ class MiningJobManager:
 
     def _finish_cancelled_locked(self, run_id: str) -> None:
         manifest = self._store.get(run_id)
+            # <<< LOCAL-EXT
         if manifest is None or manifest["status"] in TERMINAL_RUN_STATUSES:
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return
+            # <<< LOCAL-EXT
         self._store.append_event(run_id, "cancelled", {"status": "cancelled"})
         self._store.transition_status(run_id, "cancelled")
 
