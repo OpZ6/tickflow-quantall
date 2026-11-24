@@ -2,7 +2,7 @@ from datetime import date
 
 import polars as pl
 
-from app.services.financial_sync import _merge_market_core, _report_periods
+from app.services.financial_sync_ext import _merge_market_core, _report_periods
 
 
 def test_report_periods_start_at_2012_and_exclude_future():

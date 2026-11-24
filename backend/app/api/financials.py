@@ -17,8 +17,8 @@ from app.services.financial_sync import (
     FINANCIAL_TABLES,
     OVERVIEW_TABLE,
     get_financial_df,
-    provider_info,
 )
+from app.services.financial_sync_ext import provider_info
 from app.services.ndjson_heartbeat import with_heartbeat
 from app.tickflow.capabilities import Cap
 
