@@ -10,16 +10,18 @@
 
 > **以上游为底，把自研功能放在上游永远不会创建同名文件的路径里；能外置就外置，不能外置就标记清楚。**
 
-本项目的自研功能已经按这个原则落到四个"安全区"，这些文件上游永远不碰，**永久零冲突**：
+本项目的自研功能落到四个"安全区"。**注意：v0.4.1 起安全区的粒度从"目录级"降到"子包级"**——上游把后端拆成
+`packages/tivelo-*` monorepo，原本"这些目录上游永远不碰"的假设不再成立（详见 §3.1）。
 
-| 安全区 | 内容 |
-|---|---|
-| `frontend/src/custom/` | 三面板扩展（quantx / market-lab / stock_pools 等）、`api.ts`（全部自定义 API 客户端） |
-| `backend/app/custom/*.py` | 7 个后端插件（`EXTENSION_ID` + `setup(registrar)`） |
-| `backend/app/strategy/research/` | 19 个自研策略 + 4 个 `_*.py` 依赖模块 |
-| `frontend/src/features/stock-chart/` | K 线增强、缠论图层等独立模块 |
+| 安全区 | 内容 | 现状 |
+|---|---|---|
+| `frontend/src/custom/` | 三面板扩展（quantx / market-lab / stock_pools 等）、`api.ts`（全部自定义 API 客户端） | 仍然零冲突 |
+| `backend/app/custom/*.py` | 7 个后端插件（`EXTENSION_ID` + `setup(registrar)`） | 仍然零冲突 |
+| `backend/app/strategy/research/` | 19 个自研策略 + 4 个 `_*.py` 依赖模块 | 仍然零冲突 |
+| `frontend/src/features/stock-chart/` | K 线增强、缠论图层等独立模块 | 仍然零冲突 |
+| ⚠️ `packages/tivelo-*/src/**` | 上游抽取出来的"内核"，**含本地改过语义的模块**（如 `legacy/simulator.py` 撮合器） | **会冲突**，必须移植 |
 
-**同步时优先保护这四块，其余都是可协商的。**
+**同步时优先保护前四块；`packages/` 下的不再是安全区，而是"必查区"。**
 
 ---
 
@@ -80,6 +82,37 @@ cd ../<repo>-merge/frontend && pnpm install     # 独立安装，不要 junction
 ```
 
 **验收**：`npx vite build` 能过一次（证明插件链、依赖、虚拟模块都正常）。
+
+### 3.1 上游把代码抽进 `packages/` 怎么办（v0.4.1 新增形态）
+
+上游 v0.4.1 把后端内核拆成 `packages/tivelo-{contracts,data,market-cn,backtest,extensions}`，
+原文件变成**兼容垫片**（只剩 re-export）。识别信号：
+
+```bash
+# ① 文件行数骤降 / 只剩 re-export
+git show <base>:<file> | wc -l ; wc -l <file>
+# ② 原文件里出现 from tivelo_xxx import ...
+grep -n "^from tivelo_\|^import tivelo_" <file>
+```
+
+**此时"取上游"等于"整份丢掉本地改动"**。正确做法：
+
+1. 找出本地在该文件里加过什么（`git diff <base> -- <file>`）
+2. 找到上游把它搬去的目标（本例 `packages/tivelo-backtest/src/tivelo_backtest/legacy/simulator.py`）
+3. **把本地改动移植进目标文件**，而不是硬顶在原文件上
+4. 检查调用方是否仍然贯通——改了数据类字段，就要确认构造处把新字段传进去了：
+
+```bash
+grep -rn "MatcherConfig(" backend/app | head   # 每个构造点都要对齐
+```
+
+本项目实例：本地撮合器的实盘风控（分段印花税 / 入场风险矩阵 / 移动止盈 / 保本止损 / 拒单审计）
+全部移植进 `legacy/simulator.py` 的 `MatcherConfig` + 4 条撮合路径；
+`backend/app/backtest/engine.py` 保留上游的"只委托"形态，不再持有撮合实现。
+
+**另一类必查区**：包内变了，`backend/app` 侧的**热路径假设**可能被悄悄改掉。
+本项目 `repository.get_daily` 原本直读内存快照，合并后变成"冷查询触发全市场 warmup"，
+单股行情 tick 每次都全量预热 → 用本地既有测试守住的这个行为回归，必须人工改回。
 
 ---
 
@@ -230,6 +263,14 @@ git merge-base --is-ancestor main sync/upstream-<ver>   # 真=可快进
    本项目 3 处：期末强制平仓（`censored`→`sold`，多计卖出佣金）、
    信号定义迁数据库（`SIGNAL_OPTIONS` 常量废弃）、策略 `source` 口径（`builtin`→`custom`）
 10. **BOM**：某些本地文件带 U+FEFF，合并后要检查
+11. **上游抽包时"零冲突"是陷阱**：旧文件变成 re-export 垫片，merge-file 判定"无冲突"，
+    但本地实现被静默丢掉了。凡是"文件行数骤降 + 出现 `from tivelo_* import`"，一律人工复核（§3.1）
+12. **依赖版本跟着上游走，但别用 `uv sync` 洗用户环境**：上游把 `lightweight-charts` 从 4.x 升到 5.2.1
+    这类大版本升级会带来 API 变更；安装新包时用 `uv pip install --no-deps -e packages/...`，
+    不要在主目录跑 `uv sync`（它会 prune 掉用户手工装的包）
+13. **别信单次全量测试的失败清单**：本机（Python 3.14 + Windows + sqlite WAL 并发写）会随机抛
+    `attempt to write a readonly database`，把任意依赖 sqlite 的用例打挂。**必须做对照实验**：
+    同一个 venv 跑上游纯净 worktree，比较两侧失败清单的交集
 
 ---
 
@@ -239,6 +280,8 @@ git merge-base --is-ancestor main sync/upstream-<ver>   # 真=可快进
 
 - [ ] 四道关卡全绿；失败项都做过**对照实验**并归因
 - [ ] 覆盖度复查 100%（新增文件 + 修改文件抽查）
+- [ ] `packages/tivelo-*/` 内移植项逐条对齐（数据类字段 + 每个构造点 + 消费点）
+- [ ] 依赖变更已装：`uv pip install --no-deps -e packages/*`（后端）、`pnpm install`（前端）
 - [ ] 三大自研面板路由实测注册（`/quantx`、`/market-lab`、`/stock-pools` 等）
 - [ ] 自研策略引擎实测加载数正确、`load_errors()` 为空
 - [ ] 后端插件全部零错误挂载
@@ -251,15 +294,19 @@ git merge-base --is-ancestor main sync/upstream-<ver>   # 真=可快进
 
 ## 12. 下次的预期
 
-冲突面已经收敛到**固定的 121 个修改文件**（`backend/app` 46、`backend/tests` 34、`frontend/src` 29 等），
-新增的 1221 个文件永久零冲突。
+v0.3.x 时代冲突面收敛到固定的 121 个修改文件（`backend/app` 46、`backend/tests` 34、`frontend/src` 29 等），
+新增文件永久零冲突。
 
-| 同步节奏 | 预计冲突文件 |
-|---|---|
-| 每 1–2 个上游版本一次 | **10–25 个**，多为区块级 |
-| 跨 5 个版本以上 | 50+，且容易出现整文件冲突 |
+**v0.4.1 起这个结论要打折**：上游把后端内核抽进 `packages/tivelo-*`，本地接管过的内核文件
+（撮合器、数据层、市场规则）从"零冲突"变成"必查区"，且冲突形态是**静默丢实现**而不是红字冲突。
+
+| 同步节奏 | 预计冲突文件 | 必查区（packages/） |
+|---|---|---|
+| 每 1–2 个上游版本一次 | 10–25 个，多为区块级 | 1–3 个包内文件 |
+| 跨 5 个版本以上 | 50+，且容易出现整文件冲突 | 全部 5 个包，逐个比对 |
 
 **结论：同步频率比同步技巧更重要。** 上游小版本一发布就跟，不要攒。
+v0.3.23 → v0.4.1 攒了 15 个 release / 113 commits，规模 1099 文件 / +166,818 −26,598。
 
 ---
 

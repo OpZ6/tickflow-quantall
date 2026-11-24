@@ -5,7 +5,60 @@
 
 > **稳定 Tag 硬约束（2026-08-31 起）**：Quantall 每次上游合并只允许选择上游已发布的稳定 Tag；禁止直接合并 `upstream/main`、功能分支或未打 Tag 的单独提交。若最新稳定 Tag 不满足需求，停止合并并由维护者决定是否等待下一稳定版本。
 
-## 最新同步记录（v0.3.7，分支 `sync/v037-clean`）
+## 最新同步记录（v0.4.1，分支 `sync/upstream-v0.4.1`，2026-11-23）
+
+| 项目 | 值 |
+| --- | --- |
+| 同步目标 | `upstream/main` @ `v0.4.1`（稳定 Tag） |
+| 真实同步基准 | `b8f1ebaa`（= v0.3.23，与默认 merge-base 一致，本次无需桥接） |
+| 集成分支 | `sync/upstream-v0.4.1`（worktree `D:\tickflow-sync`） |
+| 合并方式 | 三方合并，**未使用 `--union`**；先合上游（`d3fd3153`），再落回归修复（`e42fd3b6`），最后并入 `main`（`00fd1993`） |
+| 规模 | 15 个 release / 113 commits / 1099 文件 / +166,818 −26,598 |
+| 回退点 | `checkpoint/pre-upstream-v0.4.1-merge-20261123`（`402a7249`）+ `.git/backups/pre-upstream-v0.4.1-merge-20261123.bundle`（71M，`bundle verify` 完整历史） |
+| 版本号 | `0.3.23` → `0.4.1`（`VERSION` + 前端 `package.json`） |
+
+### 上游形态变更（本次最大变量）
+
+1. **monorepo 抽取**：后端内核拆成 `packages/tivelo-{contracts,data,market-cn,backtest,extensions}`，
+   `backend/app/backtest/engine.py`、`market_time.py`、`data_providers/base.py`、`enriched_generation.py`
+   等退化为**兼容垫片**（只 re-export）。→ 本地实现在这些文件里的改动"零冲突但被静默丢弃"，
+   安全区粒度从目录级降为子包级（见 playbook §3.1）。
+2. **撮合器搬家**：实盘撮合逻辑迁入 `tivelo_backtest.legacy.simulator`，`engine.py` 只做委托。
+3. **依赖升级**：`lightweight-charts` `^4.2.0` → `5.2.1`（大版本，K 线类型定义全量改写）；
+   后端新增 `rfc8785` / `keyring` 等（`tivelo-contracts[signatures]`）。
+
+### 本地移植 / 回归修复清单
+
+| 位置 | 问题 | 处理 |
+| --- | --- | --- |
+| `tivelo_backtest/legacy/simulator.py` | 本地实盘风控在新位置不存在 | `MatcherConfig` 补 `stamp_tax_policy` / `entry_risk_profiles` / `profit_lock_steps` / `close_breakeven_activate_pct`；分段印花税、移动止盈、保本止损、拒单审计接入 A/B/C/D/E 五条路径 |
+| `backend/app/tickflow/repository.py` | 单股热路径变成冷查询，每 tick 触发全市场 warmup | 恢复直读内存快照 |
+| `backend/app/indicators/pipeline.py`、`backtest/matrix.py` | 涨跌停守卫依赖"与理论价容差比对" | 改为逻辑不变量 `limit_up > 前收` |
+| `backend/app/api/settings.py` | `full_minute_data_provider` 不在 `field_to_dataset` → `KeyError` | chained/rest 字段分离；PUT 按上游契约原样回显 `provider_chains` |
+| `backend/app/api/screener.py` | `enrich_and_persist_strategy_result` 引用了闭包外的 `context` | 移入 `compute()` 闭包 |
+| `backend/app/backtest/matrix.py` | `dynamic` 在分支内赋值 → `UnboundLocalError` | 判定提到分支外 |
+| `frontend/src/lib/chart-types.ts` | 上游抽取时丢失本地字段（`OHLC.amv_*` ×9、`ChartMarker.id/evidenceId/symbol`、`ChartRange.high/low/evidenceId`、`ChartPriceLine.endValue`） | 全部补回 |
+
+### 验证结果
+
+| 关卡 | 结果 |
+| --- | --- |
+| 前端 `tsc --noEmit` | 0 错误 |
+| 前端 `vitest run` | 131 文件 / **979 用例全过**；`local-panels.test` 实测 16 条自研路由全部注册 |
+| 前端 `npm run build` | 成功（`virtual:quantx-portable-runtime` 虚拟模块正常产出 1.63MB chunk） |
+| 后端对照实验 | 上游纯净 worktree（`D:\tickflow-upcheck` @ v0.4.1）vs 同步侧：失败清单 11 vs 12，交集 9；**差异项逐条归因为同一环境根因**——`sqlite3.OperationalError: attempt to write a readonly database`（Python 3.14.4 + Windows + sqlite WAL 并发写），在**上游纯净 worktree 同样复现**，非合并引入 |
+| 后端定向回归 | 风控/成本模型/市场矩阵 32 ✓；涨跌停守卫+缓存复用 42 ✓；设置链/契约/筛选器/quantx 数据源 79 ✓ |
+
+### 遗留与操作提示
+
+- **主目录 venv 必须补依赖**（历史 venv 建于 v0.3.23，不含新包）：
+  `cd backend && uv sync --frozen --inexact`。用 `--inexact` 保留手工装的额外包，
+  **不要**裸跑 `uv sync`（会 prune 掉用户手工安装的包）。
+- 前端 `pnpm install` 后 `node_modules` 已含 `lightweight-charts 5.2.1`。
+- 未做：用户真机 `dev.bat` 端到端冒烟；推送 `origin/main` 需用户确认。
+- 主目录合并前的 WIP 已存档为 `402a7249`（quantx 洛伦兹网格 / tushare 镜像熔断 / duanxianxia 旧版域名 / `dev.bat` 复用模式 / `/quantx/:date` 兼容重定向）。
+
+## 上一次同步记录（v0.3.7，分支 `sync/v037-clean`）
 
 | 项目 | 值 |
 | --- | --- |
@@ -19,7 +72,7 @@
 | 上游行为变更 | ① 去内置化（`builtin/`→`seeds/`）② 期末强制平仓（`censored`→`sold`，计卖出佣金）③ 信号定义迁数据库（`SIGNAL_OPTIONS` 废弃）④ 策略 `source` 口径 `builtin`→`custom` |
 | 已知未做 | 用户真机端到端冒烟；推送 `origin/main` 需用户确认 |
 
-## 上一次同步记录（2026-09-22）
+## 更早同步记录（v0.3.0，2026-09-22）
 
 | 项目 | 值 |
 | --- | --- |
