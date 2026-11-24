@@ -166,9 +166,9 @@ class StrategyDataContext:
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # Optional caller-owned sink; currently supported by matrix snapshot screening.
     screening_trace: dict | None = None
-    # <<< LOCAL-EXT
     # enriched 数据换代号 (repo.get_matrix_data_generation, 详见 enriched_generation):
     # 装配方填入, 消费方用作共享矩阵缓存的失效指纹 — 数据重建换代号变, 缓存自动失效。
+    # <<< LOCAL-EXT
     data_generation: str | None = None
 
 
@@ -235,9 +235,9 @@ class StrategyResult:
     scores: dict[str, float] = field(default_factory=dict)
     entry_signal_hits: list[dict] = field(default_factory=list)
     exit_signal_hits: list[dict] = field(default_factory=list)
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     strategy_version: str | None = None
     params_fingerprint: str | None = None
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     source_run_id: str | None = None
     input_fingerprint: str | None = None
     evidence: list[dict] = field(default_factory=list)
@@ -245,7 +245,6 @@ class StrategyResult:
 
 @dataclass(frozen=True)
 class StrategySignalHistory:
-    # <<< LOCAL-EXT
     """Causal signal matrices for one registered strategy over a supplied history.
 
     This is deliberately narrower than a screener run: it has no candidate
@@ -253,18 +252,17 @@ class StrategySignalHistory:
     stock-chart preview service uses it only after it has constrained the
     input panel to one symbol.
     """
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     market: Any
     signals: Any
     params: dict
-# <<< LOCAL-EXT
 
 
 @dataclass
 class _RealtimeMatrixEntry:
     fingerprint: tuple[Any, ...]
     buffer: Any
+    # <<< LOCAL-EXT
 
 
 def _resolve_required_features(meta: dict, mod, filter_history_fn, path: Path) -> frozenset[str]:
@@ -980,16 +978,15 @@ class StrategyEngine:
     # 执行
     # ================================================================
 
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def preview_signal_history(
         self,
         strategy_id: str,
         context: StrategyDataContext,
         *,
         params: dict | None = None,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         overrides: dict | None = None,
     ) -> StrategySignalHistory:
-    # <<< LOCAL-EXT
         """Evaluate one registered matrix strategy across one asset's history.
 
         Chart previews are signal replays, not screeners or backtests.  They
@@ -998,7 +995,6 @@ class StrategyEngine:
         are intentionally omitted because a one-stock min/max ranking has no
         market meaning.
         """
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from app.backtest.matrix import (
             MatrixPipelineConfig,
             MatrixStrategyPipeline,
@@ -1007,26 +1003,20 @@ class StrategyEngine:
 
         strategy = self.get(strategy_id)
         self.validate_context(strategy, context)
-        # <<< LOCAL-EXT
         preview = strategy.meta.get("chart_preview") or {}
         if not isinstance(preview, dict) or not preview.get("enabled"):
             raise ValueError(f"strategy {strategy_id} 不支持个股即时预览")
         if strategy.execution_backend != "matrix_native":
             raise ValueError(f"strategy {strategy_id} 不支持个股即时预览")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
         panel = context.history if context.history is not None else context.current
         if panel is None or panel.is_empty():
-# <<< LOCAL-EXT
             raise ValueError(f"strategy {strategy_id} 缺少个股历史数据")
         if "symbol" not in panel.columns:
             raise ValueError(f"strategy {strategy_id} 个股历史缺少 symbol 列")
         symbols = panel["symbol"].drop_nulls().cast(pl.Utf8).unique().to_list()
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if len(symbols) != 1:
-        # <<< LOCAL-EXT
             raise ValueError("个股即时预览只能计算一个标的")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
         effective_overrides = overrides or {}
         effective_params = self.resolve_params(strategy, params, effective_overrides)
@@ -1039,10 +1029,8 @@ class StrategyEngine:
             ),
         )
         basic_filter = dict(strategy.basic_filter or {})
-# <<< LOCAL-EXT
         if effective_overrides.get("basic_filter"):
             basic_filter.update(effective_overrides["basic_filter"])
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         signals = MatrixStrategyPipeline().run(
             strategy.matrix_strategy,
             market,
@@ -1055,9 +1043,7 @@ class StrategyEngine:
                 scoring={},
                 scoring_directions={},
                 order_by=None,
-        # <<< LOCAL-EXT
                 descending=bool(strategy.meta.get("descending", True)),
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             ),
         )
         return StrategySignalHistory(
@@ -1066,7 +1052,6 @@ class StrategyEngine:
             params=effective_params,
         )
 
-            # <<< LOCAL-EXT
     def run(
         self,
         strategy_id: str,
@@ -1087,6 +1072,7 @@ class StrategyEngine:
         t0 = time.perf_counter()
 
         s = self.get(strategy_id)
+        # <<< LOCAL-EXT
         self.validate_context(s, context)
         as_of = context.as_of
         overrides = overrides or {}
@@ -1598,7 +1584,6 @@ class StrategyEngine:
         from app.backtest.matrix import (
             MatrixPipelineConfig,
             MatrixStrategyPipeline,
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             build_basic_filter_mask,
             build_market_data_matrix,
             build_matrix_score,
@@ -1607,11 +1592,8 @@ class StrategyEngine:
         trace = context.screening_trace
         if trace is not None:
             trace.clear()
-            # <<< LOCAL-EXT
             trace.update(scope="unavailable", as_of=str(as_of), strategy_id=strategy_id, rows=[])
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
-# <<< LOCAL-EXT
         source_panel = context.history
         market = context.market
         if market is None:
@@ -1622,6 +1604,7 @@ class StrategyEngine:
             market = build_market_data_matrix(
                 source_panel,
                 field_columns=self._matrix_field_columns(strategy, overrides, params),
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
 
         if source_panel is None or source_panel.is_empty():
@@ -1647,27 +1630,20 @@ class StrategyEngine:
                 count=len(market.symbols),
             )
 
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         target_ids = [i for i, label in enumerate(market.timestamp_labels) if label[:10] == str(as_of)]
         if not target_ids:
             return StrategyResult(as_of=as_of, strategy_id=strategy_id)
         target_time = target_ids[-1]
-        # <<< LOCAL-EXT
         if strategy.meta.get("completed_daily_only"):
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             from app.market_time import cn_now
 
             now = cn_now()
             if as_of > now.date() or (as_of == now.date() and (now.hour, now.minute) < (15, 10)):
-            # <<< LOCAL-EXT
                 raise ValueError("该策略仅使用已完成日线, 请在收盘数据更新后运行或选择历史交易日")
         snapshot_fn = getattr(strategy.matrix_strategy, "screen_snapshot", None)
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         snapshot_signals, candidate_details = None, None
         if callable(snapshot_fn):
-        # <<< LOCAL-EXT
             trace_fn = getattr(strategy.matrix_strategy, "screen_snapshot_with_trace", None)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             detector_trace = {} if trace is not None and callable(trace_fn) else None
             if detector_trace is not None:
                 snapshot_signals, candidate_details = trace_fn(
@@ -1676,7 +1652,6 @@ class StrategyEngine:
             else:
                 snapshot_signals, candidate_details = snapshot_fn(market, params, target_time)
 
-            # <<< LOCAL-EXT
         signals = MatrixStrategyPipeline().run(
             strategy.matrix_strategy,
             market,
@@ -1689,9 +1664,7 @@ class StrategyEngine:
                 descending=bool(strategy.meta.get("descending", True)),
                 asset_mask=asset_mask,
             ),
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             precomputed_signals=snapshot_signals,
-            # <<< LOCAL-EXT
         )
         target_ids = [
             time_id
@@ -1726,6 +1699,7 @@ class StrategyEngine:
                     if source_panel is None or source_panel.is_empty():
                         raise ValueError("叠加条件含「前 N 日」偏移, 需要历史数据窗口")
                     eval_frame = source_panel
+            # <<< LOCAL-EXT
                 eval_frame = custom_signals.materialize_factor_columns(
                     eval_frame, {"__overlay__": overlay_expr}
                 )
@@ -1771,7 +1745,6 @@ class StrategyEngine:
             signals.exit_signal_ids,
             market.symbols,
         )
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         candidate_mask = entry_active.astype(bool)
         candidate_scores = signals.score
         trace_by_symbol = {}
@@ -1780,38 +1753,24 @@ class StrategyEngine:
             basic_allowed = build_basic_filter_mask(market, basic_filter)[target_time]
             if trace is not None:
                 for asset_id, symbol in enumerate(market.symbols):
-        # <<< LOCAL-EXT
                     stage = "eligible_candidate"
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     if not candidate_mask[asset_id]:
-                    # <<< LOCAL-EXT
                         stage = "strategy_no_candidate"
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     elif not basic_allowed[asset_id]:
-                    # <<< LOCAL-EXT
                         stage = "basic_filter"
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     elif asset_mask is not None and not asset_mask[asset_id]:
-                    # <<< LOCAL-EXT
                         stage = "pool_filter"
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     trace_by_symbol[symbol] = {
-                    # <<< LOCAL-EXT
                         "symbol": symbol,
                         "stage": stage,
                         "detector_reason": (detector_trace or {})
                         .get("detector_reasons", {})
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         .get(symbol),
                     }
                 trace.update(
-                        # <<< LOCAL-EXT
                     scope="matrix_snapshot_candidate_pipeline",
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     detector_subreasons_available=detector_trace is not None,
-                    # <<< LOCAL-EXT
                     detector_reason_semantics=(detector_trace or {}).get("reason_semantics"),
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     rows=list(trace_by_symbol.values()),
                 )
             candidate_mask &= basic_allowed
@@ -1820,14 +1779,12 @@ class StrategyEngine:
             universe = np.zeros(market.shape, dtype=bool)
             universe[target_time] = candidate_mask
             candidate_scores = build_matrix_score(
-                    # <<< LOCAL-EXT
                 market, universe, scoring, strategy.meta.get("order_by"),
                 bool(strategy.meta.get("descending", True)), fallback=snapshot_signals.score,
                 # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 directions=effective_scoring_directions(overrides),
             )
         selected_assets = np.flatnonzero(candidate_mask)
-                # <<< LOCAL-EXT
         if selected_assets.size == 0:
             return StrategyResult(
                 as_of=as_of,
@@ -1846,37 +1803,25 @@ class StrategyEngine:
             symbol = market.symbols[int(asset_id)]
             row = row_by_symbol.get(symbol)
             if row is None:
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 if symbol in trace_by_symbol:
-                # <<< LOCAL-EXT
                     trace_by_symbol[symbol]["stage"] = "missing_current_row"
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 continue
             score = float(candidate_scores[target_time, int(asset_id)])
             details = (candidate_details or {}).get(symbol, {})
-                # <<< LOCAL-EXT
             ranked.append((score, {**row, **details, "score": score}))
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         ranked.sort(
             key=lambda item: item[0],
-        # <<< LOCAL-EXT
             reverse=bool(strategy.meta.get("descending", True)),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
         limit = self._result_limit(strategy, overrides)
         selected_rows = ranked if limit is None else ranked[:limit]
         if trace_by_symbol:
-        # <<< LOCAL-EXT
             displayed = {str(row["symbol"]) for _, row in selected_rows}
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             for _, row in ranked:
-            # <<< LOCAL-EXT
                 symbol = str(row["symbol"])
                 trace_by_symbol[symbol]["stage"] = (
                     "displayed_candidate" if symbol in displayed else "display_limit"
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 )
-                # <<< LOCAL-EXT
         rows = _sanitize([row for _, row in selected_rows])
         scores = {str(row["symbol"]): float(row.get("score") or 0.0) for row in rows}
         return StrategyResult(
@@ -1941,6 +1886,7 @@ class StrategyEngine:
             if shared_basic_filter:
                 child_override["basic_filter"] = shared_basic_filter
             overrides_map[cid] = child_override
+                # <<< LOCAL-EXT
 
         # 共享 context 跑所有子策略。run_all 内部对 matrix_native 子策略会
         # 合并 field_columns 构建超集矩阵, 一次加载。
@@ -2039,14 +1985,11 @@ class StrategyEngine:
             exprs.append(pl.col("close") >= bf["price_min"])
         if bf.get("price_max") is not None:
             exprs.append(pl.col("close") <= bf["price_max"])
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # Enriched close is adjusted. Raw-only/live inputs expose raw price as
         # close; an existing but null raw_close must never fall back to close.
-        # <<< LOCAL-EXT
         cap_price = pl.col("raw_close" if "raw_close" in df.columns else "close")
         for prefix, share_field in (("market_cap", "total_shares"), ("float_cap", "float_shares")):
             minimum, maximum = bf.get(f"{prefix}_min"), bf.get(f"{prefix}_max")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if minimum is None and maximum is None:
                 continue
             if share_field not in df.columns:
@@ -2059,7 +2002,6 @@ class StrategyEngine:
                 exprs.append(values >= minimum)
             if maximum is not None:
                 exprs.append(values <= maximum)
-            # <<< LOCAL-EXT
         if bf.get("amount_min") is not None:
             exprs.append(pl.col("amount") >= bf["amount_min"])
         if bf.get("amount_max") is not None:
@@ -2107,6 +2049,7 @@ class StrategyEngine:
         """Stage 1: 基础参数过滤"""
         expr = StrategyEngine._basic_filter_expr(df, bf)
         if expr is not None:
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return df.filter(expr)
         return df
 
@@ -2125,6 +2068,7 @@ class StrategyEngine:
         return None
 
     def _inject_intraday_signal_columns(self, minute_df: pl.DataFrame) -> pl.DataFrame:
+            # <<< LOCAL-EXT
         """向当日分钟K帧注入自定义盘中信号列(csgi_, 当日条件上升沿)。
 
         单点注入: 实盘分钟扫描与分钟回测 worker 共用本方法, 特征计算与

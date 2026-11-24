@@ -66,19 +66,14 @@ class LowVolatilityLeaderMatrixStrategy:
 
     def compute_signals(self, market: MarketDataMatrix, params: dict) -> SignalMatrix:
         ma20 = matrix_feature(market, "ma20")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         qualifying = np.ones(market.shape, dtype=bool)
-        # <<< LOCAL-EXT
         if params.get("require_positive_momentum", True):
             qualifying &= matrix_feature(market, "momentum_20d") > 0
         if params.get("use_volatility_filter", True):
             qualifying &= matrix_feature(market, "annual_vol_20d") < float(
                 params.get("vol_max", 0.30)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
-            # <<< LOCAL-EXT
         if params.get("require_above_ma20", True):
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             qualifying &= market.close > ma20
         previous_qualifying = shift(
             qualifying,
@@ -94,7 +89,6 @@ class LowVolatilityLeaderMatrixStrategy:
             entry_signal_code=np.where(entry, 0, -1).astype(np.int16),
             exit_signal_code=np.where(exit_, 0, -1).astype(np.int16),
             entry_signal_ids=tuple(ENTRY_SIGNALS),
-            # <<< LOCAL-EXT
             exit_signal_ids=("signal_ma20_breakdown",),
         )
 

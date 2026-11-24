@@ -310,36 +310,22 @@ class DepthService:
         limit = resolve_limit(capset, Cap.DEPTH5_BATCH, default_batch=100, default_rpm=30)
 
         def fetch(provider_name: str) -> dict:
-        # <<< LOCAL-EXT
             if provider_name == "tickflow":
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 if not capset.has(Cap.DEPTH5_BATCH):
-                # <<< LOCAL-EXT
                     raise RuntimeError("TickFlow depth5 capability unavailable")
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 from app.data_providers.registry import get_provider
 
-                # <<< LOCAL-EXT
                 provider = get_provider("tickflow")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             else:
-            # <<< LOCAL-EXT
                 if not custom_sources.provider_has_dataset(provider_name, "depth5"):
                     raise RuntimeError("provider does not declare depth5")
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 provider = custom_sources.get_provider(provider_name)
 
-                # <<< LOCAL-EXT
             fetch_depth = getattr(provider, "get_depth_batch", None)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if not callable(fetch_depth):
-            # <<< LOCAL-EXT
                 fetch_depth = getattr(provider, "get_depth5", None)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if not callable(fetch_depth):
-            # <<< LOCAL-EXT
                 raise RuntimeError("provider does not implement a depth batch method")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
             result: dict = {}
             for i, symbol_chunk in enumerate(chunked(symbols, limit.batch)):
@@ -350,17 +336,13 @@ class DepthService:
                         result.update(data)
                     else:
                         logger.warning(
-# <<< LOCAL-EXT
                             "depth provider %s 第 %d 批返回非 dict, 已跳过",
-                            # >>> LOCAL-EXT 本地增强, 上游同步时保护
                             provider_name,
                             i + 1,
                         )
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                            # <<< LOCAL-EXT
                         "depth provider %s 第 %d 批失败(%d 只): %s",
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         provider_name,
                         i + 1,
                         len(symbol_chunk),
@@ -370,22 +352,15 @@ class DepthService:
 
         try:
             result, provider_name = routing.run_with_failover(
-                        # <<< LOCAL-EXT
                 "depth5", fetch, is_success=bool,
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
         except routing.ProviderChainExhaustedError as exc:
-            # <<< LOCAL-EXT
             logger.warning("depth5 provider chain failed: %s", exc)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return {}
         return {
-            # <<< LOCAL-EXT
             symbol: {**record, "source": provider_name}
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             for symbol, record in result.items()
         }
-            # <<< LOCAL-EXT
 
     def finalize(self) -> None:
         """盘后定版: 拉一次 + 落盘。"""
@@ -407,6 +382,7 @@ class DepthService:
         rows = []
         for sym, e in cache.items():
             rows.append({
+        # <<< LOCAL-EXT
                 "symbol": sym,
                 "sealed_up": e.get("sealed_up"),
                 "sealed_down": e.get("sealed_down"),
@@ -583,16 +559,11 @@ class DepthService:
         - user_interval: 用户设置(经套餐 clamp 后)的间隔
         """
         from app.services import preferences
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         provider_name = preferences.get_depth5_data_provider()
-        # <<< LOCAL-EXT
         if provider_name == "tickflow":
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             capset = self._get_capset()
             lim = capset.limits(
-            # <<< LOCAL-EXT
                 __import__("app.tickflow.capabilities", fromlist=["Cap"]).Cap.DEPTH5_BATCH
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
             batch_size = lim.batch if lim and lim.batch else 100
             rpm = lim.rpm if lim and lim.rpm else 30
@@ -600,30 +571,22 @@ class DepthService:
             from app.data_providers import custom as custom_sources
 
             provider = custom_sources.get_provider(provider_name)
-            # <<< LOCAL-EXT
             batch_size = int(getattr(provider, "depth5_batch_size", 80))
             rpm = int(getattr(provider, "depth5_rpm", 30))
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
         # ① 套餐范围 clamp
-# <<< LOCAL-EXT
         if provider_name == "tickflow":
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             from app.tickflow.policy import tier_label
 
-            # <<< LOCAL-EXT
             tier = tier_label().split()[0].split("+")[0].strip().lower()
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         else:
-        # <<< LOCAL-EXT
             tier = "custom"
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         lo, hi = TIER_INTERVAL_RANGE.get(tier, DEFAULT_RANGE)
         raw_user = preferences.get_depth_polling_interval()
         user_interval = max(lo, min(hi, raw_user))
 
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # ② 限速安全 clamp (与 resolve_limit 共用 SAFETY_RPM_FACTOR, 不叠乘)
-        # <<< LOCAL-EXT
         batches = max(1, math.ceil(n_symbols / batch_size))
         usable_rpm = apply_safety_rpm(rpm) or 1
         calls_per_min = usable_rpm / batches if batches > 0 else usable_rpm
@@ -662,6 +625,7 @@ class DepthService:
         qs = getattr(self._app_state, "quote_service", None)
         if not qs:
             return
+        # <<< LOCAL-EXT
         msg = (f"五档轮询: 当前涨跌停 {n_stocks} 只, 您设置的 {user_interval:.0f} 秒间隔会超限, "
                f"系统已自动调整为 {actual_interval:.0f} 秒")
         alert = {

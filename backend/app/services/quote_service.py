@@ -273,7 +273,6 @@ def supplement_realtime_indices(
     records: list[dict],
     symbols: list[str],
 ) -> list[dict]:
-# <<< LOCAL-EXT
     """Fill index gaps left by stock-only realtime providers.
 
     Provider routing remains authoritative for the stock snapshot.  This
@@ -281,7 +280,6 @@ def supplement_realtime_indices(
     from that snapshot, allowing asset-level sources to complement each other.
     """
     present = {str(row.get("symbol") or "") for row in records}
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     missing = [symbol for symbol in dict.fromkeys(symbols) if symbol not in present]
     if not missing:
         return records
@@ -289,22 +287,18 @@ def supplement_realtime_indices(
 
     supplemental = fetch_index_realtime(missing)
     if supplemental:
-    # <<< LOCAL-EXT
         logger.info("核心指数实时补齐: %d/%d 只 (Tencent)", len(supplemental), len(missing))
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     else:
-    # <<< LOCAL-EXT
         logger.warning("核心指数实时补齐为空: %d 只仍将使用盘后日线", len(missing))
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return [*records, *supplemental]
 
 
-    # <<< LOCAL-EXT
 class QuoteService:
     """全局实时行情服务 — 单例。"""
 
     # 档位 → 最小轮询间隔 (秒) — TickFlow 档位限速保护, 仅实时源为 tickflow 时适用
     TIER_MIN_INTERVAL = {
+# <<< LOCAL-EXT
         "expert": 1.0,
         "pro": 3.0,
         "starter": 6.0,
@@ -893,60 +887,42 @@ class QuoteService:
         """
         from app.services import preferences
 
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from app.data_providers import custom as custom_sources
         from app.data_providers import routing
 
         source_stamp = preferences.data_source_stamp()
         demand = self._wanted_quotes()
-        # <<< LOCAL-EXT
         chain = preferences.get_data_provider_chain("realtime")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 显式选择必须先于白名单回退生效 (上游 v0.4.1 语义): 用户配了一个不存在/
         # 已卸载的源时, 不能悄悄换成 tickflow 还装作正常——保留旧快照并告警,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 否则"配了付费源却全程走免费档"这类问题无从排查。
         explicit = preferences.configured_realtime_data_provider()
-        # <<< LOCAL-EXT
         if explicit and explicit != "tickflow" and explicit not in chain:
             logger.warning("所选实时数据源 %s 不可用, 保留已有行情", explicit)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return
-            # <<< LOCAL-EXT
         tickflow_enabled = "tickflow" in chain
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         for provider_name in chain:
-        # <<< LOCAL-EXT
             if provider_name == "tickflow":
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 break
-                # <<< LOCAL-EXT
             if not routing.is_healthy("realtime", provider_name):
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 continue
             try:
-                # <<< LOCAL-EXT
                 if not custom_sources.provider_has_dataset(provider_name, "realtime"):
                     raise RuntimeError("provider does not declare realtime")
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 t0 = time.perf_counter()
                 now_ts = time.perf_counter()
                 provider = custom_sources.get_provider(provider_name)
                 records = provider.get_realtime()
                 if not records:
-                # <<< LOCAL-EXT
                     raise RuntimeError("empty result")
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 # 订阅式源可能只返回部分标的: 按本轮需要的股票/ETF 补拉, 记下
                 # 未覆盖的资产类别, 交由写入层决定是否保留旧快照。
                 partial_assets: set[str] = set()
-                # <<< LOCAL-EXT
                 fetch_symbols = getattr(provider, "get_realtime_symbols", None)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 if callable(fetch_symbols):
-                # <<< LOCAL-EXT
                     received = {r.get("symbol") for r in records}
                     for asset in ("stock", "etf"):
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         missing = sorted(demand[asset] - received)
                         if missing:
                             try:
@@ -955,13 +931,9 @@ class QuoteService:
                                     records = records + supplement
                                     partial_assets.add(asset)
                             except Exception as exc:  # noqa: BLE001 -- no cross-source fallback
-                        # <<< LOCAL-EXT
                                 logger.warning("自定义源订阅行情补拉失败，保留已有数据: %s", exc)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 replace_index_cache = True
-                # <<< LOCAL-EXT
                 fetch_indices = getattr(provider, "get_realtime_indices", None)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 if callable(fetch_indices):
                     from app.indicators.pipeline import BENCHMARK_INDEX_SYMBOLS
 
@@ -969,9 +941,7 @@ class QuoteService:
                         set(CORE_INDEX_SYMBOLS)
                         | BENCHMARK_INDEX_SYMBOLS
                         | self._collect_monitor_index_symbols()
-                # <<< LOCAL-EXT
                         | demand["index"]
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     )
                     try:
                         fetched_indices = fetch_indices(wanted)
@@ -980,48 +950,33 @@ class QuoteService:
                         else:
                             records = records + fetched_indices
                     except Exception as index_exc:  # noqa: BLE001
-                    # <<< LOCAL-EXT
                         logger.warning("custom index quote fetch failed: %s", index_exc)
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         replace_index_cache = False
             except Exception as exc:  # noqa: BLE001
-                        # <<< LOCAL-EXT
                 routing.record_failure("realtime", provider_name, str(exc))
                 logger.warning("realtime provider %s failed, trying next source: %s", provider_name, exc)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 continue
             # 拉取期间用户可能改了数据源配置: 旧轮次结果不再发布, 避免把淘汰源的
             # 快照按新源名义落盘。
             if preferences.data_source_stamp() != source_stamp:
-                # <<< LOCAL-EXT
                 logger.info("行情数据源配置已变化，跳过旧轮次发布")
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 return None
             routing.record_publication(
-                # <<< LOCAL-EXT
                 "realtime", provider_name, rows=len(records), scope="full_market_snapshot",
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
-            # <<< LOCAL-EXT
             records = [{**record, "source": provider_name} for record in records]
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             result = self._process_full_market_records(
                 records,
                 t0=t0,
                 now_ts=now_ts,
                 replace_index_cache=replace_index_cache,
                 final_boundary_ms=final_boundary_ms,
-            # <<< LOCAL-EXT
                 **({"partial_assets": partial_assets} if partial_assets else {}),
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
             return result
         if not tickflow_enabled:
-            # <<< LOCAL-EXT
             logger.warning("realtime provider chain exhausted: %s", chain)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             return
-            # <<< LOCAL-EXT
 
         from app.tickflow.client import get_paid_realtime_client
 
@@ -1068,6 +1023,7 @@ class QuoteService:
             base_indices = core_index_symbols | BENCHMARK_INDEX_SYMBOLS | monitor_index_symbols
             _core_syms = sorted(base_indices | demand["index"])
             partial_assets = set()
+        # <<< LOCAL-EXT
             received = {q.get("symbol") for q in resp}
             for asset in ("stock", "etf"):
                 missing = demand[asset] - received
@@ -1168,9 +1124,7 @@ class QuoteService:
         只更新展示缓存, 不写 daily/enriched、不评估监控 —— 防止收盘后数据源仍
         返回竞价前旧价时把陈旧收盘价固化到当日分区。
         """
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         records = self._normalize_custom_realtime_records(records)
-        # <<< LOCAL-EXT
         all_index_symbols = set(self._repo.get_index_symbol_set()) if self._repo else set()
         core_index_symbols = set(CORE_INDEX_SYMBOLS)
         all_index_symbols.update(core_index_symbols)
@@ -1218,9 +1172,11 @@ class QuoteService:
             if replace_index_cache:
                 self._index_symbol_count = len(index_records)
                 self._index_quotes_cache = self._build_index_quotes(index_records)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             else:
                 logger.info("指数本轮获取失败,沿用上轮缓存: %d 只", self._index_symbol_count)
 
+            # <<< LOCAL-EXT
         _persist_last_fetch(fetched_at)
         logger.info("行情刷新: %d 只股票, %d 只ETF, %d 只指数, 耗时 %.0fms", len(stock_records), len(etf_records), len(index_records), fetch_ms)
 
@@ -1306,34 +1262,24 @@ class QuoteService:
         return out
 
     @staticmethod
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def _normalize_custom_realtime_records(
         records: list[dict],
     ) -> list[dict]:
-    # <<< LOCAL-EXT
         """Normalize provider-specific realtime units to the internal OHLCV contract."""
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         normalized: list[dict] = []
         for record in records:
-        # <<< LOCAL-EXT
             volume = record.get("volume")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             normalized.append({
                 **record,
                 # TDX exposes total volume in shares; daily/enriched OHLCV uses hands.
-            # <<< LOCAL-EXT
                 "volume": (
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     float(volume) / 100.0
-                    # <<< LOCAL-EXT
                     if record.get("source") == "tdx" and volume is not None
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     else volume
                 ),
             })
         return normalized
 
-                    # <<< LOCAL-EXT
     @staticmethod
     def _build_daily(records: list[dict]) -> pl.DataFrame:
         """将 API records 转为日K格式 DataFrame (OHLCV + quote_ts, 写 kline_daily 用)。"""
@@ -1366,6 +1312,7 @@ class QuoteService:
         # 日期归属过滤; 时间戳缺失/为空的源无法判断, 维持原行为保留。
         if "quote_ts" in result.columns:
             day_start_ms = int(
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 datetime.combine(cn_today(), dt_time(0, 0), tzinfo=CN_TZ).timestamp() * 1000
             )
             result = result.filter(
@@ -1391,6 +1338,7 @@ class QuoteService:
 
     @staticmethod
     def _build_quote_extra(records: list[dict]) -> pl.DataFrame:
+                # <<< LOCAL-EXT
         """构建 API 直接提供的补充字段 (不写 daily, 只传给 enriched 计算)。
 
         包含: prev_close, change_pct, change_amount, amplitude, turnover_rate。

@@ -29,9 +29,9 @@ from app.market_time import cn_today
 from app.services import index_sync, instrument_sync, kline_sync
 from app.services import preferences as _prefs
 from app.services.net_guard import ensure_outbound_proxy
-# <<< LOCAL-EXT
 from app.tickflow.capabilities import Cap, CapabilitySet
 from app.tickflow.pools import get_pool
+# <<< LOCAL-EXT
 from app.tickflow.repository import KlineRepository
 
 logger = logging.getLogger(__name__)
@@ -78,11 +78,10 @@ def _prune_partial_enriched_partitions(daily_dir: Path, enriched_dir: Path) -> l
     return pruned
 
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _classify_missing_enriched_dates(
     daily_dates: list[str], enriched_dates: list[str]
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 ) -> tuple[bool, bool]:
-# <<< LOCAL-EXT
     """Return ``(full_rebuild, forward_incremental)`` for raw-only dates.
 
     Only dates strictly after the latest enriched partition can use the normal
@@ -91,7 +90,6 @@ def _classify_missing_enriched_dates(
     otherwise a later symbol-only recomputation can recreate a pruned partition
     with just that symbol subset.
     """
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not enriched_dates:
         return False, bool(daily_dates)
     missing = set(daily_dates) - set(enriched_dates)
@@ -99,10 +97,10 @@ def _classify_missing_enriched_dates(
     return full_rebuild, bool(missing) and not full_rebuild
 
 
-    # <<< LOCAL-EXT
 def _prune_stale_price_partitions(
     daily_dir: Path, enriched_dir: Path, max_dates: int = 5
 ) -> list[str]:
+# <<< LOCAL-EXT
     """删除收盘价与官方日线不一致的 enriched 日期分区。
 
     实时 flush 写入的当日分区行数与 daily 相同, 但收盘价可能停留在收盘集合
@@ -231,22 +229,17 @@ def run_now(
     # 管道末尾若非空则抛 PipelineStageError, 让任务终态如实标记为 failed(而非误报成功)。
     stage_errors: list[str] = []
 
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # Step -1: 出站网络自检。启动时检测过一次, 但代理可能在盘中才失效(节点掉线/
     # 订阅过期), 那种情况下端口仍在监听、请求却卡在 TLS 握手后被掐断, 整批数据源
     # 请求超时 → 管道"跑完但零写入"。这里重探一次, 必要时切直连。
     try:
         net_mode = ensure_outbound_proxy()
-    # <<< LOCAL-EXT
         if net_mode == "direct":
             logger.warning("daily_pipeline: 出站代理不可用, 本次管道已切换直连")
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     except Exception as e:  # noqa: BLE001 — 自检失败不应阻断管道
-    # <<< LOCAL-EXT
         logger.warning("daily_pipeline: 出站网络自检异常 (忽略): %s", e)
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
-# <<< LOCAL-EXT
     # Step 0: 先同步个股维表, 再解析标的池 — 确保标的池基于最新 instruments
     emit("sync_instruments", 2, "同步个股维表…")
     inst_rows = instrument_sync.sync_instruments(repo.store.data_dir)
@@ -259,6 +252,7 @@ def run_now(
     universe = _resolve_universe(capset, repo)
     emit("resolve_universe", 10, f"标的池规模:{len(universe)} 只")
 
+    # <<< LOCAL-EXT
     # 已知异常不能先进入指标计算, 再在末尾才报失败。修补与自检页面共用链路。
     from app.services.integrity_check import repair_known_data
     repair_known_data(repo, capset, on_progress=emit)
@@ -526,11 +520,9 @@ def run_now(
     if daily_days > prev_enriched_days and enriched_exists:
         daily_dates = sorted(d.stem.split("=")[1] for d in daily_dir.glob("date=*"))
         enriched_dates = sorted(d.stem.split("=")[1] for d in enriched_dir.glob("date=*"))
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         backward_extension, forward_incremental = _classify_missing_enriched_dates(
             daily_dates, enriched_dates
         )
-        # <<< LOCAL-EXT
 
     def _enriched_batch_progress(cur: int, tot: int) -> None:
         emit("compute_enriched", 65 + int(23 * cur / tot),
@@ -540,8 +532,10 @@ def run_now(
         # 首次 或 往前扩展 → 全量
         emit("compute_enriched", 65, "全量计算 enriched…")
         logger.info("compute_enriched: full rebuild (first=%s, backward=%s, daily=%d, enriched=%d)",
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     not enriched_exists, backward_extension, daily_days, prev_enriched_days)
         written_enriched = run_pipeline(on_batch_done=_enriched_batch_progress)
+                    # <<< LOCAL-EXT
         new_enriched_days = len(list(enriched_dir.glob("date=*")))
         emit("compute_enriched", 88, f"enriched 完成,覆盖 {new_enriched_days} 天")
         logger.info("compute_enriched: full rebuild done, %d days", new_enriched_days)
@@ -585,14 +579,11 @@ def run_now(
     etf_adj_symbols = 0
     pull_index = _prefs.get_pipeline_pull_index()
     pull_etf = _prefs.get_pipeline_pull_etf()
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     index_fallback_attempted = False
 
     if pull_index and not capset.has(Cap.KLINE_DAILY_BATCH):
         index_fallback_attempted = True
-    # <<< LOCAL-EXT
         emit("sync_index", 88, "同步 QuantX 必需指数 (腾讯备用源)…")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         try:
             index_count = index_sync.sync_index_instruments(
                 repo,
@@ -602,17 +593,14 @@ def run_now(
             required_history = repo.get_index_daily(
                 index_sync.QUANTX_ALL_A_STORAGE_SYMBOL,
                 today - _td(days=730),
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 today,
-        # <<< LOCAL-EXT
                 ["date"],
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
             if override_start_date:
                 index_start = override_start_date
             elif not required_history.is_empty():
-            # <<< LOCAL-EXT
                 latest_required = required_history["date"].max()
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 index_start = latest_required + _td(days=1)
             else:
                 index_start = today - _td(days=365)
@@ -623,22 +611,15 @@ def run_now(
                 start_date=_dt.combine(index_start, _dt.min.time()),
                 end_date=_dt.combine(today, _dt.min.time()),
             )
-                # <<< LOCAL-EXT
             _invalidate("index_instruments")
             _invalidate("index_daily")
             _invalidate("index_enriched")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             emit(
-            # <<< LOCAL-EXT
                 "sync_index",
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 89,
-                # <<< LOCAL-EXT
                 f"QuantX 必需指数完成,{index_count} 只/{written_index_daily} 行 (腾讯备用源)",
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
         except Exception as e:  # noqa: BLE001
-            # <<< LOCAL-EXT
             logger.warning("required QuantX index fallback failed: %s", e)
             emit("sync_index", 89, f"QuantX 必需指数备用同步失败:{e}")
             stage_errors.append(f"required QuantX index fallback: {e}")
@@ -670,6 +651,7 @@ def run_now(
                 # 完整性修复时起点再提前到最早坏日 (实时写过今天的指数分区时,
                 # "最新日期=今天"会让停机日的快照/缺口永久留存)
                 if override_start_date:
+                # <<< LOCAL-EXT
                     index_start = override_start_date
                 else:
                     index_start = _date.fromisoformat(index_dates[-1]) if index_dates else today - _td(days=365)
@@ -760,32 +742,22 @@ def run_now(
             logger.warning("sync_index/etf failed: %s", e)
             emit("sync_index", 89, f"指数/ETF同步失败:{e}")
             stage_errors.append(f"index/etf sync: {e}")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     elif not index_fallback_attempted:
-    # <<< LOCAL-EXT
         skipped.append("sync_index")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     # The four non-exchange sentiment series are TDX-only and feed the QuantX
     # risk view. Keep their failure isolated from ordinary index/ETF sync.
     try:
-# <<< LOCAL-EXT
         sentiment_day = repo.latest_enriched_date("stock") or today
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         sentiment_rows = index_sync.sync_quantx_sentiment_indices(
             repo, end_date=_dt.combine(sentiment_day, _dt.min.time()),
         )
-        # <<< LOCAL-EXT
         _invalidate("index_daily")
         emit("sync_index", 89, f"QuantX 四情绪指数完成，{sentiment_rows} 行")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     except Exception as exc:  # noqa: BLE001
-    # <<< LOCAL-EXT
         logger.warning("QuantX sentiment indices unavailable: %s", exc)
         emit("sync_index", 89, "QuantX 四情绪指数暂不可用")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
-# <<< LOCAL-EXT
     # Step 2.5: 分钟 K 同步(可选) — 未启用或无 capability 时静默跳过(不 emit)
     from app.services import preferences
     minute_on = preferences.get_minute_sync_enabled()
@@ -798,6 +770,7 @@ def run_now(
     )
     minute_allowed = (not minute_fallback) or capset.has(Cap.KLINE_MINUTE_BATCH)
     if minute_on and minute_allowed:
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         minute_start = today - _td(days=minute_days)
         emit("sync_minute", 90, f"获取分钟K [{minute_start} ~ {today}]…")
         logger.info("sync_minute: [%s ~ %s] start", minute_start, today)
@@ -824,6 +797,7 @@ def run_now(
 
     # Step 2.6: 市场环境(regime) 增量计算 — enriched 已就绪后聚合环境指标。
     # 双检测(缺口+stale), 自动补算遗漏/被覆写的日。软失败: 不阻断主管道。
+        # <<< LOCAL-EXT
     # 默认关闭: regime 是本地聚合计算(非拉取), 首次/regime 表为空时需全量回填
     # 多日, 内存与耗时较高。用户可在数据页「市场环境」卡片设置里开启自动计算,
     # 或直接在该页面点「重算」手动触发(不受此开关影响)。
@@ -1193,62 +1167,42 @@ def _run_tracked(fn, job_label: str) -> bool:
     return succeeded
 
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _run_quantx_after_pipeline() -> dict | None:
-# <<< LOCAL-EXT
     """Run QuantX only after the main post-close generation is readable."""
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     app_state = _get_app_state()
-    # <<< LOCAL-EXT
     repo = getattr(app_state, "repo", None) if app_state is not None else None
     data_root = getattr(getattr(repo, "store", None), "data_dir", None)
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if data_root is None:
-    # <<< LOCAL-EXT
         logger.info("dependent QuantX run skipped: application repository unavailable")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return None
-        # <<< LOCAL-EXT
     latest = repo.latest_enriched_date("stock")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if latest is None:
-    # <<< LOCAL-EXT
         logger.info("dependent QuantX run skipped: no enriched partition available")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return None
 
     from app.quantx_data.scheduler import run_scheduled
 
-        # <<< LOCAL-EXT
     result = run_scheduled(data_root, trade_date=latest.strftime("%Y%m%d"))
     logger.info("dependent QuantX result: %s", result)
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return result
 
 
 def _run_stock_pools_after_pipeline() -> dict | None:
     app_state = _get_app_state()
-    # <<< LOCAL-EXT
     repo = getattr(app_state, "repo", None) if app_state is not None else None
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if repo is None:
         return None
-    # <<< LOCAL-EXT
     latest = repo.latest_enriched_date("stock")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if latest is None:
         return None
     from app.stock_pools.publisher import publish_stock_pool
 
     result = publish_stock_pool(repo, latest)
-    # <<< LOCAL-EXT
     logger.info("dependent stock-pool result: %s", result)
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return result
 
 
 def _scheduled_pipeline_task(pipeline_fn) -> None:
-    # <<< LOCAL-EXT
     """盘后管道成功后的串联任务: QuantX 复盘 → 股票池 → 实验室周期。
 
     每个依赖任务独立 try, 任一失败只记日志, 不把已成功的管道改成 failed。
@@ -1261,13 +1215,10 @@ def _scheduled_pipeline_task(pipeline_fn) -> None:
     try:
         _run_quantx_after_pipeline()
     except Exception:
-        # <<< LOCAL-EXT
         logger.exception("dependent QuantX run failed; daily pipeline remains succeeded")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     try:
         _run_stock_pools_after_pipeline()
     except Exception:
-    # <<< LOCAL-EXT
         logger.exception("dependent stock-pool run failed; daily pipeline remains succeeded")
     try:
         from app.services.lab_schedule import run_scheduled_lab
@@ -1330,6 +1281,7 @@ async def _run_scheduled_review(repo) -> None:
             "emotion_score": meta.get("emotion_score"),
             "emotion_label": meta.get("emotion_label", ""),
         })
+        # <<< LOCAL-EXT
         logger.info("scheduled review saved: as_of=%s", meta.get("as_of"))
 
         # 通知前端: 生成完成且已归档(archived=true 让前端只刷新列表, 不重复归档)
@@ -1573,15 +1525,15 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
                             hour=sched["hour"], minute=sched["minute"],
                             timezone="Asia/Shanghai"),
         id="daily_pipeline",
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # A sleeping laptop can miss the configured post-close time by hours.
         # Keep the run eligible until the next session instead of dropping it.
         misfire_grace_time=86400,
-        # <<< LOCAL-EXT
         replace_existing=True,
     )
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 盘后: 五档盘口 sealed 定版(时间由偏好决定, 默认15:02, 范围15:01~18:00)
+    # <<< LOCAL-EXT
     depth_sched = preferences.get_depth_finalize_time()
 
     def _depth_finalize():
@@ -1638,8 +1590,10 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         _register_review_job(scheduler, repo, review_sched["hour"], review_sched["minute"])
         logger.info("scheduled_review enabled @%02d:%02d mon-fri",
                     review_sched["hour"], review_sched["minute"])
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     scheduler.start()
+# <<< LOCAL-EXT
     logger.info("scheduler started; instruments@%02d:%02d, pipeline@%02d:%02d, depth@%02d:%02d mon-fri",
                 inst_sched["hour"], inst_sched["minute"], sched["hour"], sched["minute"],
                 depth_sched["hour"], depth_sched["minute"])

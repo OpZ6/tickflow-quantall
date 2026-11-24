@@ -1362,16 +1362,14 @@ def _resolve_macos_codex_command() -> str | None:
         # 文件当成可用 CLI, 一路走到 subprocess 才报 PermissionError, 提示不直观。
         # Windows 无执行位 (os.access(X_OK) 对任意存在的文件恒为真), 该解析器
         # 实际只在 darwin 上被调用, 故非 POSIX 平台跳过这一项检查。
-            # <<< LOCAL-EXT
         if os.name != "nt" and not os.access(candidate, os.X_OK):
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             continue
         return str(candidate)
-            # <<< LOCAL-EXT
     return None
 
 
 def _resolve_windows_desktop_codex() -> str | None:
+            # <<< LOCAL-EXT
     """Prefer the Codex Desktop bundled CLI over an older npm shim."""
     local_appdata = os.environ.get("LOCALAPPDATA")
     if not local_appdata:

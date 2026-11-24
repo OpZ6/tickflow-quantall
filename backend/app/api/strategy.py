@@ -33,9 +33,9 @@ from app.strategy.ai_generator import (
     find_meta_assignment,
 )
 from app.strategy.catalog import catalog_label_for, catalog_origin
-# <<< LOCAL-EXT
 from app.strategy.engine import StrategyDef, StrategyEngine
 from app.strategy.monitor import StrategyMonitorService
+# <<< LOCAL-EXT
 from app.strategy.prompt_builder import build_step1, build_step2
 from app.strategy.scoring import (
     SCORING_DIRECTIONS,
@@ -198,10 +198,9 @@ def _strategy_detail(
     name = overrides.get("name", s.meta.get("name", "")) if overrides else s.meta.get("name", "")
     description = overrides.get("description", s.meta.get("description", "")) if overrides else s.meta.get("description", "")
     origin = catalog_origin(str(s.meta["id"]), s.source)
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return {
-# <<< LOCAL-EXT
         "id": s.meta["id"],
         "name": name or s.meta.get("name", ""),
         "description": description or s.meta.get("description", ""),
@@ -217,9 +216,7 @@ def _strategy_detail(
             dict(s.meta.get("chart_preview"))
             if isinstance(s.meta.get("chart_preview"), dict)
             else {"enabled": False}
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         ),
-        # <<< LOCAL-EXT
         "version": s.meta.get("version", "1.0.0"),
         "basic_filter": bf,
         "params": s.meta.get("params", []),
@@ -242,24 +239,16 @@ def _strategy_detail(
         "trailing_stop": overrides.get("trailing_stop", getattr(s, "trailing_stop", None)) if overrides else getattr(s, "trailing_stop", None),
         "trailing_take_profit_activate": overrides.get("trailing_take_profit_activate", getattr(s, "trailing_take_profit_activate", None)) if overrides else getattr(s, "trailing_take_profit_activate", None),
         "trailing_take_profit_drawdown": overrides.get("trailing_take_profit_drawdown", getattr(s, "trailing_take_profit_drawdown", None)) if overrides else getattr(s, "trailing_take_profit_drawdown", None),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 本地回测增强: 分批盈亏锁定 / 收盘保本 / 建议最大持仓
-        # <<< LOCAL-EXT
         "profit_lock_steps": (
             overrides.get("profit_lock_steps", s.meta.get("profit_lock_steps"))
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if overrides
-            # <<< LOCAL-EXT
             else s.meta.get("profit_lock_steps")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         ),
-        # <<< LOCAL-EXT
         "close_breakeven_activate_pct": (
             overrides.get("close_breakeven_activate_pct", s.meta.get("close_breakeven_activate_pct"))
             if overrides else s.meta.get("close_breakeven_activate_pct")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         ),
-        # <<< LOCAL-EXT
         "recommended_max_positions": s.meta.get("recommended_max_positions"),
         "max_hold_days": overrides.get("max_hold_days", s.max_hold_days) if overrides else s.max_hold_days,
         "order_by": s.meta.get("order_by", "score"),
@@ -300,13 +289,10 @@ class RunAllRequest(BaseModel):
     timeframe: str = "1d"
 
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 class PreviewRequest(BaseModel):
     symbol: str
-# <<< LOCAL-EXT
     asset_type: Literal["stock", "etf", "index"] = "stock"
     timeframe: str = "1d"
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     start_date: date
     end_date: date
     strategy_ids: list[str] = Field(default_factory=list)
@@ -317,13 +303,10 @@ class EventBackfillRequest(BaseModel):
     start_date: date
     end_date: date
     strategy_ids: list[str]
-    # <<< LOCAL-EXT
     asset_type: str = "stock"
     timeframe: str = "1d"
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
-# <<< LOCAL-EXT
 class SaveConfigRequest(BaseModel):
     strategy_id: str
     overrides: dict
@@ -344,6 +327,7 @@ class AIIterateRequest(BaseModel):
 
 
 class AISaveRequest(BaseModel):
+    # <<< LOCAL-EXT
     code: str
     strategy_id: str
     name: str = ""
@@ -423,7 +407,6 @@ def list_strategies(
 
 
 @router.get("/events")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def query_strategy_events(
     request: Request,
     symbol: str | None = None,
@@ -435,81 +418,56 @@ def query_strategy_events(
     params_fingerprint: str | None = None,
     limit: int = Query(1000, ge=1, le=5000),
 ):
-# <<< LOCAL-EXT
     """查询版本化派生策略事件；不读取页面缓存或 Market Facts。"""
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     rows = StrategySignalEventRepository(_data_dir(request)).query(
         symbol=symbol,
-    # <<< LOCAL-EXT
         strategy_ids=(item.strip() for item in (strategy_ids or "").split(",") if item.strip()),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         start_date=start_date,
         end_date=end_date,
-        # <<< LOCAL-EXT
         event_types=(item.strip() for item in (event_types or "").split(",") if item.strip()),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         source_run_id=source_run_id,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         params_fingerprint=params_fingerprint,
     )
-        # <<< LOCAL-EXT
     return {"rows": rows[-limit:], "total": len(rows), "generation": StrategySignalEventRepository(_data_dir(request)).generation()}
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
-# <<< LOCAL-EXT
 @router.post("/events/backfill")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def backfill_strategy_events(req: EventBackfillRequest, request: Request):
-# <<< LOCAL-EXT
     """受控重算本地已有交易日，结果显式标记为 recomputed。"""
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if req.end_date < req.start_date:
-    # <<< LOCAL-EXT
         raise HTTPException(status_code=422, detail="end_date 不能早于 start_date")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     strategy_ids = list(dict.fromkeys(req.strategy_ids))
     if not strategy_ids or len(strategy_ids) > 32:
-    # <<< LOCAL-EXT
         raise HTTPException(status_code=422, detail="strategy_ids 需要 1—32 个")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     engine = _get_engine(request)
     for strategy_id in strategy_ids:
         strategy = _get_public_strategy(engine, strategy_id)
-    # <<< LOCAL-EXT
         if strategy.source != "builtin":
             raise HTTPException(status_code=422, detail=f"仅允许回填内置策略: {strategy_id}")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     data_dir = _data_dir(request)
     from app.tickflow.repository import enriched_dirname
 
     enriched_root = data_dir / enriched_dirname(req.asset_type)
     dates: list[date] = []
-# <<< LOCAL-EXT
     for path in enriched_root.glob("date=*/part.parquet"):
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         try:
-        # <<< LOCAL-EXT
             day = date.fromisoformat(path.parent.name.removeprefix("date="))
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         except ValueError:
             continue
         if req.start_date <= day <= req.end_date:
             dates.append(day)
     dates = sorted(set(dates))
     if len(dates) > 120:
-        # <<< LOCAL-EXT
         raise HTTPException(status_code=422, detail="单次最多回填 120 个本地交易日")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     from app.services.screener import ScreenerService
 
     service = ScreenerService(request.app.state.repo, asset_type=req.asset_type)
     overrides_by_id = strategy_config.list_overrides(data_dir)
     params_by_id = {
-# <<< LOCAL-EXT
         strategy_id: dict((overrides_by_id.get(strategy_id) or {}).get("params") or {})
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         for strategy_id in strategy_ids
     }
     written = 0
@@ -537,26 +495,19 @@ def backfill_strategy_events(req: EventBackfillRequest, request: Request):
                     strategy=engine.get(strategy_id),
                     params=params_by_id[strategy_id],
                     context=context,
-        # <<< LOCAL-EXT
                     provenance="recomputed",
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 ))
         except Exception as exc:
-                # <<< LOCAL-EXT
             failures.append({"date": day.isoformat(), "error": str(exc)})
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return {
-    # <<< LOCAL-EXT
         "dates": [day.isoformat() for day in dates],
         "strategies": strategy_ids,
         "events_written": written,
         "failures": failures,
         "provenance": "recomputed",
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     }
 
 
-    # <<< LOCAL-EXT
 @router.get("/{strategy_id}")
 def get_strategy(strategy_id: str, request: Request):
     engine = _get_engine(request)
@@ -570,24 +521,15 @@ def get_strategy(strategy_id: str, request: Request):
 
 
 @router.post("/preview")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def preview_strategy(req: PreviewRequest, request: Request):
-# <<< LOCAL-EXT
     """即时回放一只股票的正式策略信号，不执行全市场扫描或写入事件仓库。"""
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not req.symbol.strip():
-    # <<< LOCAL-EXT
         raise HTTPException(status_code=422, detail="symbol 不能为空")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if req.end_date < req.start_date:
-    # <<< LOCAL-EXT
         raise HTTPException(status_code=422, detail="end_date 不能早于 start_date")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     strategy_ids = list(dict.fromkeys(item.strip() for item in req.strategy_ids if item.strip()))
     if not strategy_ids or len(strategy_ids) > 3:
-    # <<< LOCAL-EXT
         raise HTTPException(status_code=422, detail="strategy_ids 需要 1—3 个")
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
     engine = _get_engine(request)
     for strategy_id in strategy_ids:
@@ -620,7 +562,6 @@ def preview_strategy(req: PreviewRequest, request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-# <<< LOCAL-EXT
 @router.post("/run")
 def run_strategy(req: RunRequest, request: Request):
     engine = _get_engine(request)
@@ -663,7 +604,6 @@ def run_strategy(req: RunRequest, request: Request):
             params=params,
             overrides=overrides or None,
         )
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         enrich_and_persist_strategy_result(
             data_dir=data_dir,
             result=result,
@@ -671,7 +611,6 @@ def run_strategy(req: RunRequest, request: Request):
             params=params,
             context=context,
         )
-        # <<< LOCAL-EXT
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -687,6 +626,7 @@ def run_all(req: RunAllRequest, request: Request):
     if not as_of:
         from app.services.screener import ScreenerService
         svc = ScreenerService(request.app.state.repo, asset_type=req.asset_type)
+        # <<< LOCAL-EXT
         as_of = svc.latest_date()
     if not as_of:
         return {"as_of": None, "results": {}}
@@ -720,7 +660,6 @@ def run_all(req: RunAllRequest, request: Request):
         overrides_map={sid: all_overrides.get(sid, {}) for sid in strategy_ids},
         strategy_ids=strategy_ids,
     ).items():
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         enrich_and_persist_strategy_result(
             data_dir=data_dir,
             result=result,
@@ -728,10 +667,10 @@ def run_all(req: RunAllRequest, request: Request):
             params=params_map.get(sid, {}),
             context=context,
         )
-        # <<< LOCAL-EXT
         results[sid] = {"total": result.total, "as_of": str(as_of)}
 
     return {"as_of": str(as_of), "results": results}
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 # ── 配置持久化 ───────────────────────────────────────────────────────
@@ -740,6 +679,7 @@ def run_all(req: RunAllRequest, request: Request):
 @router.post("/config")
 def save_config(req: SaveConfigRequest, request: Request):
     engine = _get_engine(request)
+# <<< LOCAL-EXT
     strategy = _get_public_strategy(engine, req.strategy_id)
     data_dir = _data_dir(request)
 
@@ -788,6 +728,7 @@ def _overlay_changed(old, new) -> bool:
 # 叠加条件第一版只支持日线 polars_expr / matrix_native; composite 已有自身
 # 的叠加合并语义, minute 帧不带 enriched 列 (ext_*/因子列不可见)。
 _OVERLAY_UNSUPPORTED_BACKENDS = frozenset({"composite", "minute_filter"})
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 def _validate_overlay_filter(strategy, overrides: dict) -> None:
@@ -797,6 +738,7 @@ def _validate_overlay_filter(strategy, overrides: dict) -> None:
     """
     conditions = overrides.get("overlay_filter")
     if conditions is None:
+# <<< LOCAL-EXT
         return
     if strategy.execution_backend in _OVERLAY_UNSUPPORTED_BACKENDS:
         raise HTTPException(

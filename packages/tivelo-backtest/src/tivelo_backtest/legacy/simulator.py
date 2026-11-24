@@ -102,9 +102,7 @@ class MatcherConfig:
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 印花税口径: fixed = 用 stamp_tax_pct; a_share_historical = 按卖出日对应的
     # 历史税率自动取 (2008-09-19 起单边 0.1%, 2023-08-28 起 0.05%)。
-    # <<< LOCAL-EXT
     stamp_tax_policy: Literal["fixed", "a_share_historical"] = "fixed"
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     slippage_bps: float = 5.0
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
@@ -118,7 +116,6 @@ class MatcherConfig:
     profit_lock_steps: list[dict[str, float]] | None = None
     # 收盘价站上 entry*(1+activate) 后转为保本模式, 跌破 entry 即触发离场信号。
     close_breakeven_activate_pct: float | None = None
-    # <<< LOCAL-EXT
     max_hold_days: int | None = None
     max_positions: int = 10
     max_exposure_pct: float = 1.0
@@ -152,23 +149,16 @@ class MatcherConfig:
         # 买入腿: 佣金 + 滑点。
         return self._commission_pct() + self.slippage_bps / 10000.0
 
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def sell_cost_pct(self, on_date: date | str | None = None) -> float:
         # 卖出腿: 佣金 + 印花税 + 滑点。印花税未设时为 0 (向后兼容)。
         # a_share_historical 按卖出日取对应税率; 缺日期时 fail-closed, 避免用错税率
         # 却静默出结果。
-    # <<< LOCAL-EXT
         if self.stamp_tax_policy == "a_share_historical":
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if on_date is None:
-            # <<< LOCAL-EXT
                 raise ValueError("a_share_historical stamp tax requires an exit date")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             exit_date = on_date if isinstance(on_date, date) else date.fromisoformat(str(on_date)[:10])
             if exit_date < date(2008, 9, 19):
-            # <<< LOCAL-EXT
                 raise ValueError("a_share_historical stamp tax supports exits from 2008-09-19")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             stamp = 0.0005 if exit_date >= date(2023, 8, 28) else 0.001
         else:
             stamp = self.stamp_tax_pct if self.stamp_tax_pct is not None else 0.0
@@ -177,17 +167,13 @@ class MatcherConfig:
 
 def _entry_risk_value(config: MatcherConfig, pos: dict, key: str, fallback):
     profiles = config.entry_risk_profiles or {}
-            # <<< LOCAL-EXT
     profile = profiles.get(str(pos.get("entry_signal_id") or ""), {})
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return profile.get(key, fallback)
 
 
 def _scheduled_open_exit(config: MatcherConfig, exit_signal: bool, hold_days: int) -> bool:
-    # <<< LOCAL-EXT
     """A scheduled open sale cannot be preempted by that session's later high/low."""
     return (config.exit_fill == "open_t+1" and not config.minute_fill
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             and (exit_signal or (config.max_hold_days is not None and hold_days >= config.max_hold_days)))
 
 
@@ -195,12 +181,10 @@ def _update_close_breakeven(config: MatcherConfig, pos: dict, close: float, on_d
     activate = config.close_breakeven_activate_pct
     if activate is None or not np.isfinite(close) or close <= 0:
         return
-            # <<< LOCAL-EXT
     if close >= pos["entry_price"] * (1 + activate):
         pos["close_breakeven_armed"] = True
     if pos.get("close_breakeven_armed") and close < pos["entry_price"]:
         pos.setdefault("close_breakeven_signal_date", on_date)
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 def _profit_lock_lines(
@@ -208,41 +192,28 @@ def _profit_lock_lines(
     entry_price: float,
     peak_price: float,
 ) -> list[tuple[float, str]]:
-# <<< LOCAL-EXT
     """Build staged, causal profit-protection lines from the prior observed peak."""
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if entry_price <= 0 or peak_price <= entry_price:
         return []
     peak_return = peak_price / entry_price - 1
     lines: list[tuple[float, str]] = []
     for step in config.profit_lock_steps or []:
-    # <<< LOCAL-EXT
         activate = step.get("activate_pct")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if activate is None or peak_return < abs(float(activate)):
             continue
-        # <<< LOCAL-EXT
         floor_return = step.get("floor_return_pct")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if floor_return is not None:
             lines.append(
-        # <<< LOCAL-EXT
                 (entry_price * (1 + float(floor_return)), "staged_profit_lock")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
-            # <<< LOCAL-EXT
         drawdown = step.get("trailing_drawdown_pct")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if drawdown is not None:
             lines.append(
-        # <<< LOCAL-EXT
                 (peak_price * (1 - abs(float(drawdown))), "staged_profit_lock")
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
     return lines
 
 
-            # <<< LOCAL-EXT
 @dataclass
 class TradeRecord:
     symbol: str
@@ -273,6 +244,7 @@ class TradeRecord:
 
 @dataclass
 class SimResult:
+    # <<< LOCAL-EXT
     equity_curve: list[dict]  # [{date, value}]
     drawdown_curve: list[dict]  # [{date, value}]
     trades: list[TradeRecord]
@@ -289,10 +261,8 @@ class SimulationOptions:
     include_trades: bool = True
     include_per_symbol_stats: bool = True
     include_return_distribution: bool = True
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 本地扩展: 把每笔被拒的买/卖尝试落成可审计记录 (默认关闭, 不改变匹配语义)。
     include_execution_rejections: bool = False
-    # <<< LOCAL-EXT
 
 
 def _resolve_signal_id(panel: pl.DataFrame, idx: int, signal_ids: list[str] | None) -> str | None:
@@ -321,10 +291,12 @@ class LegacySimulator:
     def __init__(self, *, minute_loader: Callable | None = None):
         self._minute_loader = minute_loader
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def _minute_data(self, symbols, dates, asset_type):
         return (
             {} if self._minute_loader is None else self._minute_loader(symbols, dates, asset_type)
         )
+    # <<< LOCAL-EXT
 
     def simulate(
         self,
@@ -428,10 +400,8 @@ class LegacySimulator:
                         pnl_pct = (
                             (exit_price - entry_price) / entry_price if entry_price > 0 else 0.0
                         )
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         # 印花税按本笔卖出日取对应税率 (a_share_historical 分段)。
                         fee_cost = config.buy_cost_pct() + config.sell_cost_pct(sym_dates[i])
-                        # <<< LOCAL-EXT
                         pnl_pct -= fee_cost
 
                         e_date = sym_dates[entry_idx]
@@ -462,10 +432,12 @@ class LegacySimulator:
         d_min = date_min.item() if hasattr(date_min, "item") else date_min
         d_max = date_max.item() if hasattr(date_max, "item") else date_max
         stats = self._calc_stats(trades, config.initial_capital, d_min, d_max)
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         per_symbol = self._calc_per_symbol(trades)
 
         return SimResult(
             equity_curve=equity_curve,
+        # <<< LOCAL-EXT
             drawdown_curve=drawdown_curve,
             trades=trades,
             per_symbol_stats=per_symbol,
@@ -532,10 +504,8 @@ class LegacySimulator:
         entry_prices = self._resolve_entry_prices(matrix, config)
         exit_prices = matrix.open if config.exit_fill == "open_t+1" else matrix.close
         buy_cost_pct = config.buy_cost_pct()
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 卖出腿含印花税, 税率随卖出日所在分段变化 (a_share_historical),
         # 只能在每笔平仓时按该笔成交日求值, 不能在此一次性算定。
-        # <<< LOCAL-EXT
         trades: list[TradeRecord] = []
         execution_stats = {
             "buy_invalid_price": 0,
@@ -568,10 +538,12 @@ class LegacySimulator:
 
         def _valid_price(value) -> bool:
             return bool(np.isfinite(value) and value > 0)
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
         def _present(time_id: int, asset_id: int) -> bool:
             return bool(
                 np.isfinite(
+# <<< LOCAL-EXT
                     [
                         matrix.open[time_id, asset_id],
                         matrix.high[time_id, asset_id],
@@ -688,48 +660,32 @@ class LegacySimulator:
             open_price = float(matrix.open[time_id, asset_id])
             low_price = float(matrix.low[time_id, asset_id])
             high_price = float(matrix.high[time_id, asset_id])
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 已定档的收盘保本信号 / 次日开盘的排定卖出, 不能被当日后续 high/low 抢先:
             # 该笔按开盘价成交, 日内极值不参与本日判定。
-            # <<< LOCAL-EXT
             if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(
                 config, bool(matrix.exit[time_id, asset_id]), pos["hold_days"]
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             ):
                 low_price = high_price = open_price
-            # <<< LOCAL-EXT
             peak_price = float(pos["max_high"])
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             lines: list[tuple[float, str]] = []
             if config.stop_loss_pct is not None:
-            # <<< LOCAL-EXT
                 lines.append((entry_price * (1 - abs(config.stop_loss_pct)), "stop_loss"))
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if config.trailing_stop_pct is not None:
-            # <<< LOCAL-EXT
                 lines.append((peak_price * (1 - abs(config.trailing_stop_pct)), "trailing_stop"))
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 按入场信号覆盖风控阈值: 不同入场信号的波动特征差异很大, 用同一组
             # 移动止盈参数会系统性偏紧或偏松。
             activate = _entry_risk_value(
-            # <<< LOCAL-EXT
                 config, pos, "trailing_take_profit_activate_pct",
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 config.trailing_take_profit_activate_pct,
             )
             drawdown = _entry_risk_value(
-                # <<< LOCAL-EXT
                 config, pos, "trailing_take_profit_drawdown_pct",
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 config.trailing_take_profit_drawdown_pct,
             )
             if activate is not None and drawdown is not None and peak_price > entry_price:
                 if peak_price / entry_price - 1 >= abs(float(activate)):
-                # <<< LOCAL-EXT
                     lines.append((peak_price * (1 - abs(float(drawdown))), "trailing_take_profit"))
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             lines.extend(_profit_lock_lines(config, entry_price, peak_price))
-            # <<< LOCAL-EXT
             valid_lines = [(line, reason) for line, reason in lines if _valid_price(line)]
             if valid_lines:
                 stop_price, reason = max(valid_lines, key=lambda item: item[0])
@@ -741,6 +697,7 @@ class LegacySimulator:
                 take_profit = entry_price * (1 + abs(float(config.take_profit_pct)))
                 if _valid_price(open_price) and open_price >= take_profit:
                     return "take_profit", open_price
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 if _valid_price(high_price) and high_price >= take_profit:
                     return "take_profit", take_profit
             return None, None
@@ -754,14 +711,10 @@ class LegacySimulator:
             override: float | None = None,
             force: bool = False,
         ) -> bool:
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 收盘保本信号产生于 T 日收盘, T+1 开盘才能成交: 无论 exit_fill
             # 口径如何, 该笔都按次日开盘价成交。
-            # <<< LOCAL-EXT
             if reason == "close_breakeven":
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 override = float(matrix.open[time_id, asset_id])
-                # <<< LOCAL-EXT
             signal_id = (
                 _signal_id(int(matrix.exit_signal_code[time_id, asset_id]), matrix.exit_signal_ids)
                 if reason == "signal"
@@ -808,10 +761,8 @@ class LegacySimulator:
             shares = 100.0
             entry_scale = matrix.scale_at(pos["entry_time"], asset_id)
             entry_value = round(shares * (pos["entry_price"] / entry_scale) * (1 + buy_cost_pct), 2)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 印花税按本笔卖出日取对应税率。
             sell_cost_pct = config.sell_cost_pct(matrix.timestamp_labels[time_id])
-            # <<< LOCAL-EXT
             exit_value = round((shares / entry_scale) * exit_price * (1 - sell_cost_pct), 2)
             pnl_amount = round(exit_value - entry_value, 2)
             trades.append(
@@ -820,6 +771,7 @@ class LegacySimulator:
                     name=matrix.names[asset_id],
                     entry_date=pos["entry_date"],
                     exit_date=matrix.timestamp_labels[time_id][:10],
+                # <<< LOCAL-EXT
                     entry_price=round(float(pos["entry_price"]) / entry_scale, 4),
                     exit_price=round(exit_price / matrix.scale_at(time_id, asset_id), 4),
                     pnl_pct=round(float(pnl_amount / entry_value), 6) if entry_value > 0 else 0.0,
@@ -866,10 +818,12 @@ class LegacySimulator:
                 _count(blocked)
                 continue
             score = _matrix_entry_score(matrix, time_id, asset_id)
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if config.score_min is not None and score < config.score_min:
                 _count("buy_score_filter")
                 continue
             if config.score_max is not None and score > config.score_max:
+            # <<< LOCAL-EXT
                 _count("buy_score_filter")
                 continue
             future_times = [
@@ -910,10 +864,8 @@ class LegacySimulator:
                 "blocked_exit_days": 0,
             }
             closed = False
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 建仓当日收盘价已发生, 可用于保本 arm (信号次日起生效)。
             _update_close_breakeven(config, pos, float(matrix.close[time_id, asset_id]), entry_date)
-            # <<< LOCAL-EXT
             for future in future_times:
                 pos["hold_days"] += 1
                 date_text = matrix.timestamp_labels[future][:10]
@@ -944,11 +896,9 @@ class LegacySimulator:
                 high_price = float(matrix.high[future, asset_id])
                 if _valid_price(high_price):
                     pos["max_high"] = max(float(pos["max_high"]), high_price)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 _update_close_breakeven(
                     config, pos, float(matrix.close[future, asset_id]), date_text
                 )
-                # <<< LOCAL-EXT
             if not closed and future_times:
                 last_time = future_times[-1]
                 # 尾部仍被递延(封板/停牌)的持仓不再静默丢弃: 期末已无未来数据
@@ -972,6 +922,7 @@ class LegacySimulator:
         result.stats["market_matrix_bytes"] = matrix.nbytes
         return result
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def simulate_independent_market_matrix(
         self,
         matrix: MarketMatrix,
@@ -1011,6 +962,7 @@ class LegacySimulator:
         panel_symbols = panel["symbol"].to_numpy()
 
         ent_raw = np.zeros(n, dtype=bool)
+    # <<< LOCAL-EXT
         ext_raw = np.zeros(n, dtype=bool)
         if entries is not None and len(entries) == n:
             ent_raw = entries.to_numpy().astype(bool)
@@ -1242,56 +1194,40 @@ class LegacySimulator:
             open_price = float(open_prices[idx])
             low_price = float(low_prices[idx])
             high_price = float(high_prices[idx])
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 已定档的收盘保本信号 / 次日开盘的排定卖出, 不能被当日后续 high/low
             # 抢先: 该笔按开盘价成交, 日内极值不参与本日判定。
-            # <<< LOCAL-EXT
             if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(
                 config, bool(ext[idx]), pos["hold_days"]
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             ):
                 low_price = high_price = open_price
-            # <<< LOCAL-EXT
             peak_price = float(pos.get("max_high", entry_price))
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             risk_lines: list[tuple[float, str]] = []
 
             if config.stop_loss_pct is not None:
-            # <<< LOCAL-EXT
                 risk_lines.append((entry_price * (1 - abs(config.stop_loss_pct)), "stop_loss"))
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if config.trailing_stop_pct is not None and peak_price > 0:
                 risk_lines.append(
-            # <<< LOCAL-EXT
                     (peak_price * (1 - abs(config.trailing_stop_pct)), "trailing_stop")
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 )
 
             # 按入场信号覆盖风控阈值 (不同入场信号波动特征差异大)。
             activate_pct = _entry_risk_value(
-                # <<< LOCAL-EXT
                 config, pos, "trailing_take_profit_activate_pct",
                 getattr(config, "trailing_take_profit_activate_pct", None),
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
             drawdown_pct = _entry_risk_value(
-            # <<< LOCAL-EXT
                 config, pos, "trailing_take_profit_drawdown_pct",
                 getattr(config, "trailing_take_profit_drawdown_pct", None),
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
             if activate_pct is not None and drawdown_pct is not None and peak_price > entry_price:
                 peak_profit = peak_price / entry_price - 1
                 if peak_profit >= abs(float(activate_pct)):
                     # 回撤止盈触发线: 相对峰值价回撤 drawdown 个点 (纯峰值口径)
                     risk_lines.append(
-            # <<< LOCAL-EXT
                         (peak_price * (1 - abs(float(drawdown_pct))), "trailing_take_profit")
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     )
             # 分级保本/锁盈: 用前一日已观测到的峰值构造因果风控线。
             risk_lines.extend(_profit_lock_lines(config, entry_price, peak_price))
-                    # <<< LOCAL-EXT
 
             risk_lines = [(line, reason) for line, reason in risk_lines if _valid_price(line)]
             # 止损/移损/回撤止盈: 价格跌破风控线触发 (取最高优先级线)
@@ -1320,15 +1256,12 @@ class LegacySimulator:
             reason: str,
             signal_date: str,
             exit_price_override: float | None = None,
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             force: bool = False,
         ) -> bool:
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 收盘保本信号 T 日收盘产生, T+1 开盘成交 (与 exit_fill 口径无关)。
-            # <<< LOCAL-EXT
             if reason == "close_breakeven":
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 exit_price_override = float(open_prices[idx])
-                # <<< LOCAL-EXT
             if force:
                 # 期末强制记录: 已无未来数据可等, 跳过可卖性闸门按末日价格落账
                 ok, block_reason = True, ""
@@ -1349,9 +1282,7 @@ class LegacySimulator:
                 exit_price = _refill_price(idx, "sell", float(exit_prices[idx]))
             shares = 100.0
             entry_value = round(shares * float(pos["entry_price"]) * (1 + buy_cost_pct), 2)
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             sell_cost_pct = config.sell_cost_pct(self._date_str(panel_dates[idx]))
-            # <<< LOCAL-EXT
             exit_value = round(shares * exit_price * (1 - sell_cost_pct), 2)
             pnl_amount = round(exit_value - entry_value, 2)
             pnl_pct = pnl_amount / entry_value if entry_value > 0 else 0.0
@@ -1436,6 +1367,7 @@ class LegacySimulator:
                 "entry_score": score,
                 "hold_days": 0,
                 # close_t 收盘成交: 当日 high 在建仓前发生, 不进移动止损峰值
+            # <<< LOCAL-EXT
                 # (与矩阵独立路径同口径)
                 "max_high": entry_price,
                 "pending_exit_reason": None,
@@ -1449,27 +1381,19 @@ class LegacySimulator:
 
             closed = False
             last_idx = entry_idx
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             _update_close_breakeven(
-            # <<< LOCAL-EXT
                 config, pos, float(close_prices[entry_idx]), pos["entry_date"]
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
             for idx in rows[start_pos + 1 :]:
                 last_idx = idx
-            # <<< LOCAL-EXT
                 pos["hold_days"] = int(pos["hold_days"]) + 1
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 d_str = self._date_str(panel_dates[idx])
 
                 def _scheduled_reason(pos, idx, rows, d_str) -> tuple[str | None, str]:
-                # <<< LOCAL-EXT
                     if pos.get("pending_exit_reason"):
                         return str(pos["pending_exit_reason"]), str(
                             pos.get("pending_exit_signal_date") or d_str
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         )
-                        # <<< LOCAL-EXT
                     if pos.get("close_breakeven_signal_date"):
                         return "close_breakeven", pos["close_breakeven_signal_date"]
                     # 卖点信号优先于到期: 策略主动离场先于 max_hold 兜底。
@@ -1498,9 +1422,7 @@ class LegacySimulator:
                 hi = float(high_prices[idx])
                 if _valid_price(hi):
                     pos["max_high"] = max(float(pos.get("max_high", entry_price)), hi)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 _update_close_breakeven(config, pos, float(close_prices[idx]), d_str)
-                # <<< LOCAL-EXT
 
             if not closed:
                 if last_idx == entry_idx:
@@ -1543,6 +1465,7 @@ class LegacySimulator:
         opens = minute_arr[:, 0]
         highs = minute_arr[:, 1] if ncols > 1 else opens
         lows = minute_arr[:, 2] if ncols > 2 else opens
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         closes = minute_arr[:, 3] if ncols > 3 else opens
         volumes = minute_arr[:, 4] if ncols > 4 else None
         amounts = minute_arr[:, 5] if ncols > 5 else None
@@ -1595,6 +1518,7 @@ class LegacySimulator:
         previous_above = np.empty(len(closes), dtype=bool)
         previous_above[0] = True
         previous_above[1:] = np.isfinite(closes[:-1]) & (closes[:-1] >= ref_price)
+        # <<< LOCAL-EXT
         crossings = np.flatnonzero(below & previous_above)
         if crossings.size == 0:
             return None
@@ -1658,9 +1582,7 @@ class LegacySimulator:
         entry_prices = self._resolve_entry_prices(matrix, config)
         exit_prices = matrix.open if config.exit_fill == "open_t+1" else matrix.close
         buy_cost_pct = config.buy_cost_pct()
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 卖出腿含印花税, 税率随卖出日分段变化, 逐笔按成交日求值。
-        # <<< LOCAL-EXT
         cash = float(config.initial_capital)
         peak = cash
         max_positions = max(int(config.max_positions), 0)
@@ -1754,9 +1676,11 @@ class LegacySimulator:
             return trigger * scale if trigger is not None else None
 
         def _one_price_limit(time_id: int, asset_id: int, direction: str) -> bool:
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if not matrix.tradable[time_id, asset_id]:
                 return False
             prices = (
+            # <<< LOCAL-EXT
                 float(matrix.open[time_id, asset_id]),
                 float(matrix.high[time_id, asset_id]),
                 float(matrix.low[time_id, asset_id]),
@@ -1848,9 +1772,7 @@ class LegacySimulator:
                 if override is not None
                 else _refill_price(time_id, asset_id, "sell", float(exit_prices[time_id, asset_id]))
             )
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             sell_cost_pct = config.sell_cost_pct(matrix.timestamp_labels[time_id])
-            # <<< LOCAL-EXT
             exit_value = round(pos["shares"] * exit_price * (1 - sell_cost_pct), 2)
             cash = round(cash + exit_value, 2)
             pnl_amount = round(exit_value - pos["entry_value"], 2)
@@ -1897,13 +1819,9 @@ class LegacySimulator:
             sold_today: set[int],
             override: float | None = None,
         ) -> bool:
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 收盘保本信号产生于 T 日收盘, T+1 开盘才能成交。
-            # <<< LOCAL-EXT
             if reason == "close_breakeven":
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 override = float(matrix.open[time_id, asset_id])
-                # <<< LOCAL-EXT
             signal_id = (
                 _signal_id(int(matrix.exit_signal_code[time_id, asset_id]), matrix.exit_signal_ids)
                 if reason == "signal"
@@ -1929,7 +1847,6 @@ class LegacySimulator:
                     signal_id,
                     next_open=minute_trigger,
                 )
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 _reject(blocked, time_id, asset_id, signal_date=signal_date)
                 return False
             _sell(time_id, asset_id, reason, signal_date, sold_today, override)
@@ -1945,16 +1862,13 @@ class LegacySimulator:
             signal_date: str | None = None,
             counted: bool = True,
         ) -> None:
-                # <<< LOCAL-EXT
             """记录一次买/卖尝试被拒 (counted=False 表示不进 execution_stats 的软拒)。"""
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if counted:
                 _count(reason)
             if options.include_execution_rejections:
-            # <<< LOCAL-EXT
                 side = "buy" if reason.startswith("buy_") else "sell"
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 source_time = int(matrix.entry_signal_time[time_id, asset_id])
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 execution_rejections.append(
                     {
                 # <<< LOCAL-EXT
@@ -1963,15 +1877,11 @@ class LegacySimulator:
                         "side": side,
                         "reason": reason,
                         "signal_date": signal_date
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         or _signal_date(source_time, matrix.timestamp_labels[time_id][:10]),
-                        # <<< LOCAL-EXT
                         "counted_in_execution_stats": counted,
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     }
                 )
 
-                    # <<< LOCAL-EXT
         for time_id, date_label in enumerate(matrix.timestamp_labels):
             date_text = date_label[:10]
             if time_id % 20 == 0:
@@ -2004,52 +1914,37 @@ class LegacySimulator:
                 open_price = float(matrix.open[time_id, asset_id])
                 low_price = float(matrix.low[time_id, asset_id])
                 high_price = float(matrix.high[time_id, asset_id])
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 # 已定档的收盘保本信号 / 次日开盘的排定卖出, 不能被当日后续
                 # high/low 抢先: 该笔按开盘价成交, 日内极值不参与本日判定。
-                # <<< LOCAL-EXT
                 if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(
                     config, bool(matrix.exit[time_id, asset_id]), pos["hold_days"]
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 ):
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     low_price = high_price = open_price
-                # <<< LOCAL-EXT
                 entry_price = float(pos["entry_price"])
                 peak_price = float(pos["max_high"])
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 risk_lines: list[tuple[float, str]] = []
                 if config.stop_loss_pct is not None:
-                # <<< LOCAL-EXT
                     risk_lines.append((entry_price * (1 - abs(config.stop_loss_pct)), "stop_loss"))
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 if config.trailing_stop_pct is not None:
                     risk_lines.append(
-                # <<< LOCAL-EXT
                         (peak_price * (1 - abs(config.trailing_stop_pct)), "trailing_stop")
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     )
                 # 按入场信号覆盖风控阈值 (不同入场信号波动特征差异大)。
                 activate = _entry_risk_value(
-                    # <<< LOCAL-EXT
                     config, pos, "trailing_take_profit_activate_pct",
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     config.trailing_take_profit_activate_pct,
                 )
                 drawdown = _entry_risk_value(
-                    # <<< LOCAL-EXT
                     config, pos, "trailing_take_profit_drawdown_pct",
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     config.trailing_take_profit_drawdown_pct,
                 )
                 if activate is not None and drawdown is not None and peak_price > entry_price:
                     if peak_price / entry_price - 1 >= abs(float(activate)):
                         risk_lines.append(
-                    # <<< LOCAL-EXT
                             (peak_price * (1 - abs(float(drawdown))), "trailing_take_profit")
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         )
                 risk_lines.extend(_profit_lock_lines(config, entry_price, peak_price))
-                        # <<< LOCAL-EXT
                 valid_lines = [(line, reason) for line, reason in risk_lines if _valid_price(line)]
                 if valid_lines:
                     stop_price, reason = max(valid_lines, key=lambda item: item[0])
@@ -2101,16 +1996,11 @@ class LegacySimulator:
                 for asset_id in np.flatnonzero(matrix.entry[time_id]):
                     asset = int(asset_id)
                     if asset in positions:
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         # 已持仓不算被拒: 信号仍有效, 只是无需再买。
-                        # <<< LOCAL-EXT
                         _reject("buy_already_held", time_id, asset, counted=False)
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         continue
                     if asset in sold_today:
-                        # <<< LOCAL-EXT
                         _reject("buy_same_day_reentry", time_id, asset)
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         continue
                     ok, blocked = _can_buy(time_id, asset)
                     if not ok:
@@ -2118,39 +2008,30 @@ class LegacySimulator:
                         continue
                     score = _matrix_entry_score(matrix, time_id, asset)
                     if config.score_min is not None and score < config.score_min:
-                        # <<< LOCAL-EXT
                         _reject("buy_score_filter", time_id, asset)
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         continue
                     if config.score_max is not None and score > config.score_max:
-                        # <<< LOCAL-EXT
                         _reject("buy_score_filter", time_id, asset)
-                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         continue
                     candidates.append((asset, score))
                 candidates.sort(key=lambda item: item[1], reverse=True)
                 slots = max_positions - len(positions)
                 if slots <= 0:
                     for asset, _ in candidates:
-                        # <<< LOCAL-EXT
                         _reject("buy_no_slot", time_id, asset)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 elif candidates:
                     selected = candidates[:slots]
                     if options.include_execution_rejections:
                         # 排名靠后未入选: 只进审计记录, 不计入 execution_stats,
                         # 否则 buy_rank_cutoff 会和 buy_no_slot 重复计数。
                         for asset, _ in candidates[slots:]:
-                # <<< LOCAL-EXT
                             _reject("buy_rank_cutoff", time_id, asset, counted=False)
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     market_value_before = _market_value()
                     equity_before = cash + market_value_before
                     target_value = equity_before * max_exposure_pct / max_positions
                     exposure_capacity = equity_before * max_exposure_pct - market_value_before
                     if equity_before <= 0 or exposure_capacity <= 0 or max_exposure_pct <= 0:
                         for asset, _ in selected:
-                    # <<< LOCAL-EXT
                             _reject("buy_exposure", time_id, asset)
                     else:
                         weights = np.repeat(1 / len(selected), len(selected))
@@ -2194,7 +2075,6 @@ class LegacySimulator:
                         for (asset_id, entry_score), weight in zip(selected, weights, strict=False):
                             if len(positions) >= max_positions:
                                 _reject("buy_no_slot", time_id, asset_id)
-                                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                                 break
                             market_value = _market_value()
                             equity = cash + market_value
@@ -2203,7 +2083,6 @@ class LegacySimulator:
                                 total_budget * float(weight), target_value, cash, capacity
                             )
                             if allocation <= 0:
-                                # <<< LOCAL-EXT
                                 _reject("buy_exposure", time_id, asset_id)
                                 continue
                             entry_price = _refill_price(
@@ -2225,15 +2104,11 @@ class LegacySimulator:
                             entry_value = round(lots * lot_cost, 2)
                             if shares <= 0:
                                 _reject("buy_lot_size", time_id, asset_id)
-                                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                                 continue
                             if entry_value > cash + 1e-6:
-                                # <<< LOCAL-EXT
                                 _reject("buy_cash", time_id, asset_id)
-                                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                                 continue
                             if entry_value > capacity + 1e-6:
-                                # <<< LOCAL-EXT
                                 _reject("buy_exposure", time_id, asset_id)
                                 continue
                             cash = round(cash - entry_value, 2)
@@ -2274,12 +2149,10 @@ class LegacySimulator:
                     and pos["entry_date"] == date_text
                 ):
                     pos["max_high"] = max(float(pos["max_high"]), high_price)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 # 当日收盘价可用于保本 arm, 信号次日生效。
                 _update_close_breakeven(
                     config, pos, float(matrix.close[time_id, asset_id]), date_text
                 )
-                # <<< LOCAL-EXT
             valid_closes = np.isfinite(matrix.close[time_id]) & (matrix.close[time_id] > 0)
             last_close[valid_closes] = matrix.close[time_id, valid_closes]
 
@@ -2302,6 +2175,7 @@ class LegacySimulator:
                         "exposure": exposure_value,
                     }
                 )
+                    # <<< LOCAL-EXT
                 drawdown_curve.append(
                     {
                         "date": date_text,
@@ -2343,6 +2217,7 @@ class LegacySimulator:
                 positions=len(positions),
             )
 
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         statistics_started = time.perf_counter()
         stats = self._calc_portfolio_stats_from_values(
             equity_values,
@@ -2360,9 +2235,7 @@ class LegacySimulator:
         stats["terminal_settlement_count"] = len(trades) - trades_before_settlement
         stats["market_matrix_shape"] = [time_count, asset_count]
         stats["market_matrix_bytes"] = matrix.nbytes
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if options.include_execution_rejections:
-        # <<< LOCAL-EXT
             stats["execution_rejections"] = execution_rejections
             stats["execution_rejection_scope"] = "portfolio_matrix_attempts"
         return SimResult(
@@ -2429,6 +2302,7 @@ class LegacySimulator:
             for idx in np.flatnonzero(ext):
                 exit_signal_dates[idx] = self._date_str(panel_dates[idx])
 
+        # <<< LOCAL-EXT
         open_prices = panel["open"].to_numpy()
         high_prices = panel["high"].to_numpy() if "high" in panel.columns else open_prices
         low_prices = panel["low"].to_numpy()
@@ -2474,9 +2348,7 @@ class LegacySimulator:
             return self._empty_result()
 
         buy_cost_pct = config.buy_cost_pct()
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 卖出腿含印花税, 税率随卖出日分段变化, 逐笔按成交日求值。
-        # <<< LOCAL-EXT
         cash = float(config.initial_capital)
         peak = cash
         max_positions = max(int(config.max_positions), 0)
@@ -2514,11 +2386,13 @@ class LegacySimulator:
                 loaded = self._minute_data(list(trigger_symbols), trigger_dates, asset_type)
                 for key, marr in loaded.items():
                     if marr is not None and len(marr) > 0:
+                        # >>> LOCAL-EXT 本地增强, 上游同步时保护
                         minute_cache[key] = marr
 
         def _refill_price(idx: int, side: str, daily_price: float) -> float:
             """分钟K精确成交价; 无数据则降级为 daily_price。"""
             if not config.minute_fill or not minute_cache:
+                        # <<< LOCAL-EXT
                 return daily_price
             sym = str(panel_symbols[idx])
             d_str = self._date_str(panel_dates[idx])
@@ -2676,9 +2550,7 @@ class LegacySimulator:
                 exit_price = float(exit_price_override)
             else:
                 exit_price = _refill_price(idx, "sell", float(exit_prices[idx]))
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             sell_cost_pct = config.sell_cost_pct(self._date_str(panel_dates[idx]))
-            # <<< LOCAL-EXT
             exit_value = round(pos["shares"] * exit_price * (1 - sell_cost_pct), 2)
             cash = round(cash + exit_value, 2)
             pnl_amount = round(exit_value - pos["entry_value"], 2)
@@ -2730,13 +2602,9 @@ class LegacySimulator:
                 _mark_pending(sym, reason, signal_date)
                 _count("sell_suspended")
                 return False
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # 收盘保本信号 T 日收盘产生, T+1 开盘成交。
-            # <<< LOCAL-EXT
             if reason == "close_breakeven":
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 exit_price_override = float(open_prices[idx])
-                # <<< LOCAL-EXT
             ok, block_reason = _can_sell(idx, exit_price_override)
             if not ok:
                 _mark_pending(sym, reason, signal_date)
@@ -2790,16 +2658,12 @@ class LegacySimulator:
                 open_price = float(open_prices[idx])
                 low_price = float(low_prices[idx])
                 high_price = float(high_prices[idx])
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 # 已定档的收盘保本信号 / 次日开盘的排定卖出, 不能被当日后续
                 # high/low 抢先: 该笔按开盘价成交, 日内极值不参与本日判定。
-                # <<< LOCAL-EXT
                 if pos.get("close_breakeven_signal_date") or _scheduled_open_exit(
                     config, bool(ext[idx]), pos["hold_days"]
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 ):
                     low_price = high_price = open_price
-                # <<< LOCAL-EXT
                 entry_price = float(pos["entry_price"])
                 peak_price = float(pos.get("max_high", entry_price))
                 risk_lines: list[tuple[float, str]] = []
@@ -2812,20 +2676,14 @@ class LegacySimulator:
                         (peak_price * (1 - abs(config.trailing_stop_pct)), "trailing_stop")
                     )
 
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 activate_pct = _entry_risk_value(
-                # <<< LOCAL-EXT
                     config, pos, "trailing_take_profit_activate_pct",
                     getattr(config, "trailing_take_profit_activate_pct", None),
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 )
                 drawdown_pct = _entry_risk_value(
-                # <<< LOCAL-EXT
                     config, pos, "trailing_take_profit_drawdown_pct",
                     getattr(config, "trailing_take_profit_drawdown_pct", None),
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 )
-                # <<< LOCAL-EXT
                 if (
                     activate_pct is not None
                     and drawdown_pct is not None
@@ -2837,9 +2695,7 @@ class LegacySimulator:
                         # 启动门槛用成本基准的浮盈率, 触发线用峰值基准, 与 trailing_stop 同口径
                         take_profit_line = peak_price * (1 - abs(float(drawdown_pct)))
                         risk_lines.append((take_profit_line, "trailing_take_profit"))
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 risk_lines.extend(_profit_lock_lines(config, entry_price, peak_price))
-                # <<< LOCAL-EXT
 
                 # 止损/移损/回撤止盈: 价格跌破风控线触发
                 risk_lines = [(line, reason) for line, reason in risk_lines if _valid_price(line)]
@@ -2848,9 +2704,11 @@ class LegacySimulator:
                     exit_price_override = None
                     if _valid_price(open_price) and open_price <= stop_price:
                         exit_price_override = open_price
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     elif _valid_price(low_price) and low_price <= stop_price:
                         exit_price_override = stop_price
                     if exit_price_override is not None:
+                    # <<< LOCAL-EXT
                         _try_sell(sym, idx, reason, d_str, sold_today, exit_price_override)
                         continue
 
@@ -2902,6 +2760,7 @@ class LegacySimulator:
             if slots <= 0:
                 execution_stats["buy_no_slot"] += len(candidates)
                 return
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
             selected = candidates[:slots]
             market_value_before = _market_value()
@@ -3008,6 +2867,7 @@ class LegacySimulator:
                     try:
                         progress_cb(
                             {
+# <<< LOCAL-EXT
                                 "day": d_idx + 1,
                                 "total": len(all_dates),
                                 "date": str(d_str)[:10],
@@ -3045,10 +2905,8 @@ class LegacySimulator:
                         and pos["entry_date"] == str(d_str)[:10]
                     ):
                         pos["max_high"] = max(float(pos.get("max_high", pos["entry_price"])), hi)
-                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     # 当日收盘价可用于保本 arm, 信号次日生效。
                     _update_close_breakeven(config, pos, float(close_prices[idx]), d_str)
-                    # <<< LOCAL-EXT
 
             for i in idxs:
                 c = float(close_prices[i])
@@ -3219,10 +3077,12 @@ class LegacySimulator:
         """
         pnls = pnls[np.isfinite(pnls)]  # 剔除 inf/nan, 否则 cumprod 传播 nan 导致分位为 nan
         # 防御: 单笔 pnl <= -100% 时 (1+pnl) <= 0 会让 cumprod 符号翻转/得非正净值, 回撤失真。
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # 回测有止损, 实际不会发生; 兜底 clip 到 -99.99% 保证 (1+pnl) 恒正。
         pnls = np.clip(pnls, -0.9999, None)
         n = len(pnls)
         if n < 3:
+        # <<< LOCAL-EXT
             return {"mc_maxdd_p50": None, "mc_maxdd_p95": None}
         # 内存护栏: samples/equity/peak/dd 各占 eff_sims*n*8B, 控总单元 <= 2M (~64MB 峰值)
         eff_sims = min(n_sims, max(200, 2_000_000 // n))

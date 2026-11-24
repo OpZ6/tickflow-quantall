@@ -263,20 +263,18 @@ def get_minute_refresh_interval() -> int:
 _ALLOWED_DATA_PROVIDERS = {"tickflow"}
 # >>> LOCAL-EXT 本地增强, 上游同步时保护
 _DATASET_PROVIDER_FIELDS = {
-# <<< LOCAL-EXT
     "daily": "daily_data_provider",
     "adj_factor": "adj_factor_provider",
     "minute": "minute_data_provider",
     "depth5": "depth5_data_provider",
     "realtime": "realtime_data_provider",
     "financial": "financial_data_provider",
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 }
-# <<< LOCAL-EXT
 DATA_SOURCE_JOB_TIMEOUT_MIN_S = 60
 
 
 def get_data_source_job_timeout_s() -> int:
+# <<< LOCAL-EXT
     """返回普通数据后台任务的卡死判定时间(秒)。"""
     from app.services.pipeline_jobs import DEFAULT_JOB_TIMEOUT_S
     raw = load().get("data_source_job_timeout_s", DEFAULT_JOB_TIMEOUT_S)
@@ -391,16 +389,14 @@ def _allowed_data_providers() -> set[str]:
         return set(_ALLOWED_DATA_PROVIDERS)
 
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _normalize_provider_chain(providers) -> list[str]:
     if not isinstance(providers, list):
         return []
     allowed = _allowed_data_providers()
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     result: list[str] = []
     for raw in providers:
-# <<< LOCAL-EXT
         provider = str(raw or "").strip().lower()
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if provider and provider in allowed and provider not in result:
             result.append(provider)
     return result
@@ -412,62 +408,43 @@ def get_data_provider_chain(dataset: str) -> list[str]:
         return []
     data = load()
     configured = _normalize_provider_chain(
-        # <<< LOCAL-EXT
         (data.get("provider_chains") or {}).get(dataset),
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     )
     getter_name = {
-    # <<< LOCAL-EXT
         "daily": "get_daily_data_provider",
         "adj_factor": "get_adj_factor_provider",
         "minute": "get_minute_data_provider",
         "depth5": "get_depth5_data_provider",
         "realtime": "get_realtime_data_provider",
         "financial": "get_financial_provider",
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     }[dataset]
     getter = globals().get(getter_name)
-    # <<< LOCAL-EXT
     primary = getter() if callable(getter) else "tickflow"
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return [primary, *[name for name in configured if name != primary]]
 
 
 def set_data_provider_chain(dataset: str, providers: list[str]) -> list[str]:
     field = _DATASET_PROVIDER_FIELDS.get(dataset)
     if field is None:
-    # <<< LOCAL-EXT
         raise ValueError(f"unsupported routable dataset: {dataset}")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     chain = _normalize_provider_chain(providers)
     if not chain:
-    # <<< LOCAL-EXT
         chain = ["tickflow"]
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     data = load()
-    # <<< LOCAL-EXT
     chains = dict(data.get("provider_chains") or {})
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     chains[dataset] = chain
-    # <<< LOCAL-EXT
     save({"provider_chains": chains, field: chain[0]})
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return chain
 
 
 def promote_data_provider(dataset: str, provider: str) -> list[str]:
-    # <<< LOCAL-EXT
     name = str(provider or "").strip().lower()
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if name not in _allowed_data_providers():
-    # <<< LOCAL-EXT
         raise ValueError(f"unknown data provider: {provider}")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     current = get_data_provider_chain(dataset)
     return set_data_provider_chain(dataset, [name, *current])
 
 
-    # <<< LOCAL-EXT
 def _validated_provider(raw: str, pref_key: str) -> str:
     """数据源偏好白名单校验。非法/已卸载的源回退 tickflow 并告警。
 
@@ -493,6 +470,7 @@ def get_daily_data_provider() -> str:
 
 def get_adj_factor_provider() -> str:
     # 「跟随日K」(same_as_daily) 特殊值已下线: 存量配置里的旧值按非法值回退 tickflow
+    # <<< LOCAL-EXT
     return _validated_provider(configured_adj_factor_provider(), "adj_factor_provider")
 
 
@@ -518,16 +496,12 @@ def get_depth5_data_provider() -> str:
     return _validated_provider(provider, "depth5_data_provider")
 
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def configured_realtime_data_provider() -> str:
-# <<< LOCAL-EXT
     return str(load().get("realtime_data_provider", "tickflow") or "tickflow").lower()
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
 def get_realtime_data_provider() -> str:
     provider = configured_realtime_data_provider()
-# <<< LOCAL-EXT
     return _validated_provider(provider, "realtime_data_provider")
 
 
@@ -548,12 +522,14 @@ def get_pipeline_pull_etf() -> bool:
     return load().get("pipeline_pull_etf", False)
 
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def get_pipeline_pull_index() -> bool:
     """是否拉取指数日K。默认 True。"""
     return load().get("pipeline_pull_index", True)
 
 
 def get_pipeline_regime_enabled() -> bool:
+# <<< LOCAL-EXT
     """盘后管道是否自动计算市场环境(regime)。默认 False。
 
     regime 是本地聚合计算(非拉取), 首次/regime 表为空时需全量回填多日,
@@ -780,6 +756,7 @@ def get_instruments_schedule() -> dict:
 def set_instruments_schedule(hour: int, minute: int) -> dict:
     h = max(0, min(23, hour))
     m = max(0, min(59, minute))
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 盘前不晚于 09:15
     if h * 60 + m > 9 * 60 + 15:
         h, m = 9, 15
@@ -788,6 +765,7 @@ def set_instruments_schedule(hour: int, minute: int) -> dict:
 
 
 def get_enriched_batch_size() -> int:
+    # <<< LOCAL-EXT
     """返回 enriched 全量计算每批 symbol 数量。"""
     return max(1, min(10000, load().get("enriched_batch_size", 1000)))
 
@@ -861,9 +839,7 @@ def get_review_schedule() -> dict:
     强制下限 15:00。免费档当日日K盘后约1-2小时可用, 复盘不应早于盘后管道。
     """
     d = load().get("review_schedule", {"enabled": False, "hour": 16, "minute": 45})
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return {
-    # <<< LOCAL-EXT
         "enabled": bool(d.get("enabled", False)),
         "hour": d.get("hour", 16),
         "minute": d.get("minute", 45),
@@ -887,6 +863,7 @@ def set_review_schedule(enabled: bool, hour: int, minute: int) -> dict:
 # 复盘系统提示词长度上限: 默认模板约 2.4k 字符, 留足自定义余量同时防止误存超长文本
 MARKET_RECAP_PROMPT_MAX_CHARS = 32_000
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 def get_market_recap_system_prompt() -> str:
     """用户自定义的复盘系统提示词。空串 = 未自定义 (market_recap 回退内置默认模板)。"""
@@ -895,6 +872,7 @@ def get_market_recap_system_prompt() -> str:
 
 
 def set_market_recap_system_prompt(text: str | None) -> str:
+# <<< LOCAL-EXT
     """保存自定义复盘系统提示词。空串/None = 恢复默认模板 (删除该键)。
 
     超过 MARKET_RECAP_PROMPT_MAX_CHARS 字符时抛 ValueError, 由 API 层转 400。

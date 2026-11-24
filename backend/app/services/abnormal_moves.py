@@ -128,17 +128,12 @@ def _hist_snapshot(repo: Any) -> dict[str, Any]:
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     df, cache_date = repo.get_enriched_latest()
     with _hist_cache_lock:
-    # <<< LOCAL-EXT
         cached = _hist_cache.get("data")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if (
             cached is not None
-        # <<< LOCAL-EXT
             and cached.get("_frame") is df
             and now - cached["_ts"] < _HIST_CACHE_TTL
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         ):
-        # <<< LOCAL-EXT
             return cached
 
     rows: dict[str, dict[str, Any]] = {}
@@ -155,22 +150,19 @@ def _hist_snapshot(repo: Any) -> dict[str, Any]:
                 "deviate_10d": r.get("deviate_10d"),
                 "deviate_30d": r.get("deviate_30d"),
             }
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     payload = {
-    # <<< LOCAL-EXT
         "_ts": now,
         "_frame": df,
         "rows": rows,
         "cache_date": cache_date.isoformat() if cache_date else None,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     }
-    # <<< LOCAL-EXT
     with _hist_cache_lock:
         _hist_cache["data"] = payload
     return payload
 
 
 def _bench_rt_pct(quote_service: Any) -> float:
+    # <<< LOCAL-EXT
     """基准指数今日实时涨跌 (各候选均值, 小数制, 缺数据时 0)。
 
     quote_service.get_index_quotes() 返回指数展示缓存, change_pct/pct/pct_change

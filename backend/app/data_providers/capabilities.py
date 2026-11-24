@@ -146,13 +146,10 @@ def _display_of(sources: list[dict], name: str) -> str:
 # >>> LOCAL-EXT 本地增强, 上游同步时保护
 def build_capability_matrix(
     current: dict[str, str],
-# <<< LOCAL-EXT
     tickflow_tier: str = "none",
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     provider_chains: dict[str, list[str]] | None = None,
     provider_health: dict[str, dict] | None = None,
 ) -> dict:
-    # <<< LOCAL-EXT
     """注册表 + 源能力声明 + 当前偏好 → 能力路由矩阵。
 
     current 为 {偏好字段: 当前值}, 由 API 层经 preferences getters 注入;
@@ -169,11 +166,9 @@ def build_capability_matrix(
     sources = _declared_sources()
 
     capabilities = []
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     chains = provider_chains or {}
     health_by_dataset = provider_health or {}
     for cap in CAPABILITY_REGISTRY:
-    # <<< LOCAL-EXT
         health = health_by_dataset.get(cap["id"], {})
         # field=None → 不可路由能力 (仅 TickFlow 提供, 无路由偏好), 生效源恒为默认
         effective = current.get(cap["field"], cap["default"]) if cap["field"] else cap["default"]
@@ -196,30 +191,22 @@ def build_capability_matrix(
             (candidates if s["available"] else pending).append(entry)
         available_names = {c["name"] for c in candidates}
         if cap["field"]:
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             priority_chain = list(dict.fromkeys(
-            # <<< LOCAL-EXT
                 chains.get(cap["id"]) or [effective],
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             ))
             if effective not in priority_chain:
                 priority_chain.insert(0, effective)
             effective = next(
                 (
                     name for name in priority_chain
-            # <<< LOCAL-EXT
                     if name in available_names and health.get(name, {}).get("healthy", True)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 ),
                 priority_chain[0],
             )
         else:
-                # <<< LOCAL-EXT
             priority_chain = [cap["default"]]
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         usable = effective in available_names
         capabilities.append({
-        # <<< LOCAL-EXT
             "id": cap["id"],
             "label": cap["label"],
             "desc": cap["desc"],
@@ -248,6 +235,7 @@ def _cap_specs_by_id() -> dict[str, dict]:
     return {c["id"]: c for c in CAPABILITY_REGISTRY}
 
 
+# <<< LOCAL-EXT
 def _current_routing() -> dict[str, str]:
     """偏好字段 → 当前生效源 (经 preferences getters, 非法值已回退默认)。
 

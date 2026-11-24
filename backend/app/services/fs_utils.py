@@ -28,19 +28,17 @@ def atomic_write_text(path: Path, text: str, *, mode: int | None = None, durable
     # 若入参本身已含 "\r\n" (例如从备份归档里读出的原文件), 会变成 "\r\r\n",
     # 再读回来就多出空行 — 配置恢复因此会篡改行尾。
     if durable:
-    # <<< LOCAL-EXT
         with tmp.open("w", encoding="utf-8", newline="\n") as stream:
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
     else:
-            # <<< LOCAL-EXT
         tmp.write_text(text, encoding="utf-8", newline="\n")
     if mode is not None:
         try:
             os.chmod(tmp, mode)
         except OSError:
+    # <<< LOCAL-EXT
             pass
     os.replace(tmp, path)
     if durable and os.name != "nt":

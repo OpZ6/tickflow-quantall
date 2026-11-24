@@ -17,7 +17,6 @@ from app.api import (
     analysis,
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     auth as auth_api,
-    # <<< LOCAL-EXT
     backtest,
     chart_indicators,
     config_backup,
@@ -47,7 +46,6 @@ from app.api import (
     regime,
     rps,
     screener,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     settings as settings_api,
     sector_rotation,
     signals,
@@ -56,7 +54,6 @@ from app.api import (
     strategy_pool,
     task_registry,
     upgrade_guard as upgrade_guard_api,
-    # <<< LOCAL-EXT
     watchlist,
 )
 from app.api.routes import router as core_router
@@ -74,9 +71,7 @@ from app.services.daily_health import DailyIntegrityError
 from app.services.heavy_job_limiter import HeavyJobLimitTimeoutError
 from app.services.matrix_prewarm_owner import MatrixCachePrewarmOwner
 from app.services.mining_process_lock import MiningProcessLock, MiningProcessLockError
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 from app.services.net_guard import ensure_outbound_proxy
-# <<< LOCAL-EXT
 from app.services.quote_service import QuoteService
 from app.services.shared_work import WorkBusyError
 from app.startup_diagnostics import startup_phase
@@ -108,16 +103,12 @@ async def _application_lifespan(app: FastAPI):
         __version__, tf_client.current_mode(),
     )
 
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # 出站网络自检: 代理端口在监听但上游失效时切直连, 否则数据源请求会卡在
     # TLS 握手后被掐断(约 60s SSL EOF), 盘后管道整批失败且无异常堆栈。
     _proxy_mode = ensure_outbound_proxy()
-    # <<< LOCAL-EXT
     if _proxy_mode != "none":
         logger.info("出站网络模式: %s", _proxy_mode)
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
-# <<< LOCAL-EXT
     # 同步路由线程池容量: Starlette 默认 40, 本地多标签页/自动刷新与长计算
     # 路由并存时容易排队。调大只影响空闲线程上限 (按需创建), 无常驻代价。
     try:
@@ -146,11 +137,9 @@ async def _application_lifespan(app: FastAPI):
         repo = KlineRepository(store)
     app.state.datastore = store
     app.state.repo = repo
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     from app.market_facts.repository import MarketFactRepository
 
     app.state.market_facts = MarketFactRepository(store.data_dir)
-    # <<< LOCAL-EXT
     # 去内置化种子迁移必须赶在下方 refresh_cache 之前: enriched 缓存构建时
     # 编译自定义信号表达式, 晚种会让本次启动的看板/梯队引用的 signal_limit_*
     # 列缺失 (跌停恒 0、连板梯队无数据), 直到下一次缓存刷新才自愈。
@@ -163,6 +152,7 @@ async def _application_lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.warning("signal seeding failed (ignored): %s", e)
     # 自定义/复合因子载入注册表 (P3); 单个失败只跳过该因子 (fail-隔离)
+    # <<< LOCAL-EXT
     with startup_phase(logger, "custom factor module import"):
         from app.factors.store import load_runtime_registry
 
@@ -279,20 +269,19 @@ async def _application_lifespan(app: FastAPI):
     try:
         daily_pipeline.set_app_state(app.state)  # 供 depth_finalize job 访问 depth_service
         scheduler = daily_pipeline.start_scheduler(repo, capset)
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         from app.quantx_data.scheduler import register as register_quantx_data_scheduler
         from app.stock_pools.scheduler import run_scheduled as run_stock_pool_scheduled
         register_quantx_data_scheduler(
             scheduler, store.data_dir,
             after_run=lambda day: run_stock_pool_scheduled(repo, trade_date=day),
         )
-        # <<< LOCAL-EXT
         app.state.scheduler = scheduler
     except Exception as e:  # noqa: BLE001
         logger.warning("scheduler not started: %s", e)
         app.state.scheduler = None
 
     # depth sealed: 启动补跑(当天文件不存在) + 盘中轮询(有能力时)
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     try:
         depth_service.boot_check()
         depth_service.start_polling()
@@ -301,6 +290,7 @@ async def _application_lifespan(app: FastAPI):
 
     # 盘中分钟增量刷新 (Expert 专有): 线程常驻, 开关/时段/能力门控在循环内每轮判断
     try:
+    # <<< LOCAL-EXT
         from app.services.minute_refresh import MinuteRefreshService
         minute_refresh = MinuteRefreshService(repo)
         minute_refresh.set_app_state(app.state)

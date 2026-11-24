@@ -24,7 +24,7 @@ from pathlib import Path
 BASE = os.environ.get("LOCAL_EXT_BASE", "v0.4.1")
 PY_BEGIN = "# >>> LOCAL-EXT 本地增强, 上游同步时保护"
 PY_END = "# <<< LOCAL-EXT"
-GAP = 10
+GAP = int(os.environ.get("LOCAL_EXT_GAP", "10"))
 TARGET_PREFIXES = ("backend/app/", "packages/", "frontend/src/")
 
 
@@ -96,20 +96,17 @@ def write(path: Path, text: str, bom: bool) -> None:
     path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + text.encode("utf-8"))
 
 
-def split_out_strings(start: int, end: int, covered: set[int]) -> list[tuple[int, int]]:
-    """把 [start,end] 按"落在字符串里"的行切开, 返回可标记的子段。"""
-    segments: list[tuple[int, int]] = []
-    run_start: int | None = None
-    for ln in range(start, end + 1):
-        if ln in covered:
-            if run_start is not None and ln - run_start >= 1:
-                segments.append((run_start, ln - 1))
-            run_start = None
-        elif run_start is None:
-            run_start = ln
-    if run_start is not None and end - run_start + 1 >= 1:
-        segments.append((run_start, end))
-    return segments
+def safe_span(start: int, end: int, covered: set[int]) -> tuple[int, int] | None:
+    """把 [start,end] 收缩到"插入点不落在多行字符串里"的范围。
+
+    标记是插在区块**首行之前 / 末行之后**的，只要这两个位置不在字符串内部就安全；
+    区块内部夹着文档字符串没关系（注释不会进到字符串里去）。
+    """
+    first = next((ln for ln in range(start, end + 1) if ln not in covered), None)
+    last = next((ln for ln in range(end, start - 1, -1) if ln not in covered), None)
+    if first is None or last is None or last < first:
+        return None
+    return first, last
 
 
 def mark_python(path: Path) -> tuple[int, list[str]]:
@@ -121,15 +118,14 @@ def mark_python(path: Path) -> tuple[int, list[str]]:
     skipped: list[str] = []
     marked = 0
 
-    # 先按字符串边界切成可安全插入的子段, 再自下而上插标记。
     targets: list[tuple[int, int]] = []
     covered = string_lines(text)
     for start, end in ranges:
-        segments = split_out_strings(start, end, covered)
-        if segments:
-            targets.extend(segments)
+        span = safe_span(start, end, covered)
+        if span:
+            targets.append(span)
         else:
-            skipped.append(f"{path}:{start}-{end} (整段在字符串内或过短)")
+            skipped.append(f"{path}:{start}-{end} (整段落在字符串内)")
 
     for start, end in reversed(sorted(targets)):
         lines = text.splitlines(keepends=True)

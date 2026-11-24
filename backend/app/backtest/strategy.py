@@ -738,7 +738,6 @@ class BacktestResultPolicy:
     include_strategy_info: bool = True
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     include_execution_rejections: bool = False
-    # <<< LOCAL-EXT
 
     @classmethod
     def optimizer_trial(cls, objective: str) -> BacktestResultPolicy:
@@ -762,13 +761,12 @@ class BacktestResultPolicy:
             include_trades=self.include_trades,
             include_per_symbol_stats=self.include_per_symbol_stats,
             include_return_distribution=self.include_return_distribution,
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             include_execution_rejections=self.include_execution_rejections,
-            # <<< LOCAL-EXT
         )
 
     def select_stats(self, stats: dict) -> dict:
         if self.required_stats is None:
+    # <<< LOCAL-EXT
             return stats
         diagnostic = {
             "error",
@@ -1395,16 +1393,16 @@ class StrategyBacktestService:
         t0 = time.perf_counter()
         run_id = uuid.uuid4().hex[:10]
         result_policy = result_policy or BacktestResultPolicy()
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         requested_start = config.start
         requested_end = config.end
-        # <<< LOCAL-EXT
         # 因子归因快照容器: 日线路径在 _apply_score 里填充, 其余路径保持空
         factor_snapshot: dict = {}
         basis_options = {"price_basis": config.price_basis} if config.price_basis == "hfq" else {}
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
         def _err(msg: str) -> StrategyBacktestResult:
             return StrategyBacktestResult(
+# <<< LOCAL-EXT
                 run_id=run_id,
                 config=self._config_to_dict(config),
                 error=msg,
@@ -1520,21 +1518,16 @@ class StrategyBacktestService:
                 f"移动止盈回撤({trailing_take_profit_drawdown:.0%})不能大于"
                 f"激活涨幅({trailing_take_profit_activate:.0%}), 请调整后再试"
             )
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         profit_lock_steps = self._override_value(
             overrides,
-        # <<< LOCAL-EXT
             "profit_lock_steps",
             s.meta.get("profit_lock_steps"),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
         close_breakeven_activate_pct = self._normalize_pct(
-        # <<< LOCAL-EXT
             self._override_value(overrides, "close_breakeven_activate_pct", s.meta.get("close_breakeven_activate_pct")),
             # >>> LOCAL-EXT 本地增强, 上游同步时保护
             0.005, 2.0,
         )
-            # <<< LOCAL-EXT
         max_hold_days = self._override_value(overrides, "max_hold_days", s.max_hold_days)
         score_min, score_max = self._normalize_score_range(
             overrides.get("score_min"),
@@ -1547,6 +1540,7 @@ class StrategyBacktestService:
             return self._run_minute_backtest(
                 config, s, params, overrides,
                 stop_loss=stop_loss,
+            # <<< LOCAL-EXT
                 take_profit=take_profit,
                 trailing_stop=trailing_stop,
                 trailing_take_profit_activate=trailing_take_profit_activate,
@@ -1787,7 +1781,6 @@ class StrategyBacktestService:
             fees_pct=config.fees_pct,
             commission_pct=config.commission_pct,
             stamp_tax_pct=config.stamp_tax_pct,
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             stamp_tax_policy=config.stamp_tax_policy,
             slippage_bps=config.slippage_bps,
             stop_loss_pct=stop_loss,
@@ -1795,14 +1788,12 @@ class StrategyBacktestService:
             trailing_stop_pct=trailing_stop,
             trailing_take_profit_activate_pct=trailing_take_profit_activate,
             trailing_take_profit_drawdown_pct=trailing_take_profit_drawdown,
-            # <<< LOCAL-EXT
             entry_risk_profiles=overrides.get("entry_risk_profiles"),
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             profit_lock_steps=profit_lock_steps,
             close_breakeven_activate_pct=close_breakeven_activate_pct,
-            # <<< LOCAL-EXT
             max_hold_days=max_hold_days,
             max_positions=config.max_positions,
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             max_exposure_pct=config.max_exposure_pct,
             score_min=score_min,
             score_max=score_max,
@@ -1816,6 +1807,7 @@ class StrategyBacktestService:
         t_signal = time.perf_counter()
         selection_stats: dict[str, int | bool]
 
+            # <<< LOCAL-EXT
         if s.execution_backend == "composite":
             # composite 回测信号生成: 复用 matrix 数据加载, 逐子策略算信号后合并。
             # 退出采用来源投影(composite.merge_signal_matrices), 不串平其他子策略仓位。
@@ -1927,13 +1919,11 @@ class StrategyBacktestService:
                 exit_delay_bars=1 if matcher_config.exit_fill == "open_t+1" else 0,
                 reference_price=reference_price,
                 minute_exit_trigger=matcher_config.exit_fill == "signal_next_minute",
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 entry_fill_time_mask=self._matrix_date_range_mask(
                     sim_market_data.timestamp_labels,
                     config.start,
                     config.end,
                 ),
-                # <<< LOCAL-EXT
             )
             timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
             del sim_market_data, sim_signal_matrix
@@ -1945,6 +1935,7 @@ class StrategyBacktestService:
 
             if prepared is not None:
                 market_data = prepared.market_data
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 entry_time_mask = prepared.entry_time_mask
                 exit_time_mask = prepared.exit_time_mask
                 start_id = prepared.start_id
@@ -1952,6 +1943,7 @@ class StrategyBacktestService:
                 reference_price = prepared.reference_price
                 panel_rows = int(np.isfinite(market_data.close[start_id:stop_id]).sum())
                 panel_columns = len(feature_plan.matrix_columns)
+                # <<< LOCAL-EXT
             else:
                 if market_data is None:
                     return _err("矩阵回测缺少基础行情矩阵")
@@ -2091,13 +2083,11 @@ class StrategyBacktestService:
                 exit_delay_bars=1 if matcher_config.exit_fill == "open_t+1" else 0,
                 reference_price=reference_price,
                 minute_exit_trigger=matcher_config.exit_fill == "signal_next_minute",
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 entry_fill_time_mask=self._matrix_date_range_mask(
                     sim_market_data.timestamp_labels,
                     config.start,
                     config.end,
                 ),
-                # <<< LOCAL-EXT
             )
             timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
             del sim_market_data, sim_signal_matrix
@@ -2111,6 +2101,7 @@ class StrategyBacktestService:
                 )
             except ValueError as exc:
                 return _err(str(exc))
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             if evidence is not None:
                 evidence.check_panel(
                     self._decision_frame(panel, candidate_mask, entry_mask, raw_exit_mask),
@@ -2118,6 +2109,7 @@ class StrategyBacktestService:
                         data, s, params, overrides, basic_filter, entry_signals, exit_signals,
                     )),
                 )
+            # <<< LOCAL-EXT
             formal_candidate_mask = candidate_mask & formal_range
             entry_mask = entry_mask & formal_range
             # 叠加条件: 在裁剪前的完整 panel (ext_*/因子列已在, polars 路径经
@@ -2234,7 +2226,6 @@ class StrategyBacktestService:
                 market_matrix = dynamic_daily.exact_execution_prices(market_matrix, dynamic_quotes)
             except ValueError as exc:
                 return _err(str(exc))
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         requested_labels = [
             label[:10]
             for label in market_matrix.timestamp_labels
@@ -2255,11 +2246,11 @@ class StrategyBacktestService:
             label[:10]
             for label, present in zip(
                 market_matrix.timestamp_labels, entry_rows, strict=True
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             )
             if present and requested_start.isoformat() <= label[:10] <= requested_end.isoformat()
         ]
         coverage_stats = {
-        # <<< LOCAL-EXT
             "requested_start": requested_start.isoformat(),
             "requested_end": requested_end.isoformat(),
             "data_start": data_labels[0] if data_labels else None,
@@ -2270,21 +2261,17 @@ class StrategyBacktestService:
             "data_trading_days": len(data_labels),
             "entry_trading_days": len(entry_labels),
             "data_day_coverage": (
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 round(len(data_labels) / len(requested_labels), 4)
                 if requested_labels
                 else 0.0
             ),
-                # <<< LOCAL-EXT
             "range_clipped": bool(
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 not data_labels
                 or (date.fromisoformat(data_labels[0]) - requested_start).days > 7
                 or (requested_end - date.fromisoformat(data_labels[-1])).days > 7
             ),
         }
 
-                # <<< LOCAL-EXT
         t_sim = time.perf_counter()
 
         # 撮合 — 两条生产路径共享同一只读 MarketMatrix。
@@ -2311,6 +2298,7 @@ class StrategyBacktestService:
         # 检查是否被取消
         if cancel_event is not None and cancel_event.is_set():
             return StrategyBacktestResult(
+            # <<< LOCAL-EXT
                 run_id=run_id,
                 config=self._config_to_dict(config),
                 error="cancelled",
@@ -2340,15 +2328,11 @@ class StrategyBacktestService:
         result.stats["matrix_data_cache_hit"] = matrix_data_cache_hit
         result.stats["matrix_data_cache_status"] = matrix_data_cache_status
         result.stats["matrix_data_cache_timing_ms"] = dict(matrix_data_cache_timing_ms)
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         trade_entry_dates = sorted(
             str(trade.entry_date)[:10]
             for trade in result.trades
-        # <<< LOCAL-EXT
             if getattr(trade, "entry_date", None)
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         )
-        # <<< LOCAL-EXT
         coverage_stats["first_trade"] = trade_entry_dates[0] if trade_entry_dates else None
         coverage_stats["last_trade"] = trade_entry_dates[-1] if trade_entry_dates else None
         result.stats["coverage"] = coverage_stats
@@ -2383,6 +2367,7 @@ class StrategyBacktestService:
             "score_max": score_max,
             "source": s.source,
             "execution_backend": s.execution_backend,
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             **(
                 {
                     "composite_children": [
@@ -2407,6 +2392,7 @@ class StrategyBacktestService:
                 factor_attribution = _factor_attribution_summary(
                     factor_snapshot["frame"], result.trades
                 )
+            # <<< LOCAL-EXT
             except Exception as exc:
                 logger.warning("factor attribution failed: %s", exc)
 
@@ -2596,9 +2582,7 @@ class StrategyBacktestService:
             fees_pct=config.fees_pct,
             commission_pct=config.commission_pct,
             stamp_tax_pct=config.stamp_tax_pct,
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             stamp_tax_policy=config.stamp_tax_policy,
-            # <<< LOCAL-EXT
             slippage_bps=config.slippage_bps,
             stop_loss_pct=stop_loss,
             take_profit_pct=take_profit,
@@ -2629,8 +2613,10 @@ class StrategyBacktestService:
             # 入场即信号日盘中 (分钟价覆盖), 离场沿用日K口径。
             entry_delay_bars=0,
             exit_delay_bars=1 if matcher_config.exit_fill == "open_t+1" else 0,
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             entry_price_override=entry_price_override,
         )
+            # <<< LOCAL-EXT
         timing_ms["matrix_build"] = round((time.perf_counter() - t_matrix) * 1000, 1)
         del sim_panel, market_data
 
@@ -3390,7 +3376,9 @@ class StrategyBacktestService:
 
         work = materialize_scoring_columns(panel, scoring.keys())
         temporary_scoring_columns = [name for name in scoring if name not in panel.columns and name in work.columns]
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         has_universe = universe_mask is not None and len(universe_mask) == len(panel)
+        # <<< LOCAL-EXT
         if has_universe:
             work = work.with_columns(universe_mask.rename("_score_universe"))
 

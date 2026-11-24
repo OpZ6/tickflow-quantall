@@ -646,9 +646,7 @@ def load_market_data_matrix_from_daily_panel(
     share_history: pl.DataFrame | None = None,
     cancel_event: threading.Event | None = None,
 ) -> MarketDataMatrix:
-    # <<< LOCAL-EXT
     """Build with the same daily scanner, field projection and limit masks as Parquet."""
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     dataset = pads.dataset(panel.to_arrow())
     _validate_matrix_dataset_schema(dataset)
     return _build_market_data_matrix_from_dataset(
@@ -656,11 +654,11 @@ def load_market_data_matrix_from_daily_panel(
         # 快照面板本身已带策略请求的列; 侧面股本表只在 Parquet 路径存在,
         # 缺失时与上游一致: 由 _resolve_matrix_storage_fields 明确报"字段不可用"。
         share_history,
-    # <<< LOCAL-EXT
         batch_size=_ARROW_BATCH_SIZE, cache_status="none", cancel_event=cancel_event,
     )
 
 
+    # <<< LOCAL-EXT
 def load_market_data_matrix_from_parquet(
     parquet_root: Path,
     start: date,
@@ -713,13 +711,12 @@ def load_market_data_matrix_from_parquet(
         and {"limit_up", "limit_down"}.intersection(instruments.columns)
     ):
         instruments = instruments.with_columns(pl.lit(available_end).alias("as_of"))
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     share_history, share_history_fingerprint = _load_matrix_share_history(root, build_fields)
     instrument_fingerprint = hashlib.blake2b(
         _instrument_fingerprint(instruments) + share_history_fingerprint,
         digest_size=20,
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     ).hexdigest()
-    # <<< LOCAL-EXT
 
     partitioning = pads.partitioning(
         pa.schema([("date", pa.date32())]),
@@ -740,9 +737,7 @@ def load_market_data_matrix_from_parquet(
             requested_fields,
             normalized_symbols,
             instruments,
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             share_history,
-            # <<< LOCAL-EXT
             batch_size=batch_size,
             cache_status="disabled",
             cancel_event=cancel_event,
@@ -751,6 +746,7 @@ def load_market_data_matrix_from_parquet(
     cache_dir = Path(cache_root)
     cache_dir.mkdir(parents=True, exist_ok=True)
     requested_partitions = (
+    # <<< LOCAL-EXT
         {}
         if source_generation
         else _partition_fingerprints(
@@ -808,7 +804,6 @@ def load_market_data_matrix_from_parquet(
             effective_end,
             requested_fields,
         )
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if cache_path.exists():
         shutil.rmtree(cache_path)
 
@@ -817,12 +812,12 @@ def load_market_data_matrix_from_parquet(
         root,
         cache_path,
         build_start,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         build_end,
         build_fields,
         normalized_symbols,
         instruments,
         share_history,
-    # <<< LOCAL-EXT
         build_partitions,
         instrument_fingerprint,
         profile_generation,
@@ -833,6 +828,7 @@ def load_market_data_matrix_from_parquet(
     )
     _raise_if_matrix_cancelled(cancel_event)
     _prune_matrix_disk_cache(
+        # <<< LOCAL-EXT
         cache_dir,
         keep=cache_path,
         max_bytes=int(cache_max_bytes),
@@ -873,61 +869,44 @@ def _normalize_matrix_cache_fields(
     return frozenset(str(name) for name in field_columns if str(name) not in ignored)
 
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _load_matrix_share_history(
     parquet_root: Path,
     wanted_fields: frozenset[str],
 ) -> tuple[pl.DataFrame | None, bytes]:
-# <<< LOCAL-EXT
     share_fields = {"total_shares", "float_shares"}
     if not (wanted_fields & share_fields) and "turnover_rate" not in wanted_fields:
         return None, b"no-share-history-requested"
     path = parquet_root.parent / "financials" / "shares" / "part.parquet"
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not path.is_file():
-    # <<< LOCAL-EXT
         return None, b"no-share-history"
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     stat = path.stat()
     fingerprint = hashlib.blake2b(digest_size=20)
-    # <<< LOCAL-EXT
     fingerprint.update(str(path.resolve()).encode("utf-8"))
     fingerprint.update(int(stat.st_size).to_bytes(8, "little", signed=False))
     fingerprint.update(int(stat.st_mtime_ns).to_bytes(8, "little", signed=False))
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     try:
         frame = pl.read_parquet(path)
     except Exception as exc:
-    # <<< LOCAL-EXT
         raise ValueError(f"cannot read historical share capital: {path}") from exc
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     available_date = next(
-    # <<< LOCAL-EXT
         (name for name in ("effective_date", "announce_date", "period_end") if name in frame.columns),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         None,
     )
     available_shares = share_fields & set(frame.columns)
-        # <<< LOCAL-EXT
     if available_date is None or "symbol" not in frame.columns or not available_shares:
         raise ValueError("historical share capital is missing symbol/date/share columns")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     history = frame.select(
-    # <<< LOCAL-EXT
         pl.col("symbol").cast(pl.Utf8),
         pl.col(available_date).cast(pl.Date, strict=False).alias("available_date"),
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         *(
             pl.col(name).cast(pl.Float64, strict=False)
             for name in sorted(available_shares)
         ),
-        # <<< LOCAL-EXT
     ).filter(pl.col("symbol").is_not_null() & pl.col("available_date").is_not_null())
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     return history, fingerprint.digest()
 
 
-    # <<< LOCAL-EXT
 def _normalize_symbol_request(symbols: list[str] | None) -> tuple[str, ...] | None:
     if symbols is None:
         return None
@@ -951,16 +930,13 @@ def _resolve_matrix_storage_fields(
     dataset: pads.Dataset,
     wanted_fields: frozenset[str],
     instruments: pl.DataFrame | None,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     share_history: pl.DataFrame | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     available = set(dataset.schema.names)
     parquet_fields = sorted(
         name
         for name in wanted_fields
-    # <<< LOCAL-EXT
         if name != "price_limit_pct"
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         and name in available
         and _arrow_numeric(dataset.schema.field(name).type)
     )
@@ -970,11 +946,9 @@ def _resolve_matrix_storage_fields(
     )
     matrix_fields = set(parquet_fields)
     vector_fields: set[str] = set()
-        # <<< LOCAL-EXT
     needed_share_fields = {"total_shares", "float_shares"} & set(wanted_fields)
     if "turnover_rate" in wanted_fields and "turnover_rate" not in parquet_fields:
         needed_share_fields.add("float_shares")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     for name in needed_share_fields:
         if name in parquet_fields:
             continue
@@ -982,7 +956,6 @@ def _resolve_matrix_storage_fields(
             matrix_fields.add(name)
         elif name in instrument_columns:
             vector_fields.add(name)
-    # <<< LOCAL-EXT
     if "raw_close" in wanted_fields:
         matrix_fields.add("raw_close")
     if "turnover_rate" in wanted_fields:
@@ -1003,9 +976,7 @@ def _build_market_data_matrix_from_dataset(
     wanted_fields: frozenset[str],
     symbols: tuple[str, ...] | None,
     instruments: pl.DataFrame | None,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     share_history: pl.DataFrame | None,
-    # <<< LOCAL-EXT
     *,
     batch_size: int,
     cache_status: str,
@@ -1025,9 +996,7 @@ def _build_market_data_matrix_from_dataset(
         dataset,
         wanted_fields,
         instruments,
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         share_history,
-        # <<< LOCAL-EXT
     )
     shape = (len(actual_dates), len(actual_symbols))
     arrays = {
@@ -1061,10 +1030,8 @@ def _build_market_data_matrix_from_dataset(
         fields,
         wanted_fields,
         instruments,
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         actual_dates,
         share_history,
-        # <<< LOCAL-EXT
         seen,
         parquet_fields=parquet_fields,
         vector_fields=vector_fields,
@@ -1105,6 +1072,7 @@ def _build_market_data_matrix_from_dataset(
         limit_up_locked,
         limit_down_locked,
         *fields.values(),
+    # <<< LOCAL-EXT
     )
     return MarketDataMatrix(
         timestamps=timestamps,
@@ -1134,9 +1102,7 @@ def _build_market_data_matrix_cache_from_dataset(
     wanted_fields: frozenset[str],
     symbols: tuple[str, ...] | None,
     instruments: pl.DataFrame | None,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     share_history: pl.DataFrame | None,
-    # <<< LOCAL-EXT
     source_partitions: Mapping[str, str],
     instrument_fingerprint: str,
     profile_generation: str,
@@ -1176,10 +1142,9 @@ def _build_market_data_matrix_cache_from_dataset(
         parquet_fields, matrix_fields, vector_fields = _resolve_matrix_storage_fields(
             dataset,
             wanted_fields,
-            instruments,
             # >>> LOCAL-EXT 本地增强, 上游同步时保护
+            instruments,
             share_history,
-            # <<< LOCAL-EXT
         )
         shape = (len(actual_dates), len(actual_symbols))
         array_specs, field_specs, total_bytes = _matrix_binary_layout(
@@ -1224,15 +1189,14 @@ def _build_market_data_matrix_cache_from_dataset(
         stage_started = time.perf_counter()
         _mask_unseen_staging_core(arrays, fields, parquet_fields, seen)
         names, latest_limits = _populate_matrix_derived_arrays(
+            # <<< LOCAL-EXT
             actual_symbols,
             arrays,
             fields,
             wanted_fields,
             instruments,
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             actual_dates,
             share_history,
-            # <<< LOCAL-EXT
             seen,
             parquet_fields=parquet_fields,
             vector_fields=vector_fields,
@@ -1275,10 +1239,12 @@ def _build_market_data_matrix_cache_from_dataset(
         mapped.clear()
         timing_ms["flush_close"] = round((time.perf_counter() - stage_started) * 1000, 1)
         timing_ms["total_before_publish"] = round(
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             (time.perf_counter() - build_started) * 1000,
             1,
         )
 
+            # <<< LOCAL-EXT
         manifest = {
             "version": _DIRECT_MATRIX_LOADER_VERSION,
             "storage": "matrix.bin",
@@ -1303,7 +1269,6 @@ def _build_market_data_matrix_cache_from_dataset(
             encoding="utf-8",
         )
         _raise_if_matrix_cancelled(cancel_event)
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         _publish_matrix_cache(temporary, cache_path)
     except BaseException:
         _close_matrix_memmaps(mapped)
@@ -1312,9 +1277,7 @@ def _build_market_data_matrix_cache_from_dataset(
 
 
 def _publish_matrix_cache(temporary: Path, cache_path: Path) -> None:
-        # <<< LOCAL-EXT
     """Publish a complete cache after transient Windows directory locks."""
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     last_error: PermissionError | None = None
     for attempt in range(10):
         try:
@@ -1322,9 +1285,7 @@ def _publish_matrix_cache(temporary: Path, cache_path: Path) -> None:
             return
         except PermissionError as exc:
             last_error = exc
-    # <<< LOCAL-EXT
             if (cache_path / "manifest.json").exists():
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 shutil.rmtree(temporary, ignore_errors=True)
                 return
             if cache_path.exists():
@@ -1334,7 +1295,6 @@ def _publish_matrix_cache(temporary: Path, cache_path: Path) -> None:
     raise last_error  # type: ignore[misc]
 
 
-                # <<< LOCAL-EXT
 def _matrix_binary_layout(
     shape: tuple[int, int],
     matrix_fields: list[str],
@@ -1355,6 +1315,7 @@ def _matrix_binary_layout(
     ]
     offset = 0
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def add_spec(dtype: np.dtype, value_shape: tuple[int, ...]) -> dict[str, Any]:
         nonlocal offset
         offset += (-offset) % 64
@@ -1385,6 +1346,7 @@ def _open_matrix_memmap(
 ) -> np.memmap:
     values = np.memmap(
         path,
+    # <<< LOCAL-EXT
         dtype=np.dtype(str(spec["dtype"])),
         mode="r+",
         offset=int(spec["offset"]),
@@ -1506,10 +1468,8 @@ def _populate_matrix_derived_arrays(
     fields: dict[str, np.ndarray],
     wanted_fields: frozenset[str],
     instruments: pl.DataFrame | None,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     actual_dates: list[date],
     share_history: pl.DataFrame | None,
-    # <<< LOCAL-EXT
     seen: np.ndarray,
     *,
     parquet_fields: list[str],
@@ -1534,7 +1494,6 @@ def _populate_matrix_derived_arrays(
             fields[name][:] = values[0]
         else:
             np.copyto(fields[name], values, where=seen)
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     _write_historical_share_matrices(
         fields,
         actual_dates,
@@ -1543,7 +1502,6 @@ def _populate_matrix_derived_arrays(
         wanted_fields,
         seen,
     )
-    # <<< LOCAL-EXT
     if "raw_close" in wanted_fields and "raw_close" not in parquet_fields:
         np.copyto(fields["raw_close"], arrays["close"])
     if "turnover_rate" in wanted_fields and "turnover_rate" not in parquet_fields:
@@ -1564,12 +1522,12 @@ def _populate_matrix_derived_arrays(
             _write_turnover_rate_matrix(
                 fields["turnover_rate"],
                 arrays["volume"],
+                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 float_shares,
             )
     return names, latest_limits
 
 
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 def _write_historical_share_matrices(
     fields: dict[str, np.ndarray],
     actual_dates: list[date],
@@ -1580,22 +1538,16 @@ def _write_historical_share_matrices(
 ) -> None:
     if share_history is None or share_history.is_empty():
         return
-# <<< LOCAL-EXT
     requested = {"total_shares", "float_shares"} & set(fields)
     if "turnover_rate" in wanted_fields and "float_shares" in fields:
         requested.add("float_shares")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     requested &= set(share_history.columns)
     if not requested:
         return
-    # <<< LOCAL-EXT
     date_axis = np.asarray(actual_dates, dtype="datetime64[D]").astype(np.int64)
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     grouped = {
-    # <<< LOCAL-EXT
         key[0] if isinstance(key, tuple) else key: frame.sort("available_date")
         for key, frame in share_history.partition_by("symbol", as_dict=True).items()
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     }
     for asset_id, symbol in enumerate(actual_symbols):
         history = grouped.get(symbol)
@@ -1603,17 +1555,11 @@ def _write_historical_share_matrices(
             for name in requested:
                 fields[name][:, asset_id] = np.nan
             continue
-    # <<< LOCAL-EXT
         history = history.unique("available_date", keep="last").sort("available_date")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         history_dates = np.asarray(
-        # <<< LOCAL-EXT
             history["available_date"].to_numpy(), dtype="datetime64[D]"
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         ).astype(np.int64)
-        # <<< LOCAL-EXT
         positions = np.searchsorted(history_dates, date_axis, side="right") - 1
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         has_history = positions >= 0
         for name in requested:
             target = fields[name][:, asset_id]
@@ -1627,7 +1573,6 @@ def _write_historical_share_matrices(
             target[~seen[:, asset_id]] = np.nan
 
 
-        # <<< LOCAL-EXT
 def _write_turnover_rate_matrix(
     target: np.ndarray,
     volume: np.ndarray,
@@ -1698,6 +1643,7 @@ def _matrix_disk_cache_path(
     source_generation: str | None,
 ) -> Path:
     payload = {
+                # <<< LOCAL-EXT
         "version": _DIRECT_MATRIX_LOADER_VERSION,
         "parquet_root": str(parquet_root.resolve()),
         "coverage_start": start.isoformat(),
@@ -2432,7 +2378,6 @@ def _limit_lock_matrices(
                 matches = quoted_dates == ordinal
                 no_limit = np.isfinite(latest_up) & (latest_up >= 10_000.0)
                 valid &= ~(matches & no_limit)
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 # 与 compute_limit_signals 同口径: 涨停价必须高于昨收、跌停价必须
                 # 低于昨收, 否则是维表未滚动的上一交易日旧值。不加这条会让直连
                 # 矩阵与面板构建两条路径的锁定判定打架 (前者信维表、后者校验)。
@@ -2441,7 +2386,6 @@ def _limit_lock_matrices(
                 down_ok = ~has_prev | (latest_down < previous_raw)
                 use_up = matches & (latest_up > 0) & (latest_up < 10_000.0) & up_ok
                 use_down = matches & (latest_down > 0) & (latest_down < 10_000.0) & down_ok
-                # <<< LOCAL-EXT
                 up_price = np.where(use_up, latest_up, up_price)
                 down_price = np.where(use_down, latest_down, down_price)
             up_locked[time_id, valid] = (
@@ -2504,6 +2448,7 @@ def _finalize_signal_matrix(
         entry_signal_code=entry_signal_code,
         exit_signal_code=exit_signal_code,
         entry_signal_ids=tuple(entry_signal_ids),
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         exit_signal_ids=tuple(exit_signal_ids),
     )
     validate_signal_matrix(result, shape)
@@ -2513,6 +2458,7 @@ def _finalize_signal_matrix(
 def validate_signal_matrix(signals: SignalMatrix, shape: tuple[int, int]) -> None:
     """Fail explicitly when a matrix strategy violates the shared output contract."""
     specs = {
+        # <<< LOCAL-EXT
         "entry": (signals.entry, np.dtype(np.uint8)),
         "exit": (signals.exit, np.dtype(np.uint8)),
         "score": (signals.score, np.dtype(np.float32)),
@@ -2543,9 +2489,7 @@ def build_market_matrix_from_signals(
     reference_price: np.ndarray | None = None,
     minute_exit_trigger: bool = False,
     entry_price_override: np.ndarray | None = None,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     entry_fill_time_mask: np.ndarray | None = None,
-    # <<< LOCAL-EXT
 ) -> MarketMatrix:
     """Combine base data and strategy signals into the matcher input matrix."""
     if entry_delay_bars not in (0, 1) or exit_delay_bars not in (0, 1):
@@ -2560,7 +2504,6 @@ def build_market_matrix_from_signals(
         signals.entry_signal_code,
         present,
         entry_delay_bars,
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         # A close-T entry order is valid only for the next market session.
         # Missing asset data must not carry a stale order to a later asset bar.
         skip_missing_bars=False,
@@ -2568,14 +2511,11 @@ def build_market_matrix_from_signals(
     if entry_fill_time_mask is not None:
         fill_mask = np.asarray(entry_fill_time_mask, dtype=bool)
         if fill_mask.shape != (market.shape[0],):
-        # <<< LOCAL-EXT
             raise ValueError("entry_fill_time_mask must match the market time axis")
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         outside = ~fill_mask
         entry[outside] = 0
         entry_signal_time[outside] = -1
         entry_signal_code[outside] = -1
-        # <<< LOCAL-EXT
     exit_, exit_signal_time, exit_signal_code = _delay_signal_matrix(
         signals.exit,
         signals.exit_signal_code,
@@ -2621,6 +2561,7 @@ def build_market_matrix_from_signals(
         exit_,
         resolved_reference_price,
         entry_signal_time,
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         exit_signal_time,
         entry_signal_code,
         exit_signal_code,
@@ -2654,6 +2595,7 @@ def build_market_matrix_from_signals(
         entry_price=(
             np.array(entry_price_override, dtype=np.float32, copy=True)
             if entry_price_override is not None
+        # <<< LOCAL-EXT
             else None
         ),
     )
@@ -3190,7 +3132,6 @@ def _delay_signal_matrix(
     codes: np.ndarray,
     present: np.ndarray,
     delay_bars: int,
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     *,
     skip_missing_bars: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -3204,7 +3145,6 @@ def _delay_signal_matrix(
             if skip_missing_bars
             else np.arange(shape[0], dtype=np.int32)
         )
-    # <<< LOCAL-EXT
         if len(rows) <= delay_bars:
             continue
         source_rows = rows[: len(rows) - delay_bars] if delay_bars else rows
@@ -3270,6 +3210,7 @@ def _resolve_valid_bar_index(
         return active
     return _build_valid_bar_index(valid)
 
+# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 @njit(cache=True, nogil=True, parallel=True)
 def _valid_shift_kernel(
@@ -3285,6 +3226,7 @@ def _valid_shift_kernel(
         start = int(offsets[asset_id])
         stop = int(offsets[asset_id + 1])
         ring = np.empty(distance, dtype=np.int32)
+# <<< LOCAL-EXT
         seen = 0
         if periods > 0:
             for position in range(start, stop):
@@ -3853,7 +3795,6 @@ class MatrixStrategyPipeline:
         params: dict,
         config: MatrixPipelineConfig,
         timing_ms: dict[str, float] | None = None,
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         *,
         precomputed_signals: SignalMatrix | None = None,
     ) -> SignalMatrix:
@@ -3885,7 +3826,6 @@ class MatrixStrategyPipeline:
         else:
             signals = (current_replay().dynamic_signals(strategy, market, params)
                        if dynamic else strategy.compute_signals(market, params))
-        # <<< LOCAL-EXT
         validate_signal_matrix(signals, market.shape)
         if timing_ms is not None:
             timing_ms["strategy_signals"] = round(
@@ -3935,6 +3875,7 @@ class MatrixStrategyPipeline:
             entry_signal_code=entry_codes,
             exit_signal_code=exit_codes,
             entry_signal_ids=signals.entry_signal_ids,
+            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             exit_signal_ids=signals.exit_signal_ids,
         )
 
@@ -3968,6 +3909,7 @@ def build_pipeline_filter_mask(
     config: MatrixPipelineConfig,
 ) -> np.ndarray:
     basic_mask = build_basic_filter_mask(market, config.basic_filter)
+            # <<< LOCAL-EXT
     if config.asset_mask is None:
         return basic_mask
 
@@ -4006,20 +3948,16 @@ def _build_basic_filter_mask_uncached(market: MarketDataMatrix, config: dict) ->
     if config.get("price_max") is not None:
         mask &= close <= float(config["price_max"])
 
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # Enriched close is adjusted; capitalization uses unadjusted price. Raw-only
     # panels historically omit raw_close and already expose raw prices as close.
-    # <<< LOCAL-EXT
     cap_price = market.fields.get("raw_close", close)
     for prefix, share_field in (("market_cap", "total_shares"), ("float_cap", "float_shares")):
         if config.get(f"{prefix}_min") is None and config.get(f"{prefix}_max") is None:
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             continue
         shares = _optional_field(market, share_field)
         values = cap_price * shares
         mask &= np.isfinite(values) & (cap_price > 0) & (shares > 0)
         _apply_bound(mask, values, config, prefix)
-            # <<< LOCAL-EXT
     _apply_bound(mask, _required_field_for_bound(market, config, "amount"), config, "amount")
     _apply_bound(mask, _optional_field(market, "turnover_rate"), config, "turnover")
 
@@ -4077,6 +4015,7 @@ def build_matrix_score(
                 all_finite[:, start:stop] &= finite
                 finite &= universe[:, start:stop]
                 np.minimum(
+                    # >>> LOCAL-EXT 本地增强, 上游同步时保护
                     row_min,
                     np.min(values_chunk, axis=1, where=finite, initial=np.inf),
                     out=row_min,
@@ -4106,6 +4045,7 @@ def build_matrix_score(
                 scratch[mask] = np.float32(0.5)
                 if (directions or {}).get(name) == SCORING_DIRECTION_LOW:
                     scratch[finite] = np.float32(1.0) - scratch[finite]
+                    # <<< LOCAL-EXT
                 scratch *= normalized_weight
                 score[:, start:stop] += scratch
         score *= np.float32(100.0)

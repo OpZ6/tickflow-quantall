@@ -16,9 +16,9 @@ from __future__ import annotations
 import json
 # >>> LOCAL-EXT 本地增强, 上游同步时保护
 import os
-# <<< LOCAL-EXT
 import re
 import shutil
+# <<< LOCAL-EXT
 import subprocess
 import uuid
 from pathlib import Path
@@ -101,28 +101,21 @@ def find_esbuild() -> Path | None:
     .pnpm/@esbuild+<ver>/node_modules/@esbuild/<platform>/bin/esbuild。
     """
     root = frontend_root()
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     candidates: list[Path] = []
     # Windows 上 .bin/esbuild 是给 POSIX shell 的脚本 (#! /bin/sh), 直接执行必然
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # OSError WinError 193; 真实二进制叫 esbuild.exe, 且不在 bin/ 子目录下:
     #   node_modules/@esbuild/win32-x64/esbuild.exe
     #   node_modules/.pnpm/@esbuild+win32-x64@<ver>/node_modules/@esbuild/win32-x64/esbuild.exe
-    # <<< LOCAL-EXT
     if os.name != "nt":
         candidates.append(root / "node_modules" / ".bin" / "esbuild")
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     bases = [
-    # <<< LOCAL-EXT
         root / "node_modules" / "@esbuild",
         *(root / "node_modules" / ".pnpm").glob("@esbuild+*/node_modules/@esbuild"),
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     ]
     for base in bases:
-    # <<< LOCAL-EXT
         for pattern in ("*/bin/esbuild", "*/esbuild.exe"):
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             candidates.extend(sorted(base.glob(pattern)))
-            # <<< LOCAL-EXT
     for c in candidates:
         if c.is_file():
             return c
@@ -132,6 +125,7 @@ def find_esbuild() -> Path | None:
 
 
 def namespace_source_path(namespace: str) -> Path:
+    # <<< LOCAL-EXT
     """frontend/src/custom/<ns>/extension.tsx, 带命名空间与穿越校验。"""
     if not _NS_RE.match(namespace) or namespace == "_template":
         raise ValueError(f"非法的扩展命名空间: {namespace}")

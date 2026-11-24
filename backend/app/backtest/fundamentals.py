@@ -59,13 +59,9 @@ def load_fundamental_snapshot(data_dir: Path | None) -> pl.DataFrame | None:
     identity = {"symbol", "announce_date"}
     # >>> LOCAL-EXT 本地增强, 上游同步时保护
     if not identity.issubset(frame.columns):
-    # <<< LOCAL-EXT
         logger.warning("financial snapshot missing identity columns: %s", sorted(identity - set(frame.columns)))
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return None
-        # <<< LOCAL-EXT
     metric_columns = {spec["column"] for spec in FUNDAMENTAL_FACTORS.values()}
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     missing_metrics = sorted(metric_columns - set(frame.columns))
     if missing_metrics:
         # Providers may expose a useful subset of the canonical metrics. Keep
@@ -74,13 +70,13 @@ def load_fundamental_snapshot(data_dir: Path | None) -> pl.DataFrame | None:
             [pl.lit(None, dtype=pl.Float64).alias(name) for name in missing_metrics]
         )
     needed = identity | metric_columns
-    # <<< LOCAL-EXT
     snapshot = (
         frame.select(sorted(needed))
         .filter(
             pl.col("symbol").is_not_null()
             & pl.col("announce_date").is_not_null()
         )
+    # <<< LOCAL-EXT
         .with_columns(
             pl.col("announce_date").cast(pl.Utf8).str.slice(0, 10).str.to_date().alias("_announce")
         )
@@ -182,12 +178,11 @@ def build_fundamental_matrices(
     }
     announce_values = snapshot["_announce"].to_list()
     for row_index, symbol in enumerate(snapshot["symbol"].to_list()):
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         column_index = asset_index.get(symbol)
         if column_index is None:
             continue
         announce = announce_values[row_index]
-        # <<< LOCAL-EXT
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         if announce is None:
             continue
         # 公告日之后 (严格大于) 的首个时间行索引
@@ -196,6 +191,7 @@ def build_fundamental_matrices(
             continue
         for column, target in raw_columns.items():
             value = snapshot[column][row_index]
+        # <<< LOCAL-EXT
             numeric = float("nan") if value is None else float(value)
             # 新一期该指标为空时必须覆盖旧值为 NaN: 跳过写入会让同一行混用两期
             # 报告 (bps 取新期、roe 停在上一期), 与 polars 侧 join_asof 只认

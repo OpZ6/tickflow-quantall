@@ -29,16 +29,14 @@ def _holder_key(path: Path) -> str:
         resolved = str(path.resolve())
     except OSError:
         resolved = str(path)
-# <<< LOCAL-EXT
     return resolved.lower() if os.name == "nt" else resolved
-# >>> LOCAL-EXT 本地增强, 上游同步时保护
 
 
-# <<< LOCAL-EXT
 _LOCK_SCHEMA_VERSION = 1
 
 # 旧格式 (b"0") / 内容损坏时定位持有者的白名单线索: 只认本产品的进程形态,
 # 避免把"恰好打开过锁文件"的无关进程 (杀毒扫描/编辑器) 当成持有者。
+# <<< LOCAL-EXT
 _APP_NAME_HINTS = ("python", "tsp", "tickflow")
 _APP_CMDLINE_HINTS = (
     "uvicorn",
@@ -78,11 +76,11 @@ class MiningProcessLock:
         self._stream = stream
         # flock 是唯一事实; 内容只是给诊断/强制释放用的持有者线索。
         # 持锁期间本进程是该文件唯一写入者, 无并发竞争。
-        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         payload = holder_payload(role)
         self._rewrite_locked(stream, payload)
         _LOCAL_HOLDERS[_holder_key(self._path)] = payload
 
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     def release(self) -> None:
         stream = self._stream
         if stream is None:
@@ -93,15 +91,12 @@ class MiningProcessLock:
             self._rewrite_locked(
                 stream,
                 {
-        # <<< LOCAL-EXT
                     "schema_version": _LOCK_SCHEMA_VERSION,
                     "pid": os.getpid(),
                     "released_at": datetime.now(UTC).isoformat(),
-                # >>> LOCAL-EXT 本地增强, 上游同步时保护
                 },
             )
             _LOCAL_HOLDERS.pop(key, None)
-                # <<< LOCAL-EXT
             _unlock_file(stream)
         finally:
             stream.close()
@@ -110,6 +105,7 @@ class MiningProcessLock:
     def acquired(self) -> bool:
         return self._stream is not None
 
+    # <<< LOCAL-EXT
     @staticmethod
     def _rewrite_locked(stream: BinaryIO, payload: dict) -> None:
         try:
@@ -156,21 +152,21 @@ def read_lock_holder(data_dir: Path | str) -> dict | None:
                 stream.seek(1)
                 raw = stream.read()
         except OSError:
-            # >>> LOCAL-EXT 本地增强, 上游同步时保护
             # Windows: 本进程持锁时其它句柄仍读不到被锁字节区间; 退回进程内记录
             # (见 _LOCAL_HOLDERS), 否则管理端「锁是不是我的」在 Windows 上恒为 False。
             return _LOCAL_HOLDERS.get(_holder_key(path))
-            # <<< LOCAL-EXT
     try:
         value = json.loads(raw.decode("utf-8", errors="replace"))
     except (UnicodeError, json.JSONDecodeError):
         return None
     if not isinstance(value, dict):
+        # >>> LOCAL-EXT 本地增强, 上游同步时保护
         return None
     pid = value.get("pid")
     if not isinstance(pid, int) or pid <= 0 or "released_at" in value:
         return None
     return value
+        # <<< LOCAL-EXT
 
 
 def locate_lock_holder_pid(data_dir: Path | str) -> int | None:

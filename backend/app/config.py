@@ -195,9 +195,9 @@ class Settings(BaseSettings):
     # 关闭时使用确定性聚类, 开启且已配置 AI Key 时每次发布调用一次 LLM,
     # 结果写入快照并在同日重算时复用; 调用失败自动降级回确定性结果。
     stock_pool_topic_llm: bool = False
-    # <<< LOCAL-EXT
 
     # Server
+    # <<< LOCAL-EXT
     host: str = "0.0.0.0"
     port: int = 3018
     log_level: str = "INFO"
@@ -242,18 +242,18 @@ class Settings(BaseSettings):
     # (均可被环境变量 DATA_DIR 覆盖, pydantic-settings 自动注入)
     data_dir: Path = _user_data_root()
 
-    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # External research items dir for research material index auto-refresh.
     # Set via RESEARCH_SOURCE_DIR env var to enable automatic index rebuild
+    # >>> LOCAL-EXT 本地增强, 上游同步时保护
     # before stock-pool publication. Points to the "items" subdirectory of a
     # completed QuantX Research publication tree.
     research_source_dir: Path | None = None
 
-    # <<< LOCAL-EXT
     # tiers.yaml 路径 — frozen: 资源目录内; 非 frozen: 项目根目录
     tiers_yaml: Path = _RESOURCE_ROOT / "tiers.yaml" if _IS_FROZEN else _PROJECT_ROOT / "tiers.yaml"
 
     # 静态文件(前端 dist) — frozen: 资源目录的 static/; 非 frozen: frontend/dist
+    # <<< LOCAL-EXT
     static_dir: Path = _RESOURCE_ROOT / "static" if _IS_FROZEN else (_PROJECT_ROOT / "frontend" / "dist")
 
     @model_validator(mode="after")
