@@ -19,16 +19,19 @@ _HISTORY_WORKERS = 8
 _INDEX_WORKERS = 8
 
 INDEXES = {
-    "000985.CSI": "鍏ˋ鎸囨暟", "000001.SH": "涓婅瘉鎸囨暟", "000300.SH": "娌繁300",
-    "000016.SH": "涓婅瘉50", "000905.SH": "涓瘉500", "000852.SH": "涓瘉1000",
-    "399006.SZ": "鍒涗笟鏉挎寚", "000688.SH": "绉戝垱50",
+    "000985.CSI": "全A指数", "000001.SH": "上证指数", "000300.SH": "沪深300",
+    "000016.SH": "上证50", "000905.SH": "中证500", "000852.SH": "中证1000",
+    "399006.SZ": "创业板指", "000688.SH": "科创50",
 }
 
 
 def _client():
     from app.plugins.tushare.client import build_tushare_client
 
-    return build_tushare_client(timeout=30)
+    # 镜像站正常时单日 daily 约 3-5s；30s 会让 8 并发 x 60 天历史在镜像
+    # 抖动时每个请求都白等 60s（2 次重试），直接撑爆 180s 管线预算。
+    # 缩短单次预算并配合 client 侧的镜像熔断，超时的请求能更快切到官方。
+    return build_tushare_client(timeout=15)
 
 
 def _frame_records(frame: pd.DataFrame | None) -> list[dict[str, Any]]:

@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TickFlow Quantall · AI 分析能力全景报告 · 2026-11-04</title>
+<style>
+:root{
+  --bg:#0b0f14; --surface:#121821; --surface2:#171f2b; --line:#243040;
+  --text:#e6edf3; --muted:#8b98a9; --dim:#5f6c7d;
+  --orange:#f78166; --blue:#5b9cf8; --green:#4ec9a0; --red:#f0616d;
+  --purple:#a78bfa; --yellow:#e3b341;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.75;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 80px}
+code,.mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.88em}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+
+header{padding:52px 0 28px;border-bottom:1px solid var(--line);margin-bottom:26px}
+h1{font-size:30px;line-height:1.3;margin:0 0 10px;letter-spacing:-.4px;font-weight:650}
+.sub{color:var(--muted);font-size:14px;margin:0}
+.meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.tag{background:var(--surface2);border:1px solid var(--line);color:var(--muted);
+  border-radius:5px;padding:3px 10px;font-size:11.5px}
+.tag.hot{border-color:rgba(247,129,102,.4);color:var(--orange);background:rgba(247,129,102,.08)}
+.tag.ok{border-color:rgba(78,201,160,.4);color:var(--green);background:rgba(78,201,160,.08)}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:26px 0 30px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:16px 18px}
+.kpi .n{font-size:26px;font-weight:650;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .l{color:var(--muted);font-size:11.5px;margin-top:7px}
+.kpi.o .n{color:var(--orange)} .kpi.b .n{color:var(--blue)}
+.kpi.g .n{color:var(--green)} .kpi.r .n{color:var(--red)}
+
+nav{background:var(--surface);border:1px solid var(--line);border-radius:9px;
+  padding:14px 18px;margin-bottom:34px;display:flex;flex-wrap:wrap;gap:8px 20px;font-size:12.5px}
+nav span{color:var(--dim);margin-right:4px}
+
+section{margin:0 0 46px;scroll-margin-top:20px}
+h2{font-size:20px;margin:0 0 6px;font-weight:620;letter-spacing:-.2px;
+  padding-bottom:11px;border-bottom:1px solid var(--line)}
+h2 .idx{color:var(--orange);font-family:monospace;font-size:14px;margin-right:10px}
+h3{font-size:15px;margin:26px 0 10px;font-weight:600}
+p{margin:10px 0}
+.lead{color:var(--muted);margin:12px 0 18px}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:14px 0 6px}
+table.fixed{table-layout:fixed}
+th{text-align:left;color:var(--muted);font-weight:550;background:var(--surface2);
+  padding:9px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 11px;border-bottom:1px solid rgba(36,48,64,.65);vertical-align:top}
+th,td{overflow-wrap:anywhere}
+td code{overflow-wrap:anywhere;word-break:break-word}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(91,156,248,.04)}
+td code{color:var(--blue);font-size:11.5px}
+.up{color:var(--red)} .down{color:var(--green)}
+.badge{display:inline-block;border-radius:4px;padding:1px 7px;font-size:10.5px;
+  border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.badge.off{color:var(--red);border-color:rgba(240,97,109,.35);background:rgba(240,97,109,.08)}
+.badge.on{color:var(--green);border-color:rgba(78,201,160,.35);background:rgba(78,201,160,.08)}
+.badge.warn{color:var(--yellow);border-color:rgba(227,179,65,.35);background:rgba(227,179,65,.08)}
+.badge.info{color:var(--blue);border-color:rgba(91,156,248,.35);background:rgba(91,156,248,.08)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:20px 22px;margin:16px 0}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;margin-bottom:4px}
+.card h3{margin:0;font-size:16px}
+.card .cid{font-family:monospace;color:var(--orange);font-size:12px;margin-right:9px}
+.chain{color:var(--dim);font-size:11.5px;margin:6px 0 14px;line-height:1.9;word-break:break-all}
+.chain b{color:var(--muted);font-weight:500}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0}
+.box{background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:13px 15px}
+.box .bt{font-size:11px;color:var(--dim);letter-spacing:.6px;text-transform:uppercase;margin-bottom:9px}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:3px 0;
+  border-bottom:1px dashed rgba(36,48,64,.7)}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--muted);flex-shrink:0}
+.kv .v{text-align:right;font-variant-numeric:tabular-nums;flex:1;min-width:0;
+  overflow-wrap:anywhere;word-break:break-word}
+.answer{background:linear-gradient(180deg,rgba(247,129,102,.075),rgba(247,129,102,.02));
+  border:1px solid rgba(247,129,102,.25);border-left:3px solid var(--orange);
+  border-radius:6px;padding:13px 16px;margin-top:13px;font-size:12.8px;line-height:1.85}
+.answer .at{color:var(--orange);font-size:11px;font-weight:600;letter-spacing:.5px;margin-bottom:6px}
+.answer p{margin:6px 0}
+.note{border-left:3px solid var(--yellow);background:rgba(227,179,65,.06);
+  padding:10px 14px;border-radius:0 6px 6px 0;margin:12px 0;font-size:12.5px;color:#d9c89a}
+.note.blue{border-left-color:var(--blue);background:rgba(91,156,248,.06);color:#a9c6f5}
+.note.red{border-left-color:var(--red);background:rgba(240,97,109,.06);color:#f0aeb4}
+
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin:16px 0}
+.flow .node{background:var(--surface2);border:1px solid var(--line);border-radius:7px;
+  padding:11px 13px;font-size:11.5px;flex:1;min-width:150px}
+.flow .node .t{color:var(--orange);font-size:10.5px;margin-bottom:5px;letter-spacing:.5px}
+.flow .node .d{color:var(--muted);line-height:1.6}
+.flow .arrow{display:flex;align-items:center;color:var(--dim);font-size:16px}
+
+ul.clean{margin:10px 0;padding-left:20px;color:var(--muted);font-size:13px}
+ul.clean li{margin:6px 0}
+ul.clean b{color:var(--text);font-weight:550}
+.hl{color:var(--orange);font-weight:600}
+footer{border-top:1px solid var(--line);padding-top:20px;color:var(--dim);font-size:11.5px}
+@media(max-width:820px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}
+  .wrap{padding:0 16px 60px}h1{font-size:24px}table{font-size:11.5px}}
+@media print{body{background:#fff;color:#111}.card,.kpi,nav,.box{background:#fff;border-color:#ccc}
+  th{background:#f3f3f3;color:#333}.tag,.badge{color:#333}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>AI 分析能力全景报告</h1>
+  <p class="sub">TickFlow Quantall（D:/tickflow-quantall）· 全项目 AI 链路盘点 + 逐点真实上下文实测 + 代答生成</p>
+  <div class="meta">
+    <span class="tag">数据基准日 2026-11-04</span>
+    <span class="tag">生成时间 2026-11-04 23:20 GMT+8</span>
+    <span class="tag ok">25 / 25 上下文端点 200</span>
+    <span class="tag hot">AI 门控 configured = false</span>
+    <span class="tag">后端 3018 · 前端 3011</span>
+  </div>
+</header>
+
+<div class="kpis">
+  <div class="kpi o"><div class="n">10</div><div class="l">AI 能力点（对话 1 / 报告 4 / 生成 3 / 配置 1 / 报告契约 1）</div></div>
+  <div class="kpi b"><div class="n">25</div><div class="l">实测只读上下文端点，全部 HTTP 200</div></div>
+  <div class="kpi g"><div class="n">8.3 MB</div><div class="l">本次拉取的真实上下文数据量</div></div>
+  <div class="kpi r"><div class="n">0</div><div class="l">当前可实际调用的 LLM 链路（门控全关）</div></div>
+</div>
+
+<nav>
+  <span>目录</span>
+  <a href="#s1">1 结论速览</a>
+  <a href="#s2">2 全量清单</a>
+  <a href="#s3">3 逐点上下文与代答</a>
+  <a href="#s4">4 统一架构与门控链</a>
+  <a href="#s5">5 数据口径冲突与质量告警</a>
+  <a href="#s6">6 门控影响面与接入成本</a>
+  <a href="#s7">7 下一步建议</a>
+  <a href="#s8">附录 端点实测</a>
+</nav>
+
+<section id="s1">
+<h2><span class="idx">01</span>结论速览</h2>
+<p class="lead">先给结论，细节在后面逐节展开。</p>
+<ul class="clean">
+  <li><b>AI 分析不是没做，是全被一个开关关着。</b>全项目共有 <span class="hl">10 个 AI 相关能力点</span>（1 个交互式助手、4 类报告生成、3 类代码/信号生成、1 套配置基础设施、1 份 LLM 报告契约），另有 1 组「名字像 AI 其实是纯算法」的模块已单独排除。会真正调用 LLM 的链路全部走同一个 <code>backend/app/services/ai_provider.py</code>，而 <code>ai_configured() = false</code>，所以当前<span class="hl">没有任何一条链路能真正调用 LLM</span>。</li>
+  <li><b>数据层完全健康。</b>本次为每个点拉取依赖的只读上下文，25 个端点 <span class="hl">全部 HTTP 200</span>，合计约 8.3 MB 真实数据（含 20261104 全市场 5571/5572 只标的快照、涨停梯队、情绪状态、397 概念轮动矩阵、股票池 503 候选、QuantX 7 段复盘数据等）。缺的只是那把 key，不是数据。</li>
+  <li><b>根因是一行键名。</b><code>.env</code> 里写的是 <code>deepseek-api-key=sk-5fd…</code>，而 <code>app/config.py</code> 读取的是 <code>AI_API_KEY</code>，从未被加载。用项目自带的无副作用探测接口 <code>POST /api/settings/ai/test</code> 实测该 key 返回 <code>{"ok":true,"response":"OK"}</code>，<span class="hl">key 有效</span>。</li>
+  <li><b>接上之前先修数据口径。</b>实测发现 <span class="hl">7 组指标在两套数据源之间不一致</span>（涨停 122 vs 118、封板率 77.2% vs 78.1%、情绪 83「强势」 vs 62「偏热」等），另有板块轮动数据时间戳滞后到 2026-09-02、涨停股 002578 本地财报覆盖为 0。这些会让任何 LLM 报告建立在不同口径甚至缺失数据上 —— 详见第 5 节。</li>
+  <li><b>「让我获取上下文解答」已验证可行。</b>第 3 节每个能力点都附了一段 <span class="hl">本次由 WorkBuddy 直接读取上下文生成的代答</span>（非项目 LLM 产物），并标出该点当前的实际可用性。</li>
+</ul>
+<div class="note blue">本报告只做只读探查与上下文拉取：<b>未修改任何配置、未启用付费 API、未触发任何 LLM 生成接口</b>。所有 POST 类生成端点均未调用。</div>
+</section>
+
+<section id="s2">
+<h2><span class="idx">02</span>全量清单：项目里到底哪些地方有 AI 分析</h2>
+<p class="lead">按「用户能点到什么 → 走哪个路由 → 哪个服务拼 prompt → 输出落到哪」串起来。状态列指当前能否真正调 LLM。</p>
+<table class="fixed">
+<colgroup><col style="width:4%"><col style="width:17%"><col style="width:19%"><col style="width:28%"><col style="width:21%"><col style="width:11%"></colgroup>
+<thead><tr><th>#</th><th>AI 能力点</th><th>前端入口</th><th>后端主路由 / 服务</th><th>输出与存储</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td>A1</td><td><b>AI 助手抽屉</b><br>带 50+ 数据工具的流式对话</td><td><code>custom/assistant/</code><br>悬浮球 / 顶栏入口 / 抽屉</td><td><code>POST /api/custom/assistant/chat</code><br><code>custom/assistant/{chat_service,streaming,tools,prompt}</code></td><td>NDJSON 流式消息 + 图表卡 + 工具审批；localStorage + 后端 sessions</td><td><span class="badge off">门控关闭</span></td></tr>
+<tr><td>B1</td><td><b>财务 AI 分析</b><br>CFA 九维财务质量评级</td><td><code>components/financials/</code><br>AiAnalysisDialog / AiReportBubble / 财务概况页</td><td><code>POST /api/financials/analyze</code><br><code>services/financial_analyzer.py</code></td><td>Markdown 报告；<code>data/user_data/ai_reports.json</code></td><td><span class="badge off">门控关闭</span></td></tr>
+<tr><td>B2</td><td><b>个股 AI 四维分析</b><br>技术/基本/财务/消息面</td><td><code>custom/stock-analysis/</code><br>个股分析页 / ChanlunKlineWorkbench</td><td><code>POST /api/stock-analysis/analyze</code><br><code>services/stock_analyzer.py</code></td><td>Markdown 报告；<code>data/user_data/ai_stock_reports.json</code></td><td><span class="badge off">门控关闭</span></td></tr>
+<tr><td>B3</td><td><b>大盘 AI 复盘</b><br>手动 + 工作日定时 + 推送</td><td><code>custom/review/</code>「AI 复盘」<br><code>lib/reviewStore.ts</code></td><td><code>POST /api/market-recap/analyze</code><br><code>services/market_recap.py</code><br><code>jobs/daily_pipeline.py::_run_scheduled_review</code></td><td>流式 MD + SSE 推送 + 飞书；<code>market_recap_reports</code>；提示词可自定义</td><td><span class="badge off">无 key 直接跳过</span></td></tr>
+<tr><td>B4</td><td><b>概念 / 行业轮动 AI 分析</b></td><td><code>custom/concept-analysis/</code><br><code>custom/industry-analysis/</code></td><td><code>POST /api/rps/rotation-analyze</code><br><code>services/concept_rotation_analyzer.py</code></td><td>流式 MD（主线 / 新晋 / 退潮）；不落盘</td><td><span class="badge off">门控关闭</span></td></tr>
+<tr><td>C1</td><td><b>AI 策略生成 / 迭代</b><br>自然语言 → 策略 Python 代码</td><td><code>components/screener/StrategyBuilderDialog.tsx</code></td><td><code>/api/strategies/ai/{status,test,generate,iterate,save}</code><br><code>strategy/ai_generator.py</code> + <code>ai_iterator.py</code></td><td>策略 .py 文件；<code>data/strategies/ai/</code>（不自动上线）</td><td><span class="badge off">has_key=false</span></td></tr>
+<tr><td>C2</td><td><b>自定义信号 AI 生成</b><br>自然语言 → 筛选表达式</td><td><code>custom/signals/</code></td><td><code>POST /api/custom-signals/ai/generate</code><br><code>api/signals.py</code></td><td>信号表达式 JSON；信号列表</td><td><span class="badge off">门控关闭</span></td></tr>
+<tr><td>C3</td><td><b>股票池题材聚类 LLM 增强</b><br>仅改写别名 / 去噪</td><td><code>custom/stock_pools/</code>（间接）</td><td><code>stock_pools/topic_cluster.py</code><br>开关 <code>settings.stock_pool_topic_llm</code></td><td>快照内 alias map；失败记 <code>llm-fallback</code></td><td><span class="badge warn">默认关闭</span></td></tr>
+<tr><td>D1</td><td><b>AI 配置 / 探测 / 模型清单</b></td><td><code>pages/settings/AI.tsx</code><br>AIConfigBadge / AiConfigEntry</td><td><code>/api/settings/ai/{test,sponsor-models}</code>、<code>POST|DELETE /api/settings/ai</code><br><code>services/ai_provider.py</code></td><td>配置持久化到 secrets.json</td><td><span class="badge info">基础设施可用</span></td></tr>
+<tr><td>D2</td><td><b>QuantX 复盘报告契约</b><br>为 LLM 报告预留 7 个段落</td><td>QuantXReview / QuantXCatalog</td><td><code>quantx_data/review_contract.py</code><br><code>sections.s0..s6.llm_block</code></td><td>HTML 复盘页骨架；管线全链路 <code>llm: False</code></td><td><span class="badge info">非运行时调用</span></td></tr>
+<tr><td>E1</td><td><b>名字像 AI 其实不是</b><br>AMV / 缠论 / Lab / 回测预览 / QuantX 全部图表</td><td>各分析页</td><td><code>/api/amv/analyze</code>、<code>/api/chanlun/analyze</code>、<code>/api/lab/report</code>、<code>quantx_data/*</code></td><td>确定性算法与聚合，不调 LLM</td><td><span class="badge on">与 AI 无关</span></td></tr>
+</tbody>
+</table>
+<div class="note">区分依据：只有 <code>backend/app</code> 下 15 个文件真正 import 了 <code>ai_provider</code> 的 <code>stream_ai_text</code> / <code>generate_ai_text</code> / <code>generate_ai_text_with_tools</code> / <code>ai_configured()</code>。名字带 analyze 但无这些引用的（AMV、缠论、Lab、回测预览）已被排除，避免把纯算法误算成 AI 能力。</div>
+</section>
+
+<section id="s3">
+<h2><span class="idx">03</span>逐点真实上下文 + WorkBuddy 代答</h2>
+<p class="lead">每个点的「上下文」是本次实际从运行中的 3018 后端拉回的数据；「代答」是由 WorkBuddy 读取这些上下文后生成，用来验证「不接 AI 平台也能给出分析」。<b>代答不是项目 LLM 产物</b>。</p>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">A1</span>AI 助手抽屉</h3><span class="badge off">configured=false</span></div>
+  <div class="chain"><b>链路</b> AssistantLauncher → AssistantDrawer → <code>assistantChatStream()</code> → <code>POST /api/custom/assistant/chat</code> → chat_service → streaming（自研流式 tool-loop）→ <code>ai_provider</code> → 50+ 工具回灌</div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文</div>
+      <div class="kv"><span class="k">status</span><span class="v">configured false / supports_tools false</span></div>
+      <div class="kv"><span class="k">provider / model</span><span class="v">openai_compat / openai/gpt-6-astra-saver</span></div>
+      <div class="kv"><span class="k">快捷指令</span><span class="v">18 条 · 4 组</span></div>
+      <div class="kv"><span class="k">历史会话</span><span class="v">0 条</span></div>
+      <div class="kv"><span class="k">工具口径</span><span class="v">get_market_overview / get_regime / get_sector_rotation / get_abnormal / get_sync_status 等</span></div>
+      <div class="kv"><span class="k">可用行情数据</span><span class="v">overview 14.5KB · 情绪 328KB · 梯队 76.8KB</span></div>
+    </div>
+    <div class="box"><div class="bt">代答依据的数据</div>
+      <div class="kv"><span class="k">涨 / 跌 / 平</span><span class="v"><span class="up">4666</span> / <span class="down">778</span> / 126</span></div>
+      <div class="kv"><span class="k">上涨占比</span><span class="v up">83.74%</span></div>
+      <div class="kv"><span class="k">两市成交</span><span class="v">20519.22 亿</span></div>
+      <div class="kv"><span class="k">涨停 / 炸板 / 跌停</span><span class="v">118 / 33 / 10</span></div>
+      <div class="kv"><span class="k">封板率 / 最高板</span><span class="v">78.1% / 3 板</span></div>
+      <div class="kv"><span class="k">前 5% 成交占比</span><span class="v">43.59%</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答 · 对应快捷指令「今天市场怎么样？」</div>
+    <p>2026-11-04 是典型的「<b>指数跌、个股普涨</b>」背离盘。83.74% 个股上涨（4666 涨 / 778 跌），但上证 -0.82%、中证 500 -1.45%、中证 1000 -1.71%，仅上证 50 +0.21%，说明权重与大市值拖累指数、小票全面活跃（科创板 97.4% 上涨）。成交 20519 亿，前 5% 个股吃掉 43.59% 成交额，资金抱团度和 Gini 卡片口径一致。</p>
+    <p>情绪<b>偏热但高度不足</b>：涨停 118、炸板 33、封板率 78.1%，最高仅 3 板；短期情绪 62「偏热」、中期 42「正常」。风险信号已触发 2 项（炸板 33 只、龙头断板未修复：3 板 vs 近 5 日前高 6 板），参与条件只满足 2/3。属于普涨但接力偏弱的格局。</p>
+    <p>数据告警：<code>quality.status = degraded</code>、量比为 0、参与度量能判定不可用；<code>market_heat.inputs.up_ratio</code> 写成 50，与实际 83.74% 不符；指数名称存在编码乱码。上述情绪评分低估了市场广度，结论需打折看。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">B1</span>财务 AI 分析（CFA 九维）</h3><span class="badge off">门控关闭 · 且数据缺失</span></div>
+  <div class="chain"><b>链路</b> 财务概况页「AI 分析」→ AiAnalysisDialog（历史报告二次确认）→ <code>POST /api/financials/analyze</code> → <code>financial_analyzer.py</code> 读财务表 + 股本表（最多 4 期）→ CFA 系统提示词 → 流式 → AiReportBubble 归档 <code>ai_reports.json</code></div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文 · 002578 闽发铝业</div>
+      <div class="kv"><span class="k">财务质量模型</span><span class="v">finance_quality_v1</span></div>
+      <div class="kv"><span class="k">总分 / 质量标记</span><span class="v">0.0 / false</span></div>
+      <div class="kv"><span class="k">增长卡片</span><span class="v">revenue_yoy null · net_income_yoy null</span></div>
+      <div class="kv"><span class="k">盈利 / 现金 / 偿债</span><span class="v">全部 null</span></div>
+      <div class="kv"><span class="k">覆盖期数</span><span class="v">0（latest_period null）</span></div>
+      <div class="kv"><span class="k">warnings</span><span class="v">尚无该股票的本地详细财报，请先更新该股</span></div>
+      <div class="kv"><span class="k">历史 AI 财务报告</span><span class="v">0 份</span></div>
+    </div>
+    <div class="box"><div class="bt">提示词与输出约束</div>
+      <div class="kv"><span class="k">角色</span><span class="v">15 年 A 股投研 · CFA + CPA</span></div>
+      <div class="kv"><span class="k">框架</span><span class="v">九维财务质量评级</span></div>
+      <div class="kv"><span class="k">红线</span><span class="v">客观中立 · 不含买卖建议</span></div>
+      <div class="kv"><span class="k">注入期数上限</span><span class="v">4 期（防上下文爆炸）</span></div>
+      <div class="kv"><span class="k">焦点指令</span><span class="v">build_focus_instruction（用户自定义关注点）</span></div>
+      <div class="kv"><span class="k">报告上限</span><span class="v">JsonReportStore（id 前缀 rpt）</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答</div>
+    <p>该标的<b>当前不具备生成财务分析报告的条件</b>：本地财报覆盖 0 期，5 个评分分量与 4 张卡片全部为 null，质量评分 0 是「无数据」而非「财务差」。若此时接上 LLM，模型只能对着全 null 的 JSON 输出模板化文字，极易产生把「数据缺失」误读为「经营恶化」的幻觉。</p>
+    <p>建议顺序：先在财务概况页同步该股财务表 → 确认 <code>coverage.periods ≥ 1</code> 且 cards 有值 → 再启用 AI 生成。该股 20261104 为 3 板涨停（收 4.14，+10.11%，换手 12.5%，流通市值 35.65 亿，题材「机器人」），属于<b>题材驱动而非财报驱动</b>的标的，即便补齐财报，财务分析对解释当日走势的参考价值也有限。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">B2</span>个股 AI 四维分析</h3><span class="badge off">门控关闭</span></div>
+  <div class="chain"><b>链路</b> 个股分析页 → 「AI 个股分析」→ <code>POST /api/stock-analysis/analyze</code> → <code>stock_analyzer.py</code> 组合日 K（含技术指标）+ 财务表 + 关键价位 → 客观技术分析师提示词 → 流式 → <code>ai_stock_reports.json</code></div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文</div>
+      <div class="kv"><span class="k">历史 AI 个股报告</span><span class="v">0 份</span></div>
+      <div class="kv"><span class="k">四维输入</span><span class="v">日K+指标 / 基本面 / 财务面 / 消息面</span></div>
+      <div class="kv"><span class="k">ETF 特例</span><span class="v">无财报时跳过基本/财务面</span></div>
+      <div class="kv"><span class="k">样例标的 002578 日 K</span><span class="v">3 板 · 4.14 元 · 换手 12.5%</span></div>
+      <div class="kv"><span class="k">全市场快照可支撑</span><span class="v">5571 行（screener/market-snapshot）</span></div>
+      <div class="kv"><span class="k">财务面可用性</span><span class="v">受 B1 同一份本地财报限制</span></div>
+    </div>
+    <div class="box"><div class="bt">与 B1 的刻意区分</div>
+      <div class="kv"><span class="k">角色</span><span class="v">客观技术分析师（非 CFA）</span></div>
+      <div class="kv"><span class="k">主数据</span><span class="v">K 线 + 技术指标，财务为辅</span></div>
+      <div class="kv"><span class="k">输出框架</span><span class="v">技术面 → 基本面 → 财务面 → 消息面</span></div>
+      <div class="kv"><span class="k">落点</span><span class="v">客观技术状态与风险提示</span></div>
+      <div class="kv"><span class="k">禁止</span><span class="v">买卖建议 / 操作指令</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答</div>
+    <p>以 002578 为例，当前可支撑的是<b>技术面与消息面两维</b>：连板 3 板、收盘 4.14 元、涨幅 +10.11%、换手 12.5%、流通市值 35.65 亿、竞价 +0.27%，题材归因「机器人 / 优必选 Thinker-Sim 具身智能仿真平台发布」。<b>基本面与财务面缺项</b>（同 B1，本地财报 0 期）。</p>
+    <p>因此即便 LLM 接通，四维报告会有两维只能写「数据不足」。这一点在接入前应在 prompt 或前端明确提示，避免生成一份看似完整、实则半空的报告。相对而言，日 K 与指标数据齐备，<b>纯技术形态分析是当前最接近可用的报告型 AI 点</b>。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">B3</span>大盘 AI 复盘（含定时任务）</h3><span class="badge off">无 key 时定时 job 直接 skip</span></div>
+  <div class="chain"><b>链路</b> 「AI 复盘」页 / 定时 job → <code>POST /api/market-recap/analyze</code> → <code>market_recap.py</code> 读 <code>build_market_overview</code>（与 <code>/api/overview/market</code> 同源）+ 龙虎榜 + 竞价 + 新闻 → 自定义/默认提示词 → 流式 NDJSON → SSE 推前端 → 归档 → 按 push mode 推飞书</div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文 · 2026-11-04</div>
+      <div class="kv"><span class="k">行情阶段</span><span class="v">close_final · final_sync_done true</span></div>
+      <div class="kv"><span class="k">涨 / 跌 / 平</span><span class="v"><span class="up">4667</span> / <span class="down">779</span> / 125</span></div>
+      <div class="kv"><span class="k">强势上涨 / 强势下跌</span><span class="v">1944 / 99</span></div>
+      <div class="kv"><span class="k">成交额</span><span class="v">20519.20 亿</span></div>
+      <div class="kv"><span class="k">涨停 / 炸板 / 跌停 / 最高板</span><span class="v">122 / 36 / 11 / 3</span></div>
+      <div class="kv"><span class="k">情绪分 / 标签</span><span class="v">83 · 强势</span></div>
+      <div class="kv"><span class="k">雷达</span><span class="v">指数100 赚钱99 抗跌97 量能65 投机69 主线67</span></div>
+      <div class="kv"><span class="k">龙虎榜 / 竞价基准</span><span class="v">各 5 条 / 6 条（state ok）</span></div>
+    </div>
+    <div class="box"><div class="bt">提示词与调度</div>
+      <div class="kv"><span class="k">默认提示词长度</span><span class="v">1679 字符</span></div>
+      <div class="kv"><span class="k">是否已自定义</span><span class="v">否（custom 为空）</span></div>
+      <div class="kv"><span class="k">输出结构</span><span class="v">6+ 段 Markdown（定调 / 盘面 / 指数 / 主线 / 资金 / 消息）</span></div>
+      <div class="kv"><span class="k">定时 job</span><span class="v">_run_scheduled_review · 工作日 · SSE + 飞书</span></div>
+      <div class="kv"><span class="k">断流重试</span><span class="v">最多 2 次</span></div>
+      <div class="kv"><span class="k">历史复盘报告</span><span class="v">0 份</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答 · 按默认提示词「一句话定调 + 盘面总览」口径</div>
+    <p><b>一句话定调：</b>放量普涨、赚钱效应极强，但连板高度仅 3 板、量能与主线分项偏弱，呈现「广度强、高度弱」的结构性普涨。【市场状态：偏强】</p>
+    <p><b>盘面总览：</b>4667 家上涨 / 779 家下跌，上涨占比 83.77%，强势上涨 1944 家；两市成交 20519 亿。涨停 122、炸板 36、跌停 11，封板率约 77.2%，最高 3 板。情绪雷达中指数 100、赚钱 99、抗跌 97 三项接近满值，而量能 65、主线 67 明显落后 —— 说明当日强度来自<b>普涨与抗跌</b>，而非增量资金或清晰主线。龙虎榜 5 条、竞价基准 6 条，state 均为 ok。</p>
+    <p><b>需核对：</b>同一交易日在 QuantX 口径下涨停为 118、炸板 33、跌停 10、封板率 78.1%、情绪「短期偏热 62 / 热度正常 52」。写进报告前必须确定采用哪套口径，否则「情绪 83 强势」与「热度 52 正常」会在同一份复盘里自相矛盾。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">B4</span>概念 / 行业轮动 AI 分析</h3><span class="badge off">门控关闭 · 数据滞后</span></div>
+  <div class="chain"><b>链路</b> 概念分析 / 行业分析页 → <code>POST /api/rps/rotation-analyze</code> → <code>concept_rotation_analyzer.py</code> 读 <code>rps_rotation</code> 排名矩阵 + <code>build_market_overview</code> → 轮动分析师提示词 → 流式 NDJSON（meta / delta / error / done）</div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文</div>
+      <div class="kv"><span class="k">RPS 矩阵</span><span class="v">12 个日期 × 12 列 · 397 概念</span></div>
+      <div class="kv"><span class="k">信号分类</span><span class="v">主线 / 新晋 / 退潮 / 脉冲</span></div>
+      <div class="kv"><span class="k">轮动明细 state</span><span class="v">ok</span></div>
+      <div class="kv"><span class="k">sector-rotation 返回日期</span><span class="v" style="color:var(--red)">2026-09-02（滞后约 2 个月）</span></div>
+      <div class="kv"><span class="k">timeline / cross_events</span><span class="v">50 / 120 条</span></div>
+      <div class="kv"><span class="k">大盘背景</span><span class="v">复用 overview/market</span></div>
+    </div>
+    <div class="box"><div class="bt">提示词侧</div>
+      <div class="kv"><span class="k">角色</span><span class="v">12 年题材轮动研究分析师</span></div>
+      <div class="kv"><span class="k">核心任务</span><span class="v">区分机构持续主线 vs 游资脉冲轮动</span></div>
+      <div class="kv"><span class="k">维度</span><span class="v">concept / industry 动态标签</span></div>
+      <div class="kv"><span class="k">焦点指令</span><span class="v">build_focus_instruction(轮动分析报告)</span></div>
+      <div class="kv"><span class="k">门控</span><span class="v">analyze 前显式 ai_configured() 检查</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答</div>
+    <p>上下文矩阵本身是齐的（397 概念 × 12 日排名 + 大盘背景），足以支撑「主线 / 新晋 / 退潮」的判定。但本次实测 <code>/api/sector-rotation?kind=concept</code> 返回的 <code>date = 2026-09-02</code>，与基准日 2026-11-04 相差约两个月；该端点若被拼进 prompt，会把<b>两个月前的板块切换事件当成当日轮动</b>来解读。</p>
+    <p>结论：这个 AI 点的风险不在模型，在<b>输入时间戳</b>。接入 LLM 之前应先核实 sector-rotation 的数据分区是否停更，或在 prompt 里强制带上数据日期并对过期数据拒答。相对地，RPS 矩阵日期序列应逐项核对是否覆盖到 20261104。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">C1</span>AI 策略生成 / 迭代</h3><span class="badge off">configured=false / has_key=false</span></div>
+  <div class="chain"><b>链路</b> StrategyBuilderDialog → <code>/api/strategies/ai/status|test|generate|iterate|save</code> → <code>strategy/ai_generator.py</code> 读 <code>prompts/strategy-guide.md</code> → 生成策略 .py → <code>ai_iterator.py</code> 用 <code>generate_ai_text_with_tools</code> 做「生成 → 回测 → 诊断 → 修改」有界闭环 → 落 <code>data/strategies/ai/</code></div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文</div>
+      <div class="kv"><span class="k">ai/status</span><span class="v">configured false · has_key false · has_model true</span></div>
+      <div class="kv"><span class="k">provider</span><span class="v">openai_compat</span></div>
+      <div class="kv"><span class="k">系统提示词</span><span class="v">_SYSTEM_PREFIX + 策略开发指南全文</span></div>
+      <div class="kv"><span class="k">生成后校验</span><span class="v">ast 解析 + meta 赋值检查 + 依赖白名单</span></div>
+      <div class="kv"><span class="k">迭代工具</span><span class="v">tool_catalog + 回测桥（有界轮次）</span></div>
+      <div class="kv"><span class="k">产物</span><span class="v">data/strategies/ai/，不自动上线</span></div>
+    </div>
+    <div class="box"><div class="bt">风险特征</div>
+      <div class="kv"><span class="k">是否写文件</span><span class="v" style="color:var(--yellow)">是（唯一会落代码的 AI 链路）</span></div>
+      <div class="kv"><span class="k">是否自动跑回测</span><span class="v">是（只读回测）</span></div>
+      <div class="kv"><span class="k">token 消耗</span><span class="v">最高（多轮工具往返）</span></div>
+      <div class="kv"><span class="k">当前建议</span><span class="v">最后恢复，先设轮次/预算上限</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答</div>
+    <p>这是全项目<b>权限最重、成本最高</b>的 AI 链路：它会生成 Python 代码、触发回测、把产物写进 <code>data/strategies/ai/</code>，且迭代模式每轮至少 2 次 LLM 调用。当前 <code>has_model=true</code> 但 <code>has_key=false</code>，属于「配置半截」状态 —— 一旦补 key，这条链路会立刻具备完整执行能力。</p>
+    <p>建议恢复顺序放到最后：先确认 <code>AI_DAILY_TOKEN_BUDGET</code>、<code>ai_round_checkpoint</code> 与迭代轮次上限，确认产物目录隔离，再启用。其余 9 个 AI 点都是只读或只写报告 JSON，风险远低于此。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">C2</span>自定义信号 AI 生成</h3><span class="badge off">门控关闭 · 最适合先恢复</span></div>
+  <div class="chain"><b>链路</b> 信号页 → <code>POST /api/custom-signals/ai/generate</code> → <code>api/signals.py</code> 组字段字典 + 用户描述 → <code>generate_ai_text(temperature=0.2)</code> → 表达式 JSON</div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文</div>
+      <div class="kv"><span class="k">可用字段</span><span class="v">123 个</span></div>
+      <div class="kv"><span class="k">字段分组</span><span class="v">26 组</span></div>
+      <div class="kv"><span class="k">kinds</span><span class="v">entry / exit / both</span></div>
+      <div class="kv"><span class="k">maxDays</span><span class="v">60</span></div>
+      <div class="kv"><span class="k">已保存信号</span><span class="v">20 条</span></div>
+      <div class="kv"><span class="k">options 体积</span><span class="v">16.2 KB</span></div>
+    </div>
+    <div class="box"><div class="bt">成本特征</div>
+      <div class="kv"><span class="k">是否依赖行情</span><span class="v">否（只用字段字典）</span></div>
+      <div class="kv"><span class="k">是否流式</span><span class="v">否（一次性 generate_ai_text）</span></div>
+      <div class="kv"><span class="k">单次 token</span><span class="v">低</span></div>
+      <div class="kv"><span class="k">输出校验</span><span class="v">表达式结构校验</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答</div>
+    <p>这个点的上下文完全自足：<b>123 个字段 / 26 个分组 / 3 种信号类型 / 60 天窗口</b>，不依赖当日行情、财报或板块时间戳，因此是<b>受第 5 节数据质量问题影响最小、恢复成本最低</b>的 AI 能力。上下文中已存 20 条信号可作为 few-shot 参考。</p>
+    <p>若只打算先试一条链路验证 key 是否可用，建议选它：一次 <code>generate_ai_text</code>、temperature 0.2、输出短、无副作用写盘。相比之下 A1 助手要跑工具链、C1 策略会写代码，都不适合做首个连通性验证。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">C3</span>股票池题材聚类 LLM 增强</h3><span class="badge warn">开关默认关闭</span></div>
+  <div class="chain"><b>链路</b> <code>stock_pools/topic_cluster.py</code>：确定性聚类（term 抽取 → 别名归一 → 共现分组）为主；<code>settings.stock_pool_topic_llm</code> 开启时才追加一次 <code>generate_ai_text</code>，<b>只改写 alias map / 去噪标签，绝不改成分股</b>；失败回落确定性结果并记 <code>llm-fallback</code></div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文 · 20261104</div>
+      <div class="kv"><span class="k">rule_version / status</span><span class="v">stock-pools-v2 / complete</span></div>
+      <div class="kv"><span class="k">degraded_sources</span><span class="v">空（无降级源）</span></div>
+      <div class="kv"><span class="k">全市场 / 合格 / 候选</span><span class="v">5572 / 2802 / 503</span></div>
+      <div class="kv"><span class="k">review 记录</span><span class="v">recorded 1340 · early 291 · horizon 3</span></div>
+      <div class="kv"><span class="k">快照体积</span><span class="v">198.7 KB（review 3.74 MB）</span></div>
+      <div class="kv"><span class="k">LLM 开关</span><span class="v">默认 False</span></div>
+    </div>
+    <div class="box"><div class="bt">设计约束</div>
+      <div class="kv"><span class="k">LLM 可改</span><span class="v">别名映射、噪声标签</span></div>
+      <div class="kv"><span class="k">LLM 不可改</span><span class="v">成分股归属</span></div>
+      <div class="kv"><span class="k">可复现</span><span class="v">alias 落进快照，同日重建复用</span></div>
+      <div class="kv"><span class="k">失败策略</span><span class="v">fallback + 标记 llm-fallback</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答</div>
+    <p>当前 503 只候选全部来自确定性聚类，<code>status=complete</code> 且无降级源，说明<b>不接 LLM 也完全可用</b>。这个 LLM 阶段被刻意设计成「只润标签、不动成分」，是项目里唯一做了严格副作用隔离的 AI 点，工程上最克制。</p>
+    <p>投入产出上，为它单独开启 key 的收益有限（标签可读性），但风险也最低（有 fallback、有可复现快照）。可以保持关闭，等主线 AI 接通后再顺带开启做 A/B 对比。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">D1</span>AI 配置 / 探测 / 模型清单</h3><span class="badge info">基础设施可用</span></div>
+  <div class="chain"><b>链路</b> 设置页 AI 标签 → <code>/api/settings/ai/{test,sponsor-models}</code> + <code>POST|DELETE /api/settings/ai</code> → <code>secrets_store</code> → <code>services/ai_provider.py</code>（openai / openai_compat / ollama / codex_cli；chat_completions 与 responses 双协议；token 预算、上下文窗口、round checkpoint、max_output_tokens 钳制）</div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文</div>
+      <div class="kv"><span class="k">ai_configured</span><span class="v" style="color:var(--red)">false</span></div>
+      <div class="kv"><span class="k">has_ai_key / masked</span><span class="v">false / 空</span></div>
+      <div class="kv"><span class="k">生效 base_url</span><span class="v">https://llm.runninghub.ai/v1</span></div>
+      <div class="kv"><span class="k">生效 model</span><span class="v">openai/gpt-6-astra-saver</span></div>
+      <div class="kv"><span class="k">协议 / 推理强度</span><span class="v">chat_completions / high</span></div>
+      <div class="kv"><span class="k">上下文窗口 / 输出上限</span><span class="v">128000 / 16384</span></div>
+      <div class="kv"><span class="k">sponsor-models</span><span class="v">87 个模型（23.8 KB）</span></div>
+      <div class="kv"><span class="k">端点可达性</span><span class="v">日志 /models 返回 200</span></div>
+    </div>
+    <div class="box"><div class="bt">关键判定</div>
+      <div class="kv"><span class="k">ai_configured() 逻辑</span><span class="v">openai_compat 只看 secrets_store.get_ai_key()</span></div>
+      <div class="kv"><span class="k">.env 实际写法</span><span class="v" style="color:var(--red)">deepseek-api-key（键名不匹配）</span></div>
+      <div class="kv"><span class="k">config.py 读取</span><span class="v">AI_API_KEY</span></div>
+      <div class="kv"><span class="k">该 key 探测结果</span><span class="v" style="color:var(--green)">ok=true · deepseek-chat · "OK"</span></div>
+      <div class="kv"><span class="k">本机 codex_cli</span><span class="v" style="color:var(--yellow)">探测超时 100s · HTTP 000</span></div>
+      <div class="kv"><span class="k">codex_cli 下工具</span><span class="v">supports_tools=false（丢全部工具）</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答</div>
+    <p>整份报告最关键的一处：<b>所有 10 个 AI 点的可用性都收敛到 <code>ai_configured()</code> 这一个函数</b>，而它当前为 false 的原因不是没买服务、不是端点不通、不是代码缺失，只是 <code>.env</code> 里键名写成了 <code>deepseek-api-key</code>，配置层读的是 <code>AI_API_KEY</code>。项目自带的无副作用探测接口已证明这把 key 有效。</p>
+    <p>另需留意 <code>codex_cli</code> 这条路：本机 CLI 与 <code>~/.codex/auth.json</code> 都齐全，但探测 100 秒无响应，且该 provider 会关掉工具调用（A1 助手的 50+ 工具全部失效），因此不适合作为替代方案。</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3><span class="cid">D2</span>QuantX 复盘报告契约（为 LLM 预留）</h3><span class="badge info">非运行时 AI 调用</span></div>
+  <div class="chain"><b>链路</b> <code>quantx_data/review_contract.py</code> 定义 7 个 <code>sections.sN.llm_block</code> 段落契约 → <code>/api/quantx/review/{date}</code> 输出 HTML 复盘页；<code>catalog.py</code> / <code>manifest.py</code> / <code>pipeline.py</code> / <code>multiday.py</code> 全链路显式写 <code>llm: False</code></div>
+  <div class="grid2">
+    <div class="box"><div class="bt">实测上下文 · 20261104</div>
+      <div class="kv"><span class="k">review/data 体积</span><span class="v">1.49 MB</span></div>
+      <div class="kv"><span class="k">sections</span><span class="v">7 段</span></div>
+      <div class="kv"><span class="k">metric_strip</span><span class="v">indexes / up_count / down_count / flat_count / total_amount_yi / advance_rate</span></div>
+      <div class="kv"><span class="k">read_mode</span><span class="v">canonical_view_v2</span></div>
+      <div class="kv"><span class="k">quality.llm</span><span class="v">false</span></div>
+      <div class="kv"><span class="k">quality.status</span><span class="v" style="color:var(--yellow)">degraded</span></div>
+    </div>
+    <div class="box"><div class="bt">定位说明</div>
+      <div class="kv"><span class="k">是否调 LLM</span><span class="v">否</span></div>
+      <div class="kv"><span class="k">作用</span><span class="v">给外部 LLM 报告预留结构化段落槽位</span></div>
+      <div class="kv"><span class="k">与 B3 区别</span><span class="v">B3 是自己调 LLM 出报告；此处只出数据骨架</span></div>
+      <div class="kv"><span class="k">典型消费者</span><span class="v">quantx-review-editor skill / 外部复盘流程</span></div>
+    </div>
+  </div>
+  <div class="answer"><div class="at">WORKBUDDY 代答</div>
+    <p>这是「给 AI 准备的位置」，不是 AI 本身。QuantX 数据管线在 4 处显式声明 <code>llm: False</code>，代码注释也写明「never imports an LLM/report」「never interpreted as editorial or LLM text」，是有意为之的边界：<b>确定性计算层与 LLM 编辑层严格分离</b>。</p>
+    <p>因此 QuantX 那一整屏图表（含上一轮改造的洛伦兹/Gini 卡片）都不属于 AI 分析，它们的数据可以安全地作为 AI 报告的<b>输入</b>。7 段 <code>llm_block</code> 正是接外部生成结果的位置 —— 这也解释了为什么「让我获取上下文生成一份」在架构上是自然的：把 <code>/api/quantx/review/20261104/data</code> 的 1.49 MB 结构化数据交给我，由我填这 7 段，不需要项目内嵌 LLM。</p>
+  </div>
+</div>
+</section>
+
+<section id="s4">
+<h2><span class="idx">04</span>统一架构与门控链</h2>
+<p class="lead">10 个能力点共享同一条供给链，所以一个开关能同时关掉全部。</p>
+<div class="flow">
+  <div class="node"><div class="t">前端入口</div><div class="d">助手抽屉 · 4 个报告页 · 策略构建器 · 信号页 · AI 设置页</div></div>
+  <div class="arrow">&rarr;</div>
+  <div class="node"><div class="t">API 路由层</div><div class="d">15 个后端文件直接 import ai_provider；POST 生成端点统一在 api/ 与 custom/assistant/</div></div>
+  <div class="arrow">&rarr;</div>
+  <div class="node"><div class="t">分析服务层</div><div class="d">4 个 analyzer + 2 个 strategy 生成器 + 1 个聚类器；各自拼 prompt、注入焦点指令</div></div>
+  <div class="arrow">&rarr;</div>
+  <div class="node"><div class="t">ai_provider 单点</div><div class="d">openai / openai_compat / ollama / codex_cli；chat_completions + responses 双协议</div></div>
+</div>
+<h3>门控是怎么一路关下来的</h3>
+<table>
+<thead><tr><th>层级</th><th>判定</th><th>当前值</th><th>后果</th></tr></thead>
+<tbody>
+<tr><td>配置层</td><td><code>.env → AI_API_KEY</code></td><td class="down">键名不匹配，未加载</td><td>secrets 里无 ai key</td></tr>
+<tr><td>供应商层</td><td><code>ai_configured()</code></td><td class="down">false</td><td>所有生成链路拒绝调用</td></tr>
+<tr><td>助手门控</td><td><code>/api/custom/assistant/status</code></td><td class="down">configured=false, supports_tools=false</td><td>抽屉显示「AI 未配置」，输入框锁定</td></tr>
+<tr><td>策略门控</td><td><code>/api/strategies/ai/status</code></td><td class="down">has_key=false</td><td>策略生成 / 迭代不可用</td></tr>
+<tr><td>定时复盘</td><td><code>_run_scheduled_review</code></td><td class="down"><code>if not ss.get_ai_key(): return</code></td><td>工作日定时复盘静默跳过，不报错刷日志</td></tr>
+<tr><td>报告归档</td><td>三套 JsonReportStore</td><td>0 份报告</td><td>历史报告列表全空，与 key 缺失一致</td></tr>
+</tbody>
+</table>
+<div class="note blue">正面看，这是<b>一处配置即可全部复活</b>的设计：补上 <code>AI_API_KEY</code>（或在设置页保存）后，A1 / B1–B4 / C1 / C2 / 定时复盘会同时具备调用条件；C3 仍需单独打开 <code>stock_pool_topic_llm</code> 开关。反面看，也意味着<b>没有任何降级路径</b>：key 一缺，全项目 AI 功能归零，连纯本地的模板化摘要都不会出。</div>
+</section>
+
+<section id="s5">
+<h2><span class="idx">05</span>数据口径冲突与质量告警</h2>
+<p class="lead">这是本次盘点最有价值的副产物：接 LLM 之前必须先处理的输入问题。同一个 20261104，两套数据源给出不同答案。</p>
+<h3>5.1 同一交易日的口径冲突</h3>
+<table>
+<thead><tr><th>指标</th><th>/api/overview/market<br>（B3 复盘用）</th><th>/api/quantx-data/20261104<br>（A1 工具 / QuantX 用）</th><th>差异</th></tr></thead>
+<tbody>
+<tr><td>样本总数</td><td>5571</td><td>5572</td><td>1 只</td></tr>
+<tr><td>上涨 / 下跌 / 平</td><td>4667 / 779 / 125</td><td>4666 / 778 / 126</td><td>各差 1</td></tr>
+<tr><td>涨停家数</td><td>122</td><td>118</td><td class="up">+4</td></tr>
+<tr><td>炸板家数</td><td>36</td><td>33</td><td class="up">+3</td></tr>
+<tr><td>跌停家数</td><td>11</td><td>10</td><td class="up">+1</td></tr>
+<tr><td>封板率</td><td>77.2%</td><td>78.1%</td><td>0.9 pp</td></tr>
+<tr><td>情绪结论</td><td>83 · 强势</td><td>短期 62 偏热 / 热度 52 正常</td><td class="up">定性冲突</td></tr>
+</tbody>
+</table>
+<div class="note red">最严重的是最后一行：同一天，大盘复盘会说「情绪 83 强势」，QuantX 情绪体系会说「热度 52 正常、短期 62 偏热」。这两套数一旦被拼进同一份 LLM 报告，模型只能二选一或自相矛盾。差异大概率来自<b>北交所补录 / 样本口径 / 是否含 ST 与新股</b>（此前 20261104 涨停数据修复时已有「梯队表 120 行 = 118 + 2 北交所补录」的先例），建议先约定唯一口径再谈生成。</div>
+
+<h3>5.2 其他数据质量告警</h3>
+<table>
+<thead><tr><th>问题</th><th>实测证据</th><th>影响的 AI 点</th></tr></thead>
+<tbody>
+<tr><td>管线质量降级</td><td><code>quality.status = degraded</code>，<code>quality.llm = false</code></td><td>A1 全部工具结论</td></tr>
+<tr><td>量能数据缺失</td><td>量比 0；参与度量能判定 <code>available=false</code>；「今日 0 亿 / 5 日均 16337 亿」</td><td>B3 复盘「放量/缩量」判断、A1 参与条件</td></tr>
+<tr><td>情绪输入占位值</td><td><code>market_heat.inputs.up_ratio = 50</code>，实际 83.74%</td><td>情绪评分被压低，A1 / B3</td></tr>
+<tr><td>板块轮动时间戳滞后</td><td><code>/api/sector-rotation</code> 返回 <code>date = 2026-09-02</code></td><td>B4 轮动分析结论时效性</td></tr>
+<tr><td>本地财报覆盖为 0</td><td>002578：<code>coverage.periods = 0</code>，4 张卡片全 null</td><td>B1 财务分析、B2 个股分析的基本/财务面</td></tr>
+<tr><td>指数字段与编码问题</td><td><code>overview/market</code> 的 indices 无 <code>pct_chg</code>；quantx overview 的指数名为 mojibake（如「鍏ˋ鎸囨暟」）</td><td>B3 复盘「三大指数表现」段落</td></tr>
+<tr><td>三套报告库全空</td><td>financials / stock-analysis / market-recap 均返回 <code>reports: []</code></td><td>无法做历史报告对比与 few-shot</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="s6">
+<h2><span class="idx">06</span>门控影响面与接入成本对比</h2>
+<p class="lead">沿用上一轮的实测结论，补上「哪些点受影响、恢复各要付什么代价」。</p>
+<table class="fixed">
+<colgroup><col style="width:22%"><col style="width:11%"><col style="width:13%"><col style="width:16%"><col style="width:19%"><col style="width:19%"></colgroup>
+<thead><tr><th>方案</th><th>实时流式</th><th>50+ 数据工具</th><th>外部依赖</th><th>本次实测</th><th>改动量</th></tr></thead>
+<tbody>
+<tr><td><b>A. 补 key 复活原生能力（推荐）</b></td><td><span class="badge on">有</span></td><td><span class="badge on">全开</span></td><td>DeepSeek（key 已在 .env）</td><td>探测 ok=true</td><td>1 行配置 / 设置页保存</td></tr>
+<tr><td>B. 本机 codex_cli 登录态</td><td><span class="badge off">未通</span></td><td><span class="badge off">禁用</span></td><td>无新增</td><td>超时 100s · HTTP 000</td><td>切 provider，且当前不可用</td></tr>
+<tr><td>C. WorkBuddy 桥接（我代替回答）</td><td><span class="badge warn">半自动</span></td><td><span class="badge on">可读任意 API/文件</span></td><td>无</td><td>本次已验证：25 端点全通</td><td>inbox/outbox + 前端按钮</td></tr>
+<tr><td>D. 维持现状</td><td colspan="2">全部 AI 点停用</td><td>无</td><td>0 份历史报告</td><td>0</td></tr>
+</tbody>
+</table>
+<h3>成本与带宽口径</h3>
+<ul class="clean">
+  <li><b>数据侧（确定）：</b>本次 25 个端点共拉取约 <b>8.3 MB</b>，最重的是 <code>stock-pools/20261104/review</code> 3.74 MB、<code>screener/market-snapshot</code> 1.89 MB、<code>quantx/review/20261104/data</code> 1.49 MB。这些是<b>本地回环</b>，不走公网、不产生带宽费用；但 LLM 报告不会把全量塞进 prompt —— 各 analyzer 都做了裁剪（财务最多 4 期、轮动只取榜首/切换事件、复盘取聚合概览）。</li>
+  <li><b>模型侧（按量）：</b>项目已有 <code>AI_DAILY_TOKEN_BUDGET=500000</code> 日预算护栏、<code>ai_context_window=128000</code>、<code>ai_max_output_tokens=16384</code> 与 <code>ai_round_checkpoint=100</code> 轮次检查点。最贵的是 C1 策略迭代（多轮工具往返），最便宜的是 C2 信号生成（单次、temperature 0.2、短输出）。</li>
+  <li><b>WorkBuddy 桥接（零外部成本）：</b>不调第三方 LLM，代价是<b>非实时</b> —— 我不是一个能被 3018 后端 HTTP 调用的常驻端点，需要「问题落 inbox → 我生成答案到 outbox → 前端轮询渲染」。适合每日预生成复盘、QuantX 7 段 llm_block 填充，不适合替代实时聊天。</li>
+</ul>
+<div class="note">本报告未执行任何接入动作。若选择方案 A，需注意它同时会激活 <b>C1 策略生成/迭代会写 Python 文件并跑回测</b> 这条链路，建议先单独确认该点的预算与产物隔离。</div>
+</section>
+
+<section id="s7">
+<h2><span class="idx">07</span>下一步建议</h2>
+<ul class="clean">
+  <li><b>① 先统一口径，再谈生成。</b>第 5.1 节的 7 组冲突里，先定「涨停/炸板/跌停/样本数」以哪套为准，并修 <code>market_heat.inputs.up_ratio</code> 的占位值与量比 0；否则 LLM 只会把矛盾写得更流畅。</li>
+  <li><b>② 修数据时间戳与覆盖。</b>查 <code>sector-rotation</code> 为何停在 2026-09-02；对财报覆盖为 0 的标的，在 B1/B2 前端明确提示「数据不足」而不是让模型自由发挥。</li>
+  <li><b>③ 若要接 key，按风险从低到高恢复：</b>C2 信号生成（无行情依赖、单次调用）→ B2 个股技术面 → B3 大盘复盘 → A1 助手（工具链）→ B1 财务 / B4 轮动（依赖补齐后）→ C1 策略迭代（最后，先设预算）。</li>
+  <li><b>④ 若要走「让我代替回答」：</b>建议先落在 D2 的 QuantX 7 段 <code>llm_block</code> 与 B3 每日复盘上 —— 这两处本来就是「数据骨架 + 外部填文」的结构，做 inbox/outbox 桥接最自然，且完全不依赖第三方平台。</li>
+  <li><b>⑤ 保留 C3 的克制设计。</b>它的「LLM 只改标签、不动成分股 + fallback + 可复现快照」值得推广到其他 AI 点，尤其是会写文件的 C1。</li>
+</ul>
+</section>
+
+<section id="s8">
+<h2><span class="idx">08</span>附录：25 个上下文端点实测清单</h2>
+<p class="lead">全部为 GET 只读调用，基准日 2026-11-04，后端 127.0.0.1:3018。无 POST 生成类调用、无副作用。</p>
+<table>
+<thead><tr><th>#</th><th>归属</th><th>端点</th><th>HTTP</th><th>体积</th><th>耗时</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>A1</td><td><code>/api/custom/assistant/status</code></td><td>200</td><td>105 B</td><td>53 ms</td></tr>
+<tr><td>2</td><td>A1</td><td><code>/api/custom/assistant/suggests</code></td><td>200</td><td>4.1 KB</td><td>14 ms</td></tr>
+<tr><td>3</td><td>A1</td><td><code>/api/custom/assistant/sessions</code></td><td>200</td><td>29 B</td><td>19 ms</td></tr>
+<tr><td>4</td><td>D1</td><td><code>/api/settings/ai/sponsor-models</code></td><td>200</td><td>23.8 KB</td><td>968 ms</td></tr>
+<tr><td>5</td><td>B3</td><td><code>/api/settings/preferences/market-recap-prompt</code></td><td>200</td><td>4.2 KB</td><td>17 ms</td></tr>
+<tr><td>6</td><td>B3</td><td><code>/api/overview/market</code></td><td>200</td><td>14.5 KB</td><td>153 ms</td></tr>
+<tr><td>7</td><td>B3</td><td><code>/api/market-recap/reports</code></td><td>200</td><td>14 B</td><td>28 ms</td></tr>
+<tr><td>8</td><td>B3</td><td><code>/api/market-recap/dragon-tiger?date=2026-11-04</code></td><td>200</td><td>67.6 KB</td><td>241 ms</td></tr>
+<tr><td>9</td><td>B3</td><td><code>/api/market-recap/auction-benchmark?date=2026-11-04</code></td><td>200</td><td>1.3 KB</td><td>166 ms</td></tr>
+<tr><td>10</td><td>QuantX</td><td><code>/api/quantx-data/20261104/overview</code></td><td>200</td><td>15.9 KB</td><td>64 ms</td></tr>
+<tr><td>11</td><td>QuantX</td><td><code>/api/quantx-data/20261104/limit-ladder</code></td><td>200</td><td>76.8 KB</td><td>62 ms</td></tr>
+<tr><td>12</td><td>QuantX</td><td><code>/api/quantx-data/20261104/sentiment</code></td><td>200</td><td>328.2 KB</td><td>66 ms</td></tr>
+<tr><td>13</td><td>D2</td><td><code>/api/quantx/review/20261104/data</code></td><td>200</td><td>1.49 MB</td><td>4840 ms</td></tr>
+<tr><td>14</td><td>B1</td><td><code>/api/financials/reports</code></td><td>200</td><td>14 B</td><td>27 ms</td></tr>
+<tr><td>15</td><td>B1</td><td><code>/api/financials/analysis/002578</code></td><td>200</td><td>570 B</td><td>49 ms</td></tr>
+<tr><td>16</td><td>B2</td><td><code>/api/stock-analysis/reports</code></td><td>200</td><td>14 B</td><td>30 ms</td></tr>
+<tr><td>17</td><td>B4</td><td><code>/api/rps/rotation?kind=concept</code></td><td>200</td><td>183.2 KB</td><td>235 ms</td></tr>
+<tr><td>18</td><td>B4</td><td><code>/api/sector-rotation?kind=concept</code></td><td>200</td><td>40.5 KB</td><td>235 ms</td></tr>
+<tr><td>19</td><td>C1</td><td><code>/api/strategies/ai/status</code></td><td>200</td><td>80 B</td><td>25 ms</td></tr>
+<tr><td>20</td><td>C2</td><td><code>/api/custom-signals/options</code></td><td>200</td><td>16.2 KB</td><td>17 ms</td></tr>
+<tr><td>21</td><td>C2</td><td><code>/api/custom-signals</code></td><td>200</td><td>5.7 KB</td><td>26 ms</td></tr>
+<tr><td>22</td><td>C3</td><td><code>/api/stock-pools/20261104</code></td><td>200</td><td>198.7 KB</td><td>33 ms</td></tr>
+<tr><td>23</td><td>C3</td><td><code>/api/stock-pools/20261104/review</code></td><td>200</td><td>3.74 MB</td><td>4573 ms</td></tr>
+<tr><td>24</td><td>C3</td><td><code>/api/stock-pools/2026-11-04</code></td><td>200</td><td>198.7 KB</td><td>20 ms</td></tr>
+<tr><td>25</td><td>全局</td><td><code>/api/screener/market-snapshot</code></td><td>200</td><td>1.89 MB</td><td>160 ms</td></tr>
+</tbody>
+</table>
+<p style="color:var(--dim);font-size:11.5px">合计约 8,300,647 字节（8.3 MB）· 25/25 成功 · 无 4xx / 5xx / 超时</p>
+</section>
+
+<footer>
+  TickFlow Quantall · AI 分析能力全景报告 · 数据基准日 2026-11-04 · 由 WorkBuddy 基于项目源码与运行中后端实测生成<br>
+  报告内「代答」段落为 WorkBuddy 直接读取上下文生成，非项目 LLM 产物；本报告未修改任何配置、未调用任何生成类 POST 端点。
+</footer>
+
+</div>
+</body>
+</html>

@@ -6,7 +6,11 @@ import pandas as pd
 import pytest
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from app.plugins.tushare.client import build_tushare_client, credentials_configured
+from app.plugins.tushare.client import (
+    TushareClientChain,
+    build_tushare_client,
+    credentials_configured,
+)
 
 
 def _install_clients(monkeypatch, clients: dict[str, MagicMock]) -> None:
@@ -80,3 +84,44 @@ def test_credentials_accept_mirror_only(monkeypatch) -> None:
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
 
     assert credentials_configured() is True
+
+
+def test_mirror_circuit_breaker_skips_mirror_after_consecutive_timeouts() -> None:
+    """镜像拥塞时不应让每个后续方法都白等两轮超时才回退官方。"""
+    mirror = MagicMock()
+    official = MagicMock()
+    mirror.daily.side_effect = RequestsConnectionError("read timeout")
+    official.daily.return_value = pd.DataFrame([{"ts_code": "000001.SZ"}])
+    chain = TushareClientChain(
+        [("mirror", mirror), ("official", official)], mirror_breaker_threshold=2
+    )
+
+    for _ in range(5):
+        assert len(chain.daily(trade_date="20261106")) == 1
+
+    # 熔断前 2 次调用各尝试 2 轮，之后全部直达官方。
+    assert mirror.daily.call_count == 4
+    assert official.daily.call_count == 5
+
+
+def test_mirror_circuit_breaker_resets_after_success() -> None:
+    mirror = MagicMock()
+    official = MagicMock()
+    mirror.daily.side_effect = [
+        RequestsConnectionError("read timeout"),
+        RequestsConnectionError("read timeout"),  # 调用 1: 两次失败 -> 官方
+        pd.DataFrame([{"ts_code": "000001.SZ"}]),  # 调用 2: 镜像成功 -> 计数复位
+        RequestsConnectionError("read timeout"),
+        RequestsConnectionError("read timeout"),  # 调用 3: 再次失败, 计数从 0 起
+    ]
+    official.daily.return_value = pd.DataFrame([{"ts_code": "000001.SZ"}])
+    chain = TushareClientChain(
+        [("mirror", mirror), ("official", official)], mirror_breaker_threshold=2
+    )
+
+    for _ in range(3):
+        assert len(chain.daily(trade_date="20261106")) == 1
+
+    assert chain._mirror_failures == 1
+    assert chain._mirror_open is False
+    assert official.daily.call_count == 2

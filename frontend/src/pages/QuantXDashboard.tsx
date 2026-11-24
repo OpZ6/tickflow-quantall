@@ -80,7 +80,7 @@ const DOMAIN_ADVANCED_LAYOUTS: Record<string, Record<string, AdvancedCardLayout>
     liquidity_participation: { span: 8, height: 390 },
     return_distribution: { span: 8, height: 390 },
     turnover_return_density: { span: 8, height: 380 },
-    turnover_lorenz: { span: 8, height: 340 },
+    turnover_lorenz: { span: 8, height: 330 },
   },
 }
 

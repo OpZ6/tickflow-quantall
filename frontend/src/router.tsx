@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { createBrowserRouter, Navigate, useSearchParams } from 'react-router-dom'
+import { createBrowserRouter, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { useSettings } from './lib/useSharedQueries'
 import { Logo } from './components/Logo'
@@ -64,6 +64,18 @@ function MiningRedirect() {
   const [searchParams] = useSearchParams()
   const search = searchParams.toString()
   return <Navigate to={`/factors?tab=mining${search ? `&${search}` : ''}`} replace />
+}
+
+// 旧链接兼容: 扩展注册表只支持静态 /quantx, 交易日通过 ?date=YYYYMMDD 传递。
+// QuantXReview / QuantXCatalog / 外部书签仍会生成 /quantx/:date, 直接落到 React
+// Router 的 404 页。这里统一转成 query 形式, 同时保留原有的其它查询参数。
+function QuantXDateRedirect() {
+  const { date } = useParams()
+  const [searchParams] = useSearchParams()
+  const params = new URLSearchParams(searchParams.toString())
+  if (date && !params.has('date')) params.set('date', date)
+  const search = params.toString()
+  return <Navigate to={`/quantx${search ? `?${search}` : ''}`} replace />
 }
 
 // 首次使用守卫 —— 未完成向导则重定向到 /onboarding
@@ -159,6 +171,8 @@ export const router = createBrowserRouter([
           ),
         }
       }),
+      // 旧式 /quantx/:date 链接 → /quantx?date=... (须排在扩展静态路由之后)
+      { path: 'quantx/:date', element: <QuantXDateRedirect /> },
     ],
   },
 ])

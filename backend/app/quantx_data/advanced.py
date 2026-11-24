@@ -128,47 +128,80 @@ def _state_transition_views(frame: pl.DataFrame) -> dict[str, Any]:
     }
 
 
+# 尾部加密的固定采样网格: 让洛伦兹曲线在头部区间保持分辨率, 同时把单日点数
+# 从 ~5500 降到 ~107。三条曲线共用同一 x 网格, 可直接逐点求差。
+_POPULATION_GRID: tuple[float, ...] = (
+    tuple(float(value) for value in range(0, 81, 2))
+    + tuple(80 + 0.5 * step for step in range(1, 31))
+    + tuple(95 + 0.25 * step for step in range(1, 17))
+    + tuple(99 + 0.05 * step for step in range(1, 21))
+)
+
+
 def _gini_lorenz(values: list[float]) -> dict[str, Any]:
     positive = sorted(value for value in values if math.isfinite(value) and value >= 0)
     if not positive or sum(positive) <= 0:
         return {"gini": None, "points": []}
     total = sum(positive)
+    count = len(positive)
     cumulative = 0.0
-    points = [{"population_pct": 0.0, "amount_pct": 0.0}]
     area = 0.0
     previous_x = previous_y = 0.0
+    shares = [0.0] * (count + 1)
     for index, value in enumerate(positive, start=1):
         cumulative += value
-        x = index / len(positive)
+        x = index / count
         y = cumulative / total
         area += (y + previous_y) * (x - previous_x) / 2
-        points.append({"population_pct": round(x * 100, 2), "amount_pct": round(y * 100, 2)})
+        shares[index] = y
         previous_x, previous_y = x, y
+    points = []
+    for population_pct in _POPULATION_GRID:
+        position = population_pct / 100 * count
+        left = min(count, int(math.floor(position)))
+        right = min(count, left + 1)
+        fraction = position - left
+        amount_pct = shares[left] + (shares[right] - shares[left]) * fraction
+        points.append(
+            {
+                "population_pct": round(population_pct, 2),
+                "amount_pct": round(amount_pct * 100, 2),
+            }
+        )
     return {"gini": round(1 - 2 * area, 4), "points": points}
 
 
 def _mean_lorenz_points(curves: list[list[dict[str, float]]]) -> list[dict[str, float]]:
+    """Average curves point by point; every curve shares _POPULATION_GRID."""
     if not curves:
         return []
-    points = []
-    for population_pct in range(101):
-        values = []
-        for curve in curves:
-            position = population_pct / 100 * (len(curve) - 1)
-            left = math.floor(position)
-            right = math.ceil(position)
-            fraction = position - left
-            amount_pct = curve[left]["amount_pct"]
-            if right != left:
-                amount_pct += (curve[right]["amount_pct"] - amount_pct) * fraction
-            values.append(amount_pct)
-        points.append(
-            {
-                "population_pct": float(population_pct),
-                "amount_pct": round(sum(values) / len(values), 2),
-            }
-        )
-    return points
+    length = min(len(curve) for curve in curves)
+    return [
+        {
+            "population_pct": curves[0][index]["population_pct"],
+            "amount_pct": round(
+                sum(curve[index]["amount_pct"] for curve in curves) / len(curves), 2
+            ),
+        }
+        for index in range(length)
+    ]
+
+
+_TOP_SHARE_STEPS: tuple[tuple[int, float], ...] = ((1, 0.01), (5, 0.05), (10, 0.10), (20, 0.20))
+
+
+def _top_shares(values: list[float]) -> dict[str, float]:
+    """成交额前 N% 股票占全市场成交额的比重, 比 Gini 更直观也更敏感。"""
+    positive = sorted(value for value in values if math.isfinite(value) and value > 0)
+    total = sum(positive)
+    if not positive or total <= 0:
+        return {}
+    count = len(positive)
+    shares: dict[str, float] = {}
+    for label, ratio in _TOP_SHARE_STEPS:
+        top = max(1, int(round(count * ratio)))
+        shares[f"top{label}"] = round(sum(positive[-top:]) / total * 100, 2)
+    return shares
 
 
 def _turnover_lorenz(
@@ -176,30 +209,51 @@ def _turnover_lorenz(
     end: date,
     *,
     period_days: int = 20,
+    history_days: int = 40,
 ) -> dict[str, Any]:
     if returns.is_empty() or not {"date", "amount"}.issubset(returns.columns):
         return {}
-    current = _gini_lorenz(
-        returns.filter(pl.col("date") == end)["amount"].drop_nulls().to_list()
-    )
+    by_day = {
+        day: frame["amount"].drop_nulls().to_list()
+        for (day,), frame in returns.drop_nulls("date").group_by("date")
+        if day is not None
+    }
+    # 40 日窗口一次算完, 当日/昨日/20 日均值/走势序列全部复用同一批曲线。
+    window = sorted(day for day in by_day if day <= end)[-history_days:]
+    if end not in by_day or end not in window:
+        return {}
+    curves = {day: _gini_lorenz(by_day[day]) for day in window}
+    current = curves[end]
     if not current["points"]:
         return {}
 
-    baseline_dates = sorted(
-        day for day in returns["date"].drop_nulls().unique().to_list() if day < end
-    )[-period_days:]
-    baselines = []
-    for day in baseline_dates:
-        curve = _gini_lorenz(
-            returns.filter(pl.col("date") == day)["amount"].drop_nulls().to_list()
-        )
-        if curve["points"]:
-            baselines.append((day, curve))
-
     result = dict(current)
+    history: list[dict[str, Any]] = []
+    for day in window:
+        curve = curves[day]
+        if not curve["points"]:
+            continue
+        history.append(
+            {
+                "date": str(day),
+                "gini": curve["gini"],
+                "amount_yi": _round(sum(by_day[day]) / 1e8, 0),
+                **_top_shares(by_day[day]),
+            }
+        )
+    result["history"] = history
+    result["shares"] = {"current": _top_shares(by_day[end])}
+
+    baselines = [(day, curves[day]) for day in window if day < end][-period_days:]
     if baselines:
         previous_date, previous = baselines[-1]
         result["previous"] = {"date": str(previous_date), **previous}
+        mean_shares: dict[str, float] = {}
+        share_rows = [_top_shares(by_day[day]) for day, _ in baselines]
+        for label, _ in _TOP_SHARE_STEPS:
+            values = [row[f"top{label}"] for row in share_rows if f"top{label}" in row]
+            if values:
+                mean_shares[f"top{label}"] = round(sum(values) / len(values), 2)
         result["period_mean"] = {
             "days": len(baselines),
             "start_date": str(baselines[0][0]),
@@ -212,6 +266,18 @@ def _turnover_lorenz(
                 [curve["points"] for _, curve in baselines]
             ),
         }
+        result["shares"]["period_mean"] = mean_shares
+        result["shares"]["delta"] = {
+            label: round(value - mean_shares[label], 2)
+            for label, value in result["shares"]["current"].items()
+            if label in mean_shares
+        }
+    ginis = [row["gini"] for row in history if row["gini"] is not None]
+    if ginis:
+        result["percentile"] = round(
+            sum(1 for value in ginis if value <= current["gini"]) / len(ginis) * 100
+        )
+        result["history_days"] = len(ginis)
     return result
 
 

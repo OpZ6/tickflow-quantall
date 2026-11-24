@@ -15,7 +15,7 @@ const YELLOW = '#d29922'
 const PALETTE = [RED, BLUE, ORANGE, PURPLE, GREEN, YELLOW, '#39c5cf', '#ff9f43', '#7f8cff', '#e56b9f', '#5dd39e', '#b8a1ff']
 
 type ChartTheme = ReturnType<typeof useChartTheme>
-type ChartSelection = { sectorDimension?: string; sectorWindow?: number; correlationDimension?: string; mainlineFocus?: string; promotionWindow?: string; rotationTrail?: 'focus' | 'all' | 'off'; stateTransitionWindow?: '500' | 'all' }
+type ChartSelection = { sectorDimension?: string; sectorWindow?: number; correlationDimension?: string; mainlineFocus?: string; promotionWindow?: string; rotationTrail?: 'focus' | 'all' | 'off'; stateTransitionWindow?: '500' | 'all'; lorenzMode?: 'delta' | 'lorenz'; lorenzWindow?: 'tail' | 'full' }
 export type AdvancedCardLayout = { span?: 6 | 7 | 8 | 9 | 10 | 16; height?: number }
 
 const SPAN_CLASSES: Record<NonNullable<AdvancedCardLayout['span']>, string> = {
@@ -34,7 +34,7 @@ const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 
   anomaly_calendar: { title: '2026 年异常交易日', hint: '年初至今 · 仅显示交易日 · 综合收益、广度、涨停与成交额', group: 'state', span: 'xl:[grid-column:span_10/span_10]' },
   return_distribution: { title: '全市场收益分布剖面', hint: '当日全 A 收益横截面与中位数', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
   advance_decline: { title: 'A/D 累积线与指数背离', hint: '涨跌家数差累积 vs 中证全指 · 阴影标出背离区间', group: 'state', span: 'xl:[grid-column:span_9/span_9]' },
-  turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: '实线为当日；虚线对比昨日、前 20 个交易日均值', group: 'state', span: 'xl:[grid-column:span_7/span_7]' },
+  turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: 'Gini 日走势 + 头部 N% 成交占比增量', group: 'state', span: 'xl:[grid-column:span_7/span_7]' },
   sector_diffusion: { title: '申万行业宽度扩散地图', hint: '切换一级/二级行业及 MA5 / MA10 / MA20', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   theme_river: { title: '题材单源排名演进', hint: '近 20 日同一榜单逐日名次 · 数字越小、颜色越热；不与多源强度混算', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   industry_correlation: { title: '行业收益相关性矩阵', hint: '切换同花顺一级/二级行业 · 近 35 日收益相关性', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]', caveat: '行业收益按当前行业成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
@@ -146,25 +146,125 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     return { ...common, legend: { data: ['A/D 累积线', data.index_symbol || '指数'], textStyle: { color: ct.text } }, grid: { left: 10, right: 10, top: 36, bottom: 16, containLabel: true }, xAxis: { type: 'category', data: data.dates || [], boundaryGap: false, axisLabel: { color: ct.text, fontSize: 9, hideOverlap: true } }, yAxis: [{ type: 'value', axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } }, { type: 'value', axisLabel: { color: ct.text, hideOverlap: true }, splitLine: { show: false } }], series: [{ name: 'A/D 累积线', type: 'line', symbol: 'none', data: data.ad_line || [], lineStyle: { color: ORANGE, width: 2 }, markArea: { silent: true, data: markAreas }, markPoint: { tooltip: { formatter: '{b}' }, data: markPoints } }, { name: data.index_symbol || '指数', type: 'line', yAxisIndex: 1, symbol: 'none', data: data.index_close || [], lineStyle: { color: BLUE, width: 1.5 } }] }
   }
   if (key === 'turnover_lorenz') {
+    // 洛伦兹曲线本身在 0–100 全样本坐标下几乎不随日期变化(三条曲线间距 <1pp),
+    // 因此默认改为「集中度增量」视图: 用 20 日均值减当日, 正值=今日更集中。
+    // 上方始终保留 Gini 日序列, 让每日波动可直接比较。
     const points = data.points || []
     const previous = data.previous || {}
     const periodMean = data.period_mean || {}
+    const history = data.history || []
+    const mode = selection.lorenzMode || 'delta'
+    const tailOnly = (selection.lorenzWindow || 'tail') === 'tail'
+    const xMin = tailOnly ? 90 : 0
     const previousName = previous.date ? `昨日 ${String(previous.date).slice(5)}` : '昨日'
     const periodName = periodMean.days ? `前 ${periodMean.days} 日均值` : '近期均值'
-    const subtitle = [previous.gini != null ? `昨日 ${previous.gini}` : null, periodMean.gini != null ? `前${periodMean.days}日均值 ${periodMean.gini}` : null].filter(Boolean).join(' · ')
+
+    const dates = history.map((row: any) => String(row.date).slice(5))
+    const todayIndex = history.length - 1
+    const validGinis = history.map((row: any) => row.gini).filter((value: any) => value != null)
+    const meanGini = periodMean.gini ?? null
+    const scaleValues = validGinis.length ? validGinis : [data.gini ?? 0.5]
+    const giniLow = Math.min(...scaleValues, meanGini ?? Infinity)
+    const giniHigh = Math.max(...scaleValues, meanGini ?? -Infinity)
+    const giniPad = Math.max((giniHigh - giniLow) * 0.32, 0.004)
+    const bars = history.map((row: any, index: number) => {
+      const prior = index > 0 ? history[index - 1]?.gini : null
+      const rising = prior != null && row.gini != null && row.gini >= prior
+      const today = index === todayIndex
+      return {
+        value: row.gini,
+        itemStyle: { color: today ? ORANGE : rising ? 'rgba(248,81,73,.55)' : 'rgba(63,185,80,.55)', borderRadius: [2, 2, 0, 0] },
+        label: today ? { show: true, position: 'top', color: ORANGE, fontSize: 9, fontWeight: 600, formatter: () => Number(row.gini).toFixed(4) } : { show: false },
+      }
+    })
+
+    // 头部集中度几乎全部发生在成交额最大的前 0.5% 股票里, 线性横轴会把这段压成几个像素,
+    // 因此 delta 视图改用对数横轴「成交额前 N% 股票」, 0.05%–10% 才能铺开。
+    const delta = (periodMean.points || [])
+      .map((row: any, index: number) => {
+        const currentPoint = points[index]
+        const breadth = Number((100 - row.population_pct).toFixed(2))
+        if (!currentPoint || breadth <= 0) return null
+        return [breadth, Number((row.amount_pct - currentPoint.amount_pct).toFixed(2))]
+      })
+      .filter(Boolean) as Array<[number, number]>
+    const deltaValues = delta.map((row) => row[1])
+    const deltaHigh = Math.max(0.2, ...deltaValues)
+    const deltaLow = Math.min(0, ...deltaValues)
+    const deltaTop = Number((deltaHigh * 1.18).toFixed(2))
+    const deltaBottom = deltaLow < 0 ? Number((deltaLow * 1.18).toFixed(2)) : 0
+    const zeroRatio = deltaTop / (deltaTop - deltaBottom)
+    const deltaArea = {
+      type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [
+        { offset: 0, color: 'rgba(248,81,73,.34)' },
+        { offset: zeroRatio, color: 'rgba(248,81,73,.34)' },
+        { offset: zeroRatio, color: 'rgba(63,185,80,.32)' },
+        { offset: 1, color: 'rgba(63,185,80,.32)' },
+      ],
+    }
+    const lorenzSeries: any[] = [
+      { name: '当日', type: 'line', xAxisIndex: 1, yAxisIndex: 1, symbol: 'none', data: points.map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: ORANGE, width: 2.5 }, areaStyle: { color: 'rgba(247,129,102,.10)' }, z: 4 },
+      { name: previousName, type: 'line', xAxisIndex: 1, yAxisIndex: 1, symbol: 'none', data: (previous.points || []).map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: BLUE, width: 1.5, type: 'dashed' }, z: 3 },
+      { name: periodName, type: 'line', xAxisIndex: 1, yAxisIndex: 1, symbol: 'none', data: (periodMean.points || []).map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: PURPLE, width: 1.5, type: 'dashed' }, z: 2 },
+    ]
+    if (!tailOnly) lorenzSeries.push({ name: '完全均等', type: 'line', xAxisIndex: 1, yAxisIndex: 1, symbol: 'none', data: [[0, 0], [100, 100]], lineStyle: { color: ct.text, width: 1, type: 'dotted', opacity: 0.65 }, z: 1 })
+
     return {
       ...common,
-      tooltip: { trigger: 'axis', valueFormatter: (value: number) => `${Number(value).toFixed(2)}%` },
-      title: { text: `当日 Gini ${data.gini ?? '--'}`, subtext: subtitle, left: 'center', top: 0, textStyle: { color: ct.textStrong, fontSize: 11, fontWeight: 500 }, subtextStyle: { color: ct.text, fontSize: 9 } },
-      legend: { top: 38, data: ['当日', previousName, periodName, '完全均等'], textStyle: { color: ct.text, fontSize: 9 }, itemWidth: 18, itemHeight: 8 },
-      grid: { left: 10, right: 12, top: 70, bottom: 16, containLabel: true },
-      xAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, formatter: '{value}%', hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } },
-      yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: ct.text, formatter: '{value}%', hideOverlap: true }, splitLine: { lineStyle: { color: ct.grid } } },
+      animation: false,
+      axisPointer: { link: [] },
+      tooltip: {
+        trigger: 'axis',
+        confine: true,
+        formatter: (params: any) => {
+          const list = Array.isArray(params) ? params : [params]
+          const first = list[0]
+          if (!first) return ''
+          if (first.axisIndex === 1) {
+            if (mode === 'delta') {
+              const index = first.dataIndex
+              const basePoint = (periodMean.points || [])[index] || {}
+              const todayPoint = points[index] || {}
+              const sign = first.value[1] >= 0 ? '更集中' : '更扩散'
+              const todayTop = Number((100 - (todayPoint.amount_pct ?? 0)).toFixed(2))
+              const baseTop = Number((100 - (basePoint.amount_pct ?? 0)).toFixed(2))
+              return `成交额前 ${first.value[0]}% 股票<br/>今日占比 ${todayTop}% · 基线 ${baseTop}%<br/>较${periodName}${sign} ${Math.abs(first.value[1]).toFixed(2)} pp`
+            }
+            return [`股票累计占比 ${first.value[0]}%`, ...list.map((row: any) => `${row.seriesName}：${Number(row.value[1]).toFixed(2)}%`)].join('<br/>')
+          }
+          const row = history[first.dataIndex] || {}
+          return `${row.date ?? ''}<br/>Gini ${row.gini ?? '--'}<br/>前 1% 占 ${row.top1 ?? '--'}% · 前 5% 占 ${row.top5 ?? '--'}%<br/>全市场成交 ${row.amount_yi ?? '--'} 亿`
+        },
+      },
+      title: [
+        { text: `Gini 近 ${history.length || 0} 日走势`, left: 2, top: 0, textStyle: { color: ct.textStrong, fontSize: 10, fontWeight: 500 } },
+        { text: mode === 'delta' ? '成交额前 N% 股票占比增量（横轴对数 · 正=今日更集中）' : '洛伦兹曲线（形态参考）', left: 2, top: 138, textStyle: { color: ct.textStrong, fontSize: 10, fontWeight: 500 } },
+      ],
+      legend: mode === 'lorenz'
+        ? { top: 138, right: 8, data: ['当日', previousName, periodName], textStyle: { color: ct.text, fontSize: 9 }, itemWidth: 14, itemHeight: 7 }
+        : undefined,
+      grid: [
+        { left: 2, right: 46, top: 24, height: 88, containLabel: true },
+        { left: 2, right: 46, top: 160, bottom: 14, containLabel: true },
+      ],
+      xAxis: [
+        { type: 'category', gridIndex: 0, data: dates, axisLabel: { color: ct.text, fontSize: 8, hideOverlap: true, interval: 'auto' }, axisLine: { lineStyle: { color: ct.border } }, axisTick: { show: false } },
+        mode === 'delta'
+          ? { type: 'log', gridIndex: 1, min: 0.04, max: 10, logBase: 10, axisLabel: { color: ct.text, fontSize: 9, formatter: (value: number) => `${value}%` }, splitLine: { lineStyle: { color: ct.grid } } }
+          : { type: 'value', gridIndex: 1, min: xMin, max: 100, axisLabel: { color: ct.text, fontSize: 9, formatter: '{value}%' }, splitLine: { lineStyle: { color: ct.grid } } },
+      ],
+      yAxis: [
+        { type: 'value', gridIndex: 0, min: Number((giniLow - giniPad).toFixed(4)), max: Number((giniHigh + giniPad).toFixed(4)), splitNumber: 3, axisLabel: { color: ct.text, fontSize: 8, formatter: (value: number) => value.toFixed(3) }, splitLine: { lineStyle: { color: ct.grid } } },
+        mode === 'delta'
+          ? { type: 'value', gridIndex: 1, min: deltaBottom, max: deltaTop, splitNumber: 3, axisLabel: { color: ct.text, fontSize: 8, formatter: '{value}pp' }, splitLine: { lineStyle: { color: ct.grid } } }
+          : { type: 'value', gridIndex: 1, min: 0, max: 100, splitNumber: 3, axisLabel: { color: ct.text, fontSize: 8, formatter: '{value}%' }, splitLine: { lineStyle: { color: ct.grid } } },
+      ],
       series: [
-        { name: '当日', type: 'line', symbol: 'none', data: points.map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: ORANGE, width: 2.5 }, areaStyle: { color: 'rgba(247,129,102,.10)' }, z: 4 },
-        { name: previousName, type: 'line', symbol: 'none', data: (previous.points || []).map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: BLUE, width: 1.5, type: 'dashed' }, z: 3 },
-        { name: periodName, type: 'line', symbol: 'none', data: (periodMean.points || []).map((row: any) => [row.population_pct, row.amount_pct]), lineStyle: { color: PURPLE, width: 1.5, type: 'dashed' }, z: 2 },
-        { name: '完全均等', type: 'line', symbol: 'none', data: [[0, 0], [100, 100]], lineStyle: { color: ct.text, width: 1, type: 'dotted', opacity: 0.65 }, z: 1 },
+        { name: 'Gini', type: 'bar', xAxisIndex: 0, yAxisIndex: 0, data: bars, barMaxWidth: 12, markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { color: YELLOW, type: 'dashed', width: 1 }, data: meanGini != null ? [{ yAxis: meanGini }] : [] } },
+        ...(mode === 'delta'
+          ? [{ name: '集中度增量', type: 'line', xAxisIndex: 1, yAxisIndex: 1, symbol: 'none', data: delta, lineStyle: { color: ct.textStrong, width: 1.5 }, areaStyle: { color: deltaArea }, z: 3, markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { color: ct.border, type: 'dashed', width: 1 }, data: [{ yAxis: 0 }] } }]
+          : lorenzSeries),
       ],
     }
   }
@@ -403,6 +503,32 @@ function LadderMatrix({ data }: { data: Record<string, any> }) {
   </div>
 }
 
+function LorenzReadout({ data }: { data: Record<string, any> }) {
+  const current = data.shares?.current || {}
+  const delta = data.shares?.delta || {}
+  const previous = data.previous || {}
+  const periodMean = data.period_mean || {}
+  const signature = (value: number | null, digits = 4) => (value == null ? '--' : `${value > 0 ? '+' : ''}${value.toFixed(digits)}`)
+  const tone = (value: number | null | undefined) => (value == null || value === 0 ? 'text-muted' : value > 0 ? 'text-red-400' : 'text-emerald-400')
+  const giniVsMean = data.gini != null && periodMean.gini != null ? Number((data.gini - periodMean.gini).toFixed(4)) : null
+  const giniVsPrevious = data.gini != null && previous.gini != null ? Number((data.gini - previous.gini).toFixed(4)) : null
+  const shareKeys: Array<[string, string]> = [['top1', '前 1%'], ['top5', '前 5%'], ['top10', '前 10%'], ['top20', '前 20%']]
+  return (
+    <div data-testid="quantx-lorenz-readout" className="mt-1 space-y-1 border-t border-border/60 px-1 pt-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] leading-4">
+        <span className="font-mono text-foreground">Gini <b className="text-[10px]">{data.gini ?? '--'}</b></span>
+        <span className="text-muted">vs 20 日均值 <span className={cn('font-mono', tone(giniVsMean))}>{signature(giniVsMean)}</span></span>
+        <span className="text-muted">vs 昨日 <span className={cn('font-mono', tone(giniVsPrevious))}>{signature(giniVsPrevious)}</span></span>
+        <span className="text-muted">近 {data.history_days ?? data.history?.length ?? 0} 日分位 <span className="font-mono text-foreground">{data.percentile ?? '--'}%</span></span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] leading-4 text-muted">
+        <span className="text-foreground">头部成交占比</span>
+        {shareKeys.map(([key, label]) => <span key={key} className="whitespace-nowrap">{label} <span className="font-mono text-foreground">{current[key] ?? '--'}%</span> <span className={cn('font-mono', tone(delta[key]))}>{signature(delta[key] ?? null, 2)}</span></span>)}
+      </div>
+    </div>
+  )
+}
+
 function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: QuantXAdvancedCard; layout?: AdvancedCardLayout }) {
   const meta = CARD_META[chartKey]
   const [sectorDimension, setSectorDimension] = useState('sw_level1')
@@ -414,7 +540,9 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
   const [ladderView, setLadderView] = useState<'sunburst' | 'matrix'>('sunburst')
   const [rotationTrail, setRotationTrail] = useState<'focus' | 'all' | 'off'>('focus')
   const [stateTransitionWindow, setStateTransitionWindow] = useState<'500' | 'all'>('500')
-  const selection = useMemo(() => ({ sectorDimension, sectorWindow, correlationDimension, mainlineFocus, promotionWindow, rotationTrail, stateTransitionWindow }), [correlationDimension, mainlineFocus, promotionWindow, rotationTrail, sectorDimension, sectorWindow, stateTransitionWindow])
+  const [lorenzMode, setLorenzMode] = useState<'delta' | 'lorenz'>('delta')
+  const [lorenzWindow, setLorenzWindow] = useState<'tail' | 'full'>('tail')
+  const selection = useMemo(() => ({ sectorDimension, sectorWindow, correlationDimension, mainlineFocus, promotionWindow, rotationTrail, stateTransitionWindow, lorenzMode, lorenzWindow }), [correlationDimension, lorenzMode, lorenzWindow, mainlineFocus, promotionWindow, rotationTrail, sectorDimension, sectorWindow, stateTransitionWindow])
   useEffect(() => setCorrelationIndustry(''), [correlationDimension])
   useEffect(() => {
     if (chartKey !== 'mainline_waterfall') return
@@ -428,7 +556,7 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
     anomaly_calendar: 390,
     return_distribution: 390,
     advance_decline: 340,
-    turnover_lorenz: 340,
+    turnover_lorenz: 330,
     sector_diffusion: 690,
     theme_river: 390,
     industry_correlation: 620,
@@ -470,6 +598,16 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
         {chartKey === 'promotion_funnel' && card.status === 'ok' && <div data-testid="quantx-promotion-window-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-1.5"><div className="flex gap-1" role="group" aria-label="连板晋级统计窗口">{['current', '5', '20'].map(value => { const view = card.data.views?.[value] || {}; return <button key={value} type="button" data-testid={`quantx-promotion-window-${value}`} aria-pressed={promotionWindow === value} onClick={() => setPromotionWindow(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', promotionWindow === value ? 'border-orange-400/60 bg-orange-400/10 text-orange-300' : 'border-border bg-base text-muted hover:text-foreground')}>{view.label || value}<span className="ml-1 font-mono text-muted">{view.sample_days || 0}日</span></button> })}</div><span data-testid="quantx-promotion-baseline-label" className="text-[9px] text-blue-300">◆ 全样本基线 · {card.data.baseline?.sample_days || 0} 日</span></div>}
         {chartKey === 'mainline_waterfall' && card.status === 'ok' && <div data-testid="quantx-mainline-selector" className="mb-1.5 max-h-24 overflow-y-auto border-b border-border/60 pb-1.5"><div className="flex flex-wrap gap-1" role="group" aria-label="选择主线查看贡献细分">{(card.data.mainlines || []).map((row: any, index: number) => <button key={row.focus} type="button" data-testid={`quantx-mainline-option-${index}`} aria-pressed={mainlineFocus === row.focus} onClick={() => setMainlineFocus(row.focus)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', mainlineFocus === row.focus ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}><span className="font-mono">{row.rank}</span> · {row.focus} <span className="font-mono">{row.score}</span></button>)}</div></div>}
         {chartKey === 'rps_rotation_clock' && card.status === 'ok' && <div data-testid="quantx-rps-trail-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-1.5"><div className="flex gap-1" role="group" aria-label="昨日轨迹显示范围">{([['focus', '重点轨迹'], ['all', '全部轨迹'], ['off', '关闭轨迹']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={rotationTrail === value} onClick={() => setRotationTrail(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px]', rotationTrail === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted')}>{label}</button>)}</div><span className="text-[9px] text-muted">空心点为昨日 · 箭头指向今日</span></div>}
+        {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-controls" className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5 border-b border-border/60 pb-1.5">
+          <div className="flex gap-1" role="group" aria-label="成交集中度视图">
+            {([['delta', '集中度增量'], ['lorenz', '洛伦兹曲线']] as const).map(([value, label]) => <button key={value} type="button" data-testid={`quantx-lorenz-mode-${value}`} aria-pressed={lorenzMode === value} onClick={() => setLorenzMode(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', lorenzMode === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}>{label}</button>)}
+          </div>
+          {lorenzMode === 'lorenz'
+            ? <div className="flex gap-1" role="group" aria-label="横轴样本范围">
+                {([['tail', '头部 90–100%'], ['full', '全样本 0–100%']] as const).map(([value, label]) => <button key={value} type="button" data-testid={`quantx-lorenz-window-${value}`} aria-pressed={lorenzWindow === value} onClick={() => setLorenzWindow(value)} className={cn('cursor-pointer rounded border px-2 py-1 text-[9px] transition-colors', lorenzWindow === value ? 'border-orange-400/60 bg-orange-400/10 text-orange-300' : 'border-border bg-base text-muted hover:text-foreground')}>{label}</button>)}
+              </div>
+            : <span className="text-[9px] text-muted">横轴：成交额前 N% 股票（对数）</span>}
+        </div>}
         {chartKey === 'theme_ladder_sunburst' && card.status === 'ok' && <div data-testid="quantx-ladder-view-controls" className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
           <div className="flex gap-1" role="group" aria-label="题材连板梯队视图">
             {([['sunburst', '旭日图', ChartPie], ['matrix', '梯队表', Table2]] as const).map(([value, label, Icon]) => <button key={value} type="button" data-testid={`quantx-ladder-view-${value}`} aria-pressed={ladderView === value} onClick={() => setLadderView(value)} className={cn('flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-[9px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent', ladderView === value ? 'border-accent/60 bg-accent/15 text-accent' : 'border-border bg-base text-muted hover:text-foreground')}><Icon className="h-3 w-3" />{label}</button>)}
@@ -482,7 +620,8 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
           : <div className="flex items-center justify-center text-xs text-muted" style={{ height }}><span>{card.reason || '暂无足够数据'}</span></div>}
         {chartKey === 'industry_correlation' && card.status === 'ok' && <CorrelationPairRankings view={correlationView} selectedIndustry={correlationIndustry} onSelectIndustry={setCorrelationIndustry} />}
         {chartKey === 'state_transition' && card.status === 'ok' && <div data-testid="quantx-state-transition-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p className="font-mono text-foreground">统计区间：{stateTransitionView.start_date || '--'}～{stateTransitionView.end_date || '--'} · {stateTransitionView.transition_count ?? 0} 次相邻交易日转移 · {stateTransitionView.label || '当前样本'}</p><p>读法：从左侧“当前状态”沿行读取到上方“下一交易日状态”，每行合计 100%。例如“震荡 → 偏强 20%”表示处于震荡后，次日转为偏强的历史概率为 20%。</p><p className="text-orange-300">模型边界：本矩阵来自 TickFlow Regime 四维模型；顶部市场热度、短线情绪和趋势情绪来自 QuantX market_state_daily，两套分值与状态不可直接互换。</p></div>}
-        {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>横轴是按成交额从小到大排列的股票累计占比，纵轴是累计成交额；橙线越向右下弯，成交越集中在少数头部股票。蓝色虚线是昨日，紫色虚线是前 20 个交易日均值。</p><p><span className="text-foreground">有什么用：</span>当日曲线低于历史基线、Gini 更高，表示资金抱团较近期增强；更接近均等线则表示成交扩散。它描述资金结构，不判断市场涨跌方向。</p></div>}
+        {chartKey === 'turnover_lorenz' && card.status === 'ok' && <LorenzReadout data={card.data} />}
+        {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>上方是近 40 个交易日 Gini 逐日柱，橙柱为当日，红柱代表集中度较前一日上升、绿柱代表下降，黄虚线为 20 日均值。下方横轴是「成交额最大的前 N% 股票」，用对数刻度把 0.05%–10% 这段头部展开；纵轴是该区间股票今日成交占比减去前 20 个交易日均值，正值表示今日成交更集中到头部。</p><p><span className="text-foreground">有什么用：</span>洛伦兹曲线在全样本坐标下几乎逐日重合，光看形态看不出变化；这条增量曲线才反映资金抱团是加强还是扩散，峰值落在前 0.5%–1% 说明增量主要来自最头部那一档。切到「洛伦兹曲线」可核对传统形态。它描述资金结构，不判断市场涨跌方向。</p></div>}
         {chartKey === 'advance_decline' && card.status === 'ok' && <p data-testid="quantx-ad-divergence-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">红色区间：指数走强但市场广度转弱；绿色区间：指数走弱但广度修复。图钉标记背离确认点。</p>}
         {chartKey === 'promotion_funnel' && card.status === 'ok' && <p data-testid="quantx-promotion-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">当天显示目标交易日实际结果；5日、20日按窗口内成功数 ÷ 样本数计算加权均值。蓝色菱形虚线为当前快照全部历史样本基线，切换窗口时始终保留。0→1 使用首板封板率，其余层级使用次日晋级率。</p>}
         {caveat && <p data-testid={`quantx-advanced-caveat-${chartKey}`} className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-orange-300">口径提示：{caveat}</p>}

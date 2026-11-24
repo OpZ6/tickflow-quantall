@@ -10,7 +10,21 @@ from app.quantx_data.browser_runtime import launch_chromium
 
 OUTPUT_DIR = None
 TRADE_DATE = None
-BASE_URLS = ["https://duanxianxia.com", "https://www.duanxianxia.com"]
+# 2026-11-06: 主站 duanxianxia.com 改版为 hash 路由 SPA (/#/)，
+# /web/pool 与 /web/qxlive 现在直接返回 nginx 404。旧版页面迁移到
+# https://v.duanxianxia.com（新版首页「返回旧版」链接），数据口径不变，
+# 因此以旧版域名优先；主站仅作为兜底保留，便于未来再次改版时发现。
+BASE_URLS = [
+    "https://v.duanxianxia.com",
+    "https://duanxianxia.com",
+    "https://www.duanxianxia.com",
+]
+
+# 防止 SPA 把未知路径重定向到首页后，首页的大段文本被误判为采集成功。
+_REQUIRED_MARKERS = {
+    "/web/pool": ("涨停", "封板率"),
+    "/web/qxlive": ("情绪指标", "涨停家数"),
+}
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -37,20 +51,41 @@ def _compact(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
 
 
+def _matches_target(path: str, text: str) -> bool:
+    markers = _REQUIRED_MARKERS.get(path)
+    return not markers or all(marker in text for marker in markers)
+
+
 def _goto_first_working(page, path: str) -> tuple[str, str]:
-    last_error = None
+    # 早期版本在「body 文本过短」时静默 continue，最终抛出
+    # "all urls failed ...: None"，无法区分 404 / 反爬 / 超时。这里把每个
+    # 候选 URL 的判定结果都记下来，失败时给出可定位的原因。
+    errors: list[str] = []
     for base_url in BASE_URLS:
         url = f"{base_url}{path}"
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=35000)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=35000)
+            status = response.status if response else None
             page.wait_for_timeout(5000)
-            text = page.locator("body").inner_text(timeout=15000)
-            if text and len(text) > 100:
-                return base_url, text
+            text = page.locator("body").inner_text(timeout=15000) or ""
+            preview = _compact(text)[:70]
+            if status and status >= 400:
+                errors.append(f"{url}: HTTP {status} ({preview!r})")
+                print(f"  [duanxianxia] {url} -> HTTP {status}")
+                continue
+            if len(text) <= 100:
+                errors.append(f"{url}: empty body (len={len(text)}, status={status}, {preview!r})")
+                print(f"  [duanxianxia] {url} -> empty body len={len(text)}")
+                continue
+            if not _matches_target(path, text):
+                errors.append(f"{url}: content mismatch for {path} ({preview!r})")
+                print(f"  [duanxianxia] {url} -> unexpected content for {path}")
+                continue
+            return base_url, text
         except Exception as exc:
-            last_error = exc
+            errors.append(f"{url}: {type(exc).__name__}: {str(exc)[:120]}")
             print(f"  [duanxianxia] {url} failed: {exc}")
-    raise RuntimeError(f"all duanxianxia urls failed for {path}: {last_error}")
+    raise RuntimeError(f"all duanxianxia urls failed for {path}: " + " | ".join(errors))
 
 
 def _extract_tables(page, max_tables: int = 20, max_rows: int = 80) -> dict:

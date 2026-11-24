@@ -62,6 +62,40 @@ def test_turnover_lorenz_adds_previous_and_trailing_period_baselines() -> None:
     }
 
 
+def test_turnover_lorenz_shares_and_history_align_with_curve_grid() -> None:
+    days = [date(2026, 8, 26), date(2026, 8, 27), date(2026, 8, 28)]
+    frame = pl.DataFrame(
+        {
+            "date": [day for day in days for _ in range(20)],
+            "amount": [float(value) for value in range(1, 21)] * 3,
+        }
+    )
+
+    result = _turnover_lorenz(frame, days[-1], period_days=20)
+
+    # 三条曲线共用同一采样网格, 逐点求差才不会错位。
+    assert len(result["points"]) == len(result["previous"]["points"])
+    assert len(result["points"]) == len(result["period_mean"]["points"])
+    assert [point["population_pct"] for point in result["points"]] == [
+        point["population_pct"] for point in result["period_mean"]["points"]
+    ]
+    assert result["points"][-1] == {"population_pct": 100.0, "amount_pct": 100.0}
+
+    shares = result["shares"]
+    assert set(shares["current"]) == {"top1", "top5", "top10", "top20"}
+    assert shares["current"]["top20"] >= shares["current"]["top1"] > 0
+    assert set(shares["delta"]) == set(shares["current"])
+    for label, value in shares["delta"].items():
+        assert value == pytest.approx(
+            shares["current"][label] - shares["period_mean"][label], abs=1e-9
+        )
+
+    assert [row["date"] for row in result["history"]] == [str(day) for day in days]
+    assert result["history"][-1]["gini"] == result["gini"]
+    assert result["history_days"] == 3
+    assert 0 <= result["percentile"] <= 100
+
+
 def test_stock_returns_prefers_repository_computed_turnover(tmp_path) -> None:
     days = [date(2026, 8, 27), date(2026, 8, 28)]
     persisted = pl.DataFrame(
