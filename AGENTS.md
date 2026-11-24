@@ -32,3 +32,9 @@
 - 用户建议不适合目标时直接说明，不迎合。
 - 不因假想风险主动加警告、免责声明或审批流程。
 - 无 CLI/API 的网页用已登录 Chrome；飞书优先 `lark-cli`。
+
+## 按任务找现行契约
+
+- 对接已部署的 TSP、选择 MCP 或调用 Open API，先读 [AI 接入指南](docs/ai-integration.md)。
+- 编写可导入的配置、指标、资源或插件，先查 [文档导航](docs/README.md) 和 [统一导入](docs/extension-packages.md)，再读对应契约。
+- 运行策略回测或引擎研究，先核对 [回测证据](docs/backtest-evidence.md) 与 [引擎研究](docs/engine-platform/workbench-research-jobs.md)。配置、包版本和验收结果按目标部署实际返回值记录。

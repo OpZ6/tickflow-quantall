@@ -11,6 +11,7 @@ from datetime import date
 import polars as pl
 import pytest
 
+from app.enriched_generation import EnrichedGenerationSnapshot
 from app.tickflow.repository import DataStore, KlineRepository
 
 
@@ -88,7 +89,17 @@ def test_refresh_enriched_history_keeps_persisted_turnover_rate(tmp_path, monkey
         lambda frame, *_args, **_kwargs: frame,
     )
     repo = KlineRepository(DataStore(tmp_path))
+    # 上层把世代来源改成了 manifest 快照 (get_enriched_generation_snapshot),
+    # 与 get_matrix_data_generation 是两条路径; 只钉住后者会让 _refresh_enriched
+    # 在换代校验处抛错并静默降级, 这里把两条一起钉成同一个值。
     monkeypatch.setattr(repo, "get_matrix_data_generation", lambda _asset_type: "test")
+    monkeypatch.setattr(
+        repo,
+        "get_enriched_generation_snapshot",
+        lambda _asset_type="stock": EnrichedGenerationSnapshot(
+            generation="test", base_generation="test"
+        ),
+    )
     monkeypatch.setattr(repo, "_build_live_agg", lambda _latest: None)
 
     repo._refresh_enriched()

@@ -62,10 +62,21 @@ backend/user_prompts/
 prompt/todo.md
 prompt/key.md
 
-# ===== Browser automation =====
+# ===== Local verification artifacts =====
 .playwright-mcp/
 frontend/e2e/results/
 docs/evidence/
+.playwright-cli/
+.impeccable/
+.v2c/
+/MagicMock/
+/backend/MagicMock/
+
+# ===== Tivelo Pro local installation material =====
+/tivelo-pro-dynamic/
+tivelo-pro-dynamic*.zip
+tivelo_pro_dynamic*.whl
+*.lic
 
 # ===== AI IDE =====
 .trae/

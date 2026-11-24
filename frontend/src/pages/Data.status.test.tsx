@@ -21,6 +21,9 @@ vi.mock('@/lib/api', () => ({ api: {
   settings: vi.fn(async () => ({ onboarding_completed: true, mode: 'api_key', has_tickflow_key: true })),
   preferences: vi.fn(async () => ({})),
   capabilities: vi.fn(async () => ({ capabilities: {} })),
+  capabilityMatrix: vi.fn(async () => ({ capabilities: [] })),
+  quoteStatus: vi.fn(async () => ({})),
+  quoteInterval: vi.fn(async () => ({ interval: 5 })),
 } }))
 vi.mock('@/components/StockPreviewDialog', () => ({ StockPreviewDialog: () => null }))
 vi.mock('@/components/EndpointTestDialog', () => ({ EndpointTestDialog: () => null }))
@@ -43,6 +46,7 @@ afterEach(async () => {
   client.clear()
   host.remove()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 // busy 降级形态: status 非空但各统计与 storage 均为 null (冷启动缓存未热)
@@ -90,4 +94,36 @@ it('storage 为 null 时不崩, 存储卡片降级为占位', async () => {
   expect(host.textContent).toContain('—')  // 总大小降级占位
   // 各 storage 数值区降级显示, 不出现 NaN/undefined
   expect(host.textContent).not.toContain('undefined')
+  // busy 期间统计 null = 未知 (非"无数据"): 同步按钮不进首装引导呼吸态
+  expect(host.querySelector('.animate-breath-sync')).toBeNull()
+})
+
+it('非 busy 的空库 (stats_pending=false + 统计 null) 判为无数据, 显示首装引导', async () => {
+  const { api } = await import('@/lib/api')
+  // 后端空表返回 null (而非 rows:0) — 曾被误当"未知"导致真空库引导永不出现
+  vi.mocked(api.dataStatus).mockResolvedValue({
+    ...busyStatus,
+    indicators_ready: true,
+    stats_pending: false,
+  })
+
+  await renderPage()
+  expect(host.querySelector('.animate-breath-sync')).not.toBeNull()
+})
+
+it('统计后台刷新时每 2 秒重查, 完成后恢复正常轮询间隔', async () => {
+  vi.useFakeTimers()
+  const { api } = await import('@/lib/api')
+  vi.mocked(api.dataStatus).mockClear().mockResolvedValueOnce({
+    ...busyStatus, indicators_ready: true,
+  }).mockResolvedValue({
+    ...busyStatus, indicators_ready: true, stats_pending: false,
+  })
+  await act(async () => root.render(
+    <MemoryRouter><QueryClientProvider client={client}><Data /></QueryClientProvider></MemoryRouter>,
+  ))
+  await act(async () => { await vi.advanceTimersByTimeAsync(2_002) })
+  expect(api.dataStatus).toHaveBeenCalledTimes(2)
+  await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+  expect(api.dataStatus).toHaveBeenCalledTimes(2)
 })

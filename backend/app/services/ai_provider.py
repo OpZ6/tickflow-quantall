@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -24,6 +26,7 @@ OPENAI_COMPAT_PROVIDER = "openai_compat"
 OPENAI_PROVIDER = "openai"
 CODEX_CLI_PROVIDER = "codex_cli"
 CODEX_DEFAULT_COMMAND = "codex"
+CODEX_MIN_TIMEOUT_SECONDS = 600.0
 CODEX_SUPPORTED_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
 OPENAI_DEFAULT_REASONING_EFFORT = "high"
 # OpenAI 系两种请求协议: chat.completions (兼容面最广) 与 Responses (官方新协议)。
@@ -72,6 +75,13 @@ _CODEX_ENV_ALLOWLIST = (
 )
 
 Message = dict[str, str]
+
+logger = logging.getLogger(__name__)
+
+
+class AIToolProtocolError(RuntimeError):
+    """可直接展示的工具协议错误，不包含上游响应或子进程内部输出。"""
+
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
@@ -166,6 +176,33 @@ def current_ai_model() -> str:
     return current_openai_model()
 
 
+def current_reasoning_context_key() -> str:
+    """Bind saved reasoning to its provider, protocol, endpoint and model."""
+    identity = [current_ai_provider(), current_ai_protocol(), current_ai_model(),
+                normalize_openai_base_url(secrets_store.get_ai_config("ai_base_url", settings.ai_base_url))]
+    return hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+
+
+def prepare_tool_messages(messages: Sequence[dict], *, model: str, base_url: str) -> list[dict]:
+    """Keep vendor metadata private and tolerate old DeepSeek text-only history."""
+    prepared = []
+    context_key = None
+    deepseek = urlsplit(base_url).hostname == "api.deepseek.com" or model.lower().rsplit("/", 1)[-1].startswith("deepseek")
+    for source in messages:
+        message = dict(source)
+        origin = message.pop("reasoning_context", None)
+        if origin is not None:
+            context_key = context_key or current_reasoning_context_key()
+            if origin != context_key:
+                message.pop("reasoning_content", None)
+        if deepseek and message.get("role") == "assistant" and message.get("reasoning_content") is None:
+            # Older sessions never saved reasoning; the required field can only
+            # be empty for those messages. Never replace a recorded empty string.
+            message["reasoning_content"] = ""
+        prepared.append(message)
+    return prepared
+
+
 def current_openai_reasoning_effort() -> str:
     stored = secrets_store.load()
     if "ai_reasoning_effort" not in stored:
@@ -204,7 +241,7 @@ def _estimate_input_tokens(messages: Sequence[Message]) -> int:
     """粗略估算输入 token 数: 中文按 1 字 1 token, 其余按 4 字符 1 token。"""
     total = 0
     for m in messages:
-        text = str(m.get("content") or "")
+        text = str(m.get("content") or "") + str(m.get("reasoning_content") or "")
         cjk = sum(1 for ch in text if "一" <= ch <= "鿿")
         total += cjk + (len(text) - cjk) // 4 + 1
     return max(1, total)
@@ -247,6 +284,13 @@ def current_codex_reasoning_effort() -> str:
 
 def is_codex_cli_provider(provider: str | None = None) -> bool:
     return (provider or current_ai_provider()) == CODEX_CLI_PROVIDER
+
+
+def supports_ai_tools(provider: str | None = None) -> bool:
+    """接入适配器是否支持工具协议；具体模型/CLI 的响应仍须运行期校验。"""
+    return (provider or current_ai_provider()) in {
+        OPENAI_PROVIDER, OPENAI_COMPAT_PROVIDER, CODEX_CLI_PROVIDER,
+    }
 
 
 def normalize_codex_model(model: str) -> str:
@@ -306,6 +350,8 @@ def codex_cli_available() -> bool:
     try:
         proc = subprocess.run(
             [*base, "--version"],
+            # Windows 桌面包无控制台, 不继承可能无效的标准输入句柄。
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             timeout=15,
             check=False,
@@ -339,7 +385,7 @@ async def generate_ai_text(
     max_tokens = _resolve_max_tokens(max_tokens)
     _check_input_budget(messages, max_tokens=max_tokens)
     if is_codex_cli_provider():
-        return await _run_codex_cli(messages, max_tokens=max_tokens, timeout=max(timeout, 600.0))
+        return await _run_codex_cli(messages, max_tokens=max_tokens, timeout=max(timeout, CODEX_MIN_TIMEOUT_SECONDS))
     if is_responses_protocol():
         from app.services import ai_responses
 
@@ -358,7 +404,7 @@ async def generate_ai_text(
 
 
 async def generate_ai_text_with_tools(
-    messages: Sequence[Message],
+    messages: Sequence[dict],
     tools: Sequence[dict],
     *,
     execute_tool,
@@ -367,16 +413,17 @@ async def generate_ai_text_with_tools(
     timeout: float = 180.0,
     max_rounds: int = 4,
 ) -> list[dict]:
-    """OpenAI 原生 tools 有界循环: 调用 → 逐条执行工具 → role:tool 回填 → 循环。
+    """通用有界工具循环: 调用 → 执行调用方工具 → role:tool 回填 → 循环。
 
-    与 generate_ai_text 的差异: 这里返回「完整 messages」(含 tool 往返), 最后一条
-    assistant 消息承载最终文本; 调用方可扫描 role:tool 消息重建逐轮证据 (回测指标)。
+    返回完整 messages (含 tool 往返)，可扫描 role:tool 重建执行证据。
+    轮次耗尽时可能停在工具结果，调用方须检查是否存在最终正文。
     execute_tool 为 async (name, args) -> dict, 返回 {"ok": bool, "result"|"error"},
-    由调用方注入 (见 services.tool_catalog.execute_tool)。tools 是硬能力依赖
-    (Codex CLI 无 tools= 协议), 故入口 fail-closed, 不做纯文本降级。
+    工具 schema 与执行回调由调用方注入，不依赖 AI 助手扩展或其工具目录。
+    OpenAI 两种协议及 Codex 结构化输出共用此循环；Codex 响应先做结构校验，
+    各工具的参数、权限和动作确认仍由调用方的执行回调负责。
     """
-    if is_codex_cli_provider():
-        raise RuntimeError("当前 AI 供应商不支持工具调用迭代, 请改用 OpenAI 兼容模型")
+    if not supports_ai_tools():
+        raise AIToolProtocolError("当前 AI 接入不支持工具调用，请选择支持工具调用的 AI 接入方式")
 
     max_tokens = _resolve_max_tokens(max_tokens)
     if not tools:
@@ -387,7 +434,13 @@ async def generate_ai_text_with_tools(
 
     for _ in range(max_rounds):
         _check_input_budget(req_messages, max_tokens=max_tokens)
-        if is_responses_protocol():
+        if is_codex_cli_provider():
+            from app.services import ai_codex_tools
+
+            message = await ai_codex_tools.run_message_once(
+                req_messages, tool_schemas, max_tokens=max_tokens, timeout=timeout,
+            )
+        elif is_responses_protocol():
             from app.services import ai_responses
 
             message = await ai_responses.run_message_once(
@@ -411,7 +464,11 @@ async def generate_ai_text_with_tools(
         tool_calls = getattr(message, "tool_calls", None) or []
         if not tool_calls:
             # 模型不再请求工具, 产出最终文本, 结束循环。
-            req_messages.append({"role": "assistant", "content": message.content or ""})
+            assistant = {"role": "assistant", "content": message.content or ""}
+            reasoning = getattr(message, "reasoning_content", None)
+            if reasoning is not None:
+                assistant["reasoning_content"] = reasoning
+            req_messages.append(assistant)
             return req_messages
 
         assistant = {
@@ -420,6 +477,10 @@ async def generate_ai_text_with_tools(
         }
         if message.content:
             assistant["content"] = message.content
+        # DeepSeek 思考模式要求工具轮的 reasoning_content 原样回传, 否则下一轮 400。
+        reasoning = getattr(message, "reasoning_content", None)
+        if reasoning is not None:
+            assistant["reasoning_content"] = reasoning
         req_messages.append(assistant)
 
         for tc in tool_calls:
@@ -485,7 +546,7 @@ async def stream_ai_text(
     max_tokens = _resolve_max_tokens(max_tokens)
     _check_input_budget(messages, max_tokens=max_tokens)
     if is_codex_cli_provider():
-        yield await _run_codex_cli(messages, max_tokens=max_tokens, timeout=max(timeout, 600.0))
+        yield await _run_codex_cli(messages, max_tokens=max_tokens, timeout=max(timeout, CODEX_MIN_TIMEOUT_SECONDS))
         return
 
     if is_responses_protocol():
@@ -547,7 +608,12 @@ async def _run_openai_message_once(
 
     client = _openai_client(ai_key, timeout)
     model = current_ai_model()
-    req_messages = list(messages)
+    req_messages = (
+        prepare_tool_messages(
+            messages, model=model,
+            base_url=secrets_store.get_ai_config("ai_base_url", settings.ai_base_url),
+        ) if tools else list(messages)
+    )
     kwargs = _openai_kwargs(temperature=temperature, max_tokens=max_tokens, tools=tools)
     while True:
         try:
@@ -945,8 +1011,12 @@ def _compact_error_text(text: str) -> str:
     return text[:500]
 
 
+# 词边界约束: 裸 "401" 会把输出正文里任意含 401 的数字串 (如模型回复文本)
+# 误判成鉴权失败, 附出不相关的 codex login 指引; 词边界只排除数字粘连,
+# 真实鉴权报错 ("401 Unauthorized"/"status 401") 不受影响。
 _CODEX_AUTH_FAILURE_RE = re.compile(
-    r"401|unauthorized|not logged in|missing bearer|login required", re.IGNORECASE
+    r"\b401\b|\bunauthorized\b|\bnot logged in\b|\bmissing bearer\b|\blogin required\b",
+    re.IGNORECASE,
 )
 
 
@@ -975,6 +1045,7 @@ async def _run_codex_cli(
     max_tokens: int | None,
     timeout: float,
     model_override: str | None = None,
+    output_schema: dict | None = None,
 ) -> str:
     prompt = _codex_prompt(messages, max_tokens=max_tokens)
     _sweep_stale_codex_run_dirs()
@@ -1003,6 +1074,10 @@ async def _run_codex_cli(
             "--output-last-message",
             str(output_path),
         ]
+        if output_schema is not None:
+            schema_path = run_path / "output-schema.json"
+            schema_path.write_text(json.dumps(output_schema, ensure_ascii=False), encoding="utf-8")
+            args.extend(["--output-schema", str(schema_path)])
         model = (current_ai_model() if model_override is None else model_override).strip()
         if model:
             args.extend(["--model", model])
@@ -1049,6 +1124,7 @@ def _run_codex_process(
     env: dict[str, str],
     timeout: float,
 ) -> tuple[int, bytes, bytes]:
+    started = time.monotonic()
     try:
         proc = subprocess.run(
             list(args),
@@ -1059,7 +1135,22 @@ def _run_codex_process(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError("Codex CLI 调用超时, 请稍后重试或检查本机 Codex 登录状态") from exc
+        stderr = _clean_process_text(exc.stderr or b"")
+        logger.warning(
+            "Codex CLI timed out: elapsed_s=%.1f timeout_s=%g prompt_chars=%d "
+            "structured=%s retry_indicated=%s auth_failure_indicated=%s",
+            time.monotonic() - started, timeout, len(prompt), "--output-schema" in args,
+            any(hint in stderr.lower() for hint in ("reconnecting", "retrying", "stream disconnected")),
+            bool(_CODEX_AUTH_FAILURE_RE.search(stderr)),
+        )
+        raise RuntimeError(
+            f"Codex CLI 调用超时({timeout:g} 秒), 本轮生成已终止。"
+            "可重试, 或在 AI 设置中降低 Codex 推理强度。"
+        ) from exc
+    logger.info(
+        "Codex CLI completed: elapsed_s=%.1f timeout_s=%g prompt_chars=%d structured=%s returncode=%d",
+        time.monotonic() - started, timeout, len(prompt), "--output-schema" in args, proc.returncode,
+    )
     return proc.returncode, proc.stdout, proc.stderr
 
 

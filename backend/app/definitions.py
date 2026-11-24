@@ -256,9 +256,12 @@ def smoke_definition(kind: str, definition: dict) -> dict:
         dependencies = spec.dependencies
         warmup_bars = spec.warmup_bars
 
-    unknown = sorted(
-        dependencies - _known_input_columns() - _ALWAYS_LOADED_COLUMNS
-    )
+    known = _known_input_columns()
+    if kind == "signal" and definition.get("timeframe") == "intraday":
+        from app.strategy.intraday_features import INTRADAY_FEATURES
+
+        known = frozenset(INTRADAY_FEATURES)
+    unknown = sorted(dependencies - known - _ALWAYS_LOADED_COLUMNS)
     if unknown:
         issues.append({"code": "W001", "message": f"依赖列不在已知输入列: {unknown}"})
     return {
@@ -300,6 +303,7 @@ def catalog(data_dir: Path) -> list[dict]:
             "id": sig.get("id"),
             "label": sig.get("name") or sig.get("id"),
             "enabled": sig.get("enabled") is not False,
+            "archived": sig.get("archived") is True,
             "timeframe": sig.get("timeframe") or "daily",
             "lang": "conditions",
             "dependencies": sorted(definition_dependencies("signal", sig)),
@@ -311,6 +315,7 @@ def catalog(data_dir: Path) -> list[dict]:
             "label": definition.get("label") or definition.get("id"),
             "lang": str(definition.get("lang", "dsl")),
             "status": str(definition.get("status", "draft")),
+            "archived": definition.get("archived") is True,
         }
         try:
             spec = factor_store.to_spec(definition)
