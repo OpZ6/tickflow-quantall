@@ -37,6 +37,50 @@ def _transient_sqlite_error(exc: sqlite3.OperationalError) -> bool:
     return any(marker in message for marker in _TRANSIENT_SQLITE_MARKERS)
 
 
+def connect_with_retry(database) -> sqlite3.Connection:
+    """建立连接; `PRAGMA synchronous` 也会撞上瞬时只读, 同样退避重连。
+
+    供 JobStore / ScheduleStore 等所有"会被多个进程同时打开"的库共用。
+    """
+    for attempt in range(_WRITE_ATTEMPTS):
+        candidate = None
+        try:
+            candidate = sqlite3.connect(database, timeout=30, isolation_level=None)
+            candidate.execute("PRAGMA synchronous=FULL")
+            return candidate
+        except sqlite3.OperationalError as exc:
+            if candidate is not None:
+                with suppress(Exception):
+                    candidate.close()
+            if not _transient_sqlite_error(exc) or attempt == _WRITE_ATTEMPTS - 1:
+                raise
+            time.sleep(_WRITE_BACKOFF_SECONDS * (2**attempt))
+    raise AssertionError("unreachable")
+
+
+def acquire_write_with_retry(database) -> sqlite3.Connection:
+    """建立连接并取到写锁。
+
+    readonly 是**连接级**判定(WAL 的 -shm 访问失败后, 该连接就一直认为库只读),
+    对着同一条连接重试 BEGIN 不会自愈 —— 必须丢弃连接重来。这是与"锁忙"最大的
+    区别, 也是这里单独抽出一个函数的原因。
+    """
+    for attempt in range(_WRITE_ATTEMPTS):
+        connection = None
+        try:
+            connection = connect_with_retry(database)
+            connection.execute("BEGIN IMMEDIATE")
+            return connection
+        except sqlite3.OperationalError as exc:
+            if connection is not None:
+                with suppress(Exception):
+                    connection.close()
+            if not _transient_sqlite_error(exc) or attempt == _WRITE_ATTEMPTS - 1:
+                raise
+            time.sleep(_WRITE_BACKOFF_SECONDS * (2**attempt))
+    raise AssertionError("unreachable")
+
+
 class JobError(RuntimeError):
     def __init__(self, code, message):
         super().__init__(message)
@@ -118,41 +162,23 @@ class JobStore:
         return path
 
     def _connect(self):
-        """建立连接; `PRAGMA synchronous` 也会撞上瞬时只读, 同样退避重连。"""
-        for attempt in range(_WRITE_ATTEMPTS):
-            candidate = None
-            try:
-                candidate = sqlite3.connect(self.database, timeout=30, isolation_level=None)
-                candidate.execute("PRAGMA synchronous=FULL")
-                return candidate
-            except sqlite3.OperationalError as exc:
-                if candidate is not None:
-                    with suppress(Exception):
-                        candidate.close()
-                if not _transient_sqlite_error(exc) or attempt == _WRITE_ATTEMPTS - 1:
-                    raise
-                time.sleep(_WRITE_BACKOFF_SECONDS * (2**attempt))
+        return connect_with_retry(self.database)
 
     def _acquire_write(self):
-        """建立连接并取到写锁。
+        return acquire_write_with_retry(self.database)
 
-        readonly 是**连接级**判定(WAL 的 -shm 访问失败后, 该连接就一直认为库只读),
-        对着同一条连接重试 BEGIN 不会自愈 —— 必须丢弃连接重来。这是与"锁忙"最大的
-        区别, 也是这里单独抽出一个方法的原因。
+    @contextmanager
+    def write(self):
+        """写事务上下文: 取写锁(带重连重试), 退出时关闭连接。
+
+        外部模块(price_variants / schedules)需要自己 BEGIN IMMEDIATE 时统一走这里,
+        避免每处各抄一份重试逻辑。
         """
-        for attempt in range(_WRITE_ATTEMPTS):
-            connection = None
-            try:
-                connection = self._connect()
-                connection.execute("BEGIN IMMEDIATE")
-                return connection
-            except sqlite3.OperationalError as exc:
-                if connection is not None:
-                    with suppress(Exception):
-                        connection.close()
-                if not _transient_sqlite_error(exc) or attempt == _WRITE_ATTEMPTS - 1:
-                    raise
-                time.sleep(_WRITE_BACKOFF_SECONDS * (2**attempt))
+        connection = self._acquire_write()
+        try:
+            yield connection
+        finally:
+            connection.close()
 
     @contextmanager
     def connection(self):

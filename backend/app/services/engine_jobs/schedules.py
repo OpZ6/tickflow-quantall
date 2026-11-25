@@ -14,7 +14,7 @@ from tivelo_data import DataEngine
 from .models import JobPlan
 from .schedule_calendar import FrozenTradingSchedule, TradingCalendar, freeze_trading_days
 from .schedule_models import IntervalTrigger, PublicationTrigger, ScheduleRequest, TradingDayTrigger
-from .storage import JobError, now
+from .storage import JobError, acquire_write_with_retry, connect_with_retry, now
 
 
 def publication_support():
@@ -32,12 +32,17 @@ class ScheduleStore:
         self.jobs = jobs
         self._data = None
         self.database = jobs.path("schedules.sqlite3")
-        with self.connection() as connection:
-            version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
-                raise JobError("SCHEMA_UNSUPPORTED", "研究计划索引版本高于当前程序")
-            connection.execute("PRAGMA journal_mode=WAL")
-            connection.execute("BEGIN IMMEDIATE")
+        with self.connection() as probe:
+            version = probe.execute("PRAGMA user_version").fetchone()[0]
+        if version not in (0, 1):
+            raise JobError("SCHEMA_UNSUPPORTED", "研究计划索引版本高于当前程序")
+        # 与 JobStore 同理: 已初始化就只读返回, 不要把每次构造都变成一次写锁争用。
+        if version == 1:
+            return
+        with self.connection() as setup:
+            setup.execute("PRAGMA journal_mode=WAL")
+        connection = acquire_write_with_retry(self.database)
+        try:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS schedules (id TEXT PRIMARY KEY, "
                 "request_key TEXT UNIQUE NOT NULL, request BLOB NOT NULL, state TEXT NOT NULL)"
@@ -116,13 +121,23 @@ class ScheduleStore:
             )
             connection.execute("PRAGMA user_version=1")
             connection.commit()
+        finally:
+            connection.close()
 
     @contextmanager
     def connection(self):
         self.jobs.path("schedules.sqlite3")
-        connection = sqlite3.connect(self.database, timeout=10, isolation_level=None)
+        connection = connect_with_retry(self.database)
         try:
-            connection.execute("PRAGMA synchronous=FULL")
+            yield connection
+        finally:
+            connection.close()
+
+    @contextmanager
+    def write(self):
+        """写事务: 取写锁(带重连重试)。所有 BEGIN IMMEDIATE 统一走这里。"""
+        connection = acquire_write_with_retry(self.database)
+        try:
             yield connection
         finally:
             connection.close()
@@ -237,8 +252,7 @@ class ScheduleStore:
             state["calendar"] = calendar.summary()
         if origin is not None:
             state["publication_cursor"] = origin.model_dump(mode="json")
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self.write() as connection:
             existing = self._existing(connection, request)
             if existing is not None:
                 return existing
@@ -318,8 +332,7 @@ class ScheduleStore:
     def set_enabled(self, identity, enabled):
         if type(enabled) is not bool:
             raise ValueError("enabled must be a boolean")
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self.write() as connection:
             row = connection.execute(
                 "SELECT state,trigger_type FROM all_schedules WHERE id=?", (identity,)
             ).fetchone()
@@ -452,8 +465,7 @@ class ScheduleStore:
                 ):
                     continue
                 error = str(getattr(exc, "code", "ARTIFACT_CORRUPT"))
-            with self.connection() as connection:
-                connection.execute("BEGIN IMMEDIATE")
+            with self.write() as connection:
                 current = connection.execute(
                     "SELECT state FROM extended_schedules WHERE id=?", (identity,)
                 ).fetchone()
@@ -507,8 +519,7 @@ class ScheduleStore:
         """Reserve at most one dispatch per enabled schedule; resume its outbox first."""
         at = utc_datetime(at)
         result = []
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self.write() as connection:
             rows = connection.execute(
                 "SELECT id,request,state,trigger_type FROM all_schedules AS c WHERE trigger_type<2 AND json_extract(state,'$.enabled')=1 "
                 "AND (json_extract(state,'$.next_due_at')<=? OR EXISTS(SELECT 1 FROM deliveries AS d "
@@ -616,8 +627,7 @@ class ScheduleStore:
         payload = canonical_bytes(plan)
         if len(payload) > 4 * 1024**2:
             raise JobError("RESOURCE_LIMIT", "研究派发计划超过大小限制")
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self.write() as connection:
             row = connection.execute(
                 "SELECT plan,state FROM deliveries WHERE id=?", (delivery["delivery_id"],)
             ).fetchone()
@@ -639,8 +649,7 @@ class ScheduleStore:
     def finish(self, delivery, status, *, job_id=None, code=None):
         if status not in {"submitted", "skipped_overlap", "failed"}:
             raise ValueError("invalid dispatch result")
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self.write() as connection:
             row = connection.execute(
                 "SELECT state FROM deliveries WHERE id=?", (delivery["delivery_id"],)
             ).fetchone()

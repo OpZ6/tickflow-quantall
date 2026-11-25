@@ -60,8 +60,7 @@ def save_price_variant(store, request):
     with tempfile.TemporaryDirectory(dir=store.root, prefix=".price-input-") as temporary:
         staged = Path(temporary) / "run"
         manifest = publish_run(lock, definitions, staged)
-        with store.connection() as db:
-            db.execute("BEGIN IMMEDIATE")
+        with store.write() as db:
             target = store.path("inputs/" + path)
             if target.exists():
                 previous, _ = inspect_archive(target)
