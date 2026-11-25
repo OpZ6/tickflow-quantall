@@ -42,6 +42,8 @@
 |---|---|---|---|---|
 | `app/services/engine_jobs/storage.py` | 每次 `JobStore()` 都 `BEGIN IMMEDIATE` 重跑整套 DDL；`sqlite3.OperationalError` 直接向上抛 | ①`user_version==1` 时只读探测后直接返回，不再取写锁；②连接与写锁遇 `readonly/locked` 时**丢弃连接重连**并退避重试（readonly 是连接级判定，对同一连接重试无效） | engine worker 是每个节点 spawn 一个进程，父进程同时 drain 状态；多进程同一瞬间抢写锁，Windows + WAL 下会把库短暂判为只读，异常冒到 worker 被兜成 `ENGINE_EXECUTION_FAILED` | `backend/scripts/diag_jobstore_race.py` 8 进程 × 500 轮 × 读写 = 4000 次调用零错误；`test_engine_extension_fields.py` 2 条最重用例由 `1 failed` 变为 `2 passed` |
 | `app/services/engine_jobs/worker.py` | `except` 里 `traceback` 硬编码空串；`finally` 里直接 `os._exit(0)` | ①`TF_WORKER_FAULTHANDLER=<path>` 时把完整栈与 faulthandler 现场落盘（默认行为不变，仍不向 IPC/API 泄露异常文本）；②`os._exit` 前 `watcher.join(timeout=2)` | 崩溃只有 `ENGINE_EXECUTION_FAILED` 六个字时完全无法排查；watcher 线程每 0.5s 停在 psutil 原生调用里，直接 `os._exit` 会在 Windows 上触发 access violation（退出码 3221225477），manager 据此误判节点异常 | faulthandler 实测抓到 `storage.py:93` 的真实栈；修复后崩溃点收敛到退出路径，节点状态判定恢复正常 |
+| `app/services/engine_jobs/schedules.py` | `ScheduleStore` 每次构造同样重跑 DDL + `BEGIN IMMEDIATE`；7 处方法各自 `connection()` + `BEGIN IMMEDIATE` | 同 JobStore：`user_version==1` 只读返回；新增 `write()` 上下文统一取写锁；`connection()` 改用 `connect_with_retry` | `schedules.sqlite3` 与 `jobs.sqlite3` 同处一个被多进程打开的工作区，竞态形态完全一致 | 全 29 条 `test_engine_jobs.py` 中依赖计划的用例全部通过 |
+| `app/services/engine_jobs/price_variants.py` | `with store.connection()` 后自己 `BEGIN IMMEDIATE` | 改用 `store.write()` | 上一轮修复只覆盖了 storage 内部，这里是对外漏网点，实测导致 `test_save_price_variant` 失败 | `test_save_price_variant_retains_input_and_runs_checked_new_basis` passed（82s） |
 
 **排障开关用法**（不设即完全不影响生产路径）：
 
