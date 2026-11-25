@@ -295,6 +295,19 @@ git merge-base --is-ancestor main sync/upstream-<ver>   # 真=可快进
       触发 vite 自重启（会自动重新预构建）
     - 教训：**前端依赖有任何变化，必须"清缓存 + 重启 dev server + 真开一次浏览器"**，
       绿测试不等于能跑
+15. **"失败但看不到原因"要先怀疑诊断链路，不是先怀疑业务逻辑**
+    - 现象：引擎作业（v0.4.1 新增）报 `ENGINE_EXECUTION_FAILED`，前端只显示"研究任务失败"
+    - 有两层遮蔽叠加：
+      1. `engine_jobs/worker.py` 的 `except` 把 `traceback` 硬编码成空串（上游安全设计，怕泄露供应商异常文本）
+      2. 原生层崩溃（`0xC0000005`）根本不走 `except`，进程被内核直接杀掉，只剩 `worker_exitcode=3221225477`
+    - 三步定位法：
+      1. `TF_WORKER_FAULTHANDLER=<path>` 复现 → Python 异常栈 / faulthandler 现场落盘
+      2. 没有栈时查 **Windows 事件日志**（`Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error'}`）
+         —— 它会直接给出 `Faulting module`，本项目实测是 `_duckdb.cpXXX-win_amd64.pyd`
+      3. 崩溃点每次都不同（validate / execute 轮换）时，别当业务 bug 查，去看**进程生命周期与并发**
+    - 最终根因是 sqlite：engine worker 每个节点 spawn 一个进程，父进程同时 drain 状态，
+      Windows + WAL 下多进程抢写锁会把库短暂判为只读 → `attempt to write a readonly database`
+    - 加固见 `docs/upstream-divergences.md` §三；回归用 `backend/scripts/diag_jobstore_race.py`
 
 ---
 

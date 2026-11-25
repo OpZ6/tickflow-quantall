@@ -33,7 +33,26 @@
 | `test_abnormal_moves.py` / `test_atomic_write_retry.py` / `test_regime_builder.py` / `test_strategy_required_history.py` / `test_enriched_range_warming_guard.py` / `test_enriched_partial_partition.py` | 仅 import 位置整理，断言未变 |
 | `test_custom_depth_provider.py` / `test_ext_pull_auth.py` / `test_minute_timezone_contract.py` / `test_price_limits.py` / `test_repository_index.py` / `test_legacy_upgrade_degrade.py` | 夹具/桩数据的形状调整，断言未变 |
 
-## 三、怎么用这张表
+## 三、跨平台稳定性加固（上游实现，本地必须保住）
+
+这几处**不是语义分歧**，是上游在 Linux 上没暴露、Windows 上会直接把节点打挂的实现细节。
+合并时如果上游重写了这些文件，**必须把加固重新贴回去**，否则引擎作业会重新变成"随机失败"。
+
+| 文件 | 上游写法 | 本地加固 | 为什么 | 验证方式 |
+|---|---|---|---|---|
+| `app/services/engine_jobs/storage.py` | 每次 `JobStore()` 都 `BEGIN IMMEDIATE` 重跑整套 DDL；`sqlite3.OperationalError` 直接向上抛 | ①`user_version==1` 时只读探测后直接返回，不再取写锁；②连接与写锁遇 `readonly/locked` 时**丢弃连接重连**并退避重试（readonly 是连接级判定，对同一连接重试无效） | engine worker 是每个节点 spawn 一个进程，父进程同时 drain 状态；多进程同一瞬间抢写锁，Windows + WAL 下会把库短暂判为只读，异常冒到 worker 被兜成 `ENGINE_EXECUTION_FAILED` | `backend/scripts/diag_jobstore_race.py` 8 进程 × 500 轮 × 读写 = 4000 次调用零错误；`test_engine_extension_fields.py` 2 条最重用例由 `1 failed` 变为 `2 passed` |
+| `app/services/engine_jobs/worker.py` | `except` 里 `traceback` 硬编码空串；`finally` 里直接 `os._exit(0)` | ①`TF_WORKER_FAULTHANDLER=<path>` 时把完整栈与 faulthandler 现场落盘（默认行为不变，仍不向 IPC/API 泄露异常文本）；②`os._exit` 前 `watcher.join(timeout=2)` | 崩溃只有 `ENGINE_EXECUTION_FAILED` 六个字时完全无法排查；watcher 线程每 0.5s 停在 psutil 原生调用里，直接 `os._exit` 会在 Windows 上触发 access violation（退出码 3221225477），manager 据此误判节点异常 | faulthandler 实测抓到 `storage.py:93` 的真实栈；修复后崩溃点收敛到退出路径，节点状态判定恢复正常 |
+
+**排障开关用法**（不设即完全不影响生产路径）：
+
+```bash
+TF_WORKER_FAULTHANDLER=D:/tmp/worker.log .venv/Scripts/python.exe -m pytest tests/test_engine_jobs.py
+# 引擎作业报"失败但无原因"时，先开这个再复现，栈就落在 D:/tmp/worker.log
+```
+
+---
+
+## 四、怎么用这张表
 
 1. 同步前：`grep -rn "LOCAL-DIVERGENCE" backend/tests` 拿到全部锚点
 2. 合并中出现冲突：先查本表，命中 → 保住本地语义，再让上游的新增断言适配

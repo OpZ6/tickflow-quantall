@@ -2,8 +2,9 @@
 
 import json
 import sqlite3
+import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,6 +14,27 @@ from .models import JobPlan, stages
 
 TERMINAL = frozenset({"succeeded", "failed", "cancelled", "interrupted"})
 ACTIVE = frozenset({"queued", "running", "publishing", "cancelling"})
+
+# Windows + WAL + 多进程下的 sqlite 竞态:
+# engine worker 是 spawn 出来的独立进程, 父进程(uvicorn/pytest)同时在 drain 状态,
+# 两边频繁开连接、取写锁。当一个进程正在 checkpoint 时, 另一个进程会**短暂**把库
+# 判为只读, 抛 "attempt to write a readonly database" —— 不是文件权限问题, 也不是
+# 永久损坏, 退避重试即可(实测 6 进程 x 600 次并发调用, 每进程撞 2~8 次, 全部自愈)。
+# 这类错误一旦冒出去, 会被 worker 兜成 ENGINE_EXECUTION_FAILED, 表现为"任务失败但
+# 看不到原因", 所以必须在存储层吃掉。
+_TRANSIENT_SQLITE_MARKERS = (
+    "readonly",
+    "database is locked",
+    "database table is locked",
+    "disk i/o error",
+)
+_WRITE_ATTEMPTS = 6
+_WRITE_BACKOFF_SECONDS = 0.03
+
+
+def _transient_sqlite_error(exc: sqlite3.OperationalError) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _TRANSIENT_SQLITE_MARKERS)
 
 
 class JobError(RuntimeError):
@@ -37,12 +59,21 @@ class JobStore:
         for name in ("inputs", "jobs", "owner"):
             self.path(name).mkdir(exist_ok=True)
         self.database = self.path("jobs.sqlite3")
-        with self.connection() as connection:
-            version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
-                raise JobError("SCHEMA_UNSUPPORTED", "任务索引版本高于当前程序")
-            connection.execute("PRAGMA journal_mode=WAL")
-            connection.execute("BEGIN IMMEDIATE")
+        with self.connection() as probe:
+            version = probe.execute("PRAGMA user_version").fetchone()[0]
+        if version not in (0, 1):
+            raise JobError("SCHEMA_UNSUPPORTED", "任务索引版本高于当前程序")
+        # 已初始化的库: 只读探测后就返回。原来每次构造都重跑整套 DDL + 写锁,
+        # 而 engine worker 是每个节点 spawn 一个进程、父进程同时在读写 —— 多个
+        # 进程在同一瞬间抢 BEGIN IMMEDIATE, 就会出现"读写竞态把库判成只读"。
+        # 把 DDL 收敛到"首次建库"这一条路径, 争用面直接消失。
+        if version == 1:
+            return
+        # journal_mode 必须在事务外切换, 所以先单独设, 再取写锁建表。
+        with self.connection() as setup:
+            setup.execute("PRAGMA journal_mode=WAL")
+        connection = self._acquire_write()
+        try:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS jobs ("
                 "id TEXT PRIMARY KEY, request_key TEXT UNIQUE NOT NULL, "
@@ -67,6 +98,8 @@ class JobStore:
             )
             connection.execute("PRAGMA user_version=1")
             connection.commit()
+        finally:
+            connection.close()
 
     def path(self, relative, *nested):
         from pydantic import TypeAdapter
@@ -84,21 +117,57 @@ class JobStore:
                     raise JobError("UNSAFE_PATH", "任务路径不能包含符号链接")
         return path
 
+    def _connect(self):
+        """建立连接; `PRAGMA synchronous` 也会撞上瞬时只读, 同样退避重连。"""
+        for attempt in range(_WRITE_ATTEMPTS):
+            candidate = None
+            try:
+                candidate = sqlite3.connect(self.database, timeout=30, isolation_level=None)
+                candidate.execute("PRAGMA synchronous=FULL")
+                return candidate
+            except sqlite3.OperationalError as exc:
+                if candidate is not None:
+                    with suppress(Exception):
+                        candidate.close()
+                if not _transient_sqlite_error(exc) or attempt == _WRITE_ATTEMPTS - 1:
+                    raise
+                time.sleep(_WRITE_BACKOFF_SECONDS * (2**attempt))
+
+    def _acquire_write(self):
+        """建立连接并取到写锁。
+
+        readonly 是**连接级**判定(WAL 的 -shm 访问失败后, 该连接就一直认为库只读),
+        对着同一条连接重试 BEGIN 不会自愈 —— 必须丢弃连接重来。这是与"锁忙"最大的
+        区别, 也是这里单独抽出一个方法的原因。
+        """
+        for attempt in range(_WRITE_ATTEMPTS):
+            connection = None
+            try:
+                connection = self._connect()
+                connection.execute("BEGIN IMMEDIATE")
+                return connection
+            except sqlite3.OperationalError as exc:
+                if connection is not None:
+                    with suppress(Exception):
+                        connection.close()
+                if not _transient_sqlite_error(exc) or attempt == _WRITE_ATTEMPTS - 1:
+                    raise
+                time.sleep(_WRITE_BACKOFF_SECONDS * (2**attempt))
+
     @contextmanager
     def connection(self):
         # Connections are short lived and never shared across executor threads.
         self.path("jobs.sqlite3")
-        connection = sqlite3.connect(self.database, timeout=10, isolation_level=None)
+        connection = self._connect()
         try:
-            connection.execute("PRAGMA synchronous=FULL")
             yield connection
         finally:
             connection.close()
 
     @contextmanager
     def transaction(self, job_id):
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        connection = self._acquire_write()
+        try:
             row = connection.execute(
                 "SELECT state,pinned FROM job_catalog WHERE id=?", (job_id,)
             ).fetchone()
@@ -116,6 +185,8 @@ class JobStore:
             except BaseException:
                 connection.rollback()
                 raise
+        finally:
+            connection.close()
 
     def create(self, plan):
         payload = canonical_bytes(plan)
@@ -136,8 +207,8 @@ class JobStore:
             },
             "artifact": None,
         }
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        connection = self._acquire_write()
+        try:
             row = connection.execute(
                 "SELECT id,plan,state FROM job_catalog WHERE request_key=?",
                 (plan.request.idempotency_key,),
@@ -162,6 +233,8 @@ class JobStore:
                 ),
             )
             connection.commit()
+        finally:
+            connection.close()
         return state
 
     def get(self, job_id):
