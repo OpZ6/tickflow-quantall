@@ -27,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.services.engine_jobs.storage import JobStore  # noqa: E402
+from app.services.engine_jobs.storage import JobStore
 
 ROUNDS = int(os.environ.get("ROUNDS", "300"))
 PROCS = int(os.environ.get("PROCS", "6"))
