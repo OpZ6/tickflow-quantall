@@ -440,6 +440,31 @@ function Read-NewLogLines($path, $prefix, $color) {
     }
 }
 
+# ===== 7.5 代理变量大小写去重 =====
+# Windows 的环境变量本身大小写不敏感, 但 .NET 的 StringDictionary 不是。若当前进程
+# 同时继承了 HTTPS_PROXY 与 https_proxy(代理软件 / 上层启动器注入大小写各一份),
+# Start-Process 会直接抛 "已添加项。字典中的关键字:HTTPS_PROXY..." ——
+# 连 Get-ChildItem env: 都枚举不出来, 整个启动器不可用(本机实测踩到)。
+# 保留大写(注册表里就是大写), 只清掉小写那份; 没有重复时这段完全是 no-op。
+foreach ($entry in @(
+    @('http_proxy', 'HTTP_PROXY'),
+    @('https_proxy', 'HTTPS_PROXY'),
+    @('no_proxy', 'NO_PROXY'),
+    @('all_proxy', 'ALL_PROXY')
+)) {
+    $lowerName, $upperName = $entry
+    $lowerValue = [Environment]::GetEnvironmentVariable($lowerName, 'Process')
+    $upperValue = [Environment]::GetEnvironmentVariable($upperName, 'Process')
+    if ($lowerValue -and $upperValue) {
+        [Environment]::SetEnvironmentVariable($lowerName, $null, 'Process')
+        # 个别组合下清小写会连带清掉大写, 补回来
+        if (-not [Environment]::GetEnvironmentVariable($upperName, 'Process')) {
+            [Environment]::SetEnvironmentVariable($upperName, $upperValue, 'Process')
+        }
+        Log-Info "removed duplicate lowercase env var: $lowerName"
+    }
+}
+
 # ===== 8. Launch + main loop =====
 # 启动与主循环同处一个 try/finally: 任一 Start-Process 失败或 Ctrl-C 都会走
 # Cleanup-All, 不留下半套进程。
