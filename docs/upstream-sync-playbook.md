@@ -282,6 +282,19 @@ git merge-base --is-ancestor main sync/upstream-<ver>   # 真=可快进
 13. **别信单次全量测试的失败清单**：本机（Python 3.14 + Windows + sqlite WAL 并发写）会随机抛
     `attempt to write a readonly database`，把任意依赖 sqlite 的用例打挂。**必须做对照实验**：
     同一个 venv 跑上游纯净 worktree，比较两侧失败清单的交集
+14. **v0.4.1 实测踩到：Vite 预构建缓存陈旧，四道关卡全绿但 dev server 全线崩**
+    - 现象：`pnpm install` 把 `lightweight-charts` 升到 5.2.1 后，**所有依赖图表的页面**全黑，
+      每个页面各自报 `扩展 official.xxx 暂时不可用`——看起来像"十几个扩展同时坏了"，实际只有一个根因
+    - 真因：`node_modules/.vite/deps/lightweight-charts.js` 还是 4.2.3 的产物，
+      `import { AreaSeries }` 在缓存里不存在 → 模块加载失败 → 引用它的扩展整体注册失败
+    - **为什么抓不到**：`tsc` 只读类型声明、`vitest` 走 node 解析、`vite build` 走 rollup，
+      三者**都不读** `optimizeDeps` 缓存。所以 tsc 0 错 / 979 用例全过 / build 成功，运行照样崩
+    - 判定：`grep -o "Lightweight Charts™ v[0-9.]*" node_modules/.vite/deps/lightweight-charts.js`
+      与 `node -e "console.log(require('lightweight-charts/package.json').version)"` 比对
+    - 修法：`rm -rf node_modules/.vite` → 重启 dev server。不想杀进程就 `touch vite.config.ts`
+      触发 vite 自重启（会自动重新预构建）
+    - 教训：**前端依赖有任何变化，必须"清缓存 + 重启 dev server + 真开一次浏览器"**，
+      绿测试不等于能跑
 
 ---
 
@@ -294,6 +307,8 @@ git merge-base --is-ancestor main sync/upstream-<ver>   # 真=可快进
 - [ ] `packages/tivelo-*/` 内移植项逐条对齐（数据类字段 + 每个构造点 + 消费点）
 - [ ] `scripts/check_call_signatures.py` 退出码 0（跨模块必填参数无缺口）
 - [ ] 依赖变更已装：`uv pip install --no-deps -e packages/*`（后端）、`pnpm install`（前端）
+- [ ] **前端依赖有变化时**：`rm -rf node_modules/.vite` + 重启 dev server，并真开浏览器确认无
+      `扩展 xxx 暂时不可用`（绿测试不足以证明能跑，见陷阱 14）
 - [ ] 三大自研面板路由实测注册（`/quantx`、`/market-lab`、`/stock-pools` 等）
 - [ ] 自研策略引擎实测加载数正确、`load_errors()` 为空
 - [ ] 后端插件全部零错误挂载

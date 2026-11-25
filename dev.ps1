@@ -280,6 +280,27 @@ if (-not (Test-Path (Join-Path $FrontendDir 'node_modules'))) {
     Log-Ok 'frontend deps installed'
 }
 
+# ===== 3.5 Vite 预构建缓存新鲜度 =====
+# pnpm-lock 比 node_modules/.vite 新 => 依赖集合变过，但预构建缓存还是旧版本产物。
+# 后果不是"慢", 而是 dev server 拿"旧版本的库 + 新版本的代码"跑:
+# 升级 lightweight-charts 4.x -> 5.2.1 后, 缓存里没有 AreaSeries 导出,
+# 所有依赖图表的页面直接黑屏并各自报"扩展 xxx 暂时不可用"(看起来像十几个扩展同时坏)。
+# tsc / vitest / vite build 都不读这个缓存, 所以四道关卡全绿也发现不了。
+$ViteCache = Join-Path $FrontendDir 'node_modules/.vite'
+$LockFile = Join-Path $FrontendDir 'pnpm-lock.yaml'
+if ((Test-Path $ViteCache) -and (Test-Path $LockFile)) {
+    if ((Get-Item $LockFile).LastWriteTime -gt (Get-Item $ViteCache).LastWriteTime) {
+        Log-Info 'vite dep cache is older than pnpm-lock - rebuilding'
+        try {
+            Remove-Item $ViteCache -Recurse -Force -Confirm:$false -ErrorAction Stop
+            Log-Ok 'vite cache cleared (will be rebuilt on first request)'
+        } catch {
+            Log-Err "could not clear vite cache: $_"
+            Log-Err 'if pages render blank, delete frontend/node_modules/.vite manually'
+        }
+    }
+}
+
 # ===== 4. Banner (ASCII so it renders on any codepage) =====
 Write-Host ''
 Write-Host '+----------------------------------------------+' -ForegroundColor Blue
