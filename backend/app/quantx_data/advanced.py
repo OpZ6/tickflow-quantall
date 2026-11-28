@@ -121,11 +121,60 @@ def _state_transition_views(frame: pl.DataFrame) -> dict[str, Any]:
     return {
         **recent_view,
         "default_view": "500",
+        "current": _state_transition_current(ordered),
         "views": {
             "500": {**recent_view, "label": "近500日"},
             "all": {**full_view, "label": "全历史"},
         },
     }
+
+
+def _state_transition_current(frame: pl.DataFrame) -> dict[str, Any] | None:
+    """Latest state plus the transition that just realised.
+
+    矩阵只给历史概率, 读者最关心的却是\"今天在哪一行\"——今天这一行才是明日分布,
+    而昨日→今日那一格是刚发生的转移。把两者单独给出去, 前端才能标注, 否则
+    49 个格子看起来完全一样。
+    """
+    states = ["weak", "lean_weak", "range", "lean_strong", "strong"]
+    labels = ["弱势", "偏弱", "震荡", "偏强", "强势"]
+    index = {value: position for position, value in enumerate(states)}
+    if frame.is_empty() or "state" not in frame.columns:
+        return None
+    rows = frame.tail(2).to_dicts()
+    if not rows:
+        return None
+    latest = rows[-1]
+    latest_state = str(latest.get("state") or "")
+    if latest_state not in index:
+        return None
+    latest_date = latest.get("date")
+    current: dict[str, Any] = {
+        "date": latest_date.isoformat() if hasattr(latest_date, "isoformat") else str(latest_date or ""),
+        "state": latest_state,
+        "label": labels[index[latest_state]],
+        "state_index": index[latest_state],
+        "previous_date": None,
+        "previous_state": None,
+        "previous_label": None,
+        "previous_index": None,
+    }
+    if len(rows) == 2:
+        previous = rows[0]
+        previous_state = str(previous.get("state") or "")
+        if previous_state in index:
+            previous_date = previous.get("date")
+            current.update(
+                {
+                    "previous_date": previous_date.isoformat()
+                    if hasattr(previous_date, "isoformat")
+                    else str(previous_date or ""),
+                    "previous_state": previous_state,
+                    "previous_label": labels[index[previous_state]],
+                    "previous_index": index[previous_state],
+                }
+            )
+    return current
 
 
 # 尾部加密的固定采样网格: 让洛伦兹曲线在头部区间保持分辨率, 同时把单日点数

@@ -30,19 +30,19 @@ const SPAN_CLASSES: Record<NonNullable<AdvancedCardLayout['span']>, string> = {
 const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 'rotation' | 'structure'; span?: string; caveat?: string }> = {
   sentiment_phase: { title: '市场情绪状态相图', hint: '趋势情绪 × 短线情绪 · 气泡为涨停家数', group: 'state' },
   liquidity_participation: { title: '流动性—参与度四象限', hint: '全市场成交额 × 上涨家数占比', group: 'state' },
-  state_transition: { title: '市场状态转移矩阵', hint: '五状态的下一交易日条件转移概率 · 色阶上限 50%', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
+  state_transition: { title: '市场状态转移矩阵', hint: '五状态条件转移概率 · 蓝框=今日所在行（明日分布）· 橙框=昨日→今日已实现', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
   anomaly_calendar: { title: '2026 年异常交易日', hint: '年初至今 · 仅显示交易日 · 综合收益、广度、涨停与成交额', group: 'state', span: 'xl:[grid-column:span_10/span_10]' },
   return_distribution: { title: '全市场收益分布剖面', hint: '当日全 A 收益横截面与中位数', group: 'state', span: 'xl:[grid-column:span_6/span_6]' },
   advance_decline: { title: 'A/D 累积线与指数背离', hint: '涨跌家数差累积 vs 中证全指 · 阴影标出背离区间', group: 'state', span: 'xl:[grid-column:span_9/span_9]' },
   turnover_lorenz: { title: '成交额洛伦兹曲线与 Gini', hint: 'Gini 日走势 + 头部 N% 成交占比增量', group: 'state', span: 'xl:[grid-column:span_7/span_7]' },
   sector_diffusion: { title: '申万行业宽度扩散地图', hint: '切换一级/二级行业及 MA5 / MA10 / MA20', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
   theme_river: { title: '题材单源排名演进', hint: '近 20 日同一榜单逐日名次 · 数字越小、颜色越热；不与多源强度混算', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]' },
-  industry_correlation: { title: '行业收益相关性矩阵', hint: '切换同花顺一级/二级行业 · 近 35 日收益相关性', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]', caveat: '行业收益按当前行业成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
+  industry_correlation: { title: '行业收益相关性矩阵', hint: '切换同花顺一级/二级行业 · 近 35 日收益相关性 · 色阶按实际分布自适应（P5–P95），不再被 0.8–1.0 挤成一片', group: 'rotation', span: 'xl:[grid-column:span_16/span_16]', caveat: '行业收益按当前行业成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
   mainline_waterfall: { title: '主线强度贡献瀑布', hint: '切换各条主线，细分涨停广度、连板高度与梯队完整度', group: 'rotation', caveat: '主线历史按当前概念成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
   theme_ladder_sunburst: { title: '题材—连板梯队', hint: '旭日图看核心题材，梯队表核对全部涨停', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]' },
   rps_rotation_clock: { title: '行业 RPS 轮动时钟', hint: '行业横截面相对强度 × 排名加速度 · 中心为行业中位数', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]', caveat: '行业收益按当前行业成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
   promotion_funnel: { title: '连板晋级阶梯', hint: '当天 / 5日 / 20日晋级效率 · 全样本基线始终对照', group: 'structure', span: 'xl:[grid-column:span_9/span_9]' },
-  turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度', group: 'structure', span: 'xl:[grid-column:span_7/span_7]' },
+  turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度 · 颜色为对数计数（格子内为真实股票数）· 橙带为 0% 涨跌分界', group: 'structure', span: 'xl:[grid-column:span_7/span_7]' },
 }
 
 function base(ct: ChartTheme) {
@@ -68,9 +68,58 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     const windowKey = selection.stateTransitionWindow || data.default_view || '500'
     const view = data.views?.[windowKey] || data
     const matrix = view.matrix || []
-    const values = matrix.flatMap((row: number[], y: number) => row.map((value, x) => [x, y, value]))
-    const visualMax = view.visual_max || Math.max(5, ...values.map((row: number[]) => row[2]))
-    return { ...common, grid: { left: 10, right: 12, top: 15, bottom: 50, containLabel: true }, xAxis: { type: 'category', data: view.labels || [], axisLabel: { color: ct.text, hideOverlap: true } }, yAxis: { type: 'category', data: view.labels || [], axisLabel: { color: ct.text, hideOverlap: true } }, visualMap: { ...heatVisual(visualMax), min: 0, max: visualMax, precision: 0 }, series: [{ type: 'heatmap', data: values, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 2 }, label: { show: true, color: ct.textStrong, formatter: (p: any) => `${p.value[2]}%` }, tooltip: { formatter: (p: any) => `${view.labels[p.value[1]]} → ${view.labels[p.value[0]]}<br/>概率：${p.value[2]}%<br/>样本：${view.counts?.[p.value[1]]?.[p.value[0]] ?? 0} 次` } }] }
+    const labels = view.labels || []
+    const current = data.current || null
+    // 今日所在行 = 明日分布；昨日→今日那一格 = 刚实现的转移。两者都单独描边，
+    // 否则 25 个格子视觉上完全等价，看不出"我现在在哪"。
+    const todayRow = Number.isInteger(current?.state_index) ? current.state_index : -1
+    const realizedFrom = Number.isInteger(current?.previous_index) ? current.previous_index : -1
+    const values = matrix.flatMap((row: number[], y: number) => row.map((value, x) => {
+      const isRealized = y === realizedFrom && x === todayRow && realizedFrom >= 0
+      const inTodayRow = y === todayRow
+      if (!isRealized && !inTodayRow) return { value: [x, y, value] }
+      return {
+        value: [x, y, value],
+        itemStyle: isRealized
+          ? { borderColor: ORANGE, borderWidth: 3 }
+          : { borderColor: 'rgba(88,166,255,.95)', borderWidth: 2 },
+      }
+    }))
+    const visualMax = view.visual_max || Math.max(5, ...values.map((row: any) => row.value[2]))
+    return {
+      ...common,
+      grid: { left: 10, right: 12, top: 15, bottom: 50, containLabel: true },
+      xAxis: { type: 'category', data: labels, axisLabel: { color: ct.text, hideOverlap: true } },
+      yAxis: {
+        type: 'category',
+        data: labels,
+        axisLabel: {
+          color: (_value: string, index: number) => (index === todayRow ? BLUE : ct.text),
+          fontWeight: (index: number) => (index === todayRow ? 'bold' : 'normal'),
+          formatter: (value: string, index: number) => (index === todayRow ? `${value} ◀今日` : value),
+          hideOverlap: true,
+        } as any,
+      },
+      visualMap: { ...heatVisual(visualMax), min: 0, max: visualMax, precision: 0 },
+      series: [{
+        type: 'heatmap',
+        data: values,
+        itemStyle: { borderColor: ct.tooltipBg, borderWidth: 2 },
+        label: {
+          show: true,
+          color: ct.textStrong,
+          formatter: (p: any) => (p.value[1] === realizedFrom && p.value[0] === todayRow ? `${p.value[2]}%▲` : `${p.value[2]}%`),
+        },
+        tooltip: {
+          formatter: (p: any) => {
+            const from = labels[p.value[1]]
+            const to = labels[p.value[0]]
+            const marked = p.value[1] === realizedFrom && p.value[0] === todayRow ? '<br/>（昨日→今日的实际转移）' : ''
+            return `${from} → ${to}<br/>概率：${p.value[2]}%<br/>样本：${view.counts?.[p.value[1]]?.[p.value[0]] ?? 0} 次${marked}`
+          },
+        },
+      }],
+    }
   }
   if (key === 'sector_diffusion') {
     const dimension = selection.sectorDimension || data.default_dimension || 'sw_level1'
@@ -274,9 +323,50 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     const industries = view.industries || []
     const matrix = view.matrix || []
     const values = matrix.flatMap((row: Array<number | null>, y: number) => row.map((value, x) => [x, y, value]))
+    // A 股行业几乎同涨同跌: 相关系数常年挤在 0.75–0.98, 固定 -1..1 色阶会把
+    // 九成格子涂成同一个红。改成按实际分布自适应(P5–P95), 让差异真正显形。
+    const finite = values
+      .map((row: any[]) => row[2])
+      .filter((value: any): value is number => typeof value === 'number' && Number.isFinite(value))
+      .sort((a: number, b: number) => a - b)
+    const quantile = (q: number) => (finite.length
+      ? finite[Math.min(finite.length - 1, Math.max(0, Math.round(q * (finite.length - 1))))]
+      : -1)
+    const scaleMin = Math.max(-1, quantile(0.05))
+    const scaleMax = Math.min(1, Math.max(quantile(0.95), scaleMin + 0.05))
     const zoomed = industries.length > 50
     const dataZoom = zoomed ? [{ type: 'inside', xAxisIndex: 0, startValue: 0, endValue: 49 }, { type: 'slider', xAxisIndex: 0, bottom: 30, height: 10, startValue: 0, endValue: 49, textStyle: { color: ct.text }, borderColor: ct.border }, { type: 'inside', yAxisIndex: 0, startValue: 0, endValue: 49 }, { type: 'slider', yAxisIndex: 0, right: 2, width: 10, startValue: 0, endValue: 49, textStyle: { color: ct.text }, borderColor: ct.border }] : []
-    return { ...common, grid: { left: 10, right: zoomed ? 34 : 12, top: 10, bottom: zoomed ? 96 : 78, containLabel: true }, dataZoom, xAxis: { type: 'category', data: industries, triggerEvent: true, axisLabel: { color: ct.text, rotate: 50, fontSize: 8, hideOverlap: true } }, yAxis: { type: 'category', data: industries, triggerEvent: true, axisLabel: { color: ct.text, width: 92, overflow: 'truncate', fontSize: 8 } }, visualMap: { min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inRange: { color: [GREEN, '#172033', RED] }, textStyle: { color: ct.text } }, series: [{ type: 'heatmap', data: values, progressive: 10000, tooltip: { formatter: (p: any) => `${industries[p.value[1]]} × ${industries[p.value[0]]}<br/>相关系数：${p.value[2] ?? '--'}<br/>样本：${view.sample_days || 0} 日<br/>点击聚焦：${industries[p.value[1]]}` } }] }
+    return {
+      ...common,
+      grid: { left: 10, right: zoomed ? 34 : 12, top: 10, bottom: zoomed ? 96 : 78, containLabel: true },
+      dataZoom,
+      xAxis: { type: 'category', data: industries, triggerEvent: true, axisLabel: { color: ct.text, rotate: 50, fontSize: 8, hideOverlap: true } },
+      yAxis: { type: 'category', data: industries, triggerEvent: true, axisLabel: { color: ct.text, width: 92, overflow: 'truncate', fontSize: 8 } },
+      visualMap: {
+        min: scaleMin,
+        max: scaleMax,
+        calculable: true,
+        orient: 'horizontal',
+        left: 'center',
+        bottom: 0,
+        itemWidth: 12,
+        itemHeight: 150,
+        inRange: { color: [GREEN, '#172033', RED] },
+        textStyle: { color: ct.text },
+        // 连续型 visualMap 的 text[0] 落在数值**高**的一端, 与色条左低右高相反
+        text: ['高相关', '低相关'],
+        formatter: (value: number) => value.toFixed(2),
+      },
+      series: [{
+        type: 'heatmap',
+        data: values,
+        progressive: 10000,
+        itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 },
+        tooltip: {
+          formatter: (p: any) => `${industries[p.value[1]]} × ${industries[p.value[0]]}<br/>相关系数：${p.value[2] ?? '--'}<br/>样本：${view.sample_days || 0} 日<br/>点击聚焦：${industries[p.value[1]]}`,
+        },
+      }],
+    }
   }
   if (key === 'mainline_waterfall') {
     const selected = (data.mainlines || []).find((row: any) => row.focus === selection.mainlineFocus) || (data.mainlines || [])[0] || data
@@ -302,6 +392,63 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
       { name: '昨日到今日', type: 'lines', coordinateSystem: 'cartesian2d', silent: true, symbol: ['none', 'arrow'], symbolSize: [0, 6], lineStyle: { color: ct.text, width: 1, opacity: 0.28 }, data: visibleTrails.map((row: any) => ({ name: row.name, coords: [[row.previous_momentum, row.previous_acceleration], [row.momentum, row.acceleration]] })), z: 2 },
       { type: 'scatter', symbolSize: 13, data: points.map((row: any, index: number) => ({ name: row.name, value: [row.momentum, row.acceleration, row.recent_rps, row.recent_return_pct, row.movement], itemStyle: { color: PALETTE[index % PALETTE.length] }, label: { show: Math.abs(row.momentum || 0) + Math.abs(row.acceleration || 0) >= 48, position: row.momentum > 0 ? 'left' : 'right' } })), label: { color: ct.textStrong, fontSize: 9, formatter: '{b}' }, labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' }, tooltip: { formatter: (p: any) => `${p.name}<br/>当前 RPS：${p.value[2]}<br/>排名加速度：${p.value[1]}<br/>近 5 日收益：${p.value[3]}%<br/>较昨日位移：${p.value[4] ?? '--'}` }, markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { color: ct.border, type: 'dashed', width: 1.5 }, data: [{ xAxis: 0 }, { yAxis: 0 }] }, z: 3 },
     ] }
+  }
+  if (key === 'turnover_return_density') {
+    const xBins: string[] = data.x_bins || []
+    const yBins: string[] = data.y_bins || []
+    const raw: number[][] = data.values || []
+    // 收益分箱里 0% 是相邻两格的**边界**, 类目轴无法落在 3.5 的位置(实测会被
+    // 四舍五入到第 4 格中心), 所以显式插一条「0%」分隔带, 让涨跌分界一眼可辨。
+    const zeroIndex = yBins.findIndex(bin => /^0\s*[~-]/.test(bin.trim()))
+    const insertAt = zeroIndex > 0 ? zeroIndex : Math.ceil(yBins.length / 2)
+    const displayBins = [...yBins.slice(0, insertAt), '0%（平盘）', ...yBins.slice(insertAt)]
+    const remapY = (y: number) => (y < insertAt ? y : y + 1)
+    // 计数分布极度右偏(最大 600+、中位数个位数), 线性色阶会把九成格子压成一色,
+    // 所以色阶走 log10(1+n), 格子里仍显示真实股票数。
+    const maxCount = Math.max(1, ...raw.map((row: number[]) => row[2] || 0))
+    const maxLog = Math.log10(maxCount + 1)
+    const values: any[] = raw.map((row: number[]) => ({
+      value: [row[0], remapY(row[1]), Math.log10((row[2] || 0) + 1), row[2]],
+    }))
+    for (let x = 0; x < xBins.length; x += 1) {
+      values.push({ value: [x, insertAt, 0, null], itemStyle: { color: 'rgba(240,180,41,.14)' }, label: { show: false } })
+    }
+    return {
+      ...common,
+      grid: { left: 10, right: 12, top: 12, bottom: 55, containLabel: true },
+      xAxis: { type: 'category', data: xBins, axisLabel: { color: ct.text, rotate: 40, fontSize: 9, hideOverlap: true } },
+      yAxis: {
+        type: 'category',
+        data: displayBins,
+        axisLabel: {
+          color: (value: string) => (value === '0%（平盘）' ? ORANGE : ct.text),
+          fontWeight: (value: string) => (value === '0%（平盘）' ? 'bold' : 'normal'),
+          width: 84,
+          overflow: 'truncate',
+          fontSize: 9,
+        } as any,
+      },
+      visualMap: { ...heatVisual(maxLog), min: 0, max: maxLog, precision: 1, text: ['密', '疏'], calculable: false },
+      series: [{
+        type: 'heatmap',
+        data: values,
+        itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 },
+        label: {
+          show: true,
+          color: '#ffffff',
+          backgroundColor: 'rgba(0,0,0,.66)',
+          borderRadius: 2,
+          padding: [1, 3],
+          fontSize: 8,
+          formatter: (p: any) => (p.value[3] == null ? '' : String(p.value[3])),
+        },
+        tooltip: {
+          formatter: (p: any) => (p.value[3] == null
+            ? `${xBins[p.value[0]]} 换手 · 0% 涨跌分界`
+            : `${xBins[p.value[0]]} 换手<br/>${yBins[p.value[1] < insertAt ? p.value[1] : p.value[1] - 1]} 收益<br/>股票数：${p.value[3]}`),
+        },
+      }],
+    }
   }
   const values = data.values || []
   return { ...common, grid: { left: 10, right: 12, top: 12, bottom: 55, containLabel: true }, xAxis: { type: 'category', data: data.x_bins || [], axisLabel: { color: ct.text, rotate: 40, fontSize: 9, hideOverlap: true } }, yAxis: { type: 'category', data: data.y_bins || [], axisLabel: { color: ct.text, width: 72, overflow: 'truncate', fontSize: 9 } }, visualMap: heatVisual(Math.max(1, ...values.map((row: number[]) => row[2]))), series: [{ type: 'heatmap', data: values, itemStyle: { borderColor: ct.tooltipBg, borderWidth: 1 }, label: { show: true, color: '#ffffff', backgroundColor: 'rgba(0,0,0,.66)', borderRadius: 2, padding: [1, 3], fontSize: 8, formatter: (p: any) => String(p.value[2]) }, tooltip: { formatter: (p: any) => `${data.x_bins[p.value[0]]} 换手<br/>${data.y_bins[p.value[1]]} 收益<br/>股票数：${p.value[2]}` } }] }
@@ -572,6 +719,15 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
   const caveat = card.note || meta.caveat
   const correlationView = card.data.views?.[correlationDimension] || card.data
   const stateTransitionView = card.data.views?.[stateTransitionWindow] || card.data
+  const stateTransitionCurrent = card.data.current || null
+  const stateTransitionRealized = stateTransitionCurrent
+    && Number.isInteger(stateTransitionCurrent.previous_index)
+    && Number.isInteger(stateTransitionCurrent.state_index)
+    ? {
+        probability: stateTransitionView.matrix?.[stateTransitionCurrent.previous_index]?.[stateTransitionCurrent.state_index],
+        count: stateTransitionView.counts?.[stateTransitionCurrent.previous_index]?.[stateTransitionCurrent.state_index],
+      }
+    : null
   const handleChartClick = useCallback((params: any) => {
     if (chartKey !== 'industry_correlation') return
     const industries: string[] = correlationView.industries || []
@@ -619,7 +775,19 @@ function AdvancedCard({ chartKey, card, layout }: { chartKey: string; card: Quan
           : <EChart chartKey={chartKey} card={card} height={height} selection={selection} onClick={chartKey === 'industry_correlation' ? handleChartClick : undefined} />
           : <div className="flex items-center justify-center text-xs text-muted" style={{ height }}><span>{card.reason || '暂无足够数据'}</span></div>}
         {chartKey === 'industry_correlation' && card.status === 'ok' && <CorrelationPairRankings view={correlationView} selectedIndustry={correlationIndustry} onSelectIndustry={setCorrelationIndustry} />}
-        {chartKey === 'state_transition' && card.status === 'ok' && <div data-testid="quantx-state-transition-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p className="font-mono text-foreground">统计区间：{stateTransitionView.start_date || '--'}～{stateTransitionView.end_date || '--'} · {stateTransitionView.transition_count ?? 0} 次相邻交易日转移 · {stateTransitionView.label || '当前样本'}</p><p>读法：从左侧“当前状态”沿行读取到上方“下一交易日状态”，每行合计 100%。例如“震荡 → 偏强 20%”表示处于震荡后，次日转为偏强的历史概率为 20%。</p><p className="text-orange-300">模型边界：本矩阵来自 TickFlow Regime 四维模型；顶部市场热度、短线情绪和趋势情绪来自 QuantX market_state_daily，两套分值与状态不可直接互换。</p></div>}
+        {chartKey === 'state_transition' && card.status === 'ok' && <div data-testid="quantx-state-transition-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">
+          {stateTransitionCurrent && <p data-testid="quantx-state-transition-current" className="text-foreground">
+            <span className="mr-1 rounded bg-blue-400/15 px-1 py-0.5 text-[9px] text-blue-300">今日</span>
+            {stateTransitionCurrent.date} 处于 <b>{stateTransitionCurrent.label}</b>
+            {stateTransitionCurrent.previous_label && stateTransitionRealized?.probability != null
+              ? <>（昨日 {stateTransitionCurrent.previous_label} → 今日 {stateTransitionCurrent.label}：{stateTransitionView.label || '当前样本'}中 {stateTransitionRealized.count ?? 0} 次 / {stateTransitionRealized.probability}%，即橙框那一格）</>
+              : null}
+            。<span className="text-blue-300">蓝框标出的「{stateTransitionCurrent.label}」这一行</span>就是明日状态分布。
+          </p>}
+          <p className="font-mono text-foreground">统计区间：{stateTransitionView.start_date || '--'}～{stateTransitionView.end_date || '--'} · {stateTransitionView.transition_count ?? 0} 次相邻交易日转移 · {stateTransitionView.label || '当前样本'}</p>
+          <p>读法：从左侧“当前状态”沿行读取到上方“下一交易日状态”，每行合计 100%。例如“震荡 → 偏强 20%”表示处于震荡后，次日转为偏强的历史概率为 20%。</p>
+          <p className="text-orange-300">模型边界：本矩阵来自 TickFlow Regime 四维模型；顶部市场热度、短线情绪和趋势情绪来自 QuantX market_state_daily，两套分值与状态不可直接互换。</p>
+        </div>}
         {chartKey === 'turnover_lorenz' && card.status === 'ok' && <LorenzReadout data={card.data} />}
         {chartKey === 'turnover_lorenz' && card.status === 'ok' && <div data-testid="quantx-lorenz-guide" className="space-y-1 border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted"><p><span className="text-foreground">怎么看：</span>上方是近 40 个交易日 Gini 逐日柱，橙柱为当日，红柱代表集中度较前一日上升、绿柱代表下降，黄虚线为 20 日均值。下方横轴是「成交额最大的前 N% 股票」，用对数刻度把 0.05%–10% 这段头部展开；纵轴是该区间股票今日成交占比减去前 20 个交易日均值，正值表示今日成交更集中到头部。</p><p><span className="text-foreground">有什么用：</span>洛伦兹曲线在全样本坐标下几乎逐日重合，光看形态看不出变化；这条增量曲线才反映资金抱团是加强还是扩散，峰值落在前 0.5%–1% 说明增量主要来自最头部那一档。切到「洛伦兹曲线」可核对传统形态。它描述资金结构，不判断市场涨跌方向。</p></div>}
         {chartKey === 'advance_decline' && card.status === 'ok' && <p data-testid="quantx-ad-divergence-guide" className="border-t border-border/60 px-1 pt-1.5 text-[9px] leading-4 text-muted">红色区间：指数走强但市场广度转弱；绿色区间：指数走弱但广度修复。图钉标记背离确认点。</p>}

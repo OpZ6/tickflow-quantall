@@ -756,3 +756,34 @@ def test_sunburst_falls_back_to_limit_reason_when_ladder_has_no_theme() -> None:
     assert result["coverage"]["classified_count"] == 3
     assert result["coverage"]["unclassified_count"] == 0
 
+
+
+def test_state_transition_exposes_current_state_and_realized_transition() -> None:
+    """矩阵只给历史概率，前端要标"今天在哪"，需要今日状态与刚实现的转移。"""
+    frame = pl.DataFrame(
+        {
+            "date": [date(2026, 11, 25), date(2026, 11, 26), date(2026, 11, 27)],
+            "state": ["weak", "lean_weak", "strong"],
+        }
+    )
+
+    result = _state_transition_views(frame)
+
+    current = result["current"]
+    assert current["date"] == "2026-11-27"
+    assert current["state"] == "strong"
+    assert current["label"] == "强势"
+    assert current["state_index"] == 4
+    assert current["previous_date"] == "2026-11-26"
+    assert current["previous_state"] == "lean_weak"
+    assert current["previous_label"] == "偏弱"
+    assert current["previous_index"] == 1
+    # 该转移在近 500 日样本里出现过一次（偏弱 -> 强势）
+    assert result["views"]["500"]["counts"][1][4] == 1
+    assert result["views"]["500"]["matrix"][1][4] == 100.0
+
+
+def test_state_transition_current_is_none_without_regime_rows() -> None:
+    result = _state_transition_views(pl.DataFrame())
+
+    assert result["current"] is None
