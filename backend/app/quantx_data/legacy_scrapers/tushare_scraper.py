@@ -6,6 +6,7 @@ so importing optional adapters never fails when a token is not configured.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -180,6 +181,34 @@ def _fetch_ad_history(trade_date: str, days: int = 60) -> dict[str, Any]:
     return {"history": records, "latest": records[-1] if records else {}}
 
 
+_MARGIN_DROP_TOLERANCE = 0.3
+"""相邻交易日融资余额的合理波动上限。
+
+沪深两市单日融资余额变动极少超过 5%，30% 已经是极端宽松的兜底：
+一旦某条记录掉了三成以上，基本可以断定当日只汇总到部分交易所的数据。
+"""
+
+
+def _margin_complete_dates(frame: pd.DataFrame) -> tuple[dict[str, frozenset[str]], frozenset[str]]:
+    """按交易日统计「当日到底有哪些交易所的数据」，并给出完整组合。
+
+    沪深两所的融资余额都是 T+1 晚间披露，BSE 更晚。取数时最新的那天经常
+    只有 SSE 一条，直接 sum 就会得到「余额腰斩 + 净买入巨幅流出」的假信号。
+    以窗口内出现次数最多的组合作为完整组合，缺所的日期一律丢弃。
+    """
+    if "exchange_id" not in frame.columns:
+        return {}, frozenset()
+    exchanges = frame["exchange_id"].astype(str).str.strip().str.upper()
+    per_date: dict[str, frozenset[str]] = {}
+    for raw_date, group in exchanges.groupby(frame["trade_date"].astype(str)):
+        per_date[str(raw_date)] = frozenset(group.tolist())
+    if not per_date:
+        return {}, frozenset()
+    counts = Counter(per_date.values())
+    reference = counts.most_common(1)[0][0]
+    return per_date, reference
+
+
 def _fetch_margin(trade_date: str, days: int = 30) -> dict[str, Any]:
     end = datetime.strptime(trade_date, "%Y%m%d")
     start = (end - timedelta(days=90)).strftime("%Y%m%d")
@@ -189,19 +218,57 @@ def _fetch_margin(trade_date: str, days: int = 30) -> dict[str, Any]:
         return {}
     if frame is None or frame.empty or "rzye" not in frame.columns:
         return {}
+    frame = frame.copy()
     frame["rzye_f"] = pd.to_numeric(frame["rzye"], errors="coerce").fillna(0) / 1e8
-    grouped = frame.groupby("trade_date", as_index=False)["rzye_f"].sum().sort_values("trade_date").tail(days)
-    records = []
-    previous = None
+    per_date_exchanges, reference = _margin_complete_dates(frame)
+    grouped = (
+        frame.groupby("trade_date", as_index=False)["rzye_f"]
+        .sum()
+        .sort_values("trade_date")
+    )
+    records: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    previous: float | None = None
     for row in grouped.to_dict(orient="records"):
+        row_date = str(row["trade_date"])
         value = float(row["rzye_f"])
-        records.append({
-            "date": str(row["trade_date"]),
-            "rzye_yi": round(value, 2),
-            "rz_net_buy_yi": round(value - previous, 2) if previous is not None else 0.0,
-        })
+        exchanges = per_date_exchanges.get(row_date)
+        if reference and exchanges is not None and exchanges != reference:
+            skipped.append(
+                {
+                    "date": row_date,
+                    "reason": "incomplete_exchanges",
+                    "exchanges": sorted(exchanges),
+                    "expected": sorted(reference),
+                }
+            )
+            continue
+        if previous is not None and previous > 0 and abs(value - previous) / previous > _MARGIN_DROP_TOLERANCE:
+            skipped.append(
+                {
+                    "date": row_date,
+                    "reason": "implausible_jump",
+                    "rzye_yi": round(value, 2),
+                    "previous_yi": round(previous, 2),
+                }
+            )
+            continue
+        records.append(
+            {
+                "date": row_date,
+                "rzye_yi": round(value, 2),
+                "rz_net_buy_yi": round(value - previous, 2) if previous is not None else 0.0,
+            }
+        )
         previous = value
-    return {"history": records, "latest": records[-1] if records else {}}
+    records = records[-days:]
+    payload: dict[str, Any] = {
+        "history": records,
+        "latest": records[-1] if records else {},
+    }
+    if skipped:
+        payload["skipped_dates"] = skipped
+    return payload
 
 
 def _fetch_kline(trade_date: str, days: int = 60) -> list[dict[str, Any]]:

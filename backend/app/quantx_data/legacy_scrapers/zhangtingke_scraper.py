@@ -197,6 +197,10 @@ def scrape(trade_date: str) -> dict[str, Any]:
     return {
         "trade_date": trade_date,
         "available": bool(height_rows or ladder_stocks),
+        # 当日梯队页(lbtd_lst)为空时, 只剩高度榜可用: 高度和个股都在, 但**没有题材列**。
+        # 下游会退化到 pywencai 的「高度->股票名」列表, 归类率会骤降, 必须显式标出来
+        # 而不是报 ok —— 否则页面上只会看到一大块「待归类」而查不到原因。
+        "ladder_available": bool(ladder_stocks),
         "source_urls": {
             "height_history": HEIGHT_URL,
             "daily_ladder": LADDER_URL.format(date=trade_date),
@@ -215,7 +219,12 @@ def run(trade_date: str, output_dir: str) -> str:
     result: dict[str, Any] = {"trade_date": trade_date, "scraped_at": datetime.now().isoformat()}
     try:
         result.update(scrape(trade_date))
-        result["status"] = "ok" if result.get("available") else "empty"
+        if not result.get("available"):
+            result["status"] = "empty"
+        elif not result.get("ladder_available"):
+            result["status"] = "degraded"
+        else:
+            result["status"] = "ok"
         print(
             f"  [zhangtingke] height_rows={result.get('raw_counts', {}).get('height_rows', 0)}, "
             f"ladder_rows={result.get('raw_counts', {}).get('ladder_rows', 0)}"

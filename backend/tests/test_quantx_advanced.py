@@ -709,3 +709,50 @@ def test_snapshot_has_exactly_the_fifteen_supported_cards(tmp_path) -> None:
     assert "cross_day_survival_sankey" not in snapshot["cards"]
     assert "leader_handoff_timeline" not in snapshot["cards"]
     assert all(card["status"] == "unavailable" for card in snapshot["cards"].values())
+
+
+def test_sunburst_falls_back_to_limit_reason_when_ladder_has_no_theme() -> None:
+    """主源梯队只给股票名时(zhangtingke lbtd_lst 为空 -> pywencai 名字列表),
+    题材列全空, 整张矩阵会退化成一格几百只的「待归类」。此时应按当日涨停理由
+    临时归类, 并把 basis 标成 limit_reason, 让前端显示「按涨停理由归类」。
+    """
+    day = date(2026, 11, 27)
+    ladder = pl.DataFrame(
+        {
+            "trade_date": [day] * 3,
+            "theme_name": ["", "", ""],
+            "board_height": [2, 1, 1],
+            "name": ["股票甲", "股票乙", "股票丙"],
+            "symbol": ["000001", "000002", "000003"],
+            "exchange": ["SZSE"] * 3,
+            "source": ["pywencai"] * 3,
+            "is_fallback": [True] * 3,
+            "theme_reason": ["", "", ""],
+            "interpretation": ["", "", ""],
+        }
+    )
+    events = pl.DataFrame(
+        {
+            "trade_date": [day] * 3,
+            "event_type": ["limit_up"] * 3,
+            "board_height": [2, 1, 1],
+            "name": ["股票甲", "股票乙", "股票丙"],
+            "symbol": ["000001", "000002", "000003"],
+            "exchange": ["SZSE"] * 3,
+            "source": ["pywencai"] * 3,
+            "is_fallback": [True] * 3,
+            "limit_reason": ["半导体", "半导体", "造纸"],
+        }
+    )
+
+    result = _sunburst(ladder, day, events)
+
+    members = {member["name"]: member for member in result["members"]}
+    assert members["股票甲"]["theme"] == "半导体"
+    assert members["股票丙"]["theme"] == "造纸"
+    assert {member["classification_basis"] for member in members.values()} == {
+        "limit_reason"
+    }
+    assert result["coverage"]["classified_count"] == 3
+    assert result["coverage"]["unclassified_count"] == 0
+

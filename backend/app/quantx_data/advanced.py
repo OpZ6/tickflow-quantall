@@ -988,6 +988,15 @@ def _sunburst(
         if can_carry_previous:
             theme_reason = theme_reason or _text(previous.get("theme_reason"))
             interpretation = interpretation or _text(previous.get("interpretation"))
+        if theme == "待归类":
+            # 涨停客的当日梯队页(lbtd_lst)偶尔返回 0 行，管线会退化到 pywencai
+            # 的「高度 -> 股票名」列表（没有题材列），于是整张矩阵变成一格
+            # 389 只的「待归类」。这里用当日涨停理由做临时归类，basis 标成
+            # limit_reason，前端会显示「按涨停理由归类」，不冒充真实题材。
+            fallback_theme, fallback_basis = _supplemental_theme(limit_reason)
+            if fallback_basis == "limit_reason":
+                theme = fallback_theme
+                classification_basis = "limit_reason"
         reason, reason_kind = _reason_detail(
             interpretation, limit_reason, theme_reason
         )

@@ -128,3 +128,32 @@ def test_run_marks_empty_when_no_data(monkeypatch, tmp_path) -> None:
     assert path == str(tmp_path / "zhangtingke.json")
     assert payload["status"] == "empty"
     assert payload["available"] is False
+
+
+def test_run_marks_degraded_when_daily_ladder_is_missing(monkeypatch, tmp_path) -> None:
+    """高度榜拿到了但当日梯队页为空时, 题材列会全空(下游只能按股票名归类)。
+
+    这种情况不能报 ok, 否则页面上出现一大块「待归类」时没人知道是源缺数据。
+    """
+    _silence_sleep(monkeypatch)
+    payloads = [HEIGHT_HTML, EMPTY_LADDER_HTML] * zhangtingke_scraper._SCRAPE_RETRIES
+    monkeypatch.setattr(zhangtingke_scraper, "_fetch", lambda _url: payloads.pop(0))
+
+    zhangtingke_scraper.run("20260911", str(tmp_path))
+    payload = json.loads((tmp_path / "zhangtingke.json").read_text(encoding="utf-8"))
+
+    assert payload["status"] == "degraded"
+    assert payload["available"] is True
+    assert payload["ladder_available"] is False
+
+
+def test_run_marks_ok_when_ladder_present(monkeypatch, tmp_path) -> None:
+    _silence_sleep(monkeypatch)
+    payloads = [HEIGHT_HTML, LADDER_HTML]
+    monkeypatch.setattr(zhangtingke_scraper, "_fetch", lambda _url: payloads.pop(0))
+
+    zhangtingke_scraper.run("20260911", str(tmp_path))
+    payload = json.loads((tmp_path / "zhangtingke.json").read_text(encoding="utf-8"))
+
+    assert payload["status"] == "ok"
+    assert payload["ladder_available"] is True

@@ -273,7 +273,11 @@ export function MarginChart({ history, height = 400 }: { history: any[]; height?
   }), [rows, ct.text, ct.border, ct.grid])
   const ref = useEChart(option, [rows, ct.text])
   if (!rows.length) return null
-  return <div ref={ref} className="w-full" style={{ height }} />
+  const lastDate = String(rows[rows.length - 1]?.date || '')
+  return <div className="w-full">
+    {lastDate && <p data-testid="quantx-margin-cutoff" className="mb-1 text-right text-[9px] text-muted">数据截至 {lastDate}（沪深融资余额 T+1 披露，未披露日不参与统计）</p>}
+    <div ref={ref} className="w-full" style={{ height }} />
+  </div>
 }
 
 export function HeightChart({ history, height = 280 }: { history: any[]; height?: number }) {
