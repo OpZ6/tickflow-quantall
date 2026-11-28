@@ -127,6 +127,25 @@ def _stretch_around_mid(score: float, factor: float) -> int:
     return round(max(0.0, min(100.0, stretched)))
 
 
+def _ratio_pct(numerator, denominator) -> float | None:
+    """占比(%): 分母缺失或为 0 时返回 None（不把"算不出来"伪造成 0）。"""
+    try:
+        if denominator is None or float(denominator) <= 0:
+            return None
+        return float(numerator or 0) / float(denominator) * 100
+    except (TypeError, ValueError):
+        return None
+
+
+def _round_pct(value: float | None, digits: int = 1) -> float | None:
+    return round(value, digits) if value is not None else None
+
+
+def _reaches(value: float | None, threshold: float) -> bool:
+    """比率阈值判断: None(不可用) 视为不触发, 避免缺数据时误报。"""
+    return value is not None and value >= threshold
+
+
 def _zone_for_score(score: float) -> str:
     if score < 30: return "冰点"
     elif score < 40: return "偏冷"
@@ -365,7 +384,16 @@ def _calc_advance_stats(py: dict, dx: dict | None = None) -> dict:
 
 
 def _calc_loss_effect(py: dict, dx: dict, tu: dict) -> dict:
-    """亏钱效应扫描。"""
+    """亏钱效应扫描。
+
+    三个维度全部用「比率」而不是绝对家数：绝对家数会随市场规模与当日涨停数一起漂移，
+    2026-11-27 这种 417 家涨停的日子，只要 31 家炸板就会踩中原来的"崩塌"阈值，而当天
+    炸板率其实只有 7%。比率口径（历史分位取自 regime_history 2015-2026，2892 天）：
+      炸板率 = 炸板 / (炸板 + 涨停)        p50 30% / p90 44%
+      跌停比 = 跌停 / (跌停 + 涨停)        p50 10% / p90 43%
+      下跌占比 = 跌停家数 / 涨跌家数合计    p50 52% / p90 83%
+    按这三条"或"起来分档，全历史分布约 收敛 32% / 稳定 24% / 扩散 29% / 蔓延 15%。
+    """
     bb = py.get("broken_board", {})
     broken_count = bb.get("count", 0)
     broken_stocks = bb.get("stocks", [])
@@ -373,6 +401,8 @@ def _calc_loss_effect(py: dict, dx: dict, tu: dict) -> dict:
     dm = tu.get("daily_market", {})
     green_avg = _as_optional_float(dm.get("green_avg_pct"))
     down_count = _as_optional_int(dm.get("down_count"))
+    up_count = _as_optional_int(dm.get("up_count"))
+    limit_up_count = _dx_fallback(py, dx)["limit_up_count"]
 
     primary_limit_down = py.get("limit_down", {}) if isinstance(py, dict) else {}
     primary_count = (
@@ -387,15 +417,27 @@ def _calc_loss_effect(py: dict, dx: dict, tu: dict) -> dict:
         tolerance = max(2, round(primary_count * 0.10))
         if abs(primary_count - fallback_count) > tolerance:
             source_quality = "conflict"
-    rule_limit_down = dt_today if dt_today is not None else 0
-    rule_down_count = down_count if down_count is not None else 0
+
+    # 涨停数缺失时比率无从谈起: 直接置 None(不触发), 否则 10 只炸板 / 0 只涨停 会算出
+    # 100% 炸板率这种假信号。缺数据宁可不报警, 也不伪造极端值。
+    broken_rate = (
+        _ratio_pct(broken_count, broken_count + limit_up_count) if limit_up_count else None
+    )
+    limit_down_ratio = (
+        _ratio_pct(dt_today, (dt_today or 0) + limit_up_count) if limit_up_count else None
+    )
+    down_share = (
+        _ratio_pct(down_count, (down_count or 0) + (up_count or 0))
+        if up_count is not None and down_count is not None
+        else None
+    )
 
     severity = "收敛"
-    if rule_down_count > 3000 or rule_limit_down > 20 or broken_count > 40:
+    if _reaches(broken_rate, 55) or _reaches(limit_down_ratio, 40) or _reaches(down_share, 85):
         severity = "蔓延"
-    elif rule_down_count > 2000 or rule_limit_down > 10 or broken_count > 25:
+    elif _reaches(broken_rate, 45) or _reaches(limit_down_ratio, 20) or _reaches(down_share, 65):
         severity = "扩散"
-    elif rule_down_count > 1000 or rule_limit_down > 5:
+    elif _reaches(down_share, 55) or _reaches(broken_rate, 30):
         severity = "稳定"
 
     return {
@@ -403,8 +445,13 @@ def _calc_loss_effect(py: dict, dx: dict, tu: dict) -> dict:
         "broken_board_count": broken_count,
         "broken_board_stocks": [{"code": s.get("code"), "name": s.get("name")} for s in broken_stocks[:10]],
         "limit_down_count": dt_today,
+        "limit_up_count": limit_up_count,
         "limit_down_source_quality": source_quality,
         "down_count": down_count,
+        "up_count": up_count,
+        "broken_rate_pct": _round_pct(broken_rate),
+        "limit_down_ratio_pct": _round_pct(limit_down_ratio),
+        "down_share_pct": _round_pct(down_share),
         "green_avg_pct": green_avg,
         "detail": {
             "broken_board_stocks": [
@@ -413,11 +460,19 @@ def _calc_loss_effect(py: dict, dx: dict, tu: dict) -> dict:
             ],
             "inputs": {
                 "broken_board_count": broken_count,
+                "limit_up_count": limit_up_count,
                 "limit_down_count": dt_today,
                 "down_count": down_count,
+                "up_count": up_count,
+                "broken_rate_pct": _round_pct(broken_rate),
+                "limit_down_ratio_pct": _round_pct(limit_down_ratio),
+                "down_share_pct": _round_pct(down_share),
                 "green_avg_pct": green_avg,
             },
-            "rule": "炸板>40或跌停>20或下跌>3000为蔓延；炸板>25或跌停>10或下跌>2000为扩散。",
+            "rule": (
+                "比率口径（不做绝对家数阈值）：炸板率≥55%/跌停比≥40%/下跌占比≥85% 为蔓延；"
+                "≥45%/≥20%/≥65% 为扩散；下跌占比≥55% 或 炸板率≥30% 为稳定，其余收敛。"
+            ),
         },
     }
 
@@ -738,15 +793,28 @@ def _calc_crash_signals(
     py: dict, dx: dict, tu: dict,
     height_trend: dict | None = None, suspension_impact: dict | None = None,
 ) -> dict:
-    """崩塌前兆 3 信号。"""
+    """崩塌前兆 3 信号。
+
+    第 1、3 条用比率：炸板 30 只 / 下跌 2000 家在 400+ 涨停的日子里天天踩线，
+    实际炸板率可能只有 7%。改看炸板率（≥40%，p90 约 44%）与跌停比（≥20%）+ 下跌占比。
+    """
     dm = tu.get("daily_market", {})
-    down_count = dm.get("down_count", 0)
+    down_count = _as_optional_int(dm.get("down_count"))
+    up_count = _as_optional_int(dm.get("up_count"))
     ps = dx.get("pool_stats", {})
     dt_today = int(ps.get("跌停", {}).get("today", 0)) if ps.get("跌停") else 0
 
     bb = py.get("broken_board", {})
     broken_count = bb.get("count", 0)
-    s1_triggered = broken_count > 30
+    limit_up_count = _dx_fallback(py, dx)["limit_up_count"]
+    broken_rate = (
+        _ratio_pct(broken_count, broken_count + limit_up_count) if limit_up_count else None
+    )
+    s1_triggered = _reaches(broken_rate, 40)
+    s1_evidence = (
+        f"炸板{broken_count}只 / 涨停{limit_up_count}只"
+        + (f"（炸板率{broken_rate:.0f}%）" if broken_rate is not None else "（涨停数缺失，无法算炸板率）")
+    )
 
     lu = py.get("limit_up", {})
     ladder = lu.get("ladder", {})
@@ -766,13 +834,26 @@ def _calc_crash_signals(
         s2_status = "已触发" if s2_triggered else "待观察"
         s2_evidence = f"最高{max_board}板，近5日前高{previous_high}板"
 
-    s3_triggered = down_count > 2000 and dt_today > 10
+    limit_down_ratio = (
+        _ratio_pct(dt_today, dt_today + limit_up_count) if limit_up_count else None
+    )
+    down_share = (
+        _ratio_pct(down_count, (down_count or 0) + (up_count or 0))
+        if up_count is not None and down_count is not None
+        else None
+    )
+    s3_triggered = _reaches(limit_down_ratio, 20) and _reaches(down_share, 65)
+    s3_evidence = (
+        f"跌停{dt_today}只 / 涨停{limit_up_count}只"
+        + (f"（跌停比{limit_down_ratio:.0f}%）" if limit_down_ratio is not None else "")
+        + (f" 下跌占比{down_share:.0f}%" if down_share is not None else "")
+    )
 
     return {
         "signals": [
-            {"name": "领跌含近期强势股", "triggered": s1_triggered, "status": "已触发" if s1_triggered else "待观察", "evidence": f"炸板{broken_count}只"},
+            {"name": "领跌含近期强势股", "triggered": s1_triggered, "status": "已触发" if s1_triggered else "待观察", "evidence": s1_evidence},
             {"name": "龙头断板未修复", "triggered": s2_triggered, "status": s2_status, "evidence": s2_evidence},
-            {"name": "尾部放量跌停", "triggered": s3_triggered, "status": "已触发" if s3_triggered else "待观察", "evidence": f"跌{down_count}家 跌停{dt_today}只"},
+            {"name": "尾部放量跌停", "triggered": s3_triggered, "status": "已触发" if s3_triggered else "待观察", "evidence": s3_evidence},
         ],
         "any_triggered": s1_triggered or s2_triggered or s3_triggered,
     }

@@ -16,6 +16,7 @@ from app.quantx_data.review_repository import _clear_canonical_cache_fields
 from app.quantx_data.review_schema import QuantXReviewResponseV2
 from app.quantx_data.review_view import (
     apply_deterministic_review_view,
+    loss_risk_triggered,
     review_view_derivation_status,
 )
 
@@ -267,3 +268,11 @@ def test_frontend_review_consumers_have_one_declared_v2_classification():
 def test_matched_rule_returns_longest_prefix_on_segment_boundaries(path, rules, expected):
     """契约匹配只认「完全相同 / rule. 前缀 / rule[] 前缀」, 且取最长命中。"""
     assert _matched_rule(path, rules) == expected
+
+
+@pytest.mark.parametrize(
+    ("severity", "expected"),
+    [("收敛", False), ("稳定", False), ("扩散", True), ("蔓延", True), ("", False), ("未知", False)],
+)
+def test_loss_risk_only_triggers_when_spreading(severity, expected):
+    assert loss_risk_triggered(severity) is expected

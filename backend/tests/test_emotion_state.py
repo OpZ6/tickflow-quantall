@@ -11,6 +11,7 @@ import pytest
 from app.services.emotion_state import (
     _calc_crash_signals,
     _calc_ebb_risk_check,
+    _calc_loss_effect,
     _calc_market_heat,
     _calc_participation_check,
     _calc_short_term_sentiment,
@@ -241,19 +242,40 @@ class TestCrashSignals:
         result = _calc_crash_signals(py, dx, tu)
         assert result["any_triggered"] is False
 
-    def test_broken_board_trigger(self):
-        py = {"broken_board": {"count": 40}, "limit_up": {"ladder": {"5": ["A"]}}}
+    def test_broken_board_ratio_triggers_only_when_rate_is_high(self):
+        """炸板 40 只本身不再触发 —— 要看它占当日打板数的比例（2026-11-27 的误报根因）。"""
         dx = {"pool_stats": {"跌停": {"today": "3"}}}
-        tu = {"daily_market": {"down_count": 1000}}
-        result = _calc_crash_signals(py, dx, tu)
-        assert result["signals"][0]["triggered"] is True
-        assert result["any_triggered"] is True
+        tu = {"daily_market": {"down_count": 1000, "up_count": 3000}}
+
+        busy = _calc_crash_signals(
+            {"broken_board": {"count": 40}, "limit_up": {"ladder": {"5": ["A"]}, "count": 400}},
+            dx,
+            tu,
+        )
+        assert busy["signals"][0]["triggered"] is False  # 40/(40+400) = 9%
+
+        thin = _calc_crash_signals(
+            {"broken_board": {"count": 40}, "limit_up": {"ladder": {"5": ["A"]}, "count": 40}},
+            dx,
+            tu,
+        )
+        assert thin["signals"][0]["triggered"] is True  # 40/(40+40) = 50%
+
+    def test_broken_board_without_limit_up_count_does_not_alarm(self):
+        """涨停数缺失时算不出炸板率，不能凭绝对家数报警。"""
+        result = _calc_crash_signals(
+            {"broken_board": {"count": 60}, "limit_up": {"ladder": {}}},
+            {"pool_stats": {"跌停": {"today": "3"}}},
+            {"daily_market": {"down_count": 1000, "up_count": 3000}},
+        )
+        assert result["signals"][0]["triggered"] is False
 
     def test_plunge_trigger(self):
-        py = {"broken_board": {"count": 5}, "limit_up": {"ladder": {}}}
+        py = {"broken_board": {"count": 5}, "limit_up": {"ladder": {}, "count": 60}}
         dx = {"pool_stats": {"跌停": {"today": "15"}}}
-        tu = {"daily_market": {"down_count": 2500}}
+        tu = {"daily_market": {"down_count": 3000, "up_count": 1000}}
         result = _calc_crash_signals(py, dx, tu)
+        # 跌停比 15/(15+60)=20%、下跌占比 75% → 触发
         assert result["signals"][2]["triggered"] is True
         assert result["any_triggered"] is True
 
@@ -339,3 +361,46 @@ class TestCompute:
         assert "daily_summary" in result
         assert 0 <= result["market_heat"]["score"] <= 100
         assert (data_dir / "_computed.json").exists()
+
+
+# ---- 亏钱效应（比率口径） ----
+
+class TestLossEffect:
+    """2026-11-27 的误报根因：绝对家数阈值。这里锁住比率口径。"""
+
+    @staticmethod
+    def _call(limit_up, broken, limit_down, down, up):
+        py = {
+            "limit_up": {"count": limit_up},
+            "broken_board": {"count": broken},
+            "limit_down": {"status": "ok", "count": limit_down},
+        }
+        return _calc_loss_effect(py, {}, {"daily_market": {"up_count": up, "down_count": down}})
+
+    def test_big_limit_up_day_is_not_contagion(self):
+        """涨停 417 家、炸板 42 只（炸板率 9%）不应判「蔓延」。"""
+        result = self._call(417, 42, 0, 181, 5382)
+        assert result["broken_rate_pct"] == 9.2
+        assert result["severity"] == "收敛"
+
+    def test_broad_selloff_is_contagion(self):
+        """跌停 58 只、下跌占比 95% → 蔓延。"""
+        result = self._call(28, 7, 58, 5236, 300)
+        assert result["limit_down_ratio_pct"] > 40
+        assert result["down_share_pct"] > 85
+        assert result["severity"] == "蔓延"
+
+    def test_mid_pullback_is_spreading(self):
+        """跌停 5 只但三分之二个股下跌 → 扩散，不到蔓延。"""
+        result = self._call(65, 29, 5, 3642, 1700)
+        assert result["down_share_pct"] > 65
+        assert result["severity"] == "扩散"
+
+    def test_missing_up_count_does_not_fabricate_share(self):
+        result = _calc_loss_effect(
+            {"limit_up": {"count": 50}, "broken_board": {"count": 5}},
+            {},
+            {"daily_market": {"down_count": 1000}},
+        )
+        assert result["down_share_pct"] is None
+        assert result["severity"] == "收敛"

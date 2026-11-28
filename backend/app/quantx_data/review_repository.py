@@ -26,6 +26,15 @@ from .review_contract import (
     audit_review_fields,
 )
 from .review_schema import REVIEW_V2_SCHEMA_VERSION, QuantXReviewResponseV2
+
+# 退潮四信号在事实表里存的是键名(relay_payoff_weak 等), 直接吐给前端会在
+# 「退潮信号」「风险清单」里显示成英文下划线串。这里只做展示层翻译, 不改事实。
+EBB_SIGNAL_LABELS = {
+    "relay_payoff_weak": "接力赚钱效应转弱",
+    "seal_quality_weak": "封板质量下滑",
+    "ladder_compressed": "连板高度压缩",
+    "loss_effect_expanding": "亏钱效应扩散",
+}
 from .review_view import (
     VIEW_ALGORITHM_VERSION,
     apply_deterministic_review_view,
@@ -800,7 +809,8 @@ class QuantXReviewRepository:
             }
             section3["ebb_signals"] = [
                 {
-                    "name": row["signal_name"],
+                    "key": row["signal_name"],
+                    "name": EBB_SIGNAL_LABELS.get(row["signal_name"], row["signal_name"]),
                     "triggered": row.get("triggered"),
                     "available": row.get("available"),
                     "value": _decoded(row.get("value_json")),

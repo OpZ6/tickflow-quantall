@@ -138,6 +138,15 @@ def _height_trend(history: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def loss_risk_triggered(severity: str) -> bool:
+    """亏钱效应是否算风险触发。
+
+    只有"扩散/蔓延"是在恶化; 收敛、稳定（以及空/未知）都不该标红 ——
+    原写法是 `not in {"", "未知", "稳定"}`, 结果把最好的"收敛"也当成了风险。
+    """
+    return severity in {"扩散", "蔓延"}
+
+
 def apply_deterministic_review_view(
     snapshot: dict[str, Any],
     *,
@@ -245,7 +254,7 @@ def apply_deterministic_review_view(
     risks.append(
         {
             "name": "亏钱效应",
-            "triggered": loss_severity not in {"", "未知", "稳定"},
+            "triggered": loss_risk_triggered(loss_severity),
             "status": loss_severity,
             "evidence": "",
         }
