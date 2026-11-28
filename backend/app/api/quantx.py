@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -88,16 +89,32 @@ def get_review_data(
     trade_date: str,
     request: Request,
     view_version: Literal["v2"] = "v2",
+    refresh: bool = False,
 ):
-    _date_dir(request, trade_date)
+    d = _date_dir(request, trade_date)
     from app.quantx_data.review_repository import QuantXReviewRepository
+    from app.quantx_data.snapshot_cache import (
+        LIVE_TTL_SECONDS,
+        PAST_TTL_SECONDS,
+        load_or_build,
+    )
 
-    snapshot = QuantXReviewRepository(
+    repo = QuantXReviewRepository(
         _quantx_dir(request),
         request.app.state.market_facts,
         request.app.state.repo,
-    ).load(trade_date, view_version=view_version)
-    return snapshot
+    )
+    day = date.fromisoformat(f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:8]}")
+    # 复盘主体一次 7.8s, 且每次都是全量重算: 按交易日缓存整份响应。
+    # 输入指纹取当日 quantx/<date>/ 下的产物(管道重跑会重写), 历史日 6h TTL 兜底。
+    return load_or_build(
+        d.parent.parent / ".cache" / "quantx_snapshots",
+        f"review-{trade_date}-{view_version}",
+        lambda: repo.load(trade_date, view_version=view_version),
+        inputs=sorted(d.glob("*")),
+        ttl=LIVE_TTL_SECONDS if day >= date.today() else PAST_TTL_SECONDS,
+        refresh=refresh,
+    )
 
 
 # ---- 多日驾驶舱 ----

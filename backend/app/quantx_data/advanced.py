@@ -8,9 +8,11 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import polars as pl
 
 from app.market_facts.registry import DatasetId, get_route
+from app.market_time import cn_today
 
 SCHEMA_VERSION = "tickflow-quantx-advanced-v1"
 CARD_KEYS = (
@@ -341,8 +343,20 @@ def _stock_returns(
         return pl.DataFrame()
     required = {"symbol", "date", "close", "raw_close", "amount", "turnover_rate"}
     frame = None
+    # 历史日优先直读当日分区: 同一区间实测 0.15s vs repo.enriched_range 首次 9.4s
+    # (后者要重建 300 天 enriched 缓存), 6 列数值逐行比对完全一致。但落盘分区的
+    # turnover_rate 可能缺值, 而 repo 会现算补齐 —— 有任何一个必需列为空就退回 repo,
+    # 不能拿空换手率去画拥挤密度。当日也不能走这条路: 盘中要的是带实时叠加的快照。
+    if end < cn_today():
+        persisted = _read_range(root, "kline_daily_enriched", dates[0], dates[-1])
+        if not persisted.is_empty() and required.issubset(persisted.columns):
+            nulls = persisted.select(
+                [pl.col(column).null_count() for column in sorted(required)]
+            ).row(0)
+            if not any(nulls):
+                frame = persisted
     get_enriched_range = getattr(repo, "get_enriched_range", None)
-    if callable(get_enriched_range):
+    if (frame is None or frame.is_empty()) and callable(get_enriched_range):
         frame = get_enriched_range(dates[0], dates[-1], columns=sorted(required))
     if frame is None or not required.issubset(frame.columns):
         frame = _read_range(root, "kline_daily_enriched", dates[0], dates[-1])
@@ -752,6 +766,36 @@ def _industry_daily_returns(returns: pl.DataFrame, repo: Any) -> pl.DataFrame:
     )
 
 
+def _pairwise_correlation(values: np.ndarray, min_obs: int = 3) -> tuple[np.ndarray, np.ndarray]:
+    """按列求两两 Pearson 相关, 缺失值按「成对完整」处理。
+
+    原实现是在二重循环里对 pivot 反复 select+collect(一级 30² 次、二级 135² 次,
+    实测 12.6s 中有 9 成耗在 polars 的逐次 collect 开销上)。这里一次性转成 numpy:
+    完整列用一次 corrcoef 出整块, 只有含缺失的列才回落到按对计算。
+    """
+    n_cols = values.shape[1]
+    corr = np.full((n_cols, n_cols), np.nan)
+    if n_cols == 0:
+        return corr, np.zeros((0, 0), dtype=np.int32)
+    valid = ~np.isnan(values)
+    counts = valid.astype(np.int32).T @ valid.astype(np.int32)
+    complete = ~np.isnan(values).any(axis=0)
+    if int(complete.sum()) >= 2:
+        block = np.corrcoef(values[:, complete], rowvar=False)
+        corr[np.ix_(complete, complete)] = np.atleast_2d(block)
+    for index in np.flatnonzero(~complete):
+        for other in range(n_cols):
+            if other == index or counts[index, other] < min_obs:
+                continue
+            mask = valid[:, index] & valid[:, other]
+            left = values[mask, index]
+            right = values[mask, other]
+            if left.std() == 0 or right.std() == 0:
+                continue
+            corr[index, other] = float(np.corrcoef(left, right)[0, 1])
+    return corr, counts
+
+
 def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
     if daily.is_empty():
         return {}
@@ -773,6 +817,8 @@ def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
             .pivot(on="industry", index="date", values="return")
             .sort("date")
         )
+        values = pivot.drop("date").to_numpy().astype(float)
+        matrix_values, sample_counts = _pairwise_correlation(values)
         matrix = []
         pairs = []
         for left_index, left in enumerate(names):
@@ -781,15 +827,7 @@ def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
                 if left == right:
                     row.append(1.0)
                     continue
-                pair = pivot.select(
-                    pl.col(left).alias("left"), pl.col(right).alias("right")
-                ).drop_nulls()
-                corr = (
-                    pair.select(pl.corr("left", "right")).item()
-                    if pair.height >= 3
-                    else None
-                )
-                rounded = _round(corr, 3)
+                rounded = _round(float(matrix_values[left_index, right_index]), 3)
                 row.append(rounded)
                 if right_index > left_index and rounded is not None:
                     pairs.append(
@@ -797,7 +835,7 @@ def _industry_correlation(daily: pl.DataFrame) -> dict[str, Any]:
                             "left": left,
                             "right": right,
                             "correlation": rounded,
-                            "sample_days": pair.height,
+                            "sample_days": int(sample_counts[left_index, right_index]),
                         }
                     )
             matrix.append(row)
@@ -1292,6 +1330,32 @@ def _density(returns: pl.DataFrame, end: date) -> dict[str, Any]:
         for x in range(len(x_edges) - 1)
     ]
     return {"x_bins": [f"{left}-{right}%" for left, right in pairwise(x_edges)], "y_bins": [f"{left}~{right}%" for left, right in pairwise(y_edges)], "values": values, "sample": latest.height}
+
+
+ADVANCED_INPUT_DATASETS = (
+    "market_state_daily",
+    "market_breadth_daily",
+    "market_liquidity_daily",
+    "limit_event_daily",
+    "limit_ladder_daily",
+    "theme_observation_daily",
+    "sector_breadth_daily",
+    "kline_daily_enriched",
+)
+
+
+def advanced_cache_inputs(root: Path, trade_date: date) -> list[Path]:
+    """高级快照的输入文件清单, 供快照缓存做 mtime 指纹。
+
+    只取「当日分区」+ 全量历史文件: 补数或重跑管道必然重写当日的 part.parquet,
+    由此让缓存失效。窗口内更早交易日的回补(以及行业映射这类 ext 配置变更)抓不到,
+    由调用方的 TTL 兜底。
+    """
+    root = Path(root)
+    paths = [root / name / f"date={trade_date.isoformat()}" / "part.parquet" for name in ADVANCED_INPUT_DATASETS]
+    paths.append(root / "regime_history" / "part.parquet")
+    paths.append(root / "mainline_history" / "part.parquet")
+    return paths
 
 
 def build_advanced_snapshot(root: Path, trade_date: date, repo: Any = None) -> dict[str, Any]:

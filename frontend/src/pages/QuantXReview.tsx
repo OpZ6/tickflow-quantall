@@ -5,7 +5,7 @@
  */
 import { useMemo, useRef, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import * as echarts from 'echarts'
 import {
   ChevronLeft, ChevronRight, CalendarDays, Loader2,
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { quantxApi } from '@/custom/api'
 import type { QuantXReviewData } from '@/custom/api'
+import { cnToday } from '@/lib/kline'
 import { QK } from '@/lib/queryKeys'
 import { useChartTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
@@ -526,7 +527,10 @@ export function QuantXReview() {
   const { data: catalog } = useQuery({ queryKey: QK.quantxCatalog, queryFn: () => quantxApi.getCatalog(), retry: false, staleTime: 0 })
   const dates = useMemo(() => (catalog?.records || []).map(r => r.trade_date), [catalog])
   const recentRecords = useMemo(() => (catalog?.records || []).slice(-20), [catalog])
-  const { data, isLoading, error } = useQuery({ queryKey: QK.quantxReview(date), queryFn: () => quantxApi.getReviewData(date), retry: false, enabled: !!date, staleTime: 0 })
+  // 历史交易日的复盘快照不会再变: staleTime 给到无限期, 来回切日期直接命中缓存;
+  // 当日仍在更新, 保留 60s。keepPreviousData 让切换期间继续显示上一日内容, 不整页转圈。
+  const settled = Boolean(date) && date < cnToday().replace(/-/g, '')
+  const { data, isLoading, isPlaceholderData, error } = useQuery({ queryKey: QK.quantxReview(date), queryFn: () => quantxApi.getReviewData(date), retry: false, enabled: !!date, staleTime: settled ? Infinity : 60_000, gcTime: 30 * 60_000, placeholderData: keepPreviousData })
   const [sectorBreadthLevel, setSectorBreadthLevel] = useState<1 | 2>(1)
 
   if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
@@ -565,6 +569,14 @@ export function QuantXReview() {
   return (
     <div className="mx-auto max-w-6xl p-4 pb-20">
       <DateNav date={date} dates={dates} />
+      {isPlaceholderData && (
+        <div data-testid="quantx-date-switching" className="mt-2 flex justify-center">
+          <span className="flex items-center gap-1.5 rounded-full border border-border bg-elevated px-3 py-1 text-[11px] text-muted">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            正在载入 {date}，当前显示的是上一个交易日
+          </span>
+        </div>
+      )}
       {/* Metric strip */}
       <div className="flex gap-2 flex-wrap mt-4 mb-2">
         {ms.indexes.map(idx => {

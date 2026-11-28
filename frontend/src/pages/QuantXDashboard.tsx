@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Activity,
@@ -36,6 +36,7 @@ import { quantxApi } from '@/custom/api'
 import type { QuantXCandidate, QuantXMultidaySnapshot, QuantXReviewData } from '@/custom/api'
 import { cn } from '@/lib/cn'
 import { downloadQuantXInteractiveHtml } from '@/lib/exportStaticHtml'
+import { cnToday } from '@/lib/kline'
 import { QK } from '@/lib/queryKeys'
 import { usePipelineRefresh } from '@/lib/usePipelineRefresh'
 import {
@@ -537,9 +538,12 @@ export function QuantXDashboard() {
     if (!routeDate && latest) navigate(`/quantx?date=${latest}`, { replace: true })
   }, [latest, navigate, routeDate])
 
-  const reviewQuery = useQuery({ queryKey: QK.quantxReview(date), queryFn: () => quantxApi.getReviewData(date), enabled: Boolean(date), retry: false, staleTime: 0 })
-  const multidayQuery = useQuery({ queryKey: QK.quantxMultiday(date), queryFn: () => quantxApi.getMultiday(date), enabled: Boolean(date), retry: false, staleTime: 30_000 })
-  const advancedQuery = useQuery({ queryKey: QK.quantxAdvanced(date), queryFn: () => quantxApi.getAdvanced(date), enabled: Boolean(date), retry: false, staleTime: 30_000 })
+  // 历史交易日的快照不会再变: 缓存给到无限期, 只有当日(数据仍在更新)才 60s 过期。
+  // 配合 keepPreviousData, 切日期时旧内容继续显示 + 角标提示, 不再整页转圈。
+  const settled = Boolean(date) && date < cnToday().replace(/-/g, '')
+  const reviewQuery = useQuery({ queryKey: QK.quantxReview(date), queryFn: () => quantxApi.getReviewData(date), enabled: Boolean(date), retry: false, staleTime: settled ? Infinity : 60_000, gcTime: 30 * 60_000, placeholderData: keepPreviousData })
+  const multidayQuery = useQuery({ queryKey: QK.quantxMultiday(date), queryFn: () => quantxApi.getMultiday(date), enabled: Boolean(date), retry: false, staleTime: settled ? Infinity : 30_000, gcTime: 30 * 60_000, placeholderData: keepPreviousData })
+  const advancedQuery = useQuery({ queryKey: QK.quantxAdvanced(date), queryFn: () => quantxApi.getAdvanced(date), enabled: Boolean(date), retry: false, staleTime: settled ? Infinity : 60_000, gcTime: 30 * 60_000, placeholderData: keepPreviousData })
   const tablesQuery = useQuery({ queryKey: QK.quantxTables(date), queryFn: () => quantxApi.getTables(date), enabled: Boolean(date) && utilityOpen.data, retry: false, staleTime: 30_000 })
   const qualityQuery = useQuery({ queryKey: QK.quantxObservability(date), queryFn: () => quantxApi.getObservability(date), enabled: Boolean(date) && utilityOpen.quality, retry: false, staleTime: 30_000 })
   useEffect(() => {
@@ -583,6 +587,7 @@ export function QuantXDashboard() {
     )
   }
   const multiday = multidayQuery.data
+  const switching = Boolean(reviewQuery.isPlaceholderData || advancedQuery.isPlaceholderData || multidayQuery.isPlaceholderData)
   const s = review.sections
   const breadth = breadthLevel === 2 ? s.s1.width_heat_level2 : s.s1.width_heat
   const coverage = multiday ? `覆盖 ${multiday.data_coverage.window_days}/20日` : '多日数据降级'
@@ -590,6 +595,14 @@ export function QuantXDashboard() {
   return (
     <div className="mx-auto max-w-[1720px] overflow-x-clip px-3 pb-16 md:px-4" data-testid="quantx-unified-dashboard">
       <DashboardHeader date={date} dates={dates} refreshing={pipelineRefresh.isRefreshing} exporting={exporting} portable={portable} coverage={coverage} onDate={goDate} onRefresh={pipelineRefresh.refresh} onExport={portable ? undefined : () => void exportReport()} />
+      {switching && (
+        <div data-testid="quantx-date-switching" className="sticky top-0 z-30 flex justify-center py-1">
+          <span className="flex items-center gap-1.5 rounded-full border border-border bg-surface/95 px-3 py-1 text-[11px] text-muted shadow-sm backdrop-blur">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            正在载入 {date}，当前显示的是上一个交易日
+          </span>
+        </div>
+      )}
       <div className="mt-2 space-y-3">
         <MetricRibbon data={review} />
         <AnalysisDomainSection testId="quantx-domain-conclusion" title="今日市场结论" hint="先看市场方向、主线与风险，再进入各分析域验证" sequence="当前结论 → 今日行动" icon={<Zap className="h-4 w-4" />}>

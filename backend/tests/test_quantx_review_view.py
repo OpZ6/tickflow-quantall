@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.quantx_data.review_contract import (
+    _matched_rule,
     audit_review_fields,
     classify_frontend_review_paths,
     extract_frontend_review_paths,
@@ -250,3 +251,19 @@ def test_frontend_review_consumers_have_one_declared_v2_classification():
         }
         for path in paths
     )
+
+
+@pytest.mark.parametrize(
+    ("path", "rules", "expected"),
+    [
+        ("a.b[].c", {"a", "a.b", "a.b[]", "a.b[].c"}, "a.b[].c"),
+        ("a.b[]", {"a", "a.b"}, "a.b"),
+        ("a[].b", {"a", "a[]"}, "a[]"),
+        ("a[]", {"a"}, "a"),
+        ("a.b.c", {"ab", "a.b.d"}, None),
+        ("x.y", set(), None),
+    ],
+)
+def test_matched_rule_returns_longest_prefix_on_segment_boundaries(path, rules, expected):
+    """契约匹配只认「完全相同 / rule. 前缀 / rule[] 前缀」, 且取最长命中。"""
+    assert _matched_rule(path, rules) == expected
