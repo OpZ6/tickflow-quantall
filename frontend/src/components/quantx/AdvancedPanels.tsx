@@ -3,8 +3,9 @@ import * as echarts from 'echarts'
 import { Activity, ChartPie, GitBranch, Loader2, Orbit, Radar, Table2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { QuantXAdvancedCard, QuantXAdvancedSnapshot } from '@/custom/api'
-import { useChartTheme } from '@/lib/theme'
+import { useChartTheme, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
+import { densityPieces, type DensityTheme } from './densityBands'
 
 const RED = '#f85149'
 const GREEN = '#3fb950'
@@ -42,7 +43,7 @@ const CARD_META: Record<string, { title: string; hint: string; group: 'state' | 
   theme_ladder_sunburst: { title: '题材—连板梯队', hint: '旭日图看核心题材，梯队表核对全部涨停', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]' },
   rps_rotation_clock: { title: '行业 RPS 轮动时钟', hint: '行业横截面相对强度 × 排名加速度 · 中心为行业中位数', group: 'rotation', span: 'xl:[grid-column:span_8/span_8]', caveat: '行业收益按当前行业成分回看历史计算，不是历史时点成分；越接近当前日期越可靠。' },
   promotion_funnel: { title: '连板晋级阶梯', hint: '当天 / 5日 / 20日晋级效率 · 全样本基线始终对照', group: 'structure', span: 'xl:[grid-column:span_9/span_9]' },
-  turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度 · 颜色为对数计数（格子内为真实股票数）· 橙带为 0% 涨跌分界', group: 'structure', span: 'xl:[grid-column:span_7/span_7]' },
+  turnover_return_density: { title: '换手—收益拥挤密度', hint: '当日换手率 × 收益率二维密度 · 颜色按股票数分档（0 / 1-9 / 10-29 / 30-99 / 100-299 / 300+，红色只标热点格）· 橙带为 0% 涨跌分界', group: 'structure', span: 'xl:[grid-column:span_7/span_7]' },
 }
 
 function base(ct: ChartTheme) {
@@ -57,7 +58,7 @@ function heatVisual(max: number) {
   return { min: 0, max: Math.max(max, 1), calculable: true, orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 100, inRange: { color: ['#101a2d', '#244b75', '#d29922', '#f85149'] }, textStyle: { color: '#8b949e', fontSize: 9 } }
 }
 
-function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selection: ChartSelection = {}): any {
+function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selection: ChartSelection = {}, mode: DensityTheme = 'dark'): any {
   const common = base(ct)
   if (key === 'sentiment_phase' || key === 'liquidity_participation') {
     const points = data.points || []
@@ -403,19 +404,17 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
     const insertAt = zeroIndex > 0 ? zeroIndex : Math.ceil(yBins.length / 2)
     const displayBins = [...yBins.slice(0, insertAt), '0%（平盘）', ...yBins.slice(insertAt)]
     const remapY = (y: number) => (y < insertAt ? y : y + 1)
-    // 计数分布极度右偏(最大 600+、中位数个位数), 线性色阶会把九成格子压成一色,
-    // 所以色阶走 log10(1+n), 格子里仍显示真实股票数。
-    const maxCount = Math.max(1, ...raw.map((row: number[]) => row[2] || 0))
-    const maxLog = Math.log10(maxCount + 1)
+    // 色阶走固定分档(见 densityBands.ts): log10 会把中位数附近的格子抬进暖色区,
+    // 整张图变成一片红; 分档后红色只留给 300+ 的热点格, 图例直接标股票数区间。
     const values: any[] = raw.map((row: number[]) => ({
-      value: [row[0], remapY(row[1]), Math.log10((row[2] || 0) + 1), row[2]],
+      value: [row[0], remapY(row[1]), row[2] || 0, row[2]],
     }))
     for (let x = 0; x < xBins.length; x += 1) {
       values.push({ value: [x, insertAt, 0, null], itemStyle: { color: 'rgba(240,180,41,.14)' }, label: { show: false } })
     }
     return {
       ...common,
-      grid: { left: 10, right: 12, top: 12, bottom: 55, containLabel: true },
+      grid: { left: 10, right: 12, top: 12, bottom: 68, containLabel: true },
       xAxis: { type: 'category', data: xBins, axisLabel: { color: ct.text, rotate: 40, fontSize: 9, hideOverlap: true } },
       yAxis: {
         type: 'category',
@@ -428,7 +427,19 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
           fontSize: 9,
         } as any,
       },
-      visualMap: { ...heatVisual(maxLog), min: 0, max: maxLog, precision: 1, text: ['密', '疏'], calculable: false },
+      visualMap: {
+        type: 'piecewise',
+        dimension: 2,
+        pieces: densityPieces(mode),
+        orient: 'horizontal',
+        left: 'center',
+        bottom: 0,
+        itemWidth: 12,
+        itemHeight: 9,
+        itemGap: 4,
+        textStyle: { color: '#8b949e', fontSize: 9 },
+        selectedMode: false,
+      },
       series: [{
         type: 'heatmap',
         data: values,
@@ -436,11 +447,12 @@ function optionFor(key: string, data: Record<string, any>, ct: ChartTheme, selec
         label: {
           show: true,
           color: '#ffffff',
-          backgroundColor: 'rgba(0,0,0,.66)',
-          borderRadius: 2,
-          padding: [1, 3],
+          // 用深色描边代替黑底胶囊: 90 个黑块会把颜色本身盖掉, 空格的空字符串
+          // 也会在胶囊下漏出一条小横杠。
+          textBorderColor: 'rgba(0,0,0,.55)',
+          textBorderWidth: 2,
           fontSize: 8,
-          formatter: (p: any) => (p.value[3] == null ? '' : String(p.value[3])),
+          formatter: (p: any) => (p.value[3] ? String(p.value[3]) : ''),
         },
         tooltip: {
           formatter: (p: any) => (p.value[3] == null
@@ -458,7 +470,8 @@ function EChart({ chartKey, card, height = 320, selection, onClick }: { chartKey
   const container = useRef<HTMLDivElement>(null)
   const instance = useRef<echarts.ECharts | null>(null)
   const theme = useChartTheme()
-  const option = useMemo(() => optionFor(chartKey, card.data, theme, selection), [card.data, chartKey, selection, theme])
+  const mode = useTheme()
+  const option = useMemo(() => optionFor(chartKey, card.data, theme, selection, mode), [card.data, chartKey, mode, selection, theme])
 
   useEffect(() => {
     if (!container.current) return
